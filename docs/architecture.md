@@ -87,11 +87,19 @@ docker-compose.dev.yml   local dev services (postgres/redis/meilisearch)
 Plan-00 (audit) ✅ · Plan-01 (scaffold) ✅ · Plan-03 (django-core) ✅ — custom User + Toke ID,
 Region/Address, SimpleJWT auth (register/login/refresh/logout/me/password-reset), email via
 Resend (sole provider, no fallback), Celery, S3/whitenoise storage, prod security baseline,
-OpenAPI at `/api/docs/`. 22 backend tests green in CI. **Next: Plan-02 (VPS provision — needs Cloudflare).**
+OpenAPI at `/api/docs/`.
 Real smokes done 2026-07-15: live Resend email delivered + live S3 upload round-trip — both green.
+
+Plan-04 (countries-pricing) ✅ — Currency/Country + seed (NG default, ZZ Rest of World),
+X-Country middleware (`request.country`), public `/api/v1/meta/countries/`. Pricing app written
+(`Price` + `resolve_price`) but its DB migration + full resolution tests are deferred to the start
+of Plan-05 (FK to `catalog.ProductVariant`). 33 backend tests green in CI.
+**Next: Plan-05 (catalog) — opens by activating the pricing app; Plan-02 (VPS) still parked on Cloudflare.**
 
 ## Notes / limitations to record as we go
 
 - Single locale (en) at launch; prices via `Intl.NumberFormat` per currency; hreflang omitted.
-- US/CA sales-tax-by-state is out of MVP scope — flat configurable rate per country.
+- US/CA sales-tax-by-state is out of MVP scope — flat configurable rate per country (`Country.tax_rate_percent`).
+- `request.country` is set by `CountryMiddleware` from the `X-Country` header; missing → NG (default),
+  unknown/inactive → ZZ (Rest of World). All price/tax context flows from this.
 - Reports are per-currency (no FX consolidation) in the MVP.
