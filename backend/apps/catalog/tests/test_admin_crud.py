@@ -39,3 +39,34 @@ def test_admin_can_crud_product():
     r = c.delete("/api/v1/admin/products/glow-serum/")
     assert r.status_code == 204
     assert not Product.objects.filter(slug="glow-serum").exists()
+
+
+@pytest.mark.django_db
+def test_admin_crud_taxonomy_and_variant_and_price():
+    c = APIClient()
+    c.force_authenticate(user=staff_user())
+
+    assert c.post("/api/v1/admin/brands/", {"name": "Toke", "slug": "toke"}, format="json").status_code == 201
+    assert c.post("/api/v1/admin/categories/", {"name": "Face", "slug": "face"}, format="json").status_code == 201
+    assert c.post("/api/v1/admin/tags/", {"name": "Vegan", "slug": "vegan"}, format="json").status_code == 201
+    assert c.post("/api/v1/admin/collections/", {"name": "New", "slug": "new"}, format="json").status_code == 201
+
+    p = c.post("/api/v1/admin/products/", {"name": "P", "slug": "p"}, format="json").data
+    v = c.post(
+        "/api/v1/admin/variants/",
+        {"product": p["id"], "sku": "P-1", "name": "50ml", "is_default": True},
+        format="json",
+    )
+    assert v.status_code == 201, v.data
+
+    from apps.core.models import Currency
+
+    price = c.post(
+        "/api/v1/admin/prices/",
+        {"variant": v.data["id"], "currency": Currency.objects.get(code="NGN").code, "amount": "5000.00"},
+        format="json",
+    )
+    assert price.status_code == 201, price.data
+    from decimal import Decimal
+
+    assert Decimal(price.data["amount"]) == Decimal("5000.00")
