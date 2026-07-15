@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.catalog",
     "apps.pricing",
+    "apps.inventory",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
