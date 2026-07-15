@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "apps.catalog",
     "apps.pricing",
     "apps.inventory",
+    "apps.search",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -136,7 +137,12 @@ REST_FRAMEWORK = {
         "rest_framework.throttling.AnonRateThrottle",
         "rest_framework.throttling.UserRateThrottle",
     ],
-    "DEFAULT_THROTTLE_RATES": {"anon": "60/min", "user": "120/min"},
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "60/min",
+        "user": "120/min",
+        "search": "30/min",
+        "suggest": "60/min",
+    },
 }
 
 # --- JWT (SimpleJWT) ---

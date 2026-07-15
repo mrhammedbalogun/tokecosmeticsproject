@@ -16,6 +16,7 @@ urlpatterns = [
     path("api/v1/auth/", include("apps.accounts.urls")),
     path("api/v1/meta/", include("apps.core.urls")),
     path("api/v1/", include("apps.catalog.api_urls")),
+    path("api/v1/", include("apps.search.urls")),
     path("api/v1/admin/", include("apps.catalog.admin_urls")),
     path("api/v1/admin/", include("apps.inventory.admin_urls")),
     # OpenAPI schema + docs
