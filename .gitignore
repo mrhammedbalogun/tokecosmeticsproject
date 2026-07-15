@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
+.vercel/
+next-env.d.ts
+*.tsbuildinfo
+
+# Env & secrets (NEVER commit real env files)
+.env
+.env.*
+!.env.example
+
+# Backups / OS / editor
+*.bak-*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local data volumes
+/data/
