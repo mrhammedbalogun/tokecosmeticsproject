@@ -1,0 +1,42 @@
+name: ci-backend
+
+on:
+  push:
+    paths: ["backend/**", ".github/workflows/ci-backend.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/ci-backend.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: toke
+          POSTGRES_PASSWORD: toke
+          POSTGRES_DB: toke
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U toke"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgres://toke:toke@localhost:5432/toke
+      REDIS_URL: redis://localhost:6379/0
+      SECRET_KEY: ci-not-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pytest -v
