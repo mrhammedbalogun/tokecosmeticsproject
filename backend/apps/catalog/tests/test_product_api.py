@@ -72,3 +72,23 @@ def test_filter_by_category():
     _priced_product("2000")
     r = APIClient().get("/api/v1/products/?category=serums")
     assert r.data["count"] == 1
+
+
+@pytest.mark.django_db
+def test_detail_shows_variant_prices_per_country():
+    p = _priced_product("1000")
+    r = APIClient().get(f"/api/v1/products/{p.slug}/", HTTP_X_COUNTRY="NG")
+    assert r.status_code == 200
+    assert r.data["slug"] == p.slug
+    assert len(r.data["variants"]) == 1
+    price = r.data["variants"][0]["price"]
+    assert price["amount"] == "1000.00"
+    assert price["currency"] == "NGN"
+    assert price["tax_rate"] == "7.50"
+
+
+@pytest.mark.django_db
+def test_detail_404_when_not_sellable_in_country():
+    p = _priced_product("1000")  # NGN only
+    r = APIClient().get(f"/api/v1/products/{p.slug}/", HTTP_X_COUNTRY="GB")
+    assert r.status_code == 404
