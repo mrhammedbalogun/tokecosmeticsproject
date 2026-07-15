@@ -29,5 +29,6 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Local data volumes
+# Local data volumes / dev DB
 /data/
+*.sqlite3
