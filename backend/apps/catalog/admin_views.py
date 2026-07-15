@@ -1,7 +1,12 @@
+from django.http import StreamingHttpResponse
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.catalog.csv_io import export_products_csv
+from apps.catalog.tasks import import_products_csv_task
 
 from apps.catalog.admin_serializers import (
     BrandAdminSerializer,
@@ -86,3 +91,26 @@ class ProductVideoAdminViewSet(AdminBaseViewSet):
 class PriceAdminViewSet(AdminBaseViewSet):
     serializer_class = PriceAdminSerializer
     queryset = Price.objects.all()
+
+
+class ProductCSVExportView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+
+    def get(self, request):
+        resp = StreamingHttpResponse(iter([export_products_csv()]), content_type="text/csv")
+        resp["Content-Disposition"] = "attachment; filename=products.csv"
+        return resp
+
+
+class ProductCSVImportView(APIView):
+    permission_classes = [permissions.IsAdminUser]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request):
+        upload = request.data.get("file")
+        if upload is None:
+            return Response({"detail": "No file provided."}, status=400)
+        # Eager in dev/tests -> report returns inline. In prod with a real broker this
+        # blocks the request; PLAN-05c-async: switch to returning {"task_id": ...} + polling.
+        result = import_products_csv_task.delay(upload.read())
+        return Response(result.get(), status=200)

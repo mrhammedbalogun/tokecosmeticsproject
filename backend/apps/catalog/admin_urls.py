@@ -1,3 +1,4 @@
+from django.urls import path
 from rest_framework.routers import DefaultRouter
 
 from apps.catalog.admin_views import (
@@ -6,6 +7,8 @@ from apps.catalog.admin_views import (
     CollectionAdminViewSet,
     PriceAdminViewSet,
     ProductAdminViewSet,
+    ProductCSVExportView,
+    ProductCSVImportView,
     ProductVariantAdminViewSet,
     ProductVideoAdminViewSet,
     TagAdminViewSet,
@@ -21,4 +24,9 @@ router.register("variants", ProductVariantAdminViewSet, basename="admin-variant"
 router.register("videos", ProductVideoAdminViewSet, basename="admin-video")
 router.register("prices", PriceAdminViewSet, basename="admin-price")
 
-urlpatterns = router.urls
+# Explicit CSV paths BEFORE the router so `products/export.csv` isn't swallowed by the
+# router's `products/<slug>/` detail route.
+urlpatterns = [
+    path("products/export.csv", ProductCSVExportView.as_view(), name="admin-product-export"),
+    path("products/import.csv", ProductCSVImportView.as_view(), name="admin-product-import"),
+] + router.urls
