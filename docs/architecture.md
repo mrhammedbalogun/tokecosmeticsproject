@@ -84,8 +84,11 @@ docker-compose.dev.yml   local dev services (postgres/redis/meilisearch)
 
 ## Current status
 
-Plan-00 (audit) ✅ · Plan-01 (scaffold) in progress — backend `/healthz/` green (TDD),
-both Next.js apps build, local dev services run, CI configured.
+Plan-00 (audit) ✅ · Plan-01 (scaffold) ✅ · Plan-03 (django-core) ✅ — custom User + Toke ID,
+Region/Address, SimpleJWT auth (register/login/refresh/logout/me/password-reset), email via
+Resend (sole provider, no fallback), Celery, S3/whitenoise storage, prod security baseline,
+OpenAPI at `/api/docs/`. 22 backend tests green in CI. **Next: Plan-02 (VPS provision — needs Cloudflare).**
+Real smokes done 2026-07-15: live Resend email delivered + live S3 upload round-trip — both green.
 
 ## Notes / limitations to record as we go
 

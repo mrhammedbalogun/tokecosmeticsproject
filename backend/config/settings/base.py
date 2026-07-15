@@ -154,12 +154,13 @@ CORS_ALLOWED_ORIGINS = env.list(
 )
 
 # --- Email ---
-# Dev/test default = console; prod switches to Mailgun via anymail (Plan-03 checkpoint).
+# Dev/test default = console; prod switches to Resend via anymail (set EMAIL_BACKEND in .env).
+# Resend is the sole provider. From address must be on the verified sending domain
+# (mg.tokecosmetics.com); Resend rejects mail from an unverified domain.
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
-DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Toke Cosmetics <hello@tokecosmetics.com>")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Toke Cosmetics <hello@mg.tokecosmetics.com>")
 ANYMAIL = {
-    "MAILGUN_API_KEY": env("MAILGUN_API_KEY", default=""),
-    "MAILGUN_SENDER_DOMAIN": env("MAILGUN_SENDER_DOMAIN", default="mg.tokecosmetics.com"),
+    "RESEND_API_KEY": env("RESEND_API_KEY", default=""),
 }
 
 # --- Celery ---
