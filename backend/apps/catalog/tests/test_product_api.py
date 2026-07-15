@@ -1,0 +1,74 @@
+from decimal import Decimal
+
+import pytest
+from rest_framework.test import APIClient
+
+from apps.catalog.factories import (
+    BrandFactory,
+    CategoryFactory,
+    PriceFactory,
+    ProductFactory,
+    ProductVariantFactory,
+)
+from apps.core.models import Country
+
+
+def _priced_product(amount, **kwargs):
+    p = ProductFactory(**kwargs)
+    v = ProductVariantFactory(product=p)
+    PriceFactory(variant=v, amount=Decimal(amount))
+    return p
+
+
+@pytest.mark.django_db
+def test_list_hides_unpriced_products():
+    _priced_product("1000")
+    ProductFactory()  # no price -> hidden
+    r = APIClient().get("/api/v1/products/")
+    assert r.status_code == 200
+    assert r.data["count"] == 1
+
+
+@pytest.mark.django_db
+def test_list_country_price_and_exclusion():
+    p = _priced_product("1000")   # NGN only
+    # In NG: visible with NGN from_price. In GB: no GBP price -> hidden.
+    r_ng = APIClient().get("/api/v1/products/", HTTP_X_COUNTRY="NG")
+    assert r_ng.data["count"] == 1
+    row = r_ng.data["results"][0]
+    assert row["from_price"] == "1000.00"
+    assert row["currency"] == "NGN"
+
+    r_gb = APIClient().get("/api/v1/products/", HTTP_X_COUNTRY="GB")
+    assert r_gb.data["count"] == 0
+
+
+@pytest.mark.django_db
+def test_filter_by_brand_and_price_range():
+    b = BrandFactory(slug="toke")
+    _priced_product("1000", brand=b)
+    _priced_product("5000", brand=b)
+    _priced_product("9000")  # different brand (None)
+
+    r = APIClient().get("/api/v1/products/?brand=toke&price_min=2000")
+    assert {row["from_price"] for row in r.data["results"]} == {"5000.00"}
+
+
+@pytest.mark.django_db
+def test_ordering_price_asc():
+    _priced_product("3000")
+    _priced_product("1000")
+    _priced_product("2000")
+    r = APIClient().get("/api/v1/products/?ordering=price_asc")
+    prices = [row["from_price"] for row in r.data["results"]]
+    assert prices == ["1000.00", "2000.00", "3000.00"]
+
+
+@pytest.mark.django_db
+def test_filter_by_category():
+    cat = CategoryFactory(slug="serums")
+    p = _priced_product("1000")
+    p.categories.add(cat)
+    _priced_product("2000")
+    r = APIClient().get("/api/v1/products/?category=serums")
+    assert r.data["count"] == 1
