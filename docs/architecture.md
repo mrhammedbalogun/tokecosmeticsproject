@@ -110,6 +110,13 @@ upload to S3, product CSV export + import (Celery job with row-level error repor
 cache auto-invalidates on admin writes via the existing signals. **Plan-05 (catalog) COMPLETE.**
 74 backend tests green in CI. **Next: Plan-06 (inventory).**
 
+Plan-06 (inventory) ✅ — Warehouse/StockItem/StockMovement with an oversell `CHECK` constraint,
+seeded Lagos HQ + UK Warehouse, race-safe `reserve`/`release`/`commit_sale`/`adjust` services
+(pk-ordered locks, ledger-idempotent), **Postgres concurrency test** (two threads, last unit,
+exactly one wins), admin stock API (list/adjust-with-reason+note/history), hourly low-stock digest,
+and real `in_stock` wired into the storefront (stock writes bust the catalog cache). Reservation
+design reviewed with Fable 5. 91 backend tests green. **Next: Plan-06b (stock CSV) or Plan-07 (search) or Plan-08 (cart/checkout).**
+
 ### Decisions (2026-07-15)
 - **Test DB = PostgreSQL** for the whole suite (dev via docker-compose, CI via service container).
   SQLite's `select_for_update` is a no-op, so the Plan-06 stock-reservation race test is only
