@@ -1,10 +1,31 @@
 """Catalog domain services: sellability + price annotation used by the read APIs."""
 from __future__ import annotations
 
+from django.core.cache import cache
 from django.db.models import OuterRef, Q, Subquery
 from django.utils import timezone
 
 from apps.pricing.services import resolve_price
+
+_CACHE_VERSION_KEY = "catalog:cache_version"
+CATALOG_CACHE_TTL = 60  # seconds
+
+
+def catalog_cache_version() -> int:
+    return cache.get_or_set(_CACHE_VERSION_KEY, 1, None)
+
+
+def bump_catalog_cache() -> None:
+    try:
+        cache.incr(_CACHE_VERSION_KEY)
+    except ValueError:
+        cache.set(_CACHE_VERSION_KEY, 1, None)
+
+
+def catalog_cache_key(request) -> str:
+    country = request.country.code
+    qs = request.META.get("QUERY_STRING", "")
+    return f"catalog:{catalog_cache_version()}:{country}:{request.path}?{qs}"
 
 
 def sellable_in(product, country) -> bool:

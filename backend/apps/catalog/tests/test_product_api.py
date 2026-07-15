@@ -10,7 +10,6 @@ from apps.catalog.factories import (
     ProductFactory,
     ProductVariantFactory,
 )
-from apps.core.models import Country
 
 
 def _priced_product(amount, **kwargs):
@@ -31,7 +30,7 @@ def test_list_hides_unpriced_products():
 
 @pytest.mark.django_db
 def test_list_country_price_and_exclusion():
-    p = _priced_product("1000")   # NGN only
+    _priced_product("1000")   # NGN only
     # In NG: visible with NGN from_price. In GB: no GBP price -> hidden.
     r_ng = APIClient().get("/api/v1/products/", HTTP_X_COUNTRY="NG")
     assert r_ng.data["count"] == 1

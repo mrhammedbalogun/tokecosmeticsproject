@@ -73,6 +73,16 @@ ASGI_APPLICATION = "config.asgi.application"
 # Redis (used by /healthz/ now; broker/cache wired in Plan-03).
 REDIS_URL = env("REDIS_URL", default="redis://localhost:6380/0")
 
+# Cache — dev/tests default to locmem (hermetic). Prod sets these to Redis via env:
+#   CACHE_BACKEND=django.core.cache.backends.redis.RedisCache
+#   CACHE_LOCATION=${REDIS_URL}
+CACHES = {
+    "default": {
+        "BACKEND": env("CACHE_BACKEND", default="django.core.cache.backends.locmem.LocMemCache"),
+        "LOCATION": env("CACHE_LOCATION", default="toke-cache"),
+    }
+}
+
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},

@@ -1,5 +1,7 @@
+from django.core.cache import cache as _cache
 from django.db.models import Q
 from rest_framework import generics, permissions
+from rest_framework.response import Response
 
 from apps.catalog.api_serializers import (
     BrandSerializer,
@@ -9,7 +11,33 @@ from apps.catalog.api_serializers import (
     ProductListSerializer,
 )
 from apps.catalog.models import Brand, Category, Collection, Product
-from apps.catalog.services import annotate_min_price
+from apps.catalog.services import CATALOG_CACHE_TTL, annotate_min_price, catalog_cache_key
+
+
+class CatalogCacheMixin:
+    """Cache list/retrieve response payloads for CATALOG_CACHE_TTL seconds, keyed on
+    (cache-version, country, path, querystring). The version bumps on any catalog write
+    (see signals.py), so a write invalidates every cached catalog response at once.
+    """
+
+    def _cached_response(self, request, produce):
+        key = catalog_cache_key(request)
+        data = _cache.get(key)
+        if data is None:
+            data = produce().data
+            _cache.set(key, data, CATALOG_CACHE_TTL)
+        return Response(data)
+
+    def list(self, request, *args, **kwargs):
+        return self._cached_response(
+            request, lambda: super(CatalogCacheMixin, self).list(request, *args, **kwargs)
+        )
+
+    def retrieve(self, request, *args, **kwargs):
+        return self._cached_response(
+            request, lambda: super(CatalogCacheMixin, self).retrieve(request, *args, **kwargs)
+        )
+
 
 ORDERING = {
     "newest": "-published_at",
@@ -19,7 +47,7 @@ ORDERING = {
 }
 
 
-class ProductListView(generics.ListAPIView):
+class ProductListView(CatalogCacheMixin, generics.ListAPIView):
     serializer_class = ProductListSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -60,7 +88,7 @@ class ProductListView(generics.ListAPIView):
         return qs.order_by(ordering, "name").distinct()
 
 
-class ProductDetailView(generics.RetrieveAPIView):
+class ProductDetailView(CatalogCacheMixin, generics.RetrieveAPIView):
     serializer_class = ProductDetailSerializer
     permission_classes = [permissions.AllowAny]
     lookup_field = "slug"
@@ -83,7 +111,7 @@ class ProductDetailView(generics.RetrieveAPIView):
         return obj
 
 
-class CategoryTreeView(generics.ListAPIView):
+class CategoryTreeView(CatalogCacheMixin, generics.ListAPIView):
     serializer_class = CategorySerializer
     permission_classes = [permissions.AllowAny]
     pagination_class = None
@@ -97,14 +125,14 @@ class CategoryTreeView(generics.ListAPIView):
         )
 
 
-class BrandListView(generics.ListAPIView):
+class BrandListView(CatalogCacheMixin, generics.ListAPIView):
     serializer_class = BrandSerializer
     permission_classes = [permissions.AllowAny]
     pagination_class = None
     queryset = Brand.objects.filter(is_active=True).order_by("name")
 
 
-class CollectionDetailView(generics.RetrieveAPIView):
+class CollectionDetailView(CatalogCacheMixin, generics.RetrieveAPIView):
     serializer_class = CollectionSerializer
     permission_classes = [permissions.AllowAny]
     lookup_field = "slug"
