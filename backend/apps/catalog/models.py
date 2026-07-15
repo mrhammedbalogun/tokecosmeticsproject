@@ -69,7 +69,61 @@ class Collection(TimeStampedModel):
     image = models.ImageField(upload_to="catalog/collections/", blank=True, null=True)
     is_active = models.BooleanField(default=True)
     rule = models.CharField(max_length=20, choices=RULES, default="manual")
-    # M2M to Product added in Task 3 (after Product exists).
+    products = models.ManyToManyField("Product", blank=True, related_name="collections")
 
     def __str__(self) -> str:
         return self.name
+
+
+class Product(TimeStampedModel):
+    STATUS = [("draft", "Draft"), ("active", "Active"), ("archived", "Archived")]
+
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(max_length=280, unique=True)
+    brand = models.ForeignKey(
+        Brand, null=True, blank=True, on_delete=models.SET_NULL, related_name="products"
+    )
+    categories = models.ManyToManyField(Category, blank=True, related_name="products")
+    tags = models.ManyToManyField(Tag, blank=True, related_name="products")
+    description = models.TextField(blank=True)          # rich HTML
+    short_description = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=STATUS, default="draft")
+    is_featured = models.BooleanField(default=False)
+    ingredients = models.TextField(blank=True)
+    directions = models.TextField(blank=True)
+    warnings = models.TextField(blank=True)
+    specs = models.JSONField(default=list, blank=True)  # [{"label": .., "value": ..}]
+    faqs = models.JSONField(default=list, blank=True)   # [{"q": .., "a": ..}]
+    related = models.ManyToManyField("self", blank=True)
+    available_countries = models.ManyToManyField(
+        "core.Country", blank=True, related_name="products"
+    )  # empty = everywhere (see Plan-05b sellable_in)
+    seo_title = models.CharField(max_length=255, blank=True)
+    seo_description = models.TextField(blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    legacy_source = models.CharField(max_length=50, blank=True)
+    legacy_wp_id = models.IntegerField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-published_at", "name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ProductVariant(TimeStampedModel):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="variants")
+    sku = models.CharField(max_length=64, unique=True)
+    barcode = models.CharField(max_length=64, blank=True)
+    name = models.CharField(max_length=120)             # e.g. "50ml"
+    option_values = models.JSONField(default=dict, blank=True)  # {"Size": "50ml"}
+    weight_grams = models.PositiveIntegerField(null=True, blank=True)
+    is_default = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["position", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.product.name} — {self.name}"
