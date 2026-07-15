@@ -27,7 +27,7 @@ class ResolvedPrice:
 
 
 def resolve_price(variant, country, at=None):
-    from django.db.models import Q
+    from django.db.models import F, Q
     from django.utils import timezone
 
     from apps.pricing.models import Price
@@ -46,7 +46,10 @@ def resolve_price(variant, country, at=None):
         base.filter(country=country),
         base.filter(country__isnull=True),
     ):
-        price = scope.order_by("-starts_at").first()
+        # An explicit sale window (starts_at set) beats a plain price; among windows,
+        # the most recently started wins. nulls_last makes this deterministic across
+        # databases (Postgres sorts NULLs first in DESC by default; SQLite sorts them last).
+        price = scope.order_by(F("starts_at").desc(nulls_last=True)).first()
         if price:
             return ResolvedPrice(
                 amount=price.amount,
