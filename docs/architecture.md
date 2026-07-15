@@ -115,7 +115,10 @@ seeded Lagos HQ + UK Warehouse, race-safe `reserve`/`release`/`commit_sale`/`adj
 (pk-ordered locks, ledger-idempotent), **Postgres concurrency test** (two threads, last unit,
 exactly one wins), admin stock API (list/adjust-with-reason+note/history), hourly low-stock digest,
 and real `in_stock` wired into the storefront (stock writes bust the catalog cache). Reservation
-design reviewed with Fable 5. 91 backend tests green. **Next: Plan-06b (stock CSV) or Plan-07 (search) or Plan-08 (cart/checkout).**
+design reviewed with Fable 5.
+
+Plan-06b (stock CSV) ✅ — admin stock CSV export + import (imports mutate stock only via the
+ledgered `adjust()` service). 95 backend tests green. **Next: Plan-07 (search).**
 
 ### Decisions (2026-07-15)
 - **Test DB = PostgreSQL** for the whole suite (dev via docker-compose, CI via service container).
