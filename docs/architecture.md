@@ -93,8 +93,12 @@ Real smokes done 2026-07-15: live Resend email delivered + live S3 upload round-
 Plan-04 (countries-pricing) ✅ — Currency/Country + seed (NG default, ZZ Rest of World),
 X-Country middleware (`request.country`), public `/api/v1/meta/countries/`. Pricing app written
 (`Price` + `resolve_price`) but its DB migration + full resolution tests are deferred to the start
-of Plan-05 (FK to `catalog.ProductVariant`). 33 backend tests green in CI.
-**Next: Plan-05 (catalog) — opens by activating the pricing app; Plan-02 (VPS) still parked on Cloudflare.**
+of Plan-05 (FK to `catalog.ProductVariant`).
+
+Plan-05a (catalog foundation) ✅ — catalog models (Category/Brand/Tag/Collection, Product,
+ProductVariant, ProductImage/Video), pricing app ACTIVATED (`Price` migrated, full `resolve_price`
+DB tests green), factory_boy factories, Django-admin registration. 50 backend tests green in CI.
+**Next: Plan-05b (public country-aware read APIs); Plan-02 (VPS) still parked on Cloudflare.**
 
 ## Notes / limitations to record as we go
 
