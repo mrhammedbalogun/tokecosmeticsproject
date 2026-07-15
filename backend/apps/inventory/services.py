@@ -120,6 +120,15 @@ def commit_sale(reference: str) -> None:
     _replay(reference, commit=True)
 
 
+def reconcile(stock_item) -> bool:
+    """Invariant check: the ledger sums must equal the live counters. Returns True if
+    consistent. Holds only when the item's whole history is movements (started at 0)."""
+    agg = StockMovement.objects.filter(stock_item=stock_item).aggregate(
+        q=Sum("delta_quantity"), r=Sum("delta_reserved")
+    )
+    return (agg["q"] or 0) == stock_item.quantity and (agg["r"] or 0) == stock_item.reserved
+
+
 def adjust(stock_item, new_quantity: int, reason: str, note: str, user=None) -> None:
     """Set on-hand to an absolute value, recording the delta as a movement."""
     if new_quantity < 0:
