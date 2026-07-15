@@ -1,8 +1,14 @@
 from django.db.models import Q
 from rest_framework import generics, permissions
 
-from apps.catalog.api_serializers import ProductDetailSerializer, ProductListSerializer
-from apps.catalog.models import Product
+from apps.catalog.api_serializers import (
+    BrandSerializer,
+    CategorySerializer,
+    CollectionSerializer,
+    ProductDetailSerializer,
+    ProductListSerializer,
+)
+from apps.catalog.models import Brand, Category, Collection, Product
 from apps.catalog.services import annotate_min_price
 
 ORDERING = {
@@ -75,3 +81,31 @@ class ProductDetailView(generics.RetrieveAPIView):
         if not sellable_in(obj, self.request.country):
             raise Http404("Not available in this country.")
         return obj
+
+
+class CategoryTreeView(generics.ListAPIView):
+    serializer_class = CategorySerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        # Return roots only; children are nested by the serializer.
+        return (
+            Category.objects.filter(is_active=True, parent__isnull=True)
+            .prefetch_related("children")
+            .order_by("sort_order", "name")
+        )
+
+
+class BrandListView(generics.ListAPIView):
+    serializer_class = BrandSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+    queryset = Brand.objects.filter(is_active=True).order_by("name")
+
+
+class CollectionDetailView(generics.RetrieveAPIView):
+    serializer_class = CollectionSerializer
+    permission_classes = [permissions.AllowAny]
+    lookup_field = "slug"
+    queryset = Collection.objects.filter(is_active=True)
