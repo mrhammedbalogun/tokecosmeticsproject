@@ -66,3 +66,10 @@ class PriceAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Price
         fields = "__all__"
+
+
+class ProductImageAdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductImage
+        fields = ["id", "product", "image", "alt", "position", "variant"]
+        read_only_fields = ["product"]
