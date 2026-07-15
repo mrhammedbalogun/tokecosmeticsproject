@@ -127,3 +127,31 @@ class ProductVariant(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.product.name} — {self.name}"
+
+
+class ProductImage(TimeStampedModel):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
+    image = models.ImageField(upload_to="catalog/products/")
+    alt = models.CharField(max_length=255, blank=True)
+    position = models.PositiveIntegerField(default=0)
+    variant = models.ForeignKey(
+        "ProductVariant", null=True, blank=True, on_delete=models.SET_NULL, related_name="images"
+    )
+
+    class Meta:
+        ordering = ["position", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.product.name} image #{self.position}"
+
+
+class ProductVideo(TimeStampedModel):
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="videos")
+    url = models.URLField()
+    position = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ["position", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.product.name} video #{self.position}"
