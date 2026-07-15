@@ -118,7 +118,13 @@ and real `in_stock` wired into the storefront (stock writes bust the catalog cac
 design reviewed with Fable 5.
 
 Plan-06b (stock CSV) ✅ — admin stock CSV export + import (imports mutate stock only via the
-ledgered `adjust()` service). 95 backend tests green. **Next: Plan-07 (search).**
+ledgered `adjust()` service).
+
+Plan-07 (search) ✅ — Postgres trigram product search + autocomplete (`/api/v1/search/`,
+`/search/suggest/`), typo-tolerant, country-aware filters (category/brand/price/in_stock),
+results reuse the product-list card shape, throttled. Structured behind `get_backend()` so
+Meilisearch is a drop-in later (Plan-07b, deferred for RAM). Design reviewed with Fable 5.
+103 backend tests green. **Next: Plan-08 (cart/checkout).**
 
 ### Decisions (2026-07-15)
 - **Test DB = PostgreSQL** for the whole suite (dev via docker-compose, CI via service container).
