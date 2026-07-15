@@ -108,7 +108,17 @@ order (Plan-10). 65 backend tests green in CI.
 Plan-05c (catalog admin write) ✅ — staff-only CRUD for all catalog + price models, product image
 upload to S3, product CSV export + import (Celery job with row-level error report). Public read
 cache auto-invalidates on admin writes via the existing signals. **Plan-05 (catalog) COMPLETE.**
-73 backend tests green in CI. **Next: Plan-06 (inventory) or Plan-02 (VPS, needs Cloudflare).**
+74 backend tests green in CI. **Next: Plan-06 (inventory).**
+
+### Decisions (2026-07-15)
+- **Test DB = PostgreSQL** for the whole suite (dev via docker-compose, CI via service container).
+  SQLite's `select_for_update` is a no-op, so the Plan-06 stock-reservation race test is only
+  meaningful on Postgres. Plan-06 opens by switching the test DB. (Advice validated with Fable 5.)
+- **Cloudflare (Plan-02) is NOT a blocker** — approach settled: Hammed drives the Cloudflare
+  dashboard with step-by-step guidance from Claude (add `api` A record → VPS proxied, Origin CA
+  cert, SSL Full-strict, origin-port rule). Done as a guided step *inside* Plan-02 execution, when
+  the Docker API stack is up (pointing DNS before the server listens would just 5xx). Plan-02 can be
+  scheduled whenever Hammed wants to go live with the API; it no longer waits on anything.
 
 ## Notes / limitations to record as we go
 
