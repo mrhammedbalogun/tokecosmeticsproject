@@ -97,8 +97,14 @@ of Plan-05 (FK to `catalog.ProductVariant`).
 
 Plan-05a (catalog foundation) ✅ — catalog models (Category/Brand/Tag/Collection, Product,
 ProductVariant, ProductImage/Video), pricing app ACTIVATED (`Price` migrated, full `resolve_price`
-DB tests green), factory_boy factories, Django-admin registration. 50 backend tests green in CI.
-**Next: Plan-05b (public country-aware read APIs); Plan-02 (VPS) still parked on Cloudflare.**
+DB tests green), factory_boy factories, Django-admin registration.
+
+Plan-05b (catalog read APIs) ✅ — public country-aware product list (filters/ordering/sellability),
+product detail (per-country variant prices), categories tree / brands / collection detail, 60s
+response cache with version-bump invalidation, N+1 budget (5 queries / 24-product page). Stubs
+pending later plans: stock/`in_stock` (Plan-06), full-text search (Plan-07), `best_selling`
+order (Plan-10). 65 backend tests green in CI.
+**Next: Plan-05c (admin write APIs + image upload + CSV import/export); Plan-02 (VPS) parked on Cloudflare.**
 
 ## Notes / limitations to record as we go
 
