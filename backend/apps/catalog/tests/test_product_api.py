@@ -91,3 +91,25 @@ def test_detail_404_when_not_sellable_in_country():
     p = _priced_product("1000")  # NGN only
     r = APIClient().get(f"/api/v1/products/{p.slug}/", HTTP_X_COUNTRY="GB")
     assert r.status_code == 404
+
+
+@pytest.mark.django_db
+def test_detail_in_stock_reflects_inventory():
+    from apps.core.models import Country
+    from apps.inventory.factories import StockItemFactory, WarehouseFactory
+
+    p = _priced_product("1000")
+    v = p.variants.first()
+    ng = Country.objects.get(code="NG")
+    w = WarehouseFactory()
+    w.serves_countries.add(ng)
+    StockItemFactory(variant=v, warehouse=w, quantity=0)  # no stock
+
+    r = APIClient().get(f"/api/v1/products/{p.slug}/", HTTP_X_COUNTRY="NG")
+    assert r.data["variants"][0]["in_stock"] is False
+
+    si = v.stock_items.first()
+    si.quantity = 5
+    si.save(update_fields=["quantity"])
+    r = APIClient().get(f"/api/v1/products/{p.slug}/", HTTP_X_COUNTRY="NG")
+    assert r.data["variants"][0]["in_stock"] is True

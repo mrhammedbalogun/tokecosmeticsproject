@@ -1,0 +1,4 @@
+<h2>Low stock digest</h2>
+<ul>
+{% for r in rows %}<li><strong>{{ r.sku }}</strong> @ {{ r.warehouse }} — {{ r.available }} available</li>
+{% endfor %}</ul>

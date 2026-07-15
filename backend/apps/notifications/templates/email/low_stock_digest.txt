@@ -1,0 +1,3 @@
+Low stock digest:
+{% for r in rows %}- {{ r.sku }} @ {{ r.warehouse }}: {{ r.available }} available
+{% endfor %}

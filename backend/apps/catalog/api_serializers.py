@@ -46,7 +46,10 @@ class VariantSerializer(serializers.ModelSerializer):
         }
 
     def get_in_stock(self, obj):
-        return True  # PLAN-06: real stock from inventory.available_qty > 0
+        from apps.inventory.services import available_for_country
+
+        country = self.context["request"].country
+        return available_for_country(obj, country) > 0
 
 
 class ProductListSerializer(serializers.ModelSerializer):

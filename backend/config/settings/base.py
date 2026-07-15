@@ -183,3 +183,9 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
 CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
+CELERY_BEAT_SCHEDULE = {
+    "low-stock-digest-hourly": {
+        "task": "apps.inventory.tasks.low_stock_digest",
+        "schedule": 3600.0,  # every hour
+    },
+}
