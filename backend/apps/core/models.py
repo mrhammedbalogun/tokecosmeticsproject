@@ -72,3 +72,38 @@ class Region(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.country_code}/{self.level})"
+
+
+class Currency(models.Model):
+    """ISO-4217 currency used for pricing (NGN, GBP, USD, CAD)."""
+
+    code = models.CharField(max_length=3, primary_key=True)       # "NGN"
+    symbol = models.CharField(max_length=8)                       # "₦"
+    decimal_places = models.PositiveSmallIntegerField(default=2)
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self) -> str:
+        return self.code
+
+
+class Country(models.Model):
+    """A market the store sells into. Drives currency + flat tax + pricing context.
+
+    Note: US/CA sales-tax-by-state is OUT of MVP scope — one flat configurable
+    rate per country here; refine post-launch (see docs/architecture.md).
+    """
+
+    code = models.CharField(max_length=2, primary_key=True)       # "NG"
+    name = models.CharField(max_length=100)
+    currency = models.ForeignKey(Currency, on_delete=models.PROTECT)
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(default=False)               # NG
+    is_rest_of_world = models.BooleanField(default=False)         # the "ZZ" catch-all
+    tax_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    prices_include_tax = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "countries"
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.code})"
