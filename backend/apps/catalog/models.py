@@ -1,3 +1,4 @@
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 
 from apps.core.models import TimeStampedModel
@@ -106,6 +107,9 @@ class Product(TimeStampedModel):
 
     class Meta:
         ordering = ["-published_at", "name"]
+        indexes = [
+            GinIndex(name="product_name_trgm", fields=["name"], opclasses=["gin_trgm_ops"]),
+        ]
 
     def __str__(self) -> str:
         return self.name
