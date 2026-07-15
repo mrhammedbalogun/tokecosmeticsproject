@@ -9,6 +9,9 @@ from .base import BASE_DIR, env
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
 
+# Run Celery tasks synchronously in dev/tests (no worker needed).
+CELERY_TASK_ALWAYS_EAGER = True
+
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
