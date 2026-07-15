@@ -6,6 +6,37 @@ from apps.catalog.tests.factories_admin import staff_user
 
 
 @pytest.mark.django_db
+def test_admin_price_edit_busts_public_cache(settings):
+    """An admin price change must invalidate the cached public product response."""
+    from decimal import Decimal
+
+    settings.CACHES = {
+        "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "inv"}
+    }
+    from django.core.cache import cache
+
+    from apps.catalog.factories import PriceFactory, ProductFactory, ProductVariantFactory
+
+    cache.clear()
+    p = ProductFactory(slug="cached")
+    v = ProductVariantFactory(product=p)
+    price = PriceFactory(variant=v, amount=Decimal("1000"))
+
+    pub = APIClient()
+    r = pub.get("/api/v1/products/cached/", HTTP_X_COUNTRY="NG")
+    assert r.data["variants"][0]["price"]["amount"] == "1000.00"  # now cached
+
+    # Staff edits the price -> post_save signal bumps the catalog cache version.
+    admin = APIClient()
+    admin.force_authenticate(user=staff_user())
+    r = admin.patch(f"/api/v1/admin/prices/{price.id}/", {"amount": "1500.00"}, format="json")
+    assert r.status_code == 200
+
+    r = pub.get("/api/v1/products/cached/", HTTP_X_COUNTRY="NG")
+    assert r.data["variants"][0]["price"]["amount"] == "1500.00"  # cache invalidated
+
+
+@pytest.mark.django_db
 def test_admin_requires_staff():
     # Anonymous -> 401/403; non-staff -> 403.
     r = APIClient().post("/api/v1/admin/products/", {"name": "X", "slug": "x"}, format="json")

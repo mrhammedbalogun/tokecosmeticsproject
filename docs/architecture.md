@@ -104,7 +104,11 @@ product detail (per-country variant prices), categories tree / brands / collecti
 response cache with version-bump invalidation, N+1 budget (5 queries / 24-product page). Stubs
 pending later plans: stock/`in_stock` (Plan-06), full-text search (Plan-07), `best_selling`
 order (Plan-10). 65 backend tests green in CI.
-**Next: Plan-05c (admin write APIs + image upload + CSV import/export); Plan-02 (VPS) parked on Cloudflare.**
+
+Plan-05c (catalog admin write) ✅ — staff-only CRUD for all catalog + price models, product image
+upload to S3, product CSV export + import (Celery job with row-level error report). Public read
+cache auto-invalidates on admin writes via the existing signals. **Plan-05 (catalog) COMPLETE.**
+73 backend tests green in CI. **Next: Plan-06 (inventory) or Plan-02 (VPS, needs Cloudflare).**
 
 ## Notes / limitations to record as we go
 
