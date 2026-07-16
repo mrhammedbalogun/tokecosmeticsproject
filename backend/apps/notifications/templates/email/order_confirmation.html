@@ -11,5 +11,13 @@
   {{ shipping_address.city }}{% if shipping_address.region %}, {{ shipping_address.region }}{% endif %}{% if shipping_address.postcode %} {{ shipping_address.postcode }}{% endif %}
 </p>
 
-<p style="margin:24px 0 0;color:#777;font-size:13px;">We'll email you again as soon as it's on its way.</p>
+<p style="margin:24px 0 0;">
+  <a href="{{ tracking_url }}"
+     style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
+            padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
+    Track your order
+  </a>
+</p>
+
+<p style="margin:20px 0 0;color:#777;font-size:13px;">We'll email you again as soon as it's on its way.</p>
 {% endblock %}

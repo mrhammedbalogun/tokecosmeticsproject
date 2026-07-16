@@ -100,6 +100,25 @@ def test_no_email_for_internal_moves(django_capture_on_commit_callbacks):
     assert mail.outbox == []
 
 
+def test_confirmation_carries_a_tracking_link_that_actually_works(
+    django_capture_on_commit_callbacks,
+):
+    """Asserts the token in the link resolves to THIS order — not merely that some URL
+    made it into the body. A dead link in a confirmation email is a support ticket."""
+    import re
+
+    from apps.orders.tokens import read_tracking_token
+
+    order = _order(number="TC-500009")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    match = re.search(r"token=([A-Za-z0-9_\-:]+)", mail.outbox[0].body)
+    assert match, "confirmation email must contain a tracking link"
+    assert read_tracking_token(match.group(1)) == "TC-500009"
+
+
 def test_html_emails_declare_utf8_so_the_naira_sign_survives(django_capture_on_commit_callbacks):
     """Django sets a utf-8 MIME header, but not every client honours it over the
     document's own declaration — and an HTML email with no charset gets read as latin-1,

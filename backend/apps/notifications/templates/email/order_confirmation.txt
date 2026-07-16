@@ -7,6 +7,9 @@ Delivering to:
   {{ shipping_address.line1 }}{% if shipping_address.line2 %}, {{ shipping_address.line2 }}{% endif %}
   {{ shipping_address.city }}{% if shipping_address.region %}, {{ shipping_address.region }}{% endif %}{% if shipping_address.postcode %} {{ shipping_address.postcode }}{% endif %}
 
+Track your order:
+  {{ tracking_url }}
+
 We'll email you again as soon as it's on its way.
 
 — Toke Cosmetics

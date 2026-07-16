@@ -10,8 +10,11 @@ committed data rather than passing model instances. Money is rendered through
 """
 from __future__ import annotations
 
+from django.conf import settings
+
 from apps.notifications.tasks import send_email_task
 from apps.orders.models import Order
+from apps.orders.tokens import make_tracking_token
 from apps.payments.money import format_money
 
 
@@ -19,6 +22,12 @@ def _context(order: Order) -> dict:
     money = lambda amount: format_money(amount, order.currency)  # noqa: E731
     return {
         "number": order.number,
+        # Login-free deep link, so the customer can check on their parcel from whatever
+        # device they happen to read email on. Redacted view only — see orders/tokens.py.
+        "tracking_url": (
+            f"{settings.FRONTEND_URL}/orders/{order.number}"
+            f"?token={make_tracking_token(order.number)}"
+        ),
         "placed_at": order.placed_at.strftime("%d %b %Y"),
         "items": [
             {

@@ -429,3 +429,127 @@ assumptions are wrong (field names, amount units, status enums). Plan-09 is NOT 
 one real test-mode payment per gateway (Paystack card, Flutterwave card, Stripe 4242…,
 PayPal sandbox) runs checkout → webhook → order `processing` + stock committed. **Blocked on
 test-mode API keys from Hammed.**
+
+---
+
+## Order lifecycle (Plan-10)
+
+`apps/orders/state.py` is the **only** thing in the codebase that writes `order.status`.
+Grep-verifiable, and worth keeping that way: the invariant is what makes the timeline
+trustworthy.
+
+### transition()
+
+Two rules, both load-bearing:
+
+1. **Every caller holds the row lock.** `transition()` asserts it's inside a transaction
+   and assumes the caller has `select_for_update()`-ed the order, so it validates against
+   the locked row. Otherwise an admin marking an order shipped can race a payment webhook
+   and validate against a status that's already stale. `transition_by_id()` is the
+   lock-acquiring wrapper for admin views; code already inside a locked block (payments,
+   the expiry sweep) calls `transition()` directly. **There is no fast path that skips
+   validation** — that's how "nothing sets status directly" quietly stops being true.
+2. **Deferred effects run after commit.** Registering an `on_commit` callback is a pure
+   in-memory append, so it's safe under the lock — which is precisely what lets
+   `_fulfil_locked` route through `transition()` without smuggling a Redis round-trip into
+   a `select_for_update`. The callback runs after the outermost block commits, so a worker
+   can never read pre-commit state and email about an order the DB won't admit exists.
+
+**Two effect lanes.** Deferred (`on_commit`: emails) and synchronous in-transaction (DB
+work that must be atomic with the flip — `release()` on cancel). The latter stays in the
+caller's locked block; `cancel_order` is the reference example.
+
+`place_order` is a **creation, not a transition**: it opens the timeline with a `placed`
+event rather than moving through the machine.
+
+### The status vocabulary
+
+```
+pending_payment -> processing | expired | cancelled
+expired         -> processing | cancelled          # processing = late-payment re-reserve
+processing      -> shipped | on_hold | refunded
+shipped         -> delivered | on_hold | refunded  # lost parcel -> full refund
+delivered       -> completed | refunded
+completed       -> refunded                        # post-completion return
+on_hold         -> (almost anything)               # triage for migrated legacy orders
+cancelled, refunded                                # terminal
+```
+
+**`cancelled` means no money was ever captured; a paid order exits via `refunded`.** So
+`processing -> cancelled` is absent. This kills the "an admin cancelled a paid order —
+where did the money go?" ambiguity, and means cancel never owes a refund. Plan-18's UI
+therefore offers *Refund*, not *Cancel*, on a paid order.
+
+**Cancelling MUST release the reservation**, and `cancel_order` is the only path that
+does. `expire_pending_orders` sweeps `pending_payment` only, so a cancelled order that
+kept its reservation would hold that stock away from real buyers forever with nothing
+left in the system to reclaim it. `transition()` validates *before* `release()` runs, so
+a refused cancel on a paid order can't free stock that was already sold.
+
+**Not statuses, by design:** `needs_review` (orthogonal — see the Plan-09 section) and
+`partially_refunded` (a payment-ledger fact; a shipped order can be partially refunded
+and still needs delivering).
+
+### Emails
+
+Keyed on the **destination status, never the (from, to) pair** — keying on the pair is
+exactly how the late-payment customer (`expired -> processing`) silently stops getting a
+confirmation while the normal path keeps working. `on_hold` and `expired` mail nothing:
+they're our words for our problems.
+
+There is no separate "payment received" mail. With four instant gateways, placement and
+payment are the same moment and two mails would land together. If a bank-transfer or
+pay-on-delivery gateway is ever added they become distinct events and it splits.
+
+The refund mail is enqueued explicitly rather than via the effect table: a partial refund
+has no transition to hang an effect off, and the amount isn't derivable from a
+destination status.
+
+**All money renders through `format_money`, never `|floatformat`** — hardcoding two
+decimals renders a zero-decimal currency 100x wrong in the customer's inbox, the same
+trap the gateway adapters exist to avoid. Email `base.html` declares `<meta
+charset="utf-8">`: without it, every ₦ becomes "â‚¦" in clients that trust the document
+over the MIME header, and NGN is on nearly every mail we send.
+
+### Invoices
+
+**Generated on demand, never stored.** A PDF written to S3 at fulfilment keeps asserting
+the original total long after a refund changed the commercial reality, and every future
+invalidating event becomes something a human must remember to re-trigger. Rendering at
+request time means the document can't go stale — it shows settled refunds and net paid,
+dated at *render* time (dating from `placed_at` would claim a refund position was accurate
+before any refund could have settled).
+
+`render_invoice_html` holds the logic and runs anywhere; `render_invoice_pdf` is a thin
+WeasyPrint wrapper. **WeasyPrint binds to Pango/cairo: `pip install` alone is not
+enough.** `backend/Dockerfile` (Plan-02, not yet written) must apt-install
+`libpango-1.0-0 libpangoft2-1.0-0` or every invoice download 500s with a *runtime*
+ImportError. It cannot render on a Windows dev box at all — verify inside a Linux
+container.
+
+### Access control
+
+- A stranger's order **404s, never 403s**. A 403 confirms the order exists, which is a
+  free oracle for probing order numbers.
+- **Tracking tokens** (`orders/tokens.py`) are `django.core.signing`, salted per scope,
+  90-day expiry, nothing stored. The token **names its own order**; the URL's number is
+  checked against it and never trusted, so one order's token can't open another's.
+- Token holders get the **redacted** serializer — no address, phone or email. It's a
+  bearer credential that lives in a forwardable inbox and turns up in access logs; it
+  answers "where is my parcel?" and nothing that would hand a customer's home address to
+  whoever the mail got passed along to.
+- **`invoice.pdf` does not accept the token** — an invoice carries name, address and
+  billing details. If guest invoices are ever needed, mint a separate invoice-scoped
+  token; do not widen the tracking salt.
+- `resolve-review` is the **only** thing that clears `review_reason`, and it writes its
+  own event. Never a side-effect of a status change: shipping a double-payment order must
+  not erase the reason someone still owes the customer a refund.
+
+### Auto-complete
+
+`complete_delivered_orders` (daily beat) closes orders whose return window has elapsed —
+`RETURN_WINDOW_DAYS`, default 14. Staff can complete sooner from the admin; whichever
+happens first wins. The clock runs from the **delivery event, not `placed_at`**: an order
+that took three weeks to arrive hasn't had its return window eaten by shipping time. One
+transaction per order, mirroring `expire_pending_orders`, so a poison order can't abort
+the sweep.
