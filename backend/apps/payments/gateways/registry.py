@@ -1,9 +1,14 @@
-"""Maps a gateway code → instance. Plan-09 registers paystack/flutterwave/stripe/paypal."""
+"""Maps a gateway code → instance. All gateways are registered UNCONDITIONALLY (even
+without API keys) — adapters read keys lazily and raise GatewayNotConfigured at call
+time, so an admin can enable a gateway per-country before its keys are deployed without
+crashing imports, migrations, or unrelated tests."""
 from apps.payments.gateways.bank_transfer import BankTransferGateway
+from apps.payments.gateways.paystack import PaystackGateway
 from apps.payments.models import CountryPaymentGateway
 
 _REGISTRY = {
     BankTransferGateway.code: BankTransferGateway(),
+    PaystackGateway.code: PaystackGateway(),
 }
 
 

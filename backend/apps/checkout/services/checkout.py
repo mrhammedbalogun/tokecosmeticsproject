@@ -54,9 +54,14 @@ def _address_snapshot(addr: Address) -> dict:
 def place_order(*, user, country, key: str, cart_id, address_id, delivery_option_id,
                 payment_gateway: str, billing_address_id=None, coupon_code: str = "",
                 notes: str = "", expected_total=None) -> CheckoutResult:
-    # Durable backstop: a completed payment already exists for this key → replay it.
+    # Durable backstop: a payment already exists for this key.
     existing = Payment.objects.filter(idempotency_key=key, order__user=user).select_related("order").first()
     if existing:
+        # If a prior attempt created the order but the gateway initiate failed (5xx), the
+        # payment has no gateway_reference yet — resume by re-attempting initiate (may
+        # raise GatewayError again, which the view maps to 502). Never a duplicate order.
+        if not existing.gateway_reference:
+            _initiate_payment(existing, existing.order)
         return CheckoutResult(order=existing.order, payment=existing)
 
     with transaction.atomic():
@@ -139,12 +144,19 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         cart.save(update_fields=["status", "updated_at"])
 
     # Phase 2 — external call AFTER commit, no lock held.
-    init = get_gateway(payment_gateway).initiate(payment, order)
+    _initiate_payment(payment, order)
+    return CheckoutResult(order=order, payment=payment)
+
+
+def _initiate_payment(payment, order) -> None:
+    """Call the gateway to start collecting money and persist what it returns. Raises
+    GatewayError/GatewayNotConfigured on failure — the order stays pending_payment and
+    the attempt is safely retryable (see the durable backstop above)."""
+    init = get_gateway(payment.gateway).initiate(payment, order)
     payment.gateway_reference = init.reference
     payment.raw_response = init.data
     payment.save(update_fields=["gateway_reference", "raw_response", "updated_at"])
     order._initiate = init  # stash for the view's response
-    return CheckoutResult(order=order, payment=payment)
 
 
 def _totals_dict(t) -> dict:

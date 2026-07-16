@@ -14,9 +14,11 @@ from apps.checkout.services.idempotency import (
     IdempotencyConflict,
     IdempotencyKeyReused,
     begin,
+    clear,
     finish,
     hash_payload,
 )
+from apps.payments.gateways.base import GatewayError, GatewayNotConfigured
 from apps.checkout.services.totals import compute_totals
 from apps.core.country_context import resolve_country
 from apps.delivery.services import options_for_address
@@ -91,6 +93,19 @@ class CheckoutView(APIView):
         except CheckoutError as exc:
             body = {"error": exc.code, "detail": exc.detail, **exc.extra}
             return Response(body, status=exc.http)
+        except GatewayNotConfigured:
+            clear(request.user.id, key)
+            return Response({"error": "gateway_not_configured",
+                             "detail": "Payment method is not available right now."}, status=503)
+        except GatewayError:
+            # Gateway 5xx/timeout on initiate. Order stays pending; clearing the inflight
+            # marker lets the customer retry with the SAME Idempotency-Key (resumes it).
+            # NOTE: distinct from the 400 "gateway_unavailable" above, which means the
+            # method isn't offered in this country. This one means the provider is down.
+            clear(request.user.id, key)
+            return Response({"error": "gateway_error",
+                             "detail": "Payment provider is temporarily unavailable. Please retry."},
+                            status=502)
 
         init = getattr(result.order, "_initiate", None)
         body = {

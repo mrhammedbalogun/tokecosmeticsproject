@@ -56,3 +56,10 @@ def finish(user_id, key: str, request_hash: str, status_code: int, body: dict) -
         {"status": "done", "request_hash": request_hash, "code": status_code, "body": body},
         DONE_TTL,
     )
+
+
+def clear(user_id, key: str) -> None:
+    """Drop the in-progress marker so the SAME key can be retried immediately — used when
+    a payment gateway is temporarily down on initiate. The order stays pending; the retry
+    resumes it (durable Payment backstop) and re-attempts initiate."""
+    cache.delete(_key(user_id, key))
