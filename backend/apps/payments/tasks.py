@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 @shared_task
 def process_webhook_event(event_pk: int) -> str:
     from apps.payments.models import Payment, WebhookEvent
+    from apps.payments.refunds import advance_refund_from_event
     from apps.payments.services import confirm_payment
 
     event = WebhookEvent.objects.get(pk=event_pk)
@@ -44,7 +45,14 @@ def process_webhook_event(event_pk: int) -> str:
                 event.gateway, event.event_id, event.gateway_reference,
             )
             outcome = "unmatched"
-        else:
+        elif event.kind == "refund":
+            # NEVER send a refund event through confirm_payment: it would re-verify an
+            # already-refunded payment and mis-flag it as a double payment.
+            outcome = advance_refund_from_event(
+                payment, event_type=event.event_type,
+                refund_reference=event.refund_reference,
+            )
+        elif event.kind == "payment":
             confirm_payment(payment)
             outcome = "confirmed"
     except Exception as exc:  # noqa: BLE001 - record the error, don't crash the worker

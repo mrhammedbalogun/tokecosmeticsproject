@@ -88,6 +88,10 @@ class WebhookEvent(models.Model):
     # Captured from the signature-verified ParsedEvent so the async processor can match a
     # Payment WITHOUT re-parsing (re-parsing needs the live request to check the signature).
     gateway_reference = models.CharField(max_length=128, blank=True, db_index=True)
+    # How the adapter classified this event, so the async processor routes it to the
+    # payment pipeline or the refund pipeline without re-parsing.
+    kind = models.CharField(max_length=10, default="payment")  # payment|refund|other
+    refund_reference = models.CharField(max_length=128, blank=True)
     payload = models.JSONField()
     processed_at = models.DateTimeField(null=True, blank=True)
     error = models.TextField(blank=True)

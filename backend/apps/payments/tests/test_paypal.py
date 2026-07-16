@@ -22,6 +22,7 @@ BASE = "https://api-m.sandbox.paypal.com"
 SETTINGS = dict(
     PAYPAL_CLIENT_ID="cid", PAYPAL_CLIENT_SECRET="csec",
     PAYPAL_API_BASE=BASE, PAYPAL_WEBHOOK_ID="wh_1",
+    BRAND_NAME="Toké Cosmetics",
 )
 
 
@@ -69,6 +70,9 @@ def test_initiate_sends_major_unit_string_and_returns_approval_link():
     assert sent["intent"] == "CAPTURE"
     # Major-unit DECIMAL STRING — not an integer, not minor units.
     assert sent["purchase_units"][0]["amount"]["value"] == "10.99"
+    # PayPal's approval page is branded, and must not re-ask for a shipping address.
+    assert sent["application_context"]["brand_name"] == "Toké Cosmetics"
+    assert sent["application_context"]["shipping_preference"] == "NO_SHIPPING"
 
 
 @override_settings(**SETTINGS)

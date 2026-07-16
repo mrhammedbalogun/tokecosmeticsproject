@@ -56,6 +56,36 @@ def test_initiate_sends_major_units_not_minor():
     assert sent["redirect_url"] == "https://shop/ret"
 
 
+@override_settings(FLUTTERWAVE_SECRET_KEY=SECRET, BRAND_NAME="Toké Cosmetics",
+                   BRAND_LOGO_URL="https://tokecosmetics.com/logo.png")
+@respx.mock
+def test_initiate_brands_the_hosted_page():
+    order, payment = _order_payment()
+    route = respx.post(f"{API_BASE}/payments").mock(
+        return_value=httpx.Response(200, json={
+            "status": "success", "data": {"link": "https://checkout.flutterwave.com/x"},
+        })
+    )
+    FlutterwaveGateway().initiate(payment, order)
+
+    sent = json.loads(route.calls.last.request.content)
+    assert sent["customizations"]["title"] == "Toké Cosmetics"
+    assert sent["customizations"]["logo"] == "https://tokecosmetics.com/logo.png"
+
+
+@override_settings(FLUTTERWAVE_SECRET_KEY=SECRET, BRAND_LOGO_URL="")
+@respx.mock
+def test_initiate_omits_logo_when_unset():
+    order, payment = _order_payment()
+    route = respx.post(f"{API_BASE}/payments").mock(
+        return_value=httpx.Response(200, json={
+            "status": "success", "data": {"link": "https://x"},
+        })
+    )
+    FlutterwaveGateway().initiate(payment, order)
+    assert "logo" not in json.loads(route.calls.last.request.content)["customizations"]
+
+
 @override_settings(FLUTTERWAVE_SECRET_KEY=SECRET)
 @respx.mock
 def test_verify_successful_maps_major_amount():

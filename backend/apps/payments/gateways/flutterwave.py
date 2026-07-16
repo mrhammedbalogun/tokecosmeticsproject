@@ -61,12 +61,17 @@ class FlutterwaveGateway(PaymentGateway):
     # --- API -----------------------------------------------------------------
 
     def initiate(self, payment, order, return_url: str = "") -> InitiateResult:
+        # Flutterwave renders a HOSTED payment page — brand it so the customer doesn't
+        # land on an unbranded form mid-checkout. `logo` must be a public URL.
+        customizations = {"title": settings.BRAND_NAME}
+        if settings.BRAND_LOGO_URL:
+            customizations["logo"] = settings.BRAND_LOGO_URL
         payload = {
             "tx_ref": order.reservation_reference,  # our idempotency handle
             "amount": str(payment.amount),  # MAJOR units — not to_minor()
             "currency": payment.currency_id,
             "customer": {"email": order.email},
-            "customizations": {"title": "Toke Cosmetics"},
+            "customizations": customizations,
         }
         if return_url:
             payload["redirect_url"] = return_url
@@ -133,5 +138,12 @@ class FlutterwaveGateway(PaymentGateway):
         event_id = hashlib.sha256(
             f"{tx_ref}:{event_type}:{data.get('status', '')}".encode()
         ).hexdigest()
+        if "refund" in event_type:
+            kind, refund_reference = "refund", str(data.get("id", ""))
+        elif event_type.startswith("charge."):
+            kind, refund_reference = "payment", ""
+        else:
+            kind, refund_reference = "other", ""
         return ParsedEvent(event_id=event_id, event_type=event_type,
-                           gateway_reference=tx_ref, raw=body)
+                           gateway_reference=tx_ref, raw=body,
+                           kind=kind, refund_reference=refund_reference)

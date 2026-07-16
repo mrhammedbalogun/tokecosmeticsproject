@@ -126,6 +126,48 @@ def apply_succeeded_refund(refund, *, restock: bool = False, user=None) -> None:
             _restock(order, user)
 
 
+# Event-type fragments that mean "this refund settled successfully" / "it failed".
+# Kept here (not in the adapters) because it's a policy question, not a protocol one.
+_REFUND_SUCCESS_HINTS = ("processed", "completed", "succeeded", "refunded")
+_REFUND_FAILURE_HINTS = ("failed", "declined", "reversed")
+
+
+def advance_refund_from_event(payment, *, event_type: str, refund_reference: str = "") -> str:
+    """Settle an async (pending) refund when its completion webhook lands.
+
+    Flutterwave, PayPal and Paystack all report refunds as `pending` on initiate and
+    finish them out-of-band, so without this a refunded order would sit in
+    partially_refunded forever. Matches by the gateway's refund id when the event carries
+    one, else falls back to this payment's pending refunds (the common single-refund case).
+    """
+    lowered = event_type.lower()
+    if any(hint in lowered for hint in _REFUND_FAILURE_HINTS):
+        new_status = "failed"
+    elif any(hint in lowered for hint in _REFUND_SUCCESS_HINTS):
+        new_status = "succeeded"
+    else:
+        return "refund_event_ignored"
+
+    pending = payment.refunds.filter(status="pending")
+    if refund_reference:
+        matched = pending.filter(gateway_reference=refund_reference)
+        pending = matched if matched.exists() else pending
+
+    refund = pending.order_by("created_at").first()
+    if refund is None:
+        logger.info("Refund event %s for payment %s matched no pending refund",
+                    event_type, payment.pk)
+        return "no_pending_refund"
+
+    refund.status = new_status
+    refund.save(update_fields=["status", "updated_at"])
+    if new_status == "succeeded":
+        # restock=False: a webhook can't know the operator's restock intent; the original
+        # staff request already restocked if it was asked to and settled synchronously.
+        apply_succeeded_refund(refund, restock=False)
+    return f"refund_{new_status}"
+
+
 def _restock(order, user) -> None:
     """Put the goods back where they came from, using the fulfillment_warehouses snapshot
     written at fulfilment — never a guess about which warehouse shipped what."""

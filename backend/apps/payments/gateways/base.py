@@ -74,6 +74,12 @@ class ParsedEvent:
     event_type: str
     gateway_reference: str     # links the event back to a Payment
     raw: dict = field(default_factory=dict)
+    # Which pipeline should handle this event. Each adapter classifies its own taxonomy,
+    # because only it knows that (say) "charge.refunded" is a refund and not a payment.
+    # Routing matters: sending a refund event through confirm_payment would re-verify an
+    # already-refunded payment and mis-flag it as a double payment.
+    kind: str = "payment"      # "payment" | "refund" | "other"
+    refund_reference: str = "" # the gateway's refund id, when the event carries one
 
 
 # --- The contract -----------------------------------------------------------

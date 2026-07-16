@@ -312,3 +312,104 @@ manual-confirm path). To **Plan-10**: `OrderEvent` + a `state.py` state machine 
 directly in exactly two places, both to be refactored through `transition()` later), order emails,
 invoices, and the customer/admin order APIs.
 
+
+---
+
+## Payments (Plan-09)
+
+Four gateways behind one interface, signature-verified idempotent webhooks, refunds.
+Architectural rulings on this stage came from a Fable 5 consult (2026-07-15); the ones
+that constrain future changes are recorded here so they aren't relitigated.
+
+**The one law: webhooks are a trigger, never a source of truth.** No inbound payload is
+ever trusted for money. Every fulfilment goes through `payments.services.confirm_payment()`,
+which calls `gateway.verify()` — a server-side, authenticated re-read — and compares the
+verified amount+currency against the Payment before anything is committed.
+
+**Three layers** (`apps/payments/services.py`), so recovery logic never pollutes the
+fulfilment primitive:
+
+| Layer | Holds the order lock? | Job |
+|---|---|---|
+| `_fulfil_locked(order, payment)` | caller must | commit stock, snapshot fulfilment, redeem coupon, flip statuses. Pure DB. |
+| `mark_paid(payment) -> MarkPaidResult` | yes | fulfil iff `pending_payment`; otherwise REPORT (`NOOP_EXPIRED`/`NOOP_CANCELLED`/`NOOP_ALREADY_PROCESSED`) rather than silently no-op |
+| `confirm_payment(payment)` | no (verify is a network call) | verify → amount check → `mark_paid` → react to the verdict |
+
+**Invariant:** `payment.status == "succeeded"` is written *only* by `_fulfil_locked`. So
+"payment succeeded ⟺ the order was fulfilled (or explicitly recovered)". An amount
+mismatch leaves the payment `pending` and flags the order — it never fulfils.
+
+**`gateway.verify()` is NEVER called while holding a row lock.** A 15s gateway timeout
+inside `select_for_update` would serialize every payment and the expiry task behind one
+slow HTTP call. Verify first, then open the transaction. Same discipline in refunds.
+
+**needs_review vs review_reason.** `needs_review` is a *status* (pre-fulfilment flags:
+amount mismatch, expired-and-couldn't-re-reserve). `Order.review_reason` is the orthogonal
+**single source of truth for "a human must look"** and is written in *every* flag path.
+The double-payment case can't use the status (an order can't be `processing` AND
+`needs_review`), so it sets `review_reason` only. Admin needs-attention filter =
+`status == 'needs_review' OR review_reason != ''`. Plan-10's `transition()` must clear
+`review_reason` when the flag is resolved.
+
+**Money units.** `apps/payments/money.py` owns the *arithmetic* (reading
+`Currency.decimal_places`) and REFUSES to round money it can't represent. Each adapter owns
+its gateway's *convention* — they genuinely differ, and this is the 100x-overcharge trap:
+
+| Gateway | Amount on the wire | Idempotency on initiate | Webhook event id |
+|---|---|---|---|
+| Paystack | **kobo** (minor) | the `reference` param itself | derived `event:txn_id` |
+| Stripe | minor, zero-decimal aware | `Idempotency-Key` header | native `evt_…` |
+| Flutterwave | **MAJOR** (plain NGN) | `tx_ref` | **none — derived** `sha256(tx_ref:event:status)` |
+| PayPal | **major decimal string** `"10.99"` | order id | native `WH-…` |
+
+**Webhook pipeline.** `POST /api/v1/webhooks/{gateway}/` — no auth (the signature *is* the
+auth, checked over the RAW request bytes; DRF parsers are disabled on the view so the body
+is never re-serialized), throttled **generously** (gateways treat non-2xx incl. 429 as a
+delivery failure and retry — a tight throttle turns a retry burst into a storm). Flow:
+verify signature → upsert `WebhookEvent(gateway, event_id)` (the unique constraint IS the
+dedupe; duplicate ⇒ 200 immediately) → enqueue Celery → 200 fast. Unmatched/unknown events
+are recorded and **acked 200** — never make a gateway retry something we'll never process.
+
+**Event routing.** Each adapter classifies its own events (`ParsedEvent.kind`:
+payment|refund|other). This is load-bearing, not tidiness: routing a refund event through
+`confirm_payment` would re-verify an already-refunded payment and mis-flag it as a double
+payment. Refund events go to `refunds.advance_refund_from_event` instead.
+
+**Customer return endpoint** — `POST /api/v1/payments/{reference}/verify/`. The buyer
+returns from the redirect *before* the webhook lands; this runs the same `confirm_payment`,
+so the UI doesn't stare at "pending" for 5–30s. Webhook-vs-return is a benign idempotent
+race: whichever verifies first fulfils, the other no-ops.
+
+**Late payment after expiry.** `NOOP_EXPIRED` → re-reserve under a **bumped attempt suffix**
+(`TC-100042` → `/2`; `inventory.reserve()` is reference-idempotent, so re-reserving under the
+old reference would silently reserve nothing). `reserve()` is per-item, so a failure on item
+N leaves 1..N-1 reserved — the failure branch `release(new_ref)` cleans up the partial set
+before flagging. The new reference is written **before** `_fulfil_locked` reads it.
+
+**Gateway 5xx on initiate** → 502 `gateway_error` (distinct from the 400 `gateway_unavailable`,
+which means "not offered in this country"). The order stays `pending_payment` and the
+inflight idempotency marker is cleared, so the SAME `Idempotency-Key` retries and **resumes**
+the existing order via the durable Payment backstop (re-attempting initiate) — no duplicate
+order, no double reservation.
+
+**Refunds.** Two-phase like confirm: under the payment lock, compute remaining from a DB
+aggregate of `succeeded + pending` refunds and write a `pending` Refund row — that row
+*reserves* the amount, so two admins can't both pass an `amount <= remaining` check. The
+gateway call happens outside the lock; a failed refund frees its amount automatically
+(the aggregate only counts succeeded+pending). Refunds are **async** on Paystack/Flutterwave/
+PayPal, settled later by a refund-completion webhook. Restock is restricted to **full**
+refunds and driven by the `fulfillment_warehouses` snapshot — per-item partial restock needs
+a UI that can ask which lines (Plan-19).
+
+**Keys are read lazily**, never at import: all gateways register unconditionally, and an
+unconfigured one raises `GatewayNotConfigured` → 503 at call time. That fails safe when a
+gateway is activated per-country before its keys ship, and keeps migrations/tests trivial.
+`manage.py check` warns (`payments.W001`) for any gateway missing keys.
+
+**⚠️ PENDING CHECKPOINT — real test-mode e2e.** Every gateway is **code-complete but
+unverified against a sandbox**: the suite mocks HTTP (respx / SDK monkeypatch) and computes
+signatures in-test, so it encodes *our assumptions* about each API — and that's exactly where
+assumptions are wrong (field names, amount units, status enums). Plan-09 is NOT done until
+one real test-mode payment per gateway (Paystack card, Flutterwave card, Stripe 4242…,
+PayPal sandbox) runs checkout → webhook → order `processing` + stock committed. **Blocked on
+test-mode API keys from Hammed.**

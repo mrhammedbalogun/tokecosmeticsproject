@@ -109,9 +109,23 @@ class PaystackGateway(PaymentGateway):
         data = body.get("data") or {}
         # Paystack sends no event-id header; (event_type, transaction id) is unique+stable.
         event_id = f"{event_type}:{data.get('id', '')}"
+        if event_type.startswith("refund."):
+            kind, refund_reference = "refund", str(data.get("id", ""))
+            # Refund payloads nest the original transaction under `transaction`.
+            reference = (data.get("transaction") or {}).get("reference", "") or data.get(
+                "transaction_reference", ""
+            )
+        elif event_type.startswith("charge."):
+            kind, refund_reference = "payment", ""
+            reference = data.get("reference", "")
+        else:
+            kind, refund_reference = "other", ""
+            reference = data.get("reference", "")
         return ParsedEvent(
             event_id=event_id,
             event_type=event_type,
-            gateway_reference=data.get("reference", ""),
+            gateway_reference=reference,
             raw=body,
+            kind=kind,
+            refund_reference=refund_reference,
         )

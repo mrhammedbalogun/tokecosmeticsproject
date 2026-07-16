@@ -192,6 +192,14 @@ ANYMAIL = {
     "RESEND_API_KEY": env("RESEND_API_KEY", default=""),
 }
 
+# --- Brand ---
+# Shown on gateway-HOSTED checkout pages (Flutterwave/PayPal render these server-side, so
+# the logo must be a PUBLIC url they can fetch — a local file won't do). Stripe and
+# Paystack don't take branding via the API: Stripe is embedded in our own UI (client_secret)
+# so the storefront brands it, and Paystack branding is configured in their dashboard.
+BRAND_NAME = env("BRAND_NAME", default="Toké Cosmetics")
+BRAND_LOGO_URL = env("BRAND_LOGO_URL", default="")
+
 # --- Payment gateways (test-mode keys in dev; never commit real keys) ---
 # Read here, consumed lazily by each gateway adapter so a missing key never breaks
 # imports/migrations — an unconfigured gateway raises GatewayNotConfigured at call time.

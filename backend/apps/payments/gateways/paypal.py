@@ -101,8 +101,13 @@ class PayPalGateway(PaymentGateway):
                 },
             }],
         }
+        # PayPal shows brand_name on its own approval page; without it the customer sees a
+        # bare merchant id mid-checkout. SHIPPING_PREFERENCE: we already collected the
+        # address, so don't let PayPal offer a different one and desync the order.
+        context = {"brand_name": settings.BRAND_NAME, "shipping_preference": "NO_SHIPPING"}
         if return_url:
-            payload["application_context"] = {"return_url": return_url, "cancel_url": return_url}
+            context.update({"return_url": return_url, "cancel_url": return_url})
+        payload["application_context"] = context
         resp = _http.request("POST", f"{self._base()}/v2/checkout/orders",
                              headers=self._headers(), json=payload)
         if resp.status_code >= 500:
@@ -211,9 +216,18 @@ class PayPalGateway(PaymentGateway):
             ((resource.get("supplementary_data") or {}).get("related_ids") or {}).get("order_id")
             or resource.get("id", "")
         )
+        event_type = body.get("event_type", "")
+        if "REFUND" in event_type:
+            kind, refund_reference = "refund", resource.get("id", "")
+        elif event_type.startswith("PAYMENT.CAPTURE.") or event_type.startswith("CHECKOUT.ORDER."):
+            kind, refund_reference = "payment", ""
+        else:
+            kind, refund_reference = "other", ""
         return ParsedEvent(
             event_id=body.get("id", ""),
-            event_type=body.get("event_type", ""),
+            event_type=event_type,
             gateway_reference=reference,
-            raw={"id": body.get("id"), "event_type": body.get("event_type")},
+            raw={"id": body.get("id"), "event_type": event_type},
+            kind=kind,
+            refund_reference=refund_reference,
         )

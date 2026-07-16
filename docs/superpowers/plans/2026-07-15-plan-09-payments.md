@@ -10,6 +10,27 @@
 
 ---
 
+## STATUS (2026-07-16): code-complete, NOT done
+
+All eight tasks below are implemented and green — **249 tests passing** (was 171 at Plan-08),
+ruff clean, `manage.py check` clean. The design write-up landed in `docs/architecture.md`
+§ "Payments (Plan-09)".
+
+**Plan-09 does NOT get marked done until the PENDING CHECKPOINT at the bottom of this file
+passes** — real test-mode e2e per gateway. Blocked on test-mode API keys from Hammed.
+Every gateway is "code-complete, unverified against sandbox" until then, because the whole
+suite mocks HTTP and therefore encodes our *assumptions* about each API.
+
+Two bugs found and fixed along the way that were NOT in the original plan:
+1. Refund-completion webhooks were being routed through `confirm_payment`, which would
+   re-verify an already-refunded payment and raise a **bogus double-payment flag**. Fixed
+   with `ParsedEvent.kind` classification per adapter.
+2. Plan-08's recorded risks #2 and #4 (post-commit initiate failure leaving an empty
+   `payment.action`; a failed checkout holding the Idempotency-Key for 5 min) are both
+   resolved by the 502 + `idempotency.clear()` + durable-backstop-resume path.
+
+---
+
 ## Authoritative design decisions (Fable 5 rulings, 2026-07-15)
 
 These override any conflicting instinct. Rationale is in the commit history / this session.

@@ -123,15 +123,27 @@ class StripeGateway(PaymentGateway):
             raise InvalidSignature(f"Stripe payload unparseable: {exc}") from exc
 
         obj = event["data"]["object"]
+        event_type = event["type"]
         # payment_intent.* events carry the intent itself; charge.*/refund.* events carry a
         # Charge whose payment_intent field is the reference we stored on the Payment.
         if obj.get("object") == "payment_intent":
             reference = obj.get("id", "")
         else:
             reference = obj.get("payment_intent") or obj.get("id", "")
+
+        if event_type.startswith("charge.refund") or event_type.startswith("refund."):
+            kind = "refund"
+            refund_reference = obj.get("id", "") if obj.get("object") == "refund" else ""
+        elif event_type.startswith("payment_intent.") or event_type.startswith("charge."):
+            kind, refund_reference = "payment", ""
+        else:
+            kind, refund_reference = "other", ""
+
         return ParsedEvent(
             event_id=event["id"],
-            event_type=event["type"],
+            event_type=event_type,
             gateway_reference=reference or "",
-            raw={"id": event["id"], "type": event["type"]},
+            raw={"id": event["id"], "type": event_type},
+            kind=kind,
+            refund_reference=refund_reference,
         )

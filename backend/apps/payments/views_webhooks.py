@@ -64,6 +64,8 @@ class GatewayWebhookView(APIView):
                     event_id=event.event_id,
                     event_type=event.event_type,
                     gateway_reference=event.gateway_reference,
+                    kind=event.kind,
+                    refund_reference=event.refund_reference,
                     payload=event.raw,
                 )
         except IntegrityError:
