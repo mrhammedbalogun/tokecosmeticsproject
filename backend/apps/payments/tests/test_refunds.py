@@ -87,6 +87,23 @@ def test_partial_refund_math(fakerf):
     assert refundable_amount(payment) == Decimal("0")
 
 
+def test_refund_completion_webhook_replay_is_idempotent(fakerf):
+    """apply_succeeded_refund is also the entry point for an async refund-completion
+    webhook, and gateways redeliver. A replay must not blow up on refunded -> refunded."""
+    from apps.payments.refunds import apply_succeeded_refund
+
+    order, payment, _ = _paid_order()
+    refund = create_refund(payment=payment, amount=Decimal("1000.00"), reason="returned")
+    order.refresh_from_db()
+    assert order.status == "refunded"
+
+    apply_succeeded_refund(refund)  # the gateway redelivers the same completion event
+
+    order.refresh_from_db()
+    assert order.status == "refunded"
+    assert order.events.filter(type="status:refunded").count() == 1  # not double-logged
+
+
 def test_partial_refund_leaves_order_lifecycle_untouched(fakerf):
     """A partial refund is a payment-ledger fact, not a lifecycle move. Refunding one
     damaged item off a shipped order must leave it shipped — stomping the status drops

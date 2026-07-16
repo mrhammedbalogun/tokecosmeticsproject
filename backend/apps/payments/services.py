@@ -28,6 +28,7 @@ from django.db.models import Sum
 from apps.inventory.models import StockMovement
 from apps.inventory.services import InsufficientStock, commit_sale, release, reserve
 from apps.orders.models import Order
+from apps.orders.state import transition
 from apps.payments.money import to_minor
 
 logger = logging.getLogger(__name__)
@@ -77,9 +78,10 @@ def _fulfil_locked(order, payment) -> None:
 
     payment.status = "succeeded"
     payment.save(update_fields=["status", "updated_at"])
-    order.status = "processing"
     order.reservation_expires_at = None
-    order.save(update_fields=["status", "reservation_expires_at", "updated_at"])
+    order.save(update_fields=["reservation_expires_at", "updated_at"])
+    # Legal from pending_payment (normal) and from expired (the late-payment re-reserve).
+    transition(order, "processing", message=f"payment {payment.pk} verified via {payment.gateway}")
 
 
 @transaction.atomic

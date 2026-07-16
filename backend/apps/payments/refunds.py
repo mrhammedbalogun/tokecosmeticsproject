@@ -25,6 +25,7 @@ from django.db.models import Sum
 from apps.inventory.models import StockItem
 from apps.inventory.services import adjust
 from apps.orders.models import Order
+from apps.orders.state import transition
 from apps.payments.gateways.base import GatewayError
 from apps.payments.gateways.registry import get_gateway
 from apps.payments.models import Payment, Refund
@@ -124,9 +125,16 @@ def apply_succeeded_refund(refund, *, restock: bool = False, user=None) -> None:
         # order to `partially_refunded` drops it out of the packing/delivery pipeline
         # while the customer is still owed the rest of the parcel.
         order = Order.objects.select_for_update().get(pk=payment.order_id)
-        if fully:
-            order.status = "refunded"
-            order.save(update_fields=["status", "updated_at"])
+        if fully and order.status != "refunded":
+            # Guarded rather than unconditional: this is also the async refund-completion
+            # webhook's entry point, and gateways redeliver. A replay must be a no-op, not
+            # an IllegalTransition (refunded -> refunded) or a duplicate timeline entry.
+            transition(
+                order,
+                "refunded",
+                actor=user,
+                message=f"refund {refund.pk} settled at {payment.gateway}",
+            )
 
         if restock:
             _restock(order, user)

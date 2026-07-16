@@ -59,9 +59,40 @@ class Order(TimeStampedModel):
 
     class Meta:
         ordering = ["-placed_at"]
+        indexes = [
+            # The expiry task sweeps on (status, reservation_expires_at) every few
+            # minutes, and every admin order list filters on status.
+            models.Index(fields=["status", "reservation_expires_at"]),
+            models.Index(fields=["status", "-placed_at"]),
+        ]
 
     def __str__(self) -> str:
         return self.number
+
+
+class OrderEvent(models.Model):
+    """Append-only timeline: what happened to this order, when, and who did it.
+
+    This is the record that settles disputes, so it outlives the people in it —
+    `actor` is SET_NULL, never CASCADE. `actor` is null for machine-driven changes
+    (webhooks, Celery tasks), which is exactly why `message` must carry provenance;
+    "status changed to processing, by nobody, for no reason" helps no one.
+    """
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="events")
+    type = models.CharField(max_length=40)  # "status:shipped", "placed", "review_resolved"
+    message = models.TextField(blank=True)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "pk"]  # oldest first; pk breaks ties within a transaction
+        indexes = [models.Index(fields=["order", "created_at"])]
+
+    def __str__(self) -> str:
+        return f"{self.order_id}: {self.type}"
 
 
 class OrderItem(models.Model):

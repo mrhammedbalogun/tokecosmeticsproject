@@ -21,6 +21,7 @@ from apps.delivery.services import options_for_address
 from apps.inventory.services import InsufficientStock, reserve
 from apps.orders.models import Order, OrderItem
 from apps.orders.numbers import next_order_number
+from apps.orders.state import record_event
 from apps.payments.gateways.registry import active_gateways_for, get_gateway
 from apps.payments.models import Payment
 from apps.pricing.services import resolve_price
@@ -129,6 +130,9 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             customer_note=notes, reservation_reference=number,
             reservation_expires_at=timezone.now() + timedelta(minutes=settings.RESERVATION_TTL_MINUTES),
         )
+        # A creation, not a transition — there is no prior status to move from, so this
+        # opens the timeline directly rather than going through the state machine.
+        record_event(order, "placed", actor=user, message=f"{chosen['name']} to {country.code}")
         for variant, qty in lines:
             rp = resolve_price(variant, country)
             OrderItem.objects.create(
