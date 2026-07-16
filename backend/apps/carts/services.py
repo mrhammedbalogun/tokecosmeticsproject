@@ -2,6 +2,7 @@
 request owns, so views stay thin and identity rules live in one file."""
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal
 
 from django.db import transaction
@@ -9,6 +10,19 @@ from django.db import transaction
 from apps.carts.models import Cart, CartItem
 from apps.inventory.services import available_for_country
 from apps.pricing.services import resolve_price
+
+
+def _safe_uuid(value) -> uuid.UUID | None:
+    """Parse an untrusted cart id (X-Cart-Id header or request body) into a UUID,
+    returning None for anything malformed. Without this, a corrupted cookie value
+    reaches a UUIDField lookup and raises ValidationError → HTTP 500 on every
+    cart request. A bad id is simply treated as 'no cart'."""
+    if not value:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 
 def get_or_create_cart(request, kind: str = "standard") -> Cart:
@@ -27,7 +41,7 @@ def get_or_create_cart(request, kind: str = "standard") -> Cart:
         )
         return cart
 
-    cart_id = request.headers.get("X-Cart-Id")
+    cart_id = _safe_uuid(request.headers.get("X-Cart-Id"))
     if cart_id:
         cart = Cart.objects.filter(
             id=cart_id, user__isnull=True, kind=kind, status="active"
@@ -99,9 +113,14 @@ def merge_guest_cart(user, guest_cart_id, country) -> Cart:
         user=user, kind="standard", status="active",
         defaults={"country": country, "currency": country.currency},
     )
-    guest = Cart.objects.filter(
-        id=guest_cart_id, user__isnull=True, kind="standard", status="active"
-    ).first()
+    guest_id = _safe_uuid(guest_cart_id)
+    guest = (
+        Cart.objects.filter(
+            id=guest_id, user__isnull=True, kind="standard", status="active"
+        ).first()
+        if guest_id
+        else None
+    )
     if not guest or guest.id == user_cart.id:
         return user_cart
     with transaction.atomic():

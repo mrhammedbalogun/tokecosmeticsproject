@@ -52,3 +52,14 @@ def test_merge_ignores_foreign_or_claimed_guest_cart(django_user_model):
     merged = merge_guest_cart(user, claimed.id, ng)  # must not steal it
 
     assert merged.user_id == user.id and merged.id != claimed.id
+
+
+def test_merge_tolerates_malformed_or_missing_cart_id(django_user_model):
+    """A garbage or absent cart_id from the BFF must not raise (ORM UUID
+    ValidationError); it returns the user's own active cart unchanged."""
+    ng = _ng_stock(ProductVariantFactory(), qty=6)
+    user = django_user_model.objects.create_user(email="m3@x.com", password="pw")
+
+    for bad in ("not-a-uuid", None, ""):
+        merged = merge_guest_cart(user, bad, ng)
+        assert merged.user_id == user.id

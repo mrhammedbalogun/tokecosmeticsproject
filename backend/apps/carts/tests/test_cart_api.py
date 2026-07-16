@@ -83,6 +83,18 @@ def test_guest_cart_roundtrip_via_header():
     assert r.data["subtotal"] == "2000.00"
 
 
+def test_malformed_cart_id_header_does_not_500():
+    """A corrupted X-Cart-Id cookie/header must not crash: treat it as no cart
+    and hand back a fresh guest cart, not an ORM ValidationError (HTTP 500)."""
+    _ng_with_stock(ProductVariantFactory(), qty=5)
+    client = APIClient()
+
+    r = client.get("/api/v1/cart/", HTTP_X_COUNTRY="NG", HTTP_X_CART_ID="not-a-uuid")
+
+    assert r.status_code == 200
+    assert r.data["id"]  # a brand-new guest cart id, not a crash
+
+
 def test_patch_and_delete_line(django_user_model):
     variant = ProductVariantFactory()
     _ng_with_stock(variant, qty=10)  # seeds stock + NGN price for NG
