@@ -249,3 +249,53 @@ def test_confirm_late_payment_after_expiry_insufficient_stock_flags(fake_gateway
     # no phantom reservation left behind under the bumped reference
     si = variant.stock_items.get()
     assert si.reserved == 0
+
+
+# --- the raced-status guard in _reserve_and_fulfil_after_expiry ---------------
+#
+# mark_paid returns NOOP_EXPIRED, and the status can change again before
+# _reserve_and_fulfil_after_expiry re-takes the lock. Falling through to re-reserve on
+# whatever it finds is not safe: these drive the raced states directly.
+
+
+def test_late_payment_on_a_cancelled_order_flags_instead_of_reserving(fake_gateway):
+    """`expired -> cancelled` is legal, so an admin can cancel between the verdict and
+    the re-lock. Re-reserving there would take stock for a dead order and then raise
+    IllegalTransition (cancelled -> processing) straight out of the webhook task."""
+    from apps.payments.services import _reserve_and_fulfil_after_expiry
+
+    ng, ngn, variant = _setup()
+    order = _order("TC-200030", ng, ngn, status="cancelled")
+    OrderItem.objects.create(order=order, variant=variant, product_name="X",
+                             unit_price="500.00", line_total="1000.00", quantity=2)
+    payment = PaymentFactory(order=order, currency=ngn, gateway="fake", amount="1000.00")
+
+    _reserve_and_fulfil_after_expiry(order, payment)  # must not raise
+
+    order.refresh_from_db()
+    assert order.status == "cancelled"  # untouched
+    assert "refund" in order.review_reason  # the money is flagged, not silently kept
+    si = variant.stock_items.get()
+    assert si.reserved == 0  # no stock taken for a dead order
+    assert si.quantity == 10  # and nothing sold
+
+
+def test_late_payment_on_a_held_order_does_not_double_commit_stock(fake_gateway):
+    """on_hold was missing from _FULFILLED_STATES, and `on_hold -> processing` is LEGAL —
+    so a fall-through here re-reserves AND commits stock a second time."""
+    from apps.payments.services import _reserve_and_fulfil_after_expiry
+
+    ng, ngn, variant = _setup()
+    order = _order("TC-200031", ng, ngn, status="on_hold")
+    OrderItem.objects.create(order=order, variant=variant, product_name="X",
+                             unit_price="500.00", line_total="1000.00", quantity=2)
+    payment = PaymentFactory(order=order, currency=ngn, gateway="fake", amount="1000.00")
+
+    _reserve_and_fulfil_after_expiry(order, payment)
+
+    order.refresh_from_db()
+    assert order.status == "on_hold"
+    si = variant.stock_items.get()
+    assert si.quantity == 10, "stock must not be committed twice"
+    assert si.reserved == 0
+    assert order.review_reason != ""  # a human is told a payment landed on a held order

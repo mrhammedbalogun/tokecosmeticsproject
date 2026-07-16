@@ -55,16 +55,31 @@ def _send(order_pk: int, template: str, **extra) -> None:
     send_email_task.delay(template, order.email, {**_context(order), **extra})
 
 
+def enqueue_order_received(order_pk: int, bank_details: dict | None = None) -> None:
+    """Placement, for gateways that hand the customer payment instructions rather than
+    taking the money there and then (`InitiateResult.action == "bank_details"`).
+
+    This is the customer's only durable copy of the account number and — critically — of
+    the order number they're told to quote as the transfer reference. Without it those
+    details exist solely in the checkout response, and a transfer with no reference is
+    exactly the kind you can't match to an order.
+
+    Instant gateways deliberately send nothing here: that customer is mid-redirect, owes
+    nothing on paper, and would get two mails seconds apart.
+    """
+    _send(order_pk, "order_received", **(bank_details or {}))
+
+
 def enqueue_order_confirmation(order_pk: int) -> None:
     """Payment verified and stock committed — the order is real. Fires on ANY move to
     `processing`, which deliberately includes the late-payment `expired -> processing`
     path: that customer paid too, and keying on the destination rather than the pair is
     what stops them being silently skipped.
 
-    There is no separate "payment received" email. With four instant gateways, placement
-    and payment are the same moment for the customer, and two mails would land together.
-    If a bank-transfer/pay-on-delivery gateway is ever added they become distinct events
-    and this splits into `order_received` + `payment_received`.
+    For an instant gateway this is the customer's only email, so it doubles as the
+    "payment received" notice — placement and payment are one moment for them. A
+    bank-transfer customer gets `order_received` at placement and this one when the money
+    is confirmed, which is the two-step the spec's five-email list was describing.
     """
     _send(order_pk, "order_confirmation")
 

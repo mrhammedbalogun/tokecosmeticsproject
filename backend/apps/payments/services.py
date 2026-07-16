@@ -143,10 +143,27 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order.pk)
         if order.status != "expired":
-            # Raced: another confirm already handled it. If it's fulfilled, we're done;
-            # otherwise fall through to a fresh mark_paid verdict on the current status.
+            # Raced between mark_paid's NOOP_EXPIRED verdict and this lock. Re-dispatch on
+            # what is ACTUALLY true now — never fall through to re-reserve. On a cancelled
+            # order that takes stock for a dead order and then raises IllegalTransition
+            # out of the webhook task; on `on_hold` (on_hold -> processing is legal!) it
+            # silently commits the same stock twice.
             if order.status in _FULFILLED_STATES:
-                return
+                return  # another confirm got there first — nothing owed
+            if order.status == "cancelled":
+                order.review_reason = (
+                    f"payment {payment.pk} received on a cancelled order — refund it"
+                )
+            else:
+                order.review_reason = (
+                    f"late payment {payment.pk}: order moved to {order.status} while "
+                    "confirming — a human must decide whether to fulfil or refund"
+                )
+            order.save(update_fields=["review_reason", "updated_at"])
+            logger.warning(
+                "Order %s: late payment raced to %s — flagged", order.number, order.status
+            )
+            return
         new_ref = _bump_attempt(order.reservation_reference)
         try:
             for item in order.items.all():

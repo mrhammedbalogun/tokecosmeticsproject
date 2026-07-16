@@ -1,5 +1,6 @@
 import pytest
 from decimal import Decimal
+from django.core import mail
 from rest_framework.test import APIClient
 
 from apps.accounts.models import Address
@@ -138,3 +139,70 @@ def test_expected_total_mismatch_returns_409(django_user_model):
     r = client.post("/api/v1/checkout/", body, format="json", HTTP_X_COUNTRY="NG", HTTP_IDEMPOTENCY_KEY="k")
     assert r.status_code == 409
     assert r.data["error"] == "cart_changed"
+
+
+def test_bank_transfer_placement_emails_the_payment_instructions(
+    django_user_model, settings, django_capture_on_commit_callbacks
+):
+    """A gateway that returns `bank_details` means the customer walks away from checkout
+    owing money and holding instructions. Those instructions exist ONLY in the checkout
+    response — close the tab and the account number is gone, along with the order number
+    they're told to use as the transfer reference. Un-referenced transfers are exactly
+    the ones that can't be matched to an order.
+    """
+    from apps.core.models import SiteSetting
+
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    for key, value in {
+        "bank_transfer.bank_name": "GTBank",
+        "bank_transfer.account_name": "Toke Cosmetics Ltd",
+        "bank_transfer.account_number": "0123456789",
+    }.items():
+        SiteSetting.objects.update_or_create(key=key, defaults={"value": value,
+                                                                "value_type": "str"})
+
+    ng, ngn, variant, lagos, opt = _world(stock=10)
+    user = django_user_model.objects.create_user(email="bt@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = _user_cart(user, ng, ngn, variant, qty=2)
+
+    client = APIClient()
+    client.force_authenticate(user)
+    with django_capture_on_commit_callbacks(execute=True):
+        r = client.post("/api/v1/checkout/", _checkout_body(cart, addr, opt), format="json",
+                        HTTP_X_COUNTRY="NG", HTTP_IDEMPOTENCY_KEY="key-bt-1")
+
+    assert r.status_code == 201, r.data
+    number = r.data["order_number"]
+    assert len(mail.outbox) == 1
+    body = mail.outbox[0].body
+    assert "0123456789" in body  # the account number, in writing
+    assert "GTBank" in body
+    assert number in body  # ...and the transfer reference they must quote
+    assert "₦3,500.00" in body
+
+
+def test_instant_gateway_placement_does_not_email(
+    django_user_model, settings, django_capture_on_commit_callbacks
+):
+    """A card customer is mid-redirect and owes nothing on paper — mailing them now is
+    noise, and mails an order they may never pay for. They get one email, at payment."""
+    from apps.payments.models import CountryPaymentGateway
+
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    ng, ngn, variant, lagos, opt = _world(stock=10)
+    CountryPaymentGateway.objects.update_or_create(
+        country=ng, gateway="paystack", defaults={"is_active": True, "priority": 1}
+    )
+    user = django_user_model.objects.create_user(email="card@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = _user_cart(user, ng, ngn, variant, qty=2)
+
+    body = _checkout_body(cart, addr, opt) | {"payment_gateway": "paystack"}
+    client = APIClient()
+    client.force_authenticate(user)
+    with django_capture_on_commit_callbacks(execute=True):
+        client.post("/api/v1/checkout/", body, format="json",
+                    HTTP_X_COUNTRY="NG", HTTP_IDEMPOTENCY_KEY="key-card-1")
+
+    assert mail.outbox == []
