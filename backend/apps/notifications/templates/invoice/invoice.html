@@ -27,6 +27,9 @@
   .refund td { color: #b00020; }
   .foot { margin-top: 14mm; border-top: 1px solid #eee; padding-top: 4mm;
           color: #777; font-size: 9pt; }
+  .stamp { display: inline-block; margin-top: 2mm; padding: 1mm 2.5mm; border: 1.5pt solid #b00020;
+           color: #b00020; font-size: 8.5pt; font-weight: 700; letter-spacing: .08em;
+           border-radius: 1mm; }
 </style>
 </head>
 <body>
@@ -36,9 +39,10 @@
       <div class="muted">tokecosmetics.com</div>
     </div>
     <div class="meta">
-      <div class="muted">Invoice</div>
+      <div class="muted">{% if is_proforma %}Proforma{% else %}Invoice{% endif %}</div>
       <div class="num">{{ number }}</div>
       <div class="muted">{{ placed_at|date:"d M Y" }}</div>
+      {% if is_proforma %}<div class="stamp">PROFORMA — UNPAID</div>{% endif %}
     </div>
   </div>
 

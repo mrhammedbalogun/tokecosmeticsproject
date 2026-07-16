@@ -21,6 +21,11 @@ from django.utils import timezone
 from apps.payments.money import format_money
 
 
+# No money has been collected in these states, so the document is a proforma, not an
+# invoice. (`cancelled` means no money was ever captured — see orders/state.py.)
+_UNPAID_STATES = frozenset({"pending_payment", "expired", "cancelled"})
+
+
 def _refund_total(order) -> Decimal:
     """Only SETTLED refunds count. A refund still in flight is not money back yet, and an
     invoice that says otherwise is a document the customer can hold us to."""
@@ -66,6 +71,9 @@ def invoice_context(order) -> dict:
         # NOT placed_at: refunds settle after the order is placed, so dating the refund
         # position from the order date would claim it was accurate before it could be.
         "rendered_at": timezone.now(),
+        # An invoice asserts that money changed hands. For an order that was never paid
+        # it must say so on its face — Plan-18 puts a print button next to this.
+        "is_proforma": order.status in _UNPAID_STATES,
     }
 
 

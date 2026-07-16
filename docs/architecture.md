@@ -497,9 +497,26 @@ exactly how the late-payment customer (`expired -> processing`) silently stops g
 confirmation while the normal path keeps working. `on_hold` and `expired` mail nothing:
 they're our words for our problems.
 
-There is no separate "payment received" mail. With four instant gateways, placement and
-payment are the same moment and two mails would land together. If a bank-transfer or
-pay-on-delivery gateway is ever added they become distinct events and it splits.
+**Placement mails only for gateways that hand over payment instructions** —
+`InitiateResult.action == "bank_details"`, which is `bank_transfer` today and a future
+Paystack dedicated account tomorrow. That email is the customer's only durable copy of
+the account number *and* of the order number they must quote as the transfer reference;
+without it those live solely in the checkout response, and an un-referenced transfer is
+exactly the kind you can't match to an order. An instant-gateway customer is mid-redirect
+and owes nothing on paper, so they get nothing at placement and one mail at payment —
+which is why there's no separate "payment received" template for them.
+
+Keyed off the `action`, deliberately **not** an `is_instant` gateway flag: that one bit
+conflates three orthogonal questions (needs-instructions-email? / can `verify()` be
+called? / which TTL applies?), and a Paystack dedicated account breaks it — not instant,
+but machine-confirmable. When Plan-18 needs the other axis, add
+`confirmation: "gateway" | "manual"`.
+
+> **⚠️ `bank_transfer` is seeded ACTIVE for NG but is UNFINISHED** — nothing can confirm
+> it (no `verify()`; `ManualVerificationOnly`), and `RESERVATION_TTL_MINUTES=30` means it
+> always expires before the money lands. Hammed's call (2026-07-16) was to leave the seed
+> active and document it. **Plan-18 owns the fix and its spec now says so.** Do not launch
+> NG without it: an order can be placed and paid but never fulfilled.
 
 The refund mail is enqueued explicitly rather than via the effect table: a partial refund
 has no transition to hang an effect off, and the amount isn't derivable from a

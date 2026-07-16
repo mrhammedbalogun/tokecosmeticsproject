@@ -14,7 +14,8 @@ pytestmark = pytest.mark.django_db
 
 def _order(number="TC-600001", **kw):
     ng = Country.objects.get(code="NG")
-    order = OrderFactory(number=number, country=ng, currency=ng.currency, status="processing",
+    kw.setdefault("status", "processing")
+    order = OrderFactory(number=number, country=ng, currency=ng.currency,
                          email="buyer@x.com", subtotal="900.00", shipping_total="100.00",
                          grand_total="1000.00", delivery_option_name="Lagos Island Same-Day",
                          shipping_address={"line1": "1 Awolowo Rd", "city": "Ikoyi",
@@ -94,3 +95,19 @@ def test_invoice_ignores_refunds_that_have_not_settled():
     html = render_invoice_html(order)
 
     assert "Refunded" not in html  # a refund that hasn't settled isn't money back yet
+
+
+def test_an_unpaid_order_renders_a_clearly_marked_proforma():
+    """An invoice is a claim that money changed hands. Rendering the normal document for
+    a pending_payment order would assert a payment nobody made — and Plan-18 puts a print
+    button right next to it."""
+    html = render_invoice_html(_order(number="TC-600006", status="pending_payment"))
+
+    assert "PROFORMA" in html
+    assert "UNPAID" in html
+
+
+def test_a_paid_order_renders_a_real_invoice():
+    html = render_invoice_html(_order(number="TC-600007", status="processing"))
+
+    assert "PROFORMA" not in html
