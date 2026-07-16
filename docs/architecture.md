@@ -343,13 +343,29 @@ mismatch leaves the payment `pending` and flags the order — it never fulfils.
 inside `select_for_update` would serialize every payment and the expiry task behind one
 slow HTTP call. Verify first, then open the transaction. Same discipline in refunds.
 
-**needs_review vs review_reason.** `needs_review` is a *status* (pre-fulfilment flags:
-amount mismatch, expired-and-couldn't-re-reserve). `Order.review_reason` is the orthogonal
-**single source of truth for "a human must look"** and is written in *every* flag path.
-The double-payment case can't use the status (an order can't be `processing` AND
-`needs_review`), so it sets `review_reason` only. Admin needs-attention filter =
-`status == 'needs_review' OR review_reason != ''`. Plan-10's `transition()` must clear
-`review_reason` when the flag is resolved.
+**review_reason is orthogonal to status — and `needs_review` is not a status.**
+*(Revised in Plan-10; Plan-09 originally shipped `needs_review` as a status.)*
+
+"A human must look at this" is not a place in an order's life — it's a note pinned to an
+order that is somewhere in its life anyway. `Order.review_reason` is the **single source
+of truth** for it, written in *every* flag path, and the admin needs-attention filter is
+simply `review_reason != ''`.
+
+Making it a status was a category error, and the Plan-09 code testified against itself:
+the double-payment case couldn't use the status (an order can't be `processing` *and*
+`needs_review`), and a `_FULFILLED_STATES` guard existed solely to stop the status from
+stomping real ones. Flagging now never touches status, so nothing is destroyed:
+
+| Case | Status stays | Why |
+|---|---|---|
+| Amount/currency mismatch | `pending_payment` | Expiry still reclaims the stock; a later "fulfil it" replay lands on the `NOOP_EXPIRED` re-reserve path. |
+| Late payment, can't re-reserve | `expired` | It genuinely did expire. We hold their money, not their goods — auto-refund territory. |
+| Double payment | `processing` | The order really is processing. Only the *second* payment needs refunding. |
+| Payment on cancelled order | `cancelled` | Terminal. The refund is against the Payment, not a lifecycle move. |
+
+`transition()` **never** clears `review_reason`. Clearing requires an explicit admin
+resolve action that writes its own `OrderEvent` — otherwise shipping a flagged order
+would silently erase an unresolved double payment and nobody would refund the customer.
 
 **Money units.** `apps/payments/money.py` owns the *arithmetic* (reading
 `Currency.decimal_places`) and REFUSES to round money it can't represent. Each adapter owns

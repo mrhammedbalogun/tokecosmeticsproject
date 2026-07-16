@@ -16,12 +16,22 @@ class Order(TimeStampedModel):
     currency = models.ForeignKey("core.Currency", on_delete=models.PROTECT)
     status = models.CharField(max_length=24, default="pending_payment")
     # pending_payment → processing → shipped → delivered → completed
-    # + cancelled, expired, refunded, partially_refunded, needs_review, on_hold(migrated)
-    # Orthogonal "a human must look at this" carrier — single source of truth for the
-    # admin needs-attention filter. Set in EVERY flag path (including when status flips
-    # to needs_review). The double-payment case sets this WITHOUT changing status, since
-    # an already-`processing` order can't also be `needs_review`. Plan-10's transition()
-    # clears it when the flag is resolved.
+    # + cancelled, expired, refunded, on_hold(migrated). See orders/state.py for the
+    # authoritative vocabulary and the allowed moves between them.
+    #
+    # Deliberately NOT statuses:
+    #   needs_review       — orthogonal, see review_reason below.
+    #   partially_refunded — refund progress is a payment-ledger fact (payment.status +
+    #                        the Refund rows), not a place in the order's life. A shipped
+    #                        order can be partially refunded and still needs delivering.
+
+    # Orthogonal "a human must look at this" carrier, and the single source of truth for
+    # the admin needs-attention filter (`review_reason != ""`). Independent of status by
+    # design: a processing order can need review (double payment) and so can an expired
+    # one, so flagging never overwrites what actually happened.
+    # Cleared ONLY by an explicit admin resolve action, never by a status transition —
+    # otherwise shipping a flagged order would silently erase an unresolved double
+    # payment and the customer would never be refunded.
     review_reason = models.TextField(blank=True)
 
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)

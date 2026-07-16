@@ -109,7 +109,7 @@ def test_confirm_happy_path_fulfils(fake_gateway):
     assert payment.raw_response.get("verify") == {"ok": True}
 
 
-def test_confirm_amount_mismatch_flags_needs_review(fake_gateway):
+def test_confirm_amount_mismatch_flags_for_review(fake_gateway):
     ng, ngn, variant = _setup()
     order = _order("TC-200011", ng, ngn)
     reserve(variant, 2, ng, reference="TC-200011")
@@ -120,12 +120,15 @@ def test_confirm_amount_mismatch_flags_needs_review(fake_gateway):
 
     order.refresh_from_db()
     payment.refresh_from_db()
-    assert order.status == "needs_review"
+    # The flag rides on review_reason; the status stays truthful. Leaving it
+    # pending_payment means the expiry task still reclaims the stock, and a later
+    # "actually fulfil it" replay lands on the NOOP_EXPIRED re-reserve path.
+    assert order.status == "pending_payment"
     assert "order total is 1000.00" in order.review_reason
     assert payment.status != "succeeded"
 
 
-def test_confirm_currency_mismatch_flags_needs_review(fake_gateway):
+def test_confirm_currency_mismatch_flags_for_review(fake_gateway):
     ng, ngn, variant = _setup()
     order = _order("TC-200012", ng, ngn)
     payment = PaymentFactory(order=order, currency=ngn, gateway="fake", amount="1000.00")
@@ -134,7 +137,8 @@ def test_confirm_currency_mismatch_flags_needs_review(fake_gateway):
     confirm_payment(payment)
 
     order.refresh_from_db()
-    assert order.status == "needs_review"
+    assert order.status == "pending_payment"
+    assert order.review_reason != ""
 
 
 def test_confirm_unpaid_verify_does_not_fulfil(fake_gateway):
@@ -238,7 +242,9 @@ def test_confirm_late_payment_after_expiry_insufficient_stock_flags(fake_gateway
     confirm_payment(payment)
 
     order.refresh_from_db()
-    assert order.status == "needs_review"
+    # `expired` is the truth — the order really did expire. review_reason says why a
+    # human must look (this is auto-refund territory).
+    assert order.status == "expired"
     assert "could not re-reserve" in order.review_reason
     # no phantom reservation left behind under the bumped reference
     si = variant.stock_items.get()
