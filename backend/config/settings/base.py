@@ -198,4 +198,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.inventory.tasks.low_stock_digest",
         "schedule": 3600.0,  # every hour
     },
+    "abandon-stale-carts": {
+        "task": "apps.carts.tasks.abandon_stale_carts",
+        "schedule": 1800.0,  # every 30 min
+    },
 }
