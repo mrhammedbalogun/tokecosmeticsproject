@@ -4,11 +4,13 @@ time, so an admin can enable a gateway per-country before its keys are deployed 
 crashing imports, migrations, or unrelated tests."""
 from apps.payments.gateways.bank_transfer import BankTransferGateway
 from apps.payments.gateways.paystack import PaystackGateway
+from apps.payments.gateways.stripe_gateway import StripeGateway
 from apps.payments.models import CountryPaymentGateway
 
 _REGISTRY = {
     BankTransferGateway.code: BankTransferGateway(),
     PaystackGateway.code: PaystackGateway(),
+    StripeGateway.code: StripeGateway(),
 }
 
 
