@@ -91,6 +91,17 @@ def test_per_line_half_up_rounding():
     assert t.subtotal == Decimal("0.13")
 
 
+def test_inclusive_tax_half_up_rounding():
+    # Forces a non-terminating intermediate inside compute_totals so q2()'s half-up
+    # is actually exercised: 100 - 100/1.075 = 6.9767... -> 6.98.
+    ng = _country(include_tax=True, rate="7.5")
+    v = _priced_variant(ng, "100.00")
+    t = compute_totals([(v, 1)], ng)
+    assert t.subtotal == Decimal("100.00")
+    assert t.tax == Decimal("6.98")
+    assert t.grand_total == Decimal("100.00")
+
+
 def test_unpriced_line_raises():
     ng = _country(include_tax=True)
     v = ProductVariantFactory()  # no price

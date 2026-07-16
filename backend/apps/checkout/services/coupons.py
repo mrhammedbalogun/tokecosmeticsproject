@@ -48,7 +48,9 @@ def validate_coupon(
     if subtotal < coupon.min_subtotal:
         return _invalid("min_not_met")
 
-    if coupon.type == "fixed" and coupon.currency_id and coupon.currency_id != country.currency_id:
+    # A fixed coupon carries an absolute amount, so it needs a currency that matches
+    # the cart. Missing currency is ambiguous → reject rather than apply cross-currency.
+    if coupon.type == "fixed" and coupon.currency_id != country.currency_id:
         return _invalid("wrong_currency")
 
     if coupon.usage_limit is not None:
@@ -56,9 +58,15 @@ def validate_coupon(
         if total_used >= coupon.usage_limit:
             return _invalid("exhausted")
 
-    if coupon.usage_limit_per_user is not None and user is not None:
-        used_by_user = CouponRedemption.objects.filter(coupon=coupon, user=user).count()
-        if used_by_user >= coupon.usage_limit_per_user:
+    if coupon.usage_limit_per_user is not None:
+        # Count prior redemptions for this shopper: by user if signed in, else by email.
+        if user is not None:
+            used = CouponRedemption.objects.filter(coupon=coupon, user=user).count()
+        elif email:
+            used = CouponRedemption.objects.filter(coupon=coupon, email__iexact=email).count()
+        else:
+            used = 0
+        if used >= coupon.usage_limit_per_user:
             return _invalid("user_exhausted")
 
     # applies_to gate: if the coupon restricts to products/categories, the cart must
