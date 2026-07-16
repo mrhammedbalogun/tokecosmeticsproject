@@ -26,6 +26,16 @@ def _ng():
     return ng
 
 
+def _isolated_country():
+    """A country with no seeded delivery options (Task-6's 0003 seeds NG/GB/US/CA/ZZ),
+    so the exact-list assertions below compare only options this test creates."""
+    cur, _ = Currency.objects.get_or_create(code="XCU", defaults={"symbol": "X"})
+    country, _ = Country.objects.get_or_create(
+        code="XL", defaults={"name": "Testland", "currency": cur}
+    )
+    return country
+
+
 def _lagos_tree():
     # Lagos + Ikeja are seeded by delivery migration 0002; get_or_create reuses them.
     lagos, _ = Region.objects.get_or_create(
@@ -41,10 +51,10 @@ def _lagos_tree():
 
 
 def test_country_level_option_matches_any_address_in_country():
-    ng = _ng()
-    opt = DeliveryOptionFactory(currency=ng.currency, name="GIG Nationwide")
-    opt.countries.add(ng)
-    addr = FakeAddress("NG")
+    country = _isolated_country()
+    opt = DeliveryOptionFactory(currency=country.currency, name="GIG Nationwide")
+    opt.countries.add(country)
+    addr = FakeAddress(country.code)
     matched = options_for_address(addr, lines=[], subtotal=Decimal("0"))
     assert [o["name"] for o in matched] == ["GIG Nationwide"]
 
@@ -71,10 +81,10 @@ def test_specific_lga_coverage_matches_only_that_lga():
 
 
 def test_inactive_options_excluded_and_sorted_by_sort():
-    ng = _ng()
-    DeliveryOptionFactory(currency=ng.currency, name="Off", is_active=False).countries.add(ng)
-    a = DeliveryOptionFactory(currency=ng.currency, name="A", sort=2)
-    b = DeliveryOptionFactory(currency=ng.currency, name="B", sort=1)
-    a.countries.add(ng); b.countries.add(ng)
-    names = [o["name"] for o in options_for_address(FakeAddress("NG"), [], Decimal("0"))]
+    country = _isolated_country()
+    DeliveryOptionFactory(currency=country.currency, name="Off", is_active=False).countries.add(country)
+    a = DeliveryOptionFactory(currency=country.currency, name="A", sort=2)
+    b = DeliveryOptionFactory(currency=country.currency, name="B", sort=1)
+    a.countries.add(country); b.countries.add(country)
+    names = [o["name"] for o in options_for_address(FakeAddress(country.code), [], Decimal("0"))]
     assert names == ["B", "A"]  # sorted by sort; inactive excluded
