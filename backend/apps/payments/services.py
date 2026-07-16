@@ -10,12 +10,16 @@ idempotent fulfilment primitive:
                                     REPORTS what it found (never silently no-ops). The
                                     invariant: payment.status == "succeeded" is written
                                     ONLY here (via _fulfil_locked).
+  _react_to_verdict(payment, outcome) -> bool
+                                  — the recovery ladder: re-reserve on expiry, flag
+                                    double-payments and payments-on-cancelled-orders for
+                                    review. Reports whether the order ended up fulfilled,
+                                    which the verdict alone cannot say. Shared by every
+                                    confirmation path so none of them can drift.
   confirm_payment(payment)        — the ONLY thing webhook processing and the client
                                     return endpoint call. Verifies with the gateway
                                     (network, OUTSIDE any transaction), checks amount +
-                                    currency, then reacts to mark_paid's verdict:
-                                    re-reserve on expiry, flag double-payments and
-                                    payments-on-cancelled-orders for review.
+                                    currency, then hands the verdict to the ladder.
 """
 from __future__ import annotations
 
@@ -197,6 +201,45 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
         _fulfil_locked(order, payment)
 
 
+def _react_to_verdict(payment, outcome: MarkPaidResult) -> bool:
+    """React to mark_paid's verdict. Returns whether the order ended up FULFILLED.
+
+    Shared by BOTH confirmation paths (gateway verify and manual receipt) — the recovery
+    logic for late/cancelled/duplicate money is identical regardless of who did the
+    verifying, and a copy-paste would let one path silently stop recovering money.
+
+    The return value matters: NOOP_EXPIRED may or may not end in fulfilment depending on
+    whether _reserve_and_fulfil_after_expiry could re-reserve stock, and callers that flag
+    an amount discrepancy must only do so when the goods actually shipped — otherwise they
+    append noise to the ladder's own, more urgent, instruction (see _flag_review).
+    """
+    if outcome is MarkPaidResult.FULFILLED:
+        return True
+
+    if outcome is MarkPaidResult.NOOP_EXPIRED:
+        _reserve_and_fulfil_after_expiry(payment.order, payment)
+        payment.refresh_from_db(fields=["status"])
+        return payment.status == "succeeded"  # succeeded <=> fulfilled, by invariant
+
+    if outcome is MarkPaidResult.NOOP_CANCELLED:
+        _flag_review(
+            payment.order_id,
+            f"payment {payment.pk} received on a cancelled order — refund it",
+        )
+        return False
+
+    # NOOP_ALREADY_PROCESSED: either an idempotent replay of THIS payment, or a second,
+    # distinct payment for an order another payment already fulfilled (double charge).
+    payment.refresh_from_db(fields=["status"])
+    if payment.status == "succeeded":
+        return True  # this payment already fulfilled the order — benign replay
+    _flag_review(
+        payment.order_id,
+        f"possible double payment — order already processing; refund payment {payment.pk}",
+    )
+    return False
+
+
 def confirm_payment(payment) -> None:
     """Verify with the gateway and fulfil. Safe to call from both the webhook task and
     the customer return endpoint — the row lock makes the race benign (first fulfils,
@@ -222,28 +265,4 @@ def confirm_payment(payment) -> None:
         return
 
     payment.save(update_fields=["raw_response", "updated_at"])  # persist verify before fulfilling
-    outcome = mark_paid(payment)
-
-    if outcome is MarkPaidResult.FULFILLED:
-        return
-
-    if outcome is MarkPaidResult.NOOP_EXPIRED:
-        _reserve_and_fulfil_after_expiry(payment.order, payment)
-        return
-
-    if outcome is MarkPaidResult.NOOP_CANCELLED:
-        _flag_review(
-            payment.order_id,
-            f"payment {payment.pk} received on a cancelled order — refund it",
-        )
-        return
-
-    # NOOP_ALREADY_PROCESSED: either an idempotent replay of THIS payment, or a second,
-    # distinct payment for an order another payment already fulfilled (double charge).
-    payment.refresh_from_db(fields=["status"])
-    if payment.status == "succeeded":
-        return  # this payment already fulfilled the order — benign replay
-    _flag_review(
-        payment.order_id,
-        f"possible double payment — order already processing; refund payment {payment.pk}",
-    )
+    _react_to_verdict(payment, mark_paid(payment))
