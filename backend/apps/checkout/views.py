@@ -5,7 +5,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Address
-from apps.carts.models import Cart
+from apps.carts.models import Cart, CartItem
+from apps.carts.serializers import serialize_cart
+from apps.carts.services import get_or_create_cart, set_quantity
+from apps.catalog.models import ProductVariant
 from apps.checkout.services.checkout import CheckoutError, place_order
 from apps.checkout.services.idempotency import (
     IdempotencyConflict,
@@ -100,3 +103,16 @@ class CheckoutView(APIView):
         }
         finish(request.user.id, key, request_hash, status.HTTP_201_CREATED, body)
         return Response(body, status=status.HTTP_201_CREATED)
+
+
+class BuyNowView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        variant = get_object_or_404(ProductVariant, pk=request.data.get("variant_id"), is_active=True)
+        qty = int(request.data.get("quantity", 1))
+        cart = get_or_create_cart(request, kind="express")
+        # Express cart holds exactly the Buy-Now item — clear then set.
+        CartItem.objects.filter(cart=cart).delete()
+        set_quantity(cart, variant, qty, request.country)
+        return Response(serialize_cart(cart, request.country))
