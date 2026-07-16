@@ -1,0 +1,27 @@
+from apps.core.models import SiteSetting
+from apps.payments.gateways.base import InitiateResult, PaymentGateway
+
+
+class BankTransferGateway(PaymentGateway):
+    """Manual bank transfer (large in NG). No external HTTP — initiate() returns the
+    merchant's bank details from SiteSetting; the order sits pending_payment until an
+    admin confirms receipt (Plan-18) or a Paystack dedicated account webhook lands
+    (Plan-09). Payment stays 'initiated'."""
+
+    code = "bank_transfer"
+    supported_currencies = {"NGN"}
+
+    def initiate(self, payment, order, return_url: str = "") -> InitiateResult:
+        return InitiateResult(
+            action="bank_details",
+            reference=order.number,
+            data={
+                "bank_name": SiteSetting.get_typed("bank_transfer.bank_name", ""),
+                "account_name": SiteSetting.get_typed("bank_transfer.account_name", ""),
+                "account_number": SiteSetting.get_typed("bank_transfer.account_number", ""),
+                "amount": str(order.grand_total),
+                "currency": order.currency_id,
+                "reference": order.number,
+                "instructions": "Use your order number as the transfer reference.",
+            },
+        )

@@ -31,3 +31,13 @@ def test_meta_countries_is_public():
     # No Authorization header -> still 200 (storefront needs it pre-login).
     r = APIClient().get("/api/v1/meta/countries/")
     assert r.status_code == 200
+
+
+def test_countries_endpoint_includes_area_label(db, client):
+    # NG is seeded by migration 0003; set its area_label rather than re-create it.
+    from apps.core.models import Country
+
+    Country.objects.filter(code="NG").update(area_label="LGA")
+    r = client.get("/api/v1/meta/countries/")
+    ng = next(c for c in r.json() if c["code"] == "NG")
+    assert ng["area_label"] == "LGA"

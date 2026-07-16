@@ -143,3 +143,172 @@ Meilisearch is a drop-in later (Plan-07b, deferred for RAM). Design reviewed wit
 - `request.country` is set by `CountryMiddleware` from the `X-Country` header; missing → NG (default),
   unknown/inactive → ZZ (Rest of World). All price/tax context flows from this.
 - Reports are per-currency (no FX consolidation) in the MVP.
+
+## Coupons & Totals (Plan-08c)
+
+New independent domain app `apps.checkout` holds pure logic (no HTTP, no URLs, no import of
+carts/delivery/orders). It is the single source of truth for order money.
+
+**`compute_totals(items, country, delivery_amount=0, coupon=None) -> Totals`** — the ONLY place
+money is calculated (cart display, checkout, and order creation all call it, so they can never
+disagree). `items` is an iterable of `(ProductVariant, qty)`. Order of operations:
+
+1. **Subtotal** — each line is re-resolved via `pricing.services.resolve_price` (snapshots are
+   display-only, never trusted), rounded **half-up per line** (`q2()`, `ROUND_HALF_UP`, 2dp),
+   then summed. An unpriced line raises `ValueError`.
+2. **Discount** — applied to the subtotal; `free_shipping` discounts nothing here; a discount
+   never exceeds the subtotal (fixed coupons are capped at subtotal → grand total floors at 0).
+3. **Delivery** — the caller-resolved `delivery_amount` (via `apps.delivery`); a `free_shipping`
+   coupon zeroes it.
+4. **Tax** — computed on `subtotal − discount`. If `country.prices_include_tax` the tax is the
+   **extracted** portion already inside the price (`taxable − taxable/(1+r)`; grand total does not
+   add it again). Otherwise tax is **added on top** (`taxable × r`).
+
+**Coupon validation** — `validate_coupon(...) -> CouponValidation(ok, error_code, coupon)` is a
+separate gate that never raises for normal invalid cases; it returns a typed `error_code` the API
+maps to 400. Codes: `not_found`, `inactive`, `not_started`, `expired`, `min_not_met`,
+`wrong_currency`, `exhausted`, `user_exhausted`, `not_valid_for_items`. `compute_totals` consumes
+an already-valid coupon so totals and validation can never diverge. Coupon codes are stored
+uppercased and looked up case-insensitively (CI unique constraint).
+
+**Documented simplifications / deviations (Fable-approved):**
+- `Coupon.applies_to_products` / `applies_to_categories` act as an **eligibility gate** — the cart
+  must contain ≥1 matching item — and the discount then applies to the whole subtotal. Per-line
+  targeted discounts are a post-launch refinement.
+- `CouponRedemption.order_number` is a soft `CharField` reference, **not** an FK to `orders.Order`
+  (built in 08d), so `apps.checkout` stays independent. The Order→Coupon link lives on
+  `Order.coupon` (Plan-10).
+- **Known last-use race (not a bug):** usage limits read the redemption ledger, so two concurrent
+  checkouts on a coupon's final use can both pass. The ledger records the truth and admin can see
+  overuse; tighten with a locked counter post-launch if needed.
+
+## Delivery & Regions (Plan-08b)
+
+New independent domain app `apps.delivery`. It owns delivery options and the region tree matcher,
+and imports **nothing** from `apps.carts` — the matcher is pure and reusable by cart display and by
+checkout's server-side re-check (never trust the client's option list).
+
+**Mixed-granularity coverage.** A `DeliveryOption` can cover whole countries (M2M `countries`) and/or
+any node of the region tree (M2M `regions`) at any level — a whole state ("Lagos State Flat") or a
+single LGA ("Ikeja Same-Day"). Both styles coexist on one option set.
+
+**`options_for_address(address, lines, subtotal) -> list[dict]`** (`apps.delivery.services`) is the
+matcher. `address` is duck-typed (`country_code`, `state_region`, `area_region` — no Cart/Address
+import); `lines` is an iterable of `(ProductVariant, qty)`; `subtotal` is in the order currency (for
+`free_over`). It returns the active options serving the address, each with a computed `price` and ETA,
+ordered by `(sort, name)`.
+
+- **Ancestor-walk match.** The address's `area_region` and `state_region` plus every parent are
+  collected; an option matches if it covers the address's country **or** any of those region ids. So
+  "Lagos State" coverage automatically serves every Lagos LGA (zone-style), while picking individual
+  LGAs is the detailed style.
+- **Pricing (`_price_for`).** If the option has `DeliveryOptionRate` rows, the tier whose
+  `[min_weight_g, max_weight_g]` band contains the cart's total weight is used (over the top tier →
+  the highest tier's price); otherwise the flat `price`. `free_over` zeroes the price once `subtotal`
+  meets the threshold. Amounts quantized to 2dp.
+
+**Region tree** lives in `core.Region` (`country_code`, `name`, `level`, self-FK `parent`). Seeded from
+the bundled fixture `apps/core/fixtures/ng_regions.json` (a `{ "State": ["LGA", …] }` map) by data
+migration `delivery/0002_seed_ng_regions` → **37 states (36 + FCT) + 774 LGAs**. Fixture provenance:
+the widely-mirrored `devhammed` public NG states-and-LGAs dataset; counts verified against the
+36+FCT / 774 canonical totals. Other countries add rows later with no code change.
+
+**Browse API** `GET /api/v1/meta/regions/?country=<CC>` → top-level (state) regions;
+`?parent=<id>` → that region's children (LGAs). Public (`AllowAny`), unpaginated (short dropdown
+lists), each row carries `has_children` so address forms know whether to drill down.
+
+**`Country.area_label`** (Plan-03, landed here) names the finest region level per country — "LGA" (NG),
+"Borough" (GB), "County" (US) — surfaced on `/api/v1/meta/countries/` for address-form labelling.
+
+**Deferred:** `kind="carrier"` + `carrier_code` fields exist for Plan-32 carrier-API rates; at launch
+every option is `kind="manual"`. Admin CRUD is Plan-19.
+
+**Seed rates are PLACEHOLDERS.** `delivery/0003_seed_delivery_options` seeds a documented placeholder
+option set (NG "Nationwide"/"Lagos Delivery"; GB/US/CA/ZZ standard) guarded on country/currency
+presence. **Replace with the real audited rates (Plan-00 audit items 10–11) before the checkpoint.**
+
+## Carts (Plan-08a)
+
+Guest + authenticated shopping carts (`apps.carts`) with live per-country pricing.
+
+**Identity model.** A `Cart` is keyed by UUID. Authenticated requests resolve to the user's single
+active `standard` cart (get-or-created; a partial unique constraint `uniq_active_cart_per_user_kind`
+enforces one active cart per `(user, kind)`). Guests carry the cart UUID in an `X-Cart-Id` header
+(the storefront BFF keeps it in an httpOnly cookie) and may hold many carts (they're exempt from the
+constraint — their identity *is* the UUID). `get_or_create_cart(request, kind)` in `services.py` is
+the single place that decides which cart a request owns, so views stay thin.
+
+**Live re-pricing (never trust the client / the snapshot).** Every cart response is fully re-priced
+at read time via `pricing.services.resolve_price` for `request.country`. `CartItem.unit_price_snapshot`
+is stored on add/update for **display-drift detection only** — it is never the charge basis. Checkout
+(Plan-08d) recomputes totals from scratch. A variant with no price for the country stays in the cart
+but is surfaced as `unavailable: true` and contributes 0 to the subtotal.
+
+**Stock cap.** Quantities are clamped to `inventory.services.available_for_country(variant, country)`
+on every add/set (a cart never holds more than exists). `set_quantity(..., 0)` removes the line.
+
+**Endpoints** (all `AllowAny`; identity is user-or-`X-Cart-Id`; throttle scope `cart` = 120/min):
+`GET /api/v1/cart/`, `POST /api/v1/cart/items/`, `PATCH|DELETE /api/v1/cart/items/{variant_id}/`,
+and `POST /api/v1/cart/merge/` (auth-required).
+
+**Merge on login.** `POST /cart/merge/ {cart_id}` folds an unclaimed guest cart's lines into the
+caller's active standard cart (summing quantities, capped at stock), then marks the guest cart
+`converted`. Foreign/claimed/missing guest ids are ignored (returns the user's cart unchanged);
+idempotent. The BFF calls this right after storing the new access cookie — cleaner than mutating the
+SimpleJWT token view.
+
+**Express cart.** `kind="express"` is a separate single-per-user cart for Buy Now; the standard cart
+flow never touches it. The field + constraint exist here; the Buy Now *upsert* is Plan-08d.
+
+**Abandoned flagging.** The `abandon_stale_carts` Celery beat task (every 30 min) flags active carts
+untouched for >3h as `status="abandoned"` so the data accrues. **Deferred:** recovery *emails*
+(Plan-30) and `status="converted"` on real checkout (Plan-08d does that under a row lock).
+
+## Checkout & Orders/Payments scaffolding (Plan-08d)
+
+Authenticated `POST /api/v1/checkout/` turns a cart into a `pending_payment` `Order` with reserved
+stock and an `initiated` `Payment`. The `orders` and `payments` apps are introduced here with the
+**full** Plan-10/09 model field list (`Order`, `OrderItem`, `Payment`, `CountryPaymentGateway`) so
+checkout writes real tables now; Plan-09/10 add only *new* tables (`Refund`, `WebhookEvent`,
+`OrderEvent`) — the money tables stay append-only. `bank_transfer` is the first working gateway.
+
+**Two-phase checkout (no HTTP under a DB lock).** Phase 1 is one DB transaction: lock the cart
+(`select_for_update`), re-validate every line (`sellable_in` + `resolve_price`), server-side re-match
+the delivery option via `delivery.options_for_address` (never trust the client's option list or price),
+check the gateway is active for the country, validate any coupon, compute money via
+`checkout.services.totals.compute_totals` (never the client, never a snapshot), reserve stock, create
+the `Order` + snapshot `OrderItem`s, create the `Payment(initiated)`, and convert the cart. **Commit.**
+Phase 2 runs *after* commit with no lock held: `gateway.initiate()` → store `gateway_reference`. For
+bank transfer `initiate()` is local (returns merchant bank details from `SiteSetting`), but the shape
+is built now so Plan-09's networked gateways drop in cleanly behind the same `PaymentGateway` ABC.
+
+**Attempt-suffixed `reservation_reference`.** `Order.reservation_reference` starts equal to the order
+number (`TC-100042`) and gains a `/2` suffix on any re-reserve (Plan-09's late-payment path). This is
+load-bearing: `inventory.reserve()` is **idempotent by reference**, so re-reserving after an
+expiry-release under the *same* reference would silently reserve nothing. Commit/release always use
+`order.reservation_reference`, so the reference is the single ledger key for the order's stock.
+
+**Order row is the single serialization point.** Every status change (`place_order`, `mark_paid`,
+`expire_pending_orders`) locks the `Order` row and re-checks `status` under the lock, so the
+expiry-vs-payment race resolves deterministically — whichever grabs the lock first wins, and the loser
+sees the changed status and no-ops. `expire_pending_orders` (Celery beat, every 5 min) runs **one
+transaction per order** (a poison order can't roll back its siblings) and `release()` is
+ledger-idempotent, so a double-run is safe. `RESERVATION_TTL_MINUTES` (default 30) sets the window.
+
+**Idempotency.** `POST /checkout/` requires an `Idempotency-Key` header. A two-phase Redis record
+(Django cache) is the fast path: `begin()` reserves the key (`in_progress`), `finish()` stores the
+`(status, body)` for a 24h replay window; same key + different payload → 422; same key still in flight
+→ 409. The `Payment.idempotency_key` UNIQUE column is the **durable backstop** that survives Redis
+eviction — `place_order` replays from the stored `Payment` if the key already produced one.
+
+**Insufficient stock fully rolls back.** Reservation runs inside phase 1's transaction, so an
+`InsufficientStock` (mapped to 409 `insufficient_stock`) rolls back the order, items, payment, and cart
+conversion together — the ledger records zero movements.
+
+**Deferred seams.** To **Plan-09**: Paystack/Flutterwave/Stripe/PayPal gateways, webhooks, `verify()`,
+refunds (`Refund`, `WebhookEvent`), the attempt-2 re-reserve on late payment, and the *full* `mark_paid`
+with amount/currency equality checks (08d ships a minimal `mark_paid` used by tests + the bank-transfer
+manual-confirm path). To **Plan-10**: `OrderEvent` + a `state.py` state machine (08d sets `order.status`
+directly in exactly two places, both to be refactored through `transition()` later), order emails,
+invoices, and the customer/admin order APIs.
+

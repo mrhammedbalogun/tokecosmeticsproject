@@ -22,4 +22,5 @@ class CountrySerializer(serializers.ModelSerializer):
             "is_rest_of_world",
             "tax_rate_percent",
             "prices_include_tax",
+            "area_label",
         ]

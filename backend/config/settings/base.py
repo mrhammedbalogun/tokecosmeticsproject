@@ -35,6 +35,11 @@ INSTALLED_APPS = [
     "apps.pricing",
     "apps.inventory",
     "apps.search",
+    "apps.carts",
+    "apps.checkout",
+    "apps.orders",
+    "apps.payments",
+    "apps.delivery",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -142,8 +147,12 @@ REST_FRAMEWORK = {
         "user": "120/min",
         "search": "30/min",
         "suggest": "60/min",
+        "cart": "120/min",
     },
 }
+
+# --- Checkout ---
+RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 
 # --- JWT (SimpleJWT) ---
 from datetime import timedelta  # noqa: E402
@@ -193,5 +202,13 @@ CELERY_BEAT_SCHEDULE = {
     "low-stock-digest-hourly": {
         "task": "apps.inventory.tasks.low_stock_digest",
         "schedule": 3600.0,  # every hour
+    },
+    "abandon-stale-carts": {
+        "task": "apps.carts.tasks.abandon_stale_carts",
+        "schedule": 1800.0,  # every 30 min
+    },
+    "expire-pending-orders": {
+        "task": "apps.checkout.tasks.expire_pending_orders",
+        "schedule": 300.0,  # every 5 min
     },
 }
