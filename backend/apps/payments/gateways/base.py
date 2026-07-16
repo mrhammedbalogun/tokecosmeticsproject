@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+from django.conf import settings
+
 
 # --- Exceptions -------------------------------------------------------------
 
@@ -99,6 +101,23 @@ class ParsedEvent:
 class PaymentGateway(ABC):
     code: str
     supported_currencies: set[str]
+
+    # How does money become confirmed for this gateway?
+    #   "gateway" — ask it over the network (verify()); the default for anything networked.
+    #   "manual"  — a human reads a bank statement; there is no machine to ask.
+    # Deliberately NOT inferred from InitiateResult.action: that bit answers "did the
+    # customer leave holding instructions" (which is why the order_received email keys off
+    # it and should keep doing so), a different question from "can this be verify()'d" —
+    # a future Paystack dedicated account is not instant but IS machine-confirmable.
+    confirmation: str = "gateway"
+
+    @property
+    def reservation_ttl_minutes(self) -> int:
+        """How long checkout holds the stock reservation for an order paying via this
+        gateway. A property, not a class attribute: `= settings.RESERVATION_TTL_MINUTES`
+        in the class body is evaluated at import and would ignore override_settings and
+        any env change without a restart. Subclasses shadow it with a plain int."""
+        return settings.RESERVATION_TTL_MINUTES
 
     @abstractmethod
     def initiate(self, payment, order, return_url: str = "") -> InitiateResult:

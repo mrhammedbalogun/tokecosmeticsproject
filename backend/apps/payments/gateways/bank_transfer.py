@@ -14,6 +14,8 @@ class BankTransferGateway(PaymentGateway):
 
     code = "bank_transfer"
     supported_currencies = {"NGN"}
+    confirmation = "manual"
+    reservation_ttl_minutes = 1440  # 24h — NG transfers are NIP-instant; the delay is staff hours
 
     def initiate(self, payment, order, return_url: str = "") -> InitiateResult:
         return InitiateResult(
