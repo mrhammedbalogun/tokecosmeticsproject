@@ -9,7 +9,6 @@ from datetime import timedelta
 from decimal import Decimal
 from functools import partial
 
-from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -142,7 +141,12 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             coupon=coupon, delivery_option_name=chosen["name"],
             shipping_address=_address_snapshot(address), billing_address=_address_snapshot(billing),
             customer_note=notes, reservation_reference=number,
-            reservation_expires_at=timezone.now() + timedelta(minutes=settings.RESERVATION_TTL_MINUTES),
+            # Per-gateway: a card resolves in seconds, a bank transfer waits on staff
+            # working hours. The gateway is already known and validated here, and its
+            # Payment row is created in this same transaction, so nothing needs
+            # re-stamping at initiate time.
+            reservation_expires_at=timezone.now()
+            + timedelta(minutes=gateway.reservation_ttl_minutes),
         )
         # A creation, not a transition — there is no prior status to move from, so this
         # opens the timeline directly rather than going through the state machine.
