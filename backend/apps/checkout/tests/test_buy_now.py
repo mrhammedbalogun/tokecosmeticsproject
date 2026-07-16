@@ -15,12 +15,14 @@ def test_buy_now_creates_single_express_cart(django_user_model):
     # Seed migration already created NG + NGN — fetch, don't re-create (avoids PK collision).
     ng = Country.objects.get(code="NG")
     ngn = ng.currency
-    wh = WarehouseFactory(location_country="NG", priority=1); wh.serves_countries.add(ng)
+    wh = WarehouseFactory(location_country="NG", priority=1)
+    wh.serves_countries.add(ng)
     variant = ProductVariantFactory()
     Price.objects.create(variant=variant, currency=ngn, amount=Decimal("1000.00"))
     StockItemFactory(variant=variant, warehouse=wh, quantity=5)
     user = django_user_model.objects.create_user(email="b@x.com", password="pw")
-    client = APIClient(); client.force_authenticate(user)
+    client = APIClient()
+    client.force_authenticate(user)
 
     r1 = client.post("/api/v1/checkout/buy-now/", {"variant_id": variant.id, "quantity": 1},
                      format="json", HTTP_X_COUNTRY="NG")

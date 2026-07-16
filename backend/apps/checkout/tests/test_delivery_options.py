@@ -33,7 +33,8 @@ def test_delivery_options_for_users_address(django_user_model):
     cart = CartFactory(user=user, country=tg, currency=xof)
     CartItem.objects.create(cart=cart, variant=variant, quantity=1, unit_price_snapshot="1000.00")
 
-    client = APIClient(); client.force_authenticate(user)
+    client = APIClient()
+    client.force_authenticate(user)
     r = client.get(f"/api/v1/checkout/delivery-options/?address_id={addr.id}&cart_id={cart.id}",
                    HTTP_X_COUNTRY="TG")
     assert r.status_code == 200

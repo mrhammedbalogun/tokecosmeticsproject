@@ -36,7 +36,8 @@ def test_mark_paid_commits_stock_and_flags_processing():
 
     mark_paid(payment)
 
-    order.refresh_from_db(); payment.refresh_from_db()
+    order.refresh_from_db()
+    payment.refresh_from_db()
     assert payment.status == "succeeded"
     assert order.status == "processing"
     # stock committed: on-hand dropped 10 → 8, reserved back to 0.
@@ -68,6 +69,7 @@ def test_mark_paid_idempotent():
                              unit_price="500.00", line_total="500.00", quantity=1)
     reserve(variant, 1, ng, reference="TC-100003")
     p = PaymentFactory(order=order, currency=ngn)
-    mark_paid(p); mark_paid(p)  # second call must be a no-op
+    mark_paid(p)
+    mark_paid(p)  # second call must be a no-op
     si = variant.stock_items.get()
     assert si.quantity == 9  # committed once, not twice

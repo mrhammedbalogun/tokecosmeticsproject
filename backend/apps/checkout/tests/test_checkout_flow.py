@@ -55,7 +55,8 @@ def test_checkout_happy_path_creates_order_and_reservation(django_user_model):
     addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
     cart = _user_cart(user, ng, ngn, variant, qty=2)
 
-    client = APIClient(); client.force_authenticate(user)
+    client = APIClient()
+    client.force_authenticate(user)
     r = client.post("/api/v1/checkout/", _checkout_body(cart, addr, opt), format="json",
                     HTTP_X_COUNTRY="NG", HTTP_IDEMPOTENCY_KEY="key-1")
 
@@ -80,7 +81,8 @@ def test_idempotent_replay_returns_same_order_without_double_reserving(django_us
     user = django_user_model.objects.create_user(email="u2@x.com", password="pw")
     addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
     cart = _user_cart(user, ng, ngn, variant, qty=2)
-    client = APIClient(); client.force_authenticate(user)
+    client = APIClient()
+    client.force_authenticate(user)
 
     r1 = client.post("/api/v1/checkout/", _checkout_body(cart, addr, opt), format="json",
                      HTTP_X_COUNTRY="NG", HTTP_IDEMPOTENCY_KEY="same")
@@ -96,7 +98,8 @@ def test_insufficient_stock_rolls_back_everything(django_user_model):
     user = django_user_model.objects.create_user(email="u3@x.com", password="pw")
     addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
     cart = _user_cart(user, ng, ngn, variant, qty=2)  # wants 2
-    client = APIClient(); client.force_authenticate(user)
+    client = APIClient()
+    client.force_authenticate(user)
 
     # Bypass the cart stock-cap by writing the line directly (already done above via qty=2
     # vs stock=1). Force the row to 2 in case add_item capped it:
@@ -117,7 +120,8 @@ def test_missing_idempotency_key_is_400(django_user_model):
     user = django_user_model.objects.create_user(email="u4@x.com", password="pw")
     addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
     cart = _user_cart(user, ng, ngn, variant)
-    client = APIClient(); client.force_authenticate(user)
+    client = APIClient()
+    client.force_authenticate(user)
     r = client.post("/api/v1/checkout/", _checkout_body(cart, addr, opt), format="json", HTTP_X_COUNTRY="NG")
     assert r.status_code == 400
 
@@ -127,8 +131,10 @@ def test_expected_total_mismatch_returns_409(django_user_model):
     user = django_user_model.objects.create_user(email="u5@x.com", password="pw")
     addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
     cart = _user_cart(user, ng, ngn, variant)
-    body = _checkout_body(cart, addr, opt); body["expected_total"] = "1.00"
-    client = APIClient(); client.force_authenticate(user)
+    body = _checkout_body(cart, addr, opt)
+    body["expected_total"] = "1.00"
+    client = APIClient()
+    client.force_authenticate(user)
     r = client.post("/api/v1/checkout/", body, format="json", HTTP_X_COUNTRY="NG", HTTP_IDEMPOTENCY_KEY="k")
     assert r.status_code == 409
     assert r.data["error"] == "cart_changed"

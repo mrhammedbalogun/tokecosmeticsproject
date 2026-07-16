@@ -16,7 +16,8 @@ def _reserved_order(number, expires_delta):
     # Seed migration already created NG + NGN — fetch, don't re-create (avoids PK collision).
     ng = Country.objects.get(code="NG")
     ngn = ng.currency
-    wh = WarehouseFactory(location_country="NG", priority=1); wh.serves_countries.add(ng)
+    wh = WarehouseFactory(location_country="NG", priority=1)
+    wh.serves_countries.add(ng)
     variant = ProductVariantFactory()
     StockItemFactory(variant=variant, warehouse=wh, quantity=10)
     reserve(variant, 3, ng, reference=number)

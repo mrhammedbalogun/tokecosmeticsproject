@@ -263,3 +263,52 @@ flow never touches it. The field + constraint exist here; the Buy Now *upsert* i
 **Abandoned flagging.** The `abandon_stale_carts` Celery beat task (every 30 min) flags active carts
 untouched for >3h as `status="abandoned"` so the data accrues. **Deferred:** recovery *emails*
 (Plan-30) and `status="converted"` on real checkout (Plan-08d does that under a row lock).
+
+## Checkout & Orders/Payments scaffolding (Plan-08d)
+
+Authenticated `POST /api/v1/checkout/` turns a cart into a `pending_payment` `Order` with reserved
+stock and an `initiated` `Payment`. The `orders` and `payments` apps are introduced here with the
+**full** Plan-10/09 model field list (`Order`, `OrderItem`, `Payment`, `CountryPaymentGateway`) so
+checkout writes real tables now; Plan-09/10 add only *new* tables (`Refund`, `WebhookEvent`,
+`OrderEvent`) — the money tables stay append-only. `bank_transfer` is the first working gateway.
+
+**Two-phase checkout (no HTTP under a DB lock).** Phase 1 is one DB transaction: lock the cart
+(`select_for_update`), re-validate every line (`sellable_in` + `resolve_price`), server-side re-match
+the delivery option via `delivery.options_for_address` (never trust the client's option list or price),
+check the gateway is active for the country, validate any coupon, compute money via
+`checkout.services.totals.compute_totals` (never the client, never a snapshot), reserve stock, create
+the `Order` + snapshot `OrderItem`s, create the `Payment(initiated)`, and convert the cart. **Commit.**
+Phase 2 runs *after* commit with no lock held: `gateway.initiate()` → store `gateway_reference`. For
+bank transfer `initiate()` is local (returns merchant bank details from `SiteSetting`), but the shape
+is built now so Plan-09's networked gateways drop in cleanly behind the same `PaymentGateway` ABC.
+
+**Attempt-suffixed `reservation_reference`.** `Order.reservation_reference` starts equal to the order
+number (`TC-100042`) and gains a `/2` suffix on any re-reserve (Plan-09's late-payment path). This is
+load-bearing: `inventory.reserve()` is **idempotent by reference**, so re-reserving after an
+expiry-release under the *same* reference would silently reserve nothing. Commit/release always use
+`order.reservation_reference`, so the reference is the single ledger key for the order's stock.
+
+**Order row is the single serialization point.** Every status change (`place_order`, `mark_paid`,
+`expire_pending_orders`) locks the `Order` row and re-checks `status` under the lock, so the
+expiry-vs-payment race resolves deterministically — whichever grabs the lock first wins, and the loser
+sees the changed status and no-ops. `expire_pending_orders` (Celery beat, every 5 min) runs **one
+transaction per order** (a poison order can't roll back its siblings) and `release()` is
+ledger-idempotent, so a double-run is safe. `RESERVATION_TTL_MINUTES` (default 30) sets the window.
+
+**Idempotency.** `POST /checkout/` requires an `Idempotency-Key` header. A two-phase Redis record
+(Django cache) is the fast path: `begin()` reserves the key (`in_progress`), `finish()` stores the
+`(status, body)` for a 24h replay window; same key + different payload → 422; same key still in flight
+→ 409. The `Payment.idempotency_key` UNIQUE column is the **durable backstop** that survives Redis
+eviction — `place_order` replays from the stored `Payment` if the key already produced one.
+
+**Insufficient stock fully rolls back.** Reservation runs inside phase 1's transaction, so an
+`InsufficientStock` (mapped to 409 `insufficient_stock`) rolls back the order, items, payment, and cart
+conversion together — the ledger records zero movements.
+
+**Deferred seams.** To **Plan-09**: Paystack/Flutterwave/Stripe/PayPal gateways, webhooks, `verify()`,
+refunds (`Refund`, `WebhookEvent`), the attempt-2 re-reserve on late payment, and the *full* `mark_paid`
+with amount/currency equality checks (08d ships a minimal `mark_paid` used by tests + the bank-transfer
+manual-confirm path). To **Plan-10**: `OrderEvent` + a `state.py` state machine (08d sets `order.status`
+directly in exactly two places, both to be refactored through `transition()` later), order emails,
+invoices, and the customer/admin order APIs.
+
