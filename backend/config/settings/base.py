@@ -207,4 +207,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.carts.tasks.abandon_stale_carts",
         "schedule": 1800.0,  # every 30 min
     },
+    "expire-pending-orders": {
+        "task": "apps.checkout.tasks.expire_pending_orders",
+        "schedule": 300.0,  # every 5 min
+    },
 }
