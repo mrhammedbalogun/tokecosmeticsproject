@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 
 from apps.orders.invoice import render_invoice_pdf
 from apps.orders.models import Order
+from apps.orders.services import cancel_order
 from apps.orders.serializers import (
     AdminOrderListSerializer,
     AdminOrderSerializer,
@@ -147,11 +148,20 @@ class AdminOrderTransitionView(APIView):
         to_status = request.data.get("to_status")
         if not to_status:
             return Response({"error": "to_status_required"}, status=400)
+        # Cancelling is NOT a bare status flip: it must free the reservation atomically
+        # with the move, and cancel_order is the only thing that does. Routing it through
+        # transition_by_id would cancel the order and hold its stock forever —
+        # expire_pending_orders sweeps `pending_payment` only, so nothing would ever
+        # reclaim it. Any status with a mandatory side-effect belongs in this dispatch.
+        mover = cancel_order if to_status == "cancelled" else None
         try:
-            # transition_by_id re-reads under the row lock, so this validates against the
-            # order's CURRENT status even if a webhook moved it since the page loaded.
-            transition_by_id(order.pk, to_status, actor=request.user,
-                             message=request.data.get("message", ""))
+            if mover:
+                mover(order.pk, actor=request.user, message=request.data.get("message", ""))
+            else:
+                # transition_by_id re-reads under the row lock, so this validates against
+                # the CURRENT status even if a webhook moved it since the page loaded.
+                transition_by_id(order.pk, to_status, actor=request.user,
+                                 message=request.data.get("message", ""))
         except IllegalTransition as exc:
             return Response({"error": "illegal_transition", "detail": str(exc)}, status=400)
         order.refresh_from_db()

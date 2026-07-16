@@ -1,0 +1,30 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Thanks for your order — we're holding it for you while we wait for your payment.</p>
+<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }}</p>
+
+<table role="presentation" width="100%" style="background:#f6f6f4;border-radius:8px;margin:0 0 20px;">
+  <tr><td style="padding:16px;">
+    <div style="font-weight:600;margin-bottom:10px;">How to pay</div>
+    <table role="presentation" width="100%" style="font-size:14px;">
+      {% if bank_name %}
+      <tr><td style="color:#777;padding:2px 12px 2px 0;">Bank</td><td>{{ bank_name }}</td></tr>
+      <tr><td style="color:#777;padding:2px 12px 2px 0;">Account name</td><td>{{ account_name }}</td></tr>
+      <tr><td style="color:#777;padding:2px 12px 2px 0;">Account number</td><td><strong>{{ account_number }}</strong></td></tr>
+      {% endif %}
+      <tr><td style="color:#777;padding:2px 12px 2px 0;">Amount</td><td><strong>{{ grand_total }}</strong></td></tr>
+      <tr><td style="color:#777;padding:2px 12px 2px 0;">Reference</td><td><strong>{{ number }}</strong></td></tr>
+    </table>
+    <p style="margin:12px 0 0;font-size:13px;color:#b00020;">
+      Please use <strong>{{ number }}</strong> as the transfer reference — without it we may not be able to match your payment to this order.
+    </p>
+  </td></tr>
+</table>
+
+{% include "email/_order_items.html" %}
+
+<p style="margin:24px 0 0;color:#777;font-size:13px;">Once your transfer lands we'll confirm your order by email.</p>
+<p style="margin:12px 0 0;">
+  <a href="{{ tracking_url }}" style="color:#1a1a1a;font-size:13px;">Track your order</a>
+</p>
+{% endblock %}

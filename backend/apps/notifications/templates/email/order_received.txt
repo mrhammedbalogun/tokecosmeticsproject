@@ -1,0 +1,23 @@
+Thanks for your order — we're holding it for you while we wait for your payment.
+
+Order {{ number }} — placed {{ placed_at }}
+
+{% include "email/_order_items.txt" %}
+HOW TO PAY
+{% if bank_name %}
+  Bank:           {{ bank_name }}
+  Account name:   {{ account_name }}
+  Account number: {{ account_number }}
+{% endif %}
+  Amount:         {{ grand_total }}
+  Reference:      {{ number }}
+
+IMPORTANT: please use {{ number }} as the transfer reference. Without it we may not
+be able to match your payment to this order.
+
+Once your transfer lands we'll confirm your order by email.
+
+Track your order:
+  {{ tracking_url }}
+
+— Toke Cosmetics

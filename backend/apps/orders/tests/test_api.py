@@ -278,6 +278,37 @@ def test_setting_tracking_then_shipping_puts_the_number_in_the_email(
     assert "GIG99" in mail.outbox[0].body
 
 
+def test_admin_cancelling_via_the_transition_endpoint_releases_the_stock(staff):
+    """The REAL cancel path. cancel_order() releases the reservation, but the admin API
+    reaches cancellation through the generic transition endpoint — if that doesn't
+    dispatch to cancel_order, the status flips and the stock is held forever with nothing
+    left to reclaim it (expire_pending_orders sweeps pending_payment only).
+    Drives the endpoint, not the service, because that's where the gap was.
+    """
+    from apps.catalog.factories import ProductVariantFactory
+    from apps.inventory.factories import StockItemFactory, WarehouseFactory
+    from apps.inventory.services import reserve
+
+    ng = Country.objects.get(code="NG")
+    wh = WarehouseFactory(name="Lagos HQ", location_country="NG", priority=1)
+    wh.serves_countries.add(ng)
+    variant = ProductVariantFactory()
+    StockItemFactory(variant=variant, warehouse=wh, quantity=10)
+    order = _order("TC-900025", status="pending_payment", reservation_reference="TC-900025")
+    reserve(variant, 2, ng, reference="TC-900025")
+    assert variant.stock_items.get().reserved == 2
+
+    client = APIClient()
+    client.force_authenticate(staff)
+    resp = client.post(f"/api/v1/admin/orders/{order.number}/transition/",
+                       {"to_status": "cancelled", "message": "duplicate"}, format="json")
+
+    assert resp.status_code == 200
+    order.refresh_from_db()
+    assert order.status == "cancelled"
+    assert variant.stock_items.get().reserved == 0, "cancel must free the reservation"
+
+
 def test_admin_can_add_an_internal_note_without_touching_status(staff):
     order = _order("TC-900020", status="processing")
 
