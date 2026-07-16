@@ -20,6 +20,9 @@ def to_minor(amount: Decimal, currency) -> int:
     Raises ValueError if `amount` carries more precision than the currency allows
     (e.g. 10.999 in a 2-decimal currency) rather than rounding it away.
     """
+    # Coerce via str so a stray float (10.99 -> 10.9900000000000002) or a gateway's
+    # string amount ("10.99") becomes an exact Decimal instead of a float artifact.
+    amount = Decimal(str(amount))
     exponent = currency.decimal_places
     scaled = amount * (Decimal(10) ** exponent)
     if scaled != scaled.to_integral_value():
