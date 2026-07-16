@@ -85,6 +85,7 @@ def test_inactive_options_excluded_and_sorted_by_sort():
     DeliveryOptionFactory(currency=country.currency, name="Off", is_active=False).countries.add(country)
     a = DeliveryOptionFactory(currency=country.currency, name="A", sort=2)
     b = DeliveryOptionFactory(currency=country.currency, name="B", sort=1)
-    a.countries.add(country); b.countries.add(country)
+    a.countries.add(country)
+    b.countries.add(country)
     names = [o["name"] for o in options_for_address(FakeAddress(country.code), [], Decimal("0"))]
     assert names == ["B", "A"]  # sorted by sort; inactive excluded

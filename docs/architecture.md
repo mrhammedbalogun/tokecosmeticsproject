@@ -181,3 +181,48 @@ uppercased and looked up case-insensitively (CI unique constraint).
 - **Known last-use race (not a bug):** usage limits read the redemption ledger, so two concurrent
   checkouts on a coupon's final use can both pass. The ledger records the truth and admin can see
   overuse; tighten with a locked counter post-launch if needed.
+
+## Delivery & Regions (Plan-08b)
+
+New independent domain app `apps.delivery`. It owns delivery options and the region tree matcher,
+and imports **nothing** from `apps.carts` — the matcher is pure and reusable by cart display and by
+checkout's server-side re-check (never trust the client's option list).
+
+**Mixed-granularity coverage.** A `DeliveryOption` can cover whole countries (M2M `countries`) and/or
+any node of the region tree (M2M `regions`) at any level — a whole state ("Lagos State Flat") or a
+single LGA ("Ikeja Same-Day"). Both styles coexist on one option set.
+
+**`options_for_address(address, lines, subtotal) -> list[dict]`** (`apps.delivery.services`) is the
+matcher. `address` is duck-typed (`country_code`, `state_region`, `area_region` — no Cart/Address
+import); `lines` is an iterable of `(ProductVariant, qty)`; `subtotal` is in the order currency (for
+`free_over`). It returns the active options serving the address, each with a computed `price` and ETA,
+ordered by `(sort, name)`.
+
+- **Ancestor-walk match.** The address's `area_region` and `state_region` plus every parent are
+  collected; an option matches if it covers the address's country **or** any of those region ids. So
+  "Lagos State" coverage automatically serves every Lagos LGA (zone-style), while picking individual
+  LGAs is the detailed style.
+- **Pricing (`_price_for`).** If the option has `DeliveryOptionRate` rows, the tier whose
+  `[min_weight_g, max_weight_g]` band contains the cart's total weight is used (over the top tier →
+  the highest tier's price); otherwise the flat `price`. `free_over` zeroes the price once `subtotal`
+  meets the threshold. Amounts quantized to 2dp.
+
+**Region tree** lives in `core.Region` (`country_code`, `name`, `level`, self-FK `parent`). Seeded from
+the bundled fixture `apps/core/fixtures/ng_regions.json` (a `{ "State": ["LGA", …] }` map) by data
+migration `delivery/0002_seed_ng_regions` → **37 states (36 + FCT) + 774 LGAs**. Fixture provenance:
+the widely-mirrored `devhammed` public NG states-and-LGAs dataset; counts verified against the
+36+FCT / 774 canonical totals. Other countries add rows later with no code change.
+
+**Browse API** `GET /api/v1/meta/regions/?country=<CC>` → top-level (state) regions;
+`?parent=<id>` → that region's children (LGAs). Public (`AllowAny`), unpaginated (short dropdown
+lists), each row carries `has_children` so address forms know whether to drill down.
+
+**`Country.area_label`** (Plan-03, landed here) names the finest region level per country — "LGA" (NG),
+"Borough" (GB), "County" (US) — surfaced on `/api/v1/meta/countries/` for address-form labelling.
+
+**Deferred:** `kind="carrier"` + `carrier_code` fields exist for Plan-32 carrier-API rates; at launch
+every option is `kind="manual"`. Admin CRUD is Plan-19.
+
+**Seed rates are PLACEHOLDERS.** `delivery/0003_seed_delivery_options` seeds a documented placeholder
+option set (NG "Nationwide"/"Lagos Delivery"; GB/US/CA/ZZ standard) guarded on country/currency
+presence. **Replace with the real audited rates (Plan-00 audit items 10–11) before the checkpoint.**
