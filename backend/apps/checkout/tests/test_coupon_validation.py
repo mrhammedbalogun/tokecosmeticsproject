@@ -75,7 +75,8 @@ def test_per_user_usage_exhausted(django_user_model):
 def test_applies_to_gate(django_user_model):
     ng = _ng()
     from apps.catalog.factories import ProductFactory
-    p1 = ProductFactory(); p2 = ProductFactory()
+    p1 = ProductFactory()
+    p2 = ProductFactory()
     c = CouponFactory(code="P1ONLY")
     c.applies_to_products.add(p1)
     # cart has only p2 → not valid

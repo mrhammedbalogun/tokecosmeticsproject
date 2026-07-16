@@ -143,3 +143,41 @@ Meilisearch is a drop-in later (Plan-07b, deferred for RAM). Design reviewed wit
 - `request.country` is set by `CountryMiddleware` from the `X-Country` header; missing → NG (default),
   unknown/inactive → ZZ (Rest of World). All price/tax context flows from this.
 - Reports are per-currency (no FX consolidation) in the MVP.
+
+## Coupons & Totals (Plan-08c)
+
+New independent domain app `apps.checkout` holds pure logic (no HTTP, no URLs, no import of
+carts/delivery/orders). It is the single source of truth for order money.
+
+**`compute_totals(items, country, delivery_amount=0, coupon=None) -> Totals`** — the ONLY place
+money is calculated (cart display, checkout, and order creation all call it, so they can never
+disagree). `items` is an iterable of `(ProductVariant, qty)`. Order of operations:
+
+1. **Subtotal** — each line is re-resolved via `pricing.services.resolve_price` (snapshots are
+   display-only, never trusted), rounded **half-up per line** (`q2()`, `ROUND_HALF_UP`, 2dp),
+   then summed. An unpriced line raises `ValueError`.
+2. **Discount** — applied to the subtotal; `free_shipping` discounts nothing here; a discount
+   never exceeds the subtotal (fixed coupons are capped at subtotal → grand total floors at 0).
+3. **Delivery** — the caller-resolved `delivery_amount` (via `apps.delivery`); a `free_shipping`
+   coupon zeroes it.
+4. **Tax** — computed on `subtotal − discount`. If `country.prices_include_tax` the tax is the
+   **extracted** portion already inside the price (`taxable − taxable/(1+r)`; grand total does not
+   add it again). Otherwise tax is **added on top** (`taxable × r`).
+
+**Coupon validation** — `validate_coupon(...) -> CouponValidation(ok, error_code, coupon)` is a
+separate gate that never raises for normal invalid cases; it returns a typed `error_code` the API
+maps to 400. Codes: `not_found`, `inactive`, `not_started`, `expired`, `min_not_met`,
+`wrong_currency`, `exhausted`, `user_exhausted`, `not_valid_for_items`. `compute_totals` consumes
+an already-valid coupon so totals and validation can never diverge. Coupon codes are stored
+uppercased and looked up case-insensitively (CI unique constraint).
+
+**Documented simplifications / deviations (Fable-approved):**
+- `Coupon.applies_to_products` / `applies_to_categories` act as an **eligibility gate** — the cart
+  must contain ≥1 matching item — and the discount then applies to the whole subtotal. Per-line
+  targeted discounts are a post-launch refinement.
+- `CouponRedemption.order_number` is a soft `CharField` reference, **not** an FK to `orders.Order`
+  (built in 08d), so `apps.checkout` stays independent. The Order→Coupon link lives on
+  `Order.coupon` (Plan-10).
+- **Known last-use race (not a bug):** usage limits read the redemption ledger, so two concurrent
+  checkouts on a coupon's final use can both pass. The ledger records the truth and admin can see
+  overuse; tighten with a locked counter post-launch if needed.

@@ -8,7 +8,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
-from django.db.models import Count, Q
 from django.utils import timezone
 
 from apps.checkout.models import Coupon, CouponRedemption
