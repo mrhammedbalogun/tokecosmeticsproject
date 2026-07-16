@@ -151,6 +151,9 @@ REST_FRAMEWORK = {
     },
 }
 
+# --- Checkout ---
+RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
+
 # --- JWT (SimpleJWT) ---
 from datetime import timedelta  # noqa: E402
 
