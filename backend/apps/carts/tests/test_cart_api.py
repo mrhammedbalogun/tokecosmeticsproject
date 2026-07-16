@@ -65,7 +65,7 @@ def test_set_quantity_zero_removes_line():
 
 def test_guest_cart_roundtrip_via_header():
     variant = ProductVariantFactory()
-    ng = _ng_with_stock(variant, qty=10)
+    _ng_with_stock(variant, qty=10)  # seeds stock + NGN price for NG
     client = APIClient()
 
     # First GET with no header creates a cart and returns its id.
@@ -85,7 +85,7 @@ def test_guest_cart_roundtrip_via_header():
 
 def test_patch_and_delete_line(django_user_model):
     variant = ProductVariantFactory()
-    ng = _ng_with_stock(variant, qty=10)
+    _ng_with_stock(variant, qty=10)  # seeds stock + NGN price for NG
     user = django_user_model.objects.create_user(email="c@x.com", password="pw")
     client = APIClient()
     client.force_authenticate(user)
