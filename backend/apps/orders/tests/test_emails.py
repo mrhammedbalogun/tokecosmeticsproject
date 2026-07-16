@@ -100,6 +100,20 @@ def test_no_email_for_internal_moves(django_capture_on_commit_callbacks):
     assert mail.outbox == []
 
 
+def test_html_emails_declare_utf8_so_the_naira_sign_survives(django_capture_on_commit_callbacks):
+    """Django sets a utf-8 MIME header, but not every client honours it over the
+    document's own declaration — and an HTML email with no charset gets read as latin-1,
+    turning every ₦ into "â‚¦". That's the symbol on nearly every email we send."""
+    order = _order(number="TC-500008")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    html = mail.outbox[0].alternatives[0][0]
+    assert 'charset="utf-8"' in html.lower()
+    assert "₦1,000.00" in html
+
+
 def test_emails_are_not_sent_before_the_transaction_commits():
     """The whole reason effects are deferred: no capture fixture, no commit, no email."""
     order = _order(number="TC-500007")

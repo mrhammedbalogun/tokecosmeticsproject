@@ -10,18 +10,18 @@
     </td>
   </tr>
   {% endfor %}
-  <tr><td style="padding:8px 0;">Subtotal</td>
-      <td align="right" style="padding:8px 0;">{{ subtotal }}</td></tr>
+  <tr><td style="padding:8px 12px 8px 0;">Subtotal</td>
+      <td align="right" style="padding:8px 0;white-space:nowrap;">{{ subtotal }}</td></tr>
   {% if discount_total %}
-  <tr><td style="padding:2px 0;">Discount</td>
-      <td align="right" style="padding:2px 0;">-{{ discount_total }}</td></tr>
+  <tr><td style="padding:2px 12px 2px 0;">Discount</td>
+      <td align="right" style="padding:2px 0;white-space:nowrap;">-{{ discount_total }}</td></tr>
   {% endif %}
-  <tr><td style="padding:2px 0;">Delivery <span style="color:#777;">({{ delivery_option_name }})</span></td>
-      <td align="right" style="padding:2px 0;">{{ shipping_total }}</td></tr>
+  <tr><td style="padding:2px 12px 2px 0;">Delivery <span style="color:#777;">({{ delivery_option_name }})</span></td>
+      <td align="right" style="padding:2px 0;white-space:nowrap;">{{ shipping_total }}</td></tr>
   {% if tax_total %}
-  <tr><td style="padding:2px 0;">Tax</td>
-      <td align="right" style="padding:2px 0;">{{ tax_total }}</td></tr>
+  <tr><td style="padding:2px 12px 2px 0;">Tax</td>
+      <td align="right" style="padding:2px 0;white-space:nowrap;">{{ tax_total }}</td></tr>
   {% endif %}
-  <tr><td style="padding:8px 0;font-weight:600;border-top:2px solid #1a1a1a;">Total</td>
-      <td align="right" style="padding:8px 0;font-weight:600;border-top:2px solid #1a1a1a;">{{ grand_total }}</td></tr>
+  <tr><td style="padding:8px 12px 8px 0;font-weight:600;border-top:2px solid #1a1a1a;">Total</td>
+      <td align="right" style="padding:8px 0;font-weight:600;white-space:nowrap;border-top:2px solid #1a1a1a;">{{ grand_total }}</td></tr>
 </table>

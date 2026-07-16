@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 11pt; color: #1a1a1a; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start;
+          border-bottom: 2px solid #1a1a1a; padding-bottom: 10mm; margin-bottom: 8mm; }
+  .brand { font-size: 18pt; font-weight: 700; }
+  .muted { color: #777; font-size: 9pt; }
+  .meta { text-align: right; }
+  .meta .num { font-size: 13pt; font-weight: 700; }
+  .cols { display: flex; gap: 12mm; margin-bottom: 8mm; }
+  .col { flex: 1; }
+  .col h3 { font-size: 9pt; text-transform: uppercase; letter-spacing: .06em;
+            color: #777; margin: 0 0 2mm; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 9pt; text-transform: uppercase; letter-spacing: .06em;
+       color: #777; border-bottom: 1px solid #ddd; padding: 0 0 2mm; font-weight: 600; }
+  td { padding: 2.5mm 0; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+  .r { text-align: right; white-space: nowrap; }
+  .totals { margin-left: auto; width: 70mm; margin-top: 6mm; }
+  .totals td { border: none; padding: 1mm 0; }
+  .totals .grand td { border-top: 2px solid #1a1a1a; font-weight: 700; padding-top: 2mm; }
+  .totals .net td { border-top: 1px solid #ddd; font-weight: 700; }
+  .refund td { color: #b00020; }
+  .foot { margin-top: 14mm; border-top: 1px solid #eee; padding-top: 4mm;
+          color: #777; font-size: 9pt; }
+</style>
+</head>
+<body>
+  <div class="head">
+    <div>
+      <div class="brand">Toke Cosmetics</div>
+      <div class="muted">tokecosmetics.com</div>
+    </div>
+    <div class="meta">
+      <div class="muted">Invoice</div>
+      <div class="num">{{ number }}</div>
+      <div class="muted">{{ placed_at|date:"d M Y" }}</div>
+    </div>
+  </div>
+
+  <div class="cols">
+    <div class="col">
+      <h3>Billed to</h3>
+      {{ billing_address.line1 }}{% if billing_address.line2 %}<br>{{ billing_address.line2 }}{% endif %}<br>
+      {{ billing_address.city }}{% if billing_address.region %}, {{ billing_address.region }}{% endif %}{% if billing_address.postcode %} {{ billing_address.postcode }}{% endif %}<br>
+      <span class="muted">{{ email }}</span>
+    </div>
+    <div class="col">
+      <h3>Delivered to</h3>
+      {{ shipping_address.line1 }}{% if shipping_address.line2 %}<br>{{ shipping_address.line2 }}{% endif %}<br>
+      {{ shipping_address.city }}{% if shipping_address.region %}, {{ shipping_address.region }}{% endif %}{% if shipping_address.postcode %} {{ shipping_address.postcode }}{% endif %}
+      {% if delivery_option_name %}<br><span class="muted">{{ delivery_option_name }}</span>{% endif %}
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item</th><th>SKU</th><th class="r">Qty</th><th class="r">Unit</th><th class="r">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td>{{ item.name }}{% if item.variant %}<br><span class="muted">{{ item.variant }}</span>{% endif %}</td>
+        <td class="muted">{{ item.sku }}</td>
+        <td class="r">{{ item.quantity }}</td>
+        <td class="r">{{ item.unit_price }}</td>
+        <td class="r">{{ item.line_total }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <table class="totals">
+    <tr><td>Subtotal</td><td class="r">{{ subtotal }}</td></tr>
+    {% if discount_total %}<tr><td>Discount</td><td class="r">-{{ discount_total }}</td></tr>{% endif %}
+    <tr><td>Delivery</td><td class="r">{{ shipping_total }}</td></tr>
+    {% if tax_total %}<tr><td>Tax</td><td class="r">{{ tax_total }}</td></tr>{% endif %}
+    <tr class="grand"><td>Total</td><td class="r">{{ grand_total }}</td></tr>
+    {% if refunded %}
+    <tr class="refund"><td>Refunded</td><td class="r">-{{ refunded }}</td></tr>
+    <tr class="net"><td>Net paid</td><td class="r">{{ net_paid }}</td></tr>
+    {% endif %}
+  </table>
+
+  <div class="foot">
+    Thank you for shopping with Toke Cosmetics.
+    {% if refunded %}<br>This invoice reflects refunds settled as at {{ rendered_at|date:"d M Y" }} and is regenerated on each download.{% endif %}
+  </div>
+</body>
+</html>
