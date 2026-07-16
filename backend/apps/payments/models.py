@@ -19,6 +19,20 @@ class Payment(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        constraints = [
+            # A gateway_reference is only unique WITHIN a gateway (two gateways can
+            # coincidentally mint the same reference). Webhook processing matches a
+            # Payment by (gateway, gateway_reference), so a duplicate would make that
+            # lookup ambiguous at the worst moment. Empty references (pre-initiate) are
+            # exempt — many Payments legitimately have "" until the gateway assigns one.
+            models.UniqueConstraint(
+                fields=["gateway", "gateway_reference"],
+                condition=~models.Q(gateway_reference=""),
+                name="uniq_payment_gateway_reference",
+            ),
+        ]
+
     def __str__(self) -> str:
         return f"{self.gateway} {self.amount} ({self.status}) for {self.order_id}"
 
