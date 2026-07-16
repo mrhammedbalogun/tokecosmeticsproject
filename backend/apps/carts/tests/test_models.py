@@ -2,6 +2,7 @@ import pytest
 from django.db import IntegrityError
 
 from apps.carts.models import Cart
+from apps.carts.services import get_or_create_cart
 from apps.core.models import Country
 
 pytestmark = pytest.mark.django_db
@@ -25,9 +26,6 @@ def test_guest_may_hold_many_carts():
     ng = _ng()
     Cart.objects.create(user=None, country=ng, currency=ng.currency)
     Cart.objects.create(user=None, country=ng, currency=ng.currency)  # no constraint violation
-
-
-from apps.carts.services import get_or_create_cart
 
 
 class _Req:
