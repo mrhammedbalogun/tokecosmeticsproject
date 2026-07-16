@@ -145,6 +145,7 @@ REST_FRAMEWORK = {
         "user": "120/min",
         "search": "30/min",
         "suggest": "60/min",
+        "cart": "120/min",
     },
 }
 
