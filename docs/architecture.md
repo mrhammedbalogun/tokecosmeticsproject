@@ -226,3 +226,40 @@ every option is `kind="manual"`. Admin CRUD is Plan-19.
 **Seed rates are PLACEHOLDERS.** `delivery/0003_seed_delivery_options` seeds a documented placeholder
 option set (NG "Nationwide"/"Lagos Delivery"; GB/US/CA/ZZ standard) guarded on country/currency
 presence. **Replace with the real audited rates (Plan-00 audit items 10–11) before the checkpoint.**
+
+## Carts (Plan-08a)
+
+Guest + authenticated shopping carts (`apps.carts`) with live per-country pricing.
+
+**Identity model.** A `Cart` is keyed by UUID. Authenticated requests resolve to the user's single
+active `standard` cart (get-or-created; a partial unique constraint `uniq_active_cart_per_user_kind`
+enforces one active cart per `(user, kind)`). Guests carry the cart UUID in an `X-Cart-Id` header
+(the storefront BFF keeps it in an httpOnly cookie) and may hold many carts (they're exempt from the
+constraint — their identity *is* the UUID). `get_or_create_cart(request, kind)` in `services.py` is
+the single place that decides which cart a request owns, so views stay thin.
+
+**Live re-pricing (never trust the client / the snapshot).** Every cart response is fully re-priced
+at read time via `pricing.services.resolve_price` for `request.country`. `CartItem.unit_price_snapshot`
+is stored on add/update for **display-drift detection only** — it is never the charge basis. Checkout
+(Plan-08d) recomputes totals from scratch. A variant with no price for the country stays in the cart
+but is surfaced as `unavailable: true` and contributes 0 to the subtotal.
+
+**Stock cap.** Quantities are clamped to `inventory.services.available_for_country(variant, country)`
+on every add/set (a cart never holds more than exists). `set_quantity(..., 0)` removes the line.
+
+**Endpoints** (all `AllowAny`; identity is user-or-`X-Cart-Id`; throttle scope `cart` = 120/min):
+`GET /api/v1/cart/`, `POST /api/v1/cart/items/`, `PATCH|DELETE /api/v1/cart/items/{variant_id}/`,
+and `POST /api/v1/cart/merge/` (auth-required).
+
+**Merge on login.** `POST /cart/merge/ {cart_id}` folds an unclaimed guest cart's lines into the
+caller's active standard cart (summing quantities, capped at stock), then marks the guest cart
+`converted`. Foreign/claimed/missing guest ids are ignored (returns the user's cart unchanged);
+idempotent. The BFF calls this right after storing the new access cookie — cleaner than mutating the
+SimpleJWT token view.
+
+**Express cart.** `kind="express"` is a separate single-per-user cart for Buy Now; the standard cart
+flow never touches it. The field + constraint exist here; the Buy Now *upsert* is Plan-08d.
+
+**Abandoned flagging.** The `abandon_stale_carts` Celery beat task (every 30 min) flags active carts
+untouched for >3h as `status="abandoned"` so the data accrues. **Deferred:** recovery *emails*
+(Plan-30) and `status="converted"` on real checkout (Plan-08d does that under a row lock).
