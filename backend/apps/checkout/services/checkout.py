@@ -99,6 +99,18 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         if payment_gateway not in {g["gateway"] for g in active_gateways_for(country)}:
             raise CheckoutError("gateway_unavailable", "Payment method not available.", http=400)
 
+        # A manual gateway needs a configured account BEFORE we reserve stock. Failing at
+        # initiate() (phase 2, post-commit) would leave an order holding stock for the full
+        # 24h TTL and a converted cart, and every retry would burn another hold.
+        gateway = get_gateway(payment_gateway)
+        if gateway.confirmation == "manual":
+            from apps.payments.models import BankAccount
+
+            if not BankAccount.objects.filter(country=country, is_active=True).exists():
+                raise CheckoutError(
+                    "gateway_unavailable", "Payment method not available.", http=400
+                )
+
         # Coupon (optional).
         coupon = None
         if coupon_code:

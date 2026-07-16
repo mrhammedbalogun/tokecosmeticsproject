@@ -12,7 +12,7 @@ from apps.delivery.factories import DeliveryOptionFactory
 from apps.inventory.factories import StockItemFactory, WarehouseFactory
 from apps.inventory.models import StockMovement
 from apps.orders.models import Order, OrderItem
-from apps.payments.models import Payment
+from apps.payments.models import BankAccount, Payment
 from apps.pricing.models import Price
 
 pytestmark = pytest.mark.django_db
@@ -30,7 +30,10 @@ def _world(stock=10):
     opt = DeliveryOptionFactory(currency=ngn, name="Lagos Flat", price="1500.00")
     opt.regions.add(lagos)
     # Seeded payments 0002 already marks bank_transfer ACTIVE for NG, so no CPG row is
-    # created here (a create() would collide on unique_together).
+    # created here (a create() would collide on unique_together). The account is what
+    # makes it *usable*: checkout refuses a manual gateway with no account to transfer to.
+    BankAccount.objects.create(country=ng, currency=ngn, bank_name="GTBank",
+                               account_name="Toke Cosmetics Ltd", account_number="0123456789")
     variant = ProductVariantFactory()
     Price.objects.create(variant=variant, currency=ngn, amount=Decimal("1000.00"))
     StockItemFactory(variant=variant, warehouse=wh, quantity=stock)
@@ -150,18 +153,8 @@ def test_bank_transfer_placement_emails_the_payment_instructions(
     they're told to use as the transfer reference. Un-referenced transfers are exactly
     the ones that can't be matched to an order.
     """
-    from apps.core.models import SiteSetting
-
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
-    for key, value in {
-        "bank_transfer.bank_name": "GTBank",
-        "bank_transfer.account_name": "Toke Cosmetics Ltd",
-        "bank_transfer.account_number": "0123456789",
-    }.items():
-        SiteSetting.objects.update_or_create(key=key, defaults={"value": value,
-                                                                "value_type": "str"})
-
-    ng, ngn, variant, lagos, opt = _world(stock=10)
+    ng, ngn, variant, lagos, opt = _world(stock=10)  # NG account: GTBank / 0123456789
     user = django_user_model.objects.create_user(email="bt@x.com", password="pw")
     addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
     cart = _user_cart(user, ng, ngn, variant, qty=2)
