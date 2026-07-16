@@ -5,7 +5,13 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.carts.serializers import serialize_cart
-from apps.carts.services import add_item, get_or_create_cart, remove_item, set_quantity
+from apps.carts.services import (
+    add_item,
+    get_or_create_cart,
+    merge_guest_cart,
+    remove_item,
+    set_quantity,
+)
 from apps.catalog.models import ProductVariant
 
 
@@ -48,4 +54,12 @@ class CartItemDetailView(_CartBase):
         variant = get_object_or_404(ProductVariant, pk=variant_id)
         cart = get_or_create_cart(request)
         remove_item(cart, variant, request.country)
+        return self._respond(cart, request)
+
+
+class CartMergeView(_CartBase):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        cart = merge_guest_cart(request.user, request.data.get("cart_id"), request.country)
         return self._respond(cart, request)

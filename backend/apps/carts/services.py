@@ -88,3 +88,27 @@ def _write_line(cart, variant, new_qty, country, line):
 
 def remove_item(cart, variant, country=None) -> None:
     CartItem.objects.filter(cart=cart, variant=variant).delete()
+
+
+def merge_guest_cart(user, guest_cart_id, country) -> Cart:
+    """Fold an unclaimed guest cart's lines into the user's active standard cart
+    (summing quantities, capped at available stock), then mark the guest cart
+    converted. Foreign/claimed/missing guest ids are ignored — returns the user's
+    cart unchanged. Idempotent: a converted guest cart won't be merged twice."""
+    user_cart, _ = Cart.objects.get_or_create(
+        user=user, kind="standard", status="active",
+        defaults={"country": country, "currency": country.currency},
+    )
+    guest = Cart.objects.filter(
+        id=guest_cart_id, user__isnull=True, kind="standard", status="active"
+    ).first()
+    if not guest or guest.id == user_cart.id:
+        return user_cart
+    with transaction.atomic():
+        for gi in guest.items.select_related("variant").all():
+            existing = CartItem.objects.filter(cart=user_cart, variant=gi.variant).first()
+            base = existing.quantity if existing else 0
+            set_quantity(user_cart, gi.variant, base + gi.quantity, country)
+        guest.status = "converted"
+        guest.save(update_fields=["status", "updated_at"])
+    return user_cart
