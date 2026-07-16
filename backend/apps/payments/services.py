@@ -120,10 +120,22 @@ def _flag_review(order_id: int, reason: str) -> None:
 
     Only an explicit admin resolve action clears this (see orders.state), never a
     status transition — otherwise shipping a flagged order would silently erase an
-    unresolved double-payment and nobody would ever refund the customer."""
+    unresolved double-payment and nobody would ever refund the customer.
+
+    APPENDS rather than assigns, for the same reason. An order can accumulate several
+    unresolved facts in ONE request — the verdict ladder flags "refund the whole payment on
+    this cancelled order" and confirm_manual_receipt's delta branch flags "overpaid by X" —
+    and while this assigned, whichever wrote second erased the other, leaving staff to act
+    on the survivor: refund the ₦2,000 surplus, resolve, and the customer is out the ₦10,000
+    the erased flag was about. resolve_review still clears the whole string in one explicit
+    act, so Plan-10's model is untouched."""
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order_id)
-        order.review_reason = reason
+        reasons = [r for r in order.review_reason.split("; ") if r]
+        if reason in reasons:
+            return  # already flagged for exactly this — replays are normal here
+        reasons.append(reason)
+        order.review_reason = "; ".join(reasons)
         order.save(update_fields=["review_reason", "updated_at"])
     logger.warning("Order %s flagged for review: %s", order_id, reason)
 
