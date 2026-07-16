@@ -1,0 +1,9 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Your order has been delivered — we hope you love it.</p>
+<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong></p>
+
+{% include "email/_order_items.html" %}
+
+<p style="margin:24px 0 0;color:#777;font-size:13px;">If anything isn't right, just reply to this email and we'll sort it out.</p>
+{% endblock %}

@@ -1,0 +1,1 @@
+Your Toke Cosmetics order {{ number }} has been delivered

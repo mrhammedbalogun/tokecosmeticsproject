@@ -1,0 +1,11 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">We've processed a refund of <strong>{{ refund_amount }}</strong> for your order.</p>
+<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }}</p>
+
+<p style="margin:0 0 20px;color:#555;">It's on its way back to the payment method you used. Depending on your bank it can take a few working days to appear on your statement.</p>
+
+{% include "email/_order_items.html" %}
+
+<p style="margin:24px 0 0;color:#777;font-size:13px;">If you have any questions, just reply to this email.</p>
+{% endblock %}

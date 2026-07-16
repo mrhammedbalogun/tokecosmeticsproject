@@ -1,0 +1,12 @@
+Good news — your order is on its way.
+
+Order {{ number }}
+{% if tracking_number %}
+Tracking: {{ tracking_carrier }} — {{ tracking_number }}
+{% endif %}
+{% include "email/_order_items.txt" %}
+Delivering to:
+  {{ shipping_address.line1 }}{% if shipping_address.line2 %}, {{ shipping_address.line2 }}{% endif %}
+  {{ shipping_address.city }}{% if shipping_address.region %}, {{ shipping_address.region }}{% endif %}{% if shipping_address.postcode %} {{ shipping_address.postcode }}{% endif %}
+
+— Toke Cosmetics

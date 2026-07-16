@@ -1,0 +1,7 @@
+{% for item in items %}  {{ item.quantity }} x {{ item.name }}{% if item.variant %} ({{ item.variant }}){% endif %} — {{ item.line_total }}
+{% endfor %}
+  Subtotal: {{ subtotal }}{% if discount_total %}
+  Discount: -{{ discount_total }}{% endif %}
+  Delivery ({{ delivery_option_name }}): {{ shipping_total }}{% if tax_total %}
+  Tax: {{ tax_total }}{% endif %}
+  Total: {{ grand_total }}

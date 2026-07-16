@@ -1,0 +1,11 @@
+We've processed a refund of {{ refund_amount }} for your order {{ number }}.
+
+It's on its way back to the payment method you used. Depending on your bank it can
+take a few working days to appear on your statement.
+
+Order {{ number }} — placed {{ placed_at }}
+
+{% include "email/_order_items.txt" %}
+If you have any questions, just reply to this email.
+
+— Toke Cosmetics

@@ -39,3 +39,22 @@ def from_minor(minor: int, currency) -> Decimal:
     return (Decimal(minor) / (Decimal(10) ** exponent)).quantize(
         Decimal(1).scaleb(-exponent)
     )
+
+
+def format_money(amount: Decimal, currency) -> str:
+    """Render money for humans — emails, invoices, admin. "₦1,234,567.50"
+
+    Lives here, next to the math, so a currency's precision has ONE source of truth.
+    A template writing `{{ total|floatformat:2 }}` instead would render a zero-decimal
+    currency 100x wrong in the customer's inbox — the same class of trap the gateway
+    adapters exist to avoid, and it refuses to round for the same reason to_minor does.
+    """
+    amount = Decimal(str(amount))
+    exponent = currency.decimal_places
+    scaled = amount * (Decimal(10) ** exponent)
+    if scaled != scaled.to_integral_value():
+        raise ValueError(
+            f"{amount} has more precision than {currency.code} allows "
+            f"({exponent} decimal places) — refusing to round money."
+        )
+    return f"{currency.symbol}{amount:,.{exponent}f}"

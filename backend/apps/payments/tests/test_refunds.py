@@ -3,6 +3,7 @@ fulfillment snapshot, and the failed-gateway path freeing the reserved amount.""
 from decimal import Decimal
 
 import pytest
+from django.core import mail
 from rest_framework.test import APIClient
 
 from apps.catalog.factories import ProductVariantFactory
@@ -85,6 +86,25 @@ def test_partial_refund_math(fakerf):
     payment.refresh_from_db()
     assert payment.status == "refunded"
     assert refundable_amount(payment) == Decimal("0")
+
+
+def test_refund_emails_the_customer_with_the_amount_refunded(
+    fakerf, settings, django_capture_on_commit_callbacks
+):
+    """A PARTIAL refund has no transition to hang an effect off — the lifecycle is
+    deliberately untouched — so the email is enqueued explicitly. The customer still
+    needs telling either way."""
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    order, payment, _ = _paid_order(number="TC-700010")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        create_refund(payment=payment, amount=Decimal("250.00"))
+
+    order.refresh_from_db()
+    assert order.status == "processing"  # no transition happened...
+    assert len(mail.outbox) == 1  # ...but the customer was still told
+    assert "₦250.00" in mail.outbox[0].body
+    assert mail.outbox[0].to == ["c@x.com"]
 
 
 def test_refund_completion_webhook_replay_is_idempotent(fakerf):

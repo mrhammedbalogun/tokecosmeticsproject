@@ -49,6 +49,25 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
 STATUSES = frozenset(ALLOWED_TRANSITIONS)
 
 
+def _effects_for(to_status: str):
+    """Deferred effects, keyed on the DESTINATION status — never on the (from, to) pair.
+
+    Keying on the pair is how the late-payment customer (`expired -> processing`) silently
+    stops getting a confirmation email while `pending_payment -> processing` keeps working.
+    Imported lazily: apps.orders.emails imports the models this module also serves.
+
+    Statuses absent from this table mail nothing on purpose. `on_hold` and `expired` are
+    our words for our problems, not news for a customer.
+    """
+    from apps.orders import emails
+
+    return {
+        "processing": (emails.enqueue_order_confirmation,),
+        "shipped": (emails.enqueue_shipped,),
+        "delivered": (emails.enqueue_delivered,),
+    }.get(to_status, ())
+
+
 class IllegalTransition(Exception):
     """Refused: this order cannot move from where it is to where you asked."""
 
@@ -69,10 +88,14 @@ def transition(order, to_status: str, *, actor=None, message: str = "", effects=
 
     The caller MUST already hold the order's row lock inside an atomic block.
 
-    `effects` are callables invoked with the order's pk AFTER the outermost transaction
-    commits — that is where emails belong. Effects that must be atomic with the status
-    flip (releasing a stock reservation on cancel, say) are the caller's job and belong
-    inside the caller's locked block, not here.
+    Side-effects come from `_effects_for(to_status)` by default, so a caller cannot forget
+    the email that belongs to a move. They are invoked with the order's pk AFTER the
+    outermost transaction commits. Passing `effects` explicitly REPLACES the defaults —
+    for tests, and for callers that have already notified the customer themselves.
+
+    Effects that must be atomic with the status flip (releasing a stock reservation on
+    cancel, say) are the caller's job and belong inside the caller's locked block, not on
+    this deferred lane — see orders.services.cancel_order.
 
     Note what this does NOT do: it never touches `review_reason`. Clearing that is an
     explicit admin act (`resolve_review`), because auto-clearing here would silently
@@ -88,7 +111,9 @@ def transition(order, to_status: str, *, actor=None, message: str = "", effects=
     order.save(update_fields=["status", "updated_at"])
     event = record_event(order, f"status:{to_status}", actor=actor, message=message)
 
-    for effect in effects or ():
+    if effects is None:
+        effects = _effects_for(to_status)
+    for effect in effects:
         transaction.on_commit(partial(effect, order.pk))
     return event
 

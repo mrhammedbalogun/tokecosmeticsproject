@@ -1,0 +1,15 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Thanks for your order — we've received your payment and we're getting it ready.</p>
+<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }}</p>
+
+{% include "email/_order_items.html" %}
+
+<p style="margin:24px 0 4px;font-weight:600;">Delivering to</p>
+<p style="margin:0;color:#555;">
+  {{ shipping_address.line1 }}{% if shipping_address.line2 %}, {{ shipping_address.line2 }}{% endif %}<br>
+  {{ shipping_address.city }}{% if shipping_address.region %}, {{ shipping_address.region }}{% endif %}{% if shipping_address.postcode %} {{ shipping_address.postcode }}{% endif %}
+</p>
+
+<p style="margin:24px 0 0;color:#777;font-size:13px;">We'll email you again as soon as it's on its way.</p>
+{% endblock %}

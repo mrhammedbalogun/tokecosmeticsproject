@@ -18,17 +18,20 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from functools import partial
 
 from django.db import transaction
 from django.db.models import Sum
 
 from apps.inventory.models import StockItem
 from apps.inventory.services import adjust
+from apps.orders.emails import enqueue_refund_processed
 from apps.orders.models import Order
 from apps.orders.state import transition
 from apps.payments.gateways.base import GatewayError
 from apps.payments.gateways.registry import get_gateway
 from apps.payments.models import Payment, Refund
+from apps.payments.money import format_money
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +127,14 @@ def apply_succeeded_refund(refund, *, restock: bool = False, user=None) -> None:
         # dead). A partial refund must leave the lifecycle alone: stomping a `shipped`
         # order to `partially_refunded` drops it out of the packing/delivery pipeline
         # while the customer is still owed the rest of the parcel.
+        # Enqueued explicitly rather than via transition()'s effect table: a PARTIAL
+        # refund has no transition to hang an effect off (the lifecycle is deliberately
+        # untouched), and the amount refunded isn't derivable from a destination status.
+        # on_commit for the usual reason — the worker must not read pre-commit state.
+        transaction.on_commit(
+            partial(enqueue_refund_processed, payment.order_id, format_money(refund.amount, payment.currency))
+        )
+
         order = Order.objects.select_for_update().get(pk=payment.order_id)
         if fully and order.status != "refunded":
             # Guarded rather than unconditional: this is also the async refund-completion
