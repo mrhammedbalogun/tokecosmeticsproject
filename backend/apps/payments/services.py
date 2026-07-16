@@ -20,11 +20,16 @@ idempotent fulfilment primitive:
                                     return endpoint call. Verifies with the gateway
                                     (network, OUTSIDE any transaction), checks amount +
                                     currency, then hands the verdict to the ladder.
+  confirm_manual_receipt(payment) — the other entry point, for gateways with no machine to
+                                    ask (bank transfer). A staff member reading the bank
+                                    statement supplies the amount instead of verify(), and
+                                    the same ladder takes it from there.
 """
 from __future__ import annotations
 
 import enum
 import logging
+from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
@@ -33,7 +38,8 @@ from apps.inventory.models import StockMovement
 from apps.inventory.services import InsufficientStock, commit_sale, release, reserve
 from apps.orders.models import Order
 from apps.orders.state import transition
-from apps.payments.money import to_minor
+from apps.payments.models import Payment
+from apps.payments.money import from_minor, to_minor
 
 logger = logging.getLogger(__name__)
 
@@ -266,3 +272,140 @@ def confirm_payment(payment) -> None:
 
     payment.save(update_fields=["raw_response", "updated_at"])  # persist verify before fulfilling
     _react_to_verdict(payment, mark_paid(payment))
+
+
+# --- confirm_manual_receipt: the fulfilment entry point for bank transfer ----
+
+
+class AmountDiscrepancy(Exception):
+    """The confirmed amount is not the order total and staff did not explicitly accept it.
+    Nothing was fulfilled. Carries the numbers so the caller can show them and come back."""
+
+    def __init__(self, expected: Decimal, received: Decimal):
+        self.expected, self.received = expected, received
+        super().__init__(f"received {received}, order is owed {expected}")
+
+
+class DuplicateBankReference(Exception):
+    """This bank reference already confirmed another order — one statement line cannot pay
+    for two orders. Override with allow_duplicate_reference=True."""
+
+
+def _find_duplicate_reference(payment, bank_reference: str):
+    """Another payment already confirmed against this statement line, if any. The cheapest
+    fraud control we have: one transfer quoted as the reference for two orders would
+    otherwise ship goods twice against money that arrived once."""
+    return (
+        Payment.objects.filter(
+            gateway=payment.gateway,
+            raw_response__manual_receipt__has_key=bank_reference,
+        )
+        .exclude(pk=payment.pk)
+        .select_related("order")
+        .first()
+    )
+
+
+def confirm_manual_receipt(
+    payment,
+    *,
+    staff_user,
+    amount_received: Decimal,
+    bank_reference: str,
+    note: str = "",
+    accept_discrepancy: bool = False,
+    allow_duplicate_reference: bool = False,
+) -> None:
+    """Fulfil an order whose money arrived by bank transfer. The staff member reading the
+    bank statement IS the verification — there is no gateway to ask — so this deliberately
+    does NOT call verify(). It reuses mark_paid and the shared verdict ladder, because the
+    recovery logic for late/cancelled/duplicate money doesn't care who did the verifying.
+
+    Any nonzero delta requires accept_discrepancy + a reason. Overpayment then fulfils and
+    flags the surplus for refund (they paid enough — don't hold their goods hostage);
+    shortfall then fulfils and records who accepted it (intl wires legitimately lose a
+    slice to intermediary banks). Without the flag an unexpected amount raises, because the
+    common cause is a typo and the resulting flag is the ONLY authorisation a human needs
+    to wire real money out.
+    """
+    from apps.orders.state import record_event
+    from apps.payments.gateways.registry import get_gateway
+
+    if get_gateway(payment.gateway).confirmation != "manual":
+        # Letting staff hand-wave a Stripe payment into 'succeeded' would break
+        # succeeded <=> money-actually-arrived.
+        raise ValueError(
+            f"{payment.gateway} is machine-confirmed — use confirm_payment(), not manual receipt"
+        )
+
+    expected_minor = to_minor(payment.amount, payment.currency)
+    received_minor = to_minor(amount_received, payment.currency)
+    delta = received_minor - expected_minor
+
+    if delta and not accept_discrepancy:
+        record_event(
+            payment.order, "manual_receipt_refused", actor=staff_user,
+            message=(
+                f"refused: {amount_received} {payment.currency_id} against "
+                f"{payment.amount} (ref {bank_reference})"
+            ),
+        )
+        # Deliberately NO review flag: nothing happened, and the caller already has the
+        # numbers. A flag here would outlive the corrected confirm that follows.
+        raise AmountDiscrepancy(payment.amount, amount_received)
+
+    if delta and not note.strip():
+        raise ValueError("accepting an amount discrepancy requires a reason")
+
+    if not allow_duplicate_reference:
+        other = _find_duplicate_reference(payment, bank_reference)
+        if other is not None:
+            raise DuplicateBankReference(
+                f"bank reference {bank_reference} already confirmed order {other.order.number}"
+            )
+
+    # Keyed by reference rather than replaced: two staff confirming concurrently both save
+    # here unlocked, and last-write-wins would leave the payment recording an amount that
+    # fulfilled nothing. The OrderEvents are the audit trail; this is the ledger detail.
+    receipts = dict((payment.raw_response or {}).get("manual_receipt", {}))
+    receipts[bank_reference] = {
+        "amount_received": str(amount_received),
+        "confirmed_by": staff_user.get_username(),
+        "note": note,
+        "accept_discrepancy": accept_discrepancy,
+    }
+    payment.raw_response = {**(payment.raw_response or {}), "manual_receipt": receipts}
+    payment.save(update_fields=["raw_response", "updated_at"])
+
+    fulfilled = _react_to_verdict(payment, mark_paid(payment))
+
+    # AFTER mark_paid, with the outcome: recording "confirmed" before it would have a
+    # losing racer claim credit for a confirmation that did nothing.
+    record_event(
+        payment.order, "payment_confirmed_manually", actor=staff_user,
+        message=(
+            f"{amount_received} {payment.currency_id} confirmed against bank reference "
+            f"{bank_reference} — {'fulfilled' if fulfilled else 'no fulfilment (see flags)'}"
+            + (f" — {note}" if note else "")
+        ),
+    )
+
+    if not fulfilled:
+        # The ladder already flagged the operative instruction (refund it / could not
+        # re-reserve). A delta flag here would append noise to an unresolved, more urgent
+        # fact — or worse, imply the goods shipped.
+        return
+
+    if delta > 0:
+        _flag_review(
+            payment.order_id,
+            f"overpaid by {from_minor(delta, payment.currency)} {payment.currency_id} "
+            f"(received {amount_received} against {payment.amount}) — refund the difference",
+        )
+    elif delta < 0:
+        _flag_review(
+            payment.order_id,
+            f"shortfall of {from_minor(-delta, payment.currency)} {payment.currency_id} "
+            f"accepted by {staff_user.get_username()}: {note} "
+            f"(received {amount_received} against {payment.amount})",
+        )
