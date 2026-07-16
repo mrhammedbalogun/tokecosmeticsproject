@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 
@@ -51,3 +52,49 @@ class CountryPaymentGateway(models.Model):
 
     def __str__(self) -> str:
         return f"{self.country_id}:{self.gateway} ({'on' if self.is_active else 'off'})"
+
+
+class Refund(models.Model):
+    """A staff-initiated (or gateway-completion-driven) refund against a Payment.
+    Async on some gateways (Flutterwave/PayPal can return `pending`), so status
+    advances pending -> succeeded/failed, the latter via a refund-completion webhook."""
+
+    STATUSES = [("pending", "Pending"), ("succeeded", "Succeeded"), ("failed", "Failed")]
+
+    payment = models.ForeignKey(Payment, on_delete=models.PROTECT, related_name="refunds")
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+    reason = models.TextField(blank=True)
+    status = models.CharField(max_length=20, default="pending", choices=STATUSES)
+    gateway_reference = models.CharField(max_length=128, blank=True, db_index=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL
+    )
+    raw_response = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"refund {self.amount} ({self.status}) of payment {self.payment_id}"
+
+
+class WebhookEvent(models.Model):
+    """Idempotency ledger for inbound gateway webhooks. The unique (gateway, event_id)
+    row IS the dedupe: a duplicate delivery hits the constraint and is ignored. Stores
+    the raw payload for audit and to reprocess if a bug is fixed later."""
+
+    gateway = models.CharField(max_length=20)
+    event_id = models.CharField(max_length=128)  # gateway's id, or a derived deterministic id
+    event_type = models.CharField(max_length=64)
+    # Captured from the signature-verified ParsedEvent so the async processor can match a
+    # Payment WITHOUT re-parsing (re-parsing needs the live request to check the signature).
+    gateway_reference = models.CharField(max_length=128, blank=True, db_index=True)
+    payload = models.JSONField()
+    processed_at = models.DateTimeField(null=True, blank=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [("gateway", "event_id")]
+
+    def __str__(self) -> str:
+        return f"{self.gateway}:{self.event_type}:{self.event_id}"
