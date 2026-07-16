@@ -118,9 +118,15 @@ def apply_succeeded_refund(refund, *, restock: bool = False, user=None) -> None:
         payment.status = "refunded" if fully else "partially_refunded"
         payment.save(update_fields=["status", "updated_at"])
 
+        # Refund progress is a payment-ledger fact, carried by payment.status and the
+        # Refund rows. Only a FULL refund is a lifecycle move (the order is commercially
+        # dead). A partial refund must leave the lifecycle alone: stomping a `shipped`
+        # order to `partially_refunded` drops it out of the packing/delivery pipeline
+        # while the customer is still owed the rest of the parcel.
         order = Order.objects.select_for_update().get(pk=payment.order_id)
-        order.status = "refunded" if fully else "partially_refunded"
-        order.save(update_fields=["status", "updated_at"])
+        if fully:
+            order.status = "refunded"
+            order.save(update_fields=["status", "updated_at"])
 
         if restock:
             _restock(order, user)

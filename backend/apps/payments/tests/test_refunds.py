@@ -77,7 +77,7 @@ def test_partial_refund_math(fakerf):
     payment.refresh_from_db()
     order.refresh_from_db()
     assert payment.status == "partially_refunded"
-    assert order.status == "partially_refunded"
+    assert order.status == "processing"  # lifecycle untouched by a partial refund
     assert refundable_amount(payment) == Decimal("750.00")
 
     # A second partial brings it to fully refunded.
@@ -85,6 +85,22 @@ def test_partial_refund_math(fakerf):
     payment.refresh_from_db()
     assert payment.status == "refunded"
     assert refundable_amount(payment) == Decimal("0")
+
+
+def test_partial_refund_leaves_order_lifecycle_untouched(fakerf):
+    """A partial refund is a payment-ledger fact, not a lifecycle move. Refunding one
+    damaged item off a shipped order must leave it shipped — stomping the status drops
+    the order out of the packing/delivery pipeline and nobody chases the rest of it."""
+    order, payment, _ = _paid_order()
+    order.status = "shipped"
+    order.save(update_fields=["status"])
+
+    create_refund(payment=payment, amount=Decimal("250.00"))
+
+    payment.refresh_from_db()
+    order.refresh_from_db()
+    assert payment.status == "partially_refunded"  # the ledger records the partial
+    assert order.status == "shipped"  # ...the lifecycle does not
 
 
 def test_refund_over_remaining_is_rejected(fakerf):
