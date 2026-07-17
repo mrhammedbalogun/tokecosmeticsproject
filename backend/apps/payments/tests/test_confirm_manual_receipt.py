@@ -59,6 +59,20 @@ def _order_awaiting_transfer(number, ng, ngn, variant, *, gateway="bank_transfer
     )
 
 
+def _cancelled_order_with_transfer(number, ng, ngn):
+    """An order cancelled before its transfer was spotted on the statement. No items or
+    reservation: mark_paid reads the status under the lock and never reaches the stock,
+    which is the point — the money arrived for goods that will never ship."""
+    order = OrderFactory(
+        number=number, country=ng, currency=ngn, reservation_reference=number,
+        grand_total="10000.00", status="cancelled", email="c@x.com",
+    )
+    return order, PaymentFactory(
+        order=order, currency=ngn, amount=Decimal("10000.00"),
+        gateway="bank_transfer", status="initiated",
+    )
+
+
 @pytest.fixture
 def staff(django_user_model):
     return django_user_model.objects.create_user(
@@ -226,6 +240,50 @@ def test_records_who_confirmed_and_against_which_statement_line(staff):
     assert event.actor == staff
     assert "FT-010" in event.message
     assert "10000.00" in event.message
+
+
+def test_delta_flag_never_buries_the_ladders_instruction_on_a_cancelled_order(staff):
+    """The ordering constraint, pinned. An overpayment on a CANCELLED order: nothing
+    shipped, so the whole 12000 goes back. The ladder says exactly that. Hoisting the
+    delta flag above the `if not fulfilled: return` would append "refund the difference"
+    to it — and staff who act on the survivor wire 2000 back, resolve the flag, and the
+    customer is out 10000 with no goods. The flags are an instruction to move real money,
+    so the operative one must not share the field with a contradicting one."""
+    ng, ngn, variant = _setup()
+    order, payment = _cancelled_order_with_transfer("TC-300012", ng, ngn)
+
+    confirm_manual_receipt(
+        payment, staff_user=staff, amount_received=Decimal("12000.00"),
+        bank_reference="FT-012", note="customer rounded up", accept_discrepancy=True,
+    )
+
+    order.refresh_from_db()
+    assert order.status == "cancelled"
+    assert f"payment {payment.pk} received on a cancelled order — refund it" in (
+        order.review_reason
+    )
+    # The whole payment goes back, not the 2000 surplus.
+    assert "refund the difference" not in order.review_reason
+    assert "overpaid" not in order.review_reason
+
+
+def test_the_confirmation_event_reports_the_outcome_not_just_the_attempt(staff):
+    """The other ordering constraint, pinned. record_event fires AFTER mark_paid and
+    carries the outcome, so it can only be written by a confirmation that knows what it
+    did. Moving it earlier — where `fulfilled` does not exist yet — leaves the timeline
+    claiming a confirmation that fulfilled nothing, which is the record that settles
+    disputes saying the opposite of what happened."""
+    ng, ngn, variant = _setup()
+    order, payment = _cancelled_order_with_transfer("TC-300013", ng, ngn)
+
+    confirm_manual_receipt(
+        payment, staff_user=staff, amount_received=Decimal("10000.00"),
+        bank_reference="FT-013",
+    )
+
+    event = order.events.get(type="payment_confirmed_manually")
+    assert "no fulfilment" in event.message
+    assert "FT-013" in event.message
 
 
 def test_a_networked_gateway_cannot_be_hand_waved_into_succeeded(staff):
