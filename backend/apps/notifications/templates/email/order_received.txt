@@ -4,9 +4,9 @@ Order {{ number }} — placed {{ placed_at }}
 
 {% include "email/_order_items.txt" %}
 HOW TO PAY
-{% if bank_details %}{% for label, value in bank_details.items %}  {{ label|add:":"|ljust:"16" }}{{ value }}
-{% endfor %}{% endif %}  Amount:         {{ grand_total }}
-  Reference:      {{ number }}
+{% if bank_details %}{% for label, value in bank_details.items %}  {{ label|add:":"|ljust:"16" }} {{ value }}
+{% endfor %}{% endif %}  Amount:          {{ grand_total }}
+  Reference:       {{ number }}
 
 IMPORTANT: please use {{ number }} as the transfer reference. Without it we may not
 be able to match your payment to this order.

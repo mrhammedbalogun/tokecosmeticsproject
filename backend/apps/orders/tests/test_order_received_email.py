@@ -124,6 +124,31 @@ def test_capitalised_extra_keys_survive_as_typed(
     assert "Sort code" in body  # ...while a machine-shaped key is still prettified
 
 
+def test_a_long_bank_label_still_separates_from_its_value(
+    django_user_model, settings, django_capture_on_commit_callbacks
+):
+    """`ljust` pads a string UP TO a width — it does not guarantee a gap. A label at or
+    over the pad width renders flush against its value ("Institution number:003"), and
+    these are digits the customer retypes into their banking app.
+
+    Not hypothetical: Canada's real transfer fields are a transit number and an
+    institution number, and `institution_number` prettifies to an 18-character label —
+    longer than the 16-wide pad. The labels come from BankAccount.extra keys typed in the
+    admin, so the template cannot assume any particular length.
+    """
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    world = _world("CA", bank_name="RBC", account_number="1234567",
+                   extra={"transit_number": "00123", "institution_number": "003"})
+    _place(django_user_model, django_capture_on_commit_callbacks, "CA", world, "ca@x.com")
+
+    body = mail.outbox[0].body
+    assert "  Institution number: 003" in body
+    # ...and the short labels stay aligned with the hardcoded Amount/Reference rows,
+    # which are padded by hand and drift the moment the pad width changes.
+    assert "  Transit number:  00123" in body
+    assert "  Amount:          CA$3,500.00" in body
+
+
 def test_order_received_states_the_24_hour_deadline(
     django_user_model, settings, django_capture_on_commit_callbacks
 ):
