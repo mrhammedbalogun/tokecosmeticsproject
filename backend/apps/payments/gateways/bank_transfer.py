@@ -1,6 +1,7 @@
 from apps.payments.gateways.base import (
     GatewayNotConfigured,
     InitiateResult,
+    ManualRefundOnly,
     ManualVerificationOnly,
     PaymentGateway,
 )
@@ -74,4 +75,13 @@ class BankTransferGateway(PaymentGateway):
         "check my payment" button returning their order status instead of a 500."""
         raise ManualVerificationOnly(
             "bank_transfer is confirmed by a human, not by the gateway"
+        )
+
+    def refund(self, payment, amount, reason: str = ""):
+        """No API to push money back — staff wire it from the bank and record it via
+        payments.refunds.record_manual_refund. Reaching here means a caller routed a manual
+        payment through the gateway refund path; fail in the gateway vocabulary so the
+        reserved Refund row is released rather than stranded."""
+        raise ManualRefundOnly(
+            "bank_transfer refunds are sent by a human — use record_manual_refund()"
         )

@@ -49,6 +49,15 @@ class ManualVerificationOnly(GatewayError):
     """
 
 
+class ManualRefundOnly(GatewayError):
+    """This gateway cannot push money back — a human sends the transfer and records it.
+
+    A GatewayError (unlike the base refund()'s NotImplementedError) so create_refund's
+    existing handler catches it, marks the reserved Refund row failed, and frees the
+    amount instead of 500ing and wedging that payment's refundable balance forever.
+    """
+
+
 class VerificationMismatch(GatewayError):
     """gateway.verify() returned an amount/currency that does not match the order."""
 

@@ -21,7 +21,12 @@ from apps.orders.models import Order
 from apps.payments.gateways.base import GatewayError
 from apps.payments.gateways.registry import get_gateway
 from apps.payments.models import Payment
-from apps.payments.refunds import RefundError, create_refund, refundable_amount
+from apps.payments.refunds import (
+    RefundError,
+    create_refund,
+    record_manual_refund,
+    refundable_amount,
+)
 from apps.payments.services import (
     AmountDiscrepancy,
     DuplicateBankReference,
@@ -105,6 +110,59 @@ class OrderRefundView(APIView):
             "refund_id": refund.pk,
             "status": refund.status,
             "amount": str(refund.amount),
+            "payment_status": payment.status,
+            "remaining": str(refundable_amount(payment)),
+        }, status=201)
+
+    @staticmethod
+    def _pick_payment(order, payment_id):
+        payments = order.payments.all()
+        if payment_id:
+            return payments.filter(pk=payment_id).first()
+        return payments.filter(status__in=["succeeded", "partially_refunded"]).first()
+
+
+class ManualRefundSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2,
+                                      min_value=Decimal("0.01"))
+    bank_reference = serializers.CharField(max_length=128)
+    note = serializers.CharField(required=False, allow_blank=True, default="")
+    restock = serializers.BooleanField(required=False, default=False)
+
+
+class ManualRefundView(APIView):
+    """POST /api/v1/admin/orders/{number}/manual-refund/ — staff record a refund they have
+    already wired from the bank. The only refund path for a manual gateway, and the one
+    the review flags that say "refund it" are telling staff to use.
+    """
+
+    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+
+    def post(self, request, number: str):
+        order = get_object_or_404(Order, number=number)
+        payment = self._pick_payment(order, request.data.get("payment_id"))
+        if payment is None:
+            return Response({"error": "no_refundable_payment",
+                             "detail": "This order has no collected payment to refund."},
+                            status=400)
+
+        serializer = ManualRefundSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            refund = record_manual_refund(
+                payment=payment, staff_user=request.user, **serializer.validated_data
+            )
+        except RefundError as exc:
+            return Response({"error": exc.code, "detail": exc.detail, **exc.extra},
+                            status=exc.http)
+
+        payment.refresh_from_db()
+        return Response({
+            "refund_id": refund.pk,
+            "status": refund.status,
+            "amount": str(refund.amount),
+            "bank_reference": refund.gateway_reference,
             "payment_status": payment.status,
             "remaining": str(refundable_amount(payment)),
         }, status=201)
