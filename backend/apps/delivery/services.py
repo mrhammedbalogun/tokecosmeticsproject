@@ -72,6 +72,12 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
     caller raises delivery_option_invalid. The trigger is an unknown code, never an
     empty result — "no options found => use ZZ" would silently serve international
     pricing to GB customers the day someone deactivates the last GB option.
+
+    Options are filtered to the ORDER's currency. compute_totals takes a bare
+    delivery amount and knows nothing about the option's currency, so an option in
+    another currency would have its number added to the order as if it were the
+    order's currency. Blocking is deliberate (see the spec): converting via an FX
+    rate would put FX into the totals maths for a rare case.
     """
     resolved = resolve_country(address.country_code)
     if resolved is None:
@@ -79,6 +85,7 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
     region_ids = _covered_region_ids(address)
     qs = (
         DeliveryOption.objects.filter(is_active=True)
+        .filter(currency_id=country.currency_id)
         .filter(_coverage_q(resolved.code, region_ids))
         .prefetch_related("rates", "countries", "regions")
         .distinct()

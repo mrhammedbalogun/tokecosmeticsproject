@@ -177,3 +177,23 @@ def test_region_option_is_not_reached_by_an_address_in_another_country():
     matched = options_for_address(addr, lines=[], subtotal=Decimal("0"), country=zz)
 
     assert matched == []
+
+
+@pytest.mark.django_db
+def test_option_in_another_currency_is_never_offered():
+    """The order currency comes from the browsing context; the option comes from the
+    shipping address. A NGN-context customer shipping to Germany must NOT be offered
+    the USD ZZ option — compute_totals would add its 25 to an NGN order as N25."""
+    _clear_seeded_options()
+    zz = Country.objects.get(code="ZZ")          # USD
+    ng = _ng()                                   # NGN
+    opt = DeliveryOption.objects.create(
+        name="International Standard", kind="manual", price=Decimal("25.00"),
+        currency=zz.currency, min_days=3, max_days=10,
+    )
+    opt.countries.add(zz)
+
+    # Browsing the NG storefront (order currency NGN), shipping to Germany (resolves ZZ).
+    matched = options_for_address(FakeAddress("DE"), lines=[], subtotal=Decimal("0"), country=ng)
+
+    assert matched == []
