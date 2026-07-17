@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 
 from apps.orders.models import Order
 from apps.payments.gateways.base import GatewayError
+from apps.payments.gateways.registry import get_gateway
 from apps.payments.models import Payment
 from apps.payments.refunds import RefundError, create_refund, refundable_amount
 from apps.payments.services import (
@@ -43,12 +44,16 @@ class PaymentStatusView(APIView):
             gateway_reference=reference,
             order__user=request.user,
         )
-        try:
-            confirm_payment(payment)
-        except GatewayError:
-            # Verification couldn't complete right now (gateway down / not configured).
-            # Report current state; the webhook will reconcile when it lands.
-            logger.warning("Return-verify for %s could not reach gateway", reference)
+        # A manual gateway has no machine to ask — skip straight to reporting state.
+        # Branching on `confirmation` rather than relying on ManualVerificationOnly being
+        # caught below makes the intent explicit; the except stays as belt-and-braces.
+        if get_gateway(payment.gateway).confirmation != "manual":
+            try:
+                confirm_payment(payment)
+            except GatewayError:
+                # Verification couldn't complete right now (gateway down / not configured).
+                # Report current state; the webhook will reconcile when it lands.
+                logger.warning("Return-verify for %s could not reach gateway", reference)
 
         payment.refresh_from_db()
         payment.order.refresh_from_db()
