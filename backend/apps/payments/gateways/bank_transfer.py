@@ -36,6 +36,15 @@ class BankTransferGateway(PaymentGateway):
                 "account_name": account.account_name,
                 "account_number": account.account_number,
                 **account.extra,
+                # Ordered, display-ready, per-market. The email iterates this rather than
+                # naming fields, so a market that needs a sort code or SWIFT gets it
+                # without a template change. Labels are what the customer reads.
+                "bank_details": {
+                    "Bank": account.bank_name,
+                    "Account name": account.account_name,
+                    "Account number": account.account_number,
+                    **{k.replace("_", " ").capitalize(): v for k, v in account.extra.items()},
+                },
                 "amount": str(order.grand_total),
                 "currency": order.currency_id,
                 "reference": order.number,
