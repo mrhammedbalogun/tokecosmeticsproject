@@ -105,6 +105,25 @@ def test_us_order_received_shows_the_routing_number(
     assert "Routing number" in body
 
 
+def test_capitalised_extra_keys_survive_as_typed(
+    django_user_model, settings, django_capture_on_commit_callbacks
+):
+    """`IBAN` must not render as "Iban". These keys are acronyms as the bank writes them,
+    and a customer matching an email against their banking app reads the label, not just
+    the digits. Naive `.capitalize()` lowercases the tail and mangles every one of them.
+    """
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    world = _world("ZZ", bank_name="Citi", account_number="55555555",
+                   extra={"IBAN": "GB33BUKB20201555555555", "SWIFT BIC": "CITIGB2L",
+                          "sort_code": "04-00-04"})
+    _place(django_user_model, django_capture_on_commit_callbacks, "ZZ", world, "iban@x.com")
+
+    body = mail.outbox[0].body
+    assert "IBAN" in body and "Iban" not in body
+    assert "SWIFT BIC" in body and "Swift bic" not in body
+    assert "Sort code" in body  # ...while a machine-shaped key is still prettified
+
+
 def test_order_received_states_the_24_hour_deadline(
     django_user_model, settings, django_capture_on_commit_callbacks
 ):

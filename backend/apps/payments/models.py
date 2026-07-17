@@ -119,8 +119,10 @@ class BankAccount(models.Model):
     account_number = models.CharField(max_length=64)  # or IBAN
     # Per-market shape: sort_code (GB), routing_number (US), IBAN/SWIFT (intl wires).
     # A JSON blob rather than columns — every market wants a different subset and this is
-    # display-only data the customer copies into their banking app. Keys are rendered
-    # verbatim to the customer (see the order_received template), so write them readably.
+    # display-only data the customer copies into their banking app. Keys BECOME the labels
+    # the customer reads (see gateways.bank_transfer._label): an all-lowercase key is
+    # prettified, so `sort_code` renders as "Sort code", while a key with any capital in it
+    # is left exactly as typed — write `IBAN` or `SWIFT BIC` and that is what is sent.
     extra = models.JSONField(default=dict, blank=True)
     instructions = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)

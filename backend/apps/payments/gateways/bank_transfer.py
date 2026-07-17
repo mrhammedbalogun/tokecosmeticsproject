@@ -6,6 +6,20 @@ from apps.payments.gateways.base import (
 )
 
 
+def _label(key: str) -> str:
+    """Turn a BankAccount.extra key into the label the customer reads.
+
+    Prettify only what is plainly a machine key: an all-lowercase `sort_code` becomes
+    "Sort code". Anything carrying capitals was typed that way on purpose and is left
+    alone — `str.capitalize()` lowercases the tail, so it would render a carefully
+    entered IBAN as "Iban" and SWIFT as "Swift". Banking identifiers are acronyms; a
+    customer matching these against their banking app should see them as their bank
+    writes them.
+    """
+    words = key.replace("_", " ")
+    return words.capitalize() if words.islower() else words
+
+
 class BankTransferGateway(PaymentGateway):
     """Manual bank transfer — the ONLY live method at launch (see Plan-09b). No external
     HTTP: initiate() returns the merchant's bank details for the order's country and the
@@ -43,7 +57,7 @@ class BankTransferGateway(PaymentGateway):
                     "Bank": account.bank_name,
                     "Account name": account.account_name,
                     "Account number": account.account_number,
-                    **{k.replace("_", " ").capitalize(): v for k, v in account.extra.items()},
+                    **{_label(k): v for k, v in account.extra.items()},
                 },
                 "amount": str(order.grand_total),
                 "currency": order.currency_id,
