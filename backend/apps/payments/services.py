@@ -121,6 +121,22 @@ def _amounts_match(result, payment) -> bool:
     return to_minor(result.amount, payment.currency) == to_minor(payment.amount, payment.currency)
 
 
+def _append_reason(order, reason: str) -> bool:
+    """Add `reason` to the in-memory order's review_reason, unless it's already there.
+    Returns whether anything changed; the CALLER saves, because callers who already hold
+    the row lock must not re-open a transaction just to write a note.
+
+    Every writer of review_reason goes through here. It is not a formatting helper: a
+    writer that assigns directly erases whatever an earlier writer put there, which is the
+    whole failure this exists to prevent (see _flag_review)."""
+    reasons = [r for r in order.review_reason.split("; ") if r]
+    if reason in reasons:
+        return False
+    reasons.append(reason)
+    order.review_reason = "; ".join(reasons)
+    return True
+
+
 def _flag_review(order_id: int, reason: str) -> None:
     """Flag an order for human attention. `review_reason` is the single source of truth
     and is ORTHOGONAL to the lifecycle: "a human must look at this" is not a place in the
@@ -132,20 +148,19 @@ def _flag_review(order_id: int, reason: str) -> None:
     status transition — otherwise shipping a flagged order would silently erase an
     unresolved double-payment and nobody would ever refund the customer.
 
-    APPENDS rather than assigns, for the same reason. An order can accumulate several
-    unresolved facts in ONE request — the verdict ladder flags "refund the whole payment on
-    this cancelled order" and confirm_manual_receipt's delta branch flags "overpaid by X" —
-    and while this assigned, whichever wrote second erased the other, leaving staff to act
-    on the survivor: refund the ₦2,000 surplus, resolve, and the customer is out the ₦10,000
-    the erased flag was about. resolve_review still clears the whole string in one explicit
-    act, so Plan-10's model is untouched."""
+    APPENDS rather than assigns, for the same reason: an order accumulates unresolved facts
+    over its life, and while this assigned, whichever writer came second erased the first —
+    leaving staff to act on the survivor alone. A mismatch flagged while pending_payment,
+    then a late payment that can't re-reserve, used to leave only "could not re-reserve
+    stock": staff refund the order total, never learning the gateway reported a different
+    amount. The fact that explained WHY the money was in dispute was the one erased.
+
+    resolve_review still clears the whole string in one explicit act, so Plan-10's model is
+    untouched — an admin decides everything here is handled, not a passing writer."""
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order_id)
-        reasons = [r for r in order.review_reason.split("; ") if r]
-        if reason in reasons:
+        if not _append_reason(order, reason):
             return  # already flagged for exactly this — replays are normal here
-        reasons.append(reason)
-        order.review_reason = "; ".join(reasons)
         order.save(update_fields=["review_reason", "updated_at"])
     logger.warning("Order %s flagged for review: %s", order_id, reason)
 
@@ -173,13 +188,14 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
             if order.status in _FULFILLED_STATES:
                 return  # another confirm got there first — nothing owed
             if order.status == "cancelled":
-                order.review_reason = (
-                    f"payment {payment.pk} received on a cancelled order — refund it"
+                _append_reason(
+                    order, f"payment {payment.pk} received on a cancelled order — refund it"
                 )
             else:
-                order.review_reason = (
+                _append_reason(
+                    order,
                     f"late payment {payment.pk}: order moved to {order.status} while "
-                    "confirming — a human must decide whether to fulfil or refund"
+                    "confirming — a human must decide whether to fulfil or refund",
                 )
             order.save(update_fields=["review_reason", "updated_at"])
             logger.warning(
@@ -196,8 +212,9 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
             release(new_ref)  # clean up any items reserved before the failing one
             # Stays `expired` — that IS the truth. review_reason says why a human must
             # look (this is auto-refund territory: we hold their money, not their goods).
-            order.review_reason = (
-                f"late payment {payment.pk} after expiry — could not re-reserve stock: {exc}"
+            _append_reason(
+                order,
+                f"late payment {payment.pk} after expiry — could not re-reserve stock: {exc}",
             )
             order.save(update_fields=["review_reason", "updated_at"])
             logger.warning("Order %s: late payment could not re-reserve: %s", order.number, exc)
