@@ -7,6 +7,7 @@ state (adapters raise GatewayNotConfigured -> 503), and dev/CI shouldn't be bloc
 """
 from django.conf import settings
 from django.core.checks import Warning, register
+from django.db.utils import OperationalError, ProgrammingError
 
 GATEWAY_REQUIRED_SETTINGS = {
     "paystack": ["PAYSTACK_SECRET_KEY"],
@@ -41,4 +42,31 @@ def gateway_configuration_check(app_configs, **kwargs):
                     id="payments.W001",
                 )
             )
+
+    # Bank transfer needs no API keys — it needs an ACCOUNT. Same failure shape as a
+    # missing secret: live for a country, unusable in practice. Checkout now refuses such
+    # an order outright, so a stranded market cannot sell at all.
+    try:
+        from apps.payments.models import BankAccount, CountryPaymentGateway
+
+        live = CountryPaymentGateway.objects.filter(gateway="bank_transfer", is_active=True)
+        funded = set(
+            BankAccount.objects.filter(is_active=True).values_list("country_id", flat=True)
+        )
+        stranded = sorted(str(r.country_id) for r in live if r.country_id not in funded)
+        if stranded:
+            issues.append(
+                Warning(
+                    "bank_transfer is active but has no BankAccount for: " + ", ".join(stranded),
+                    hint=(
+                        "Customers in those countries cannot check out at all. Add a "
+                        "BankAccount in Django admin, or deactivate bank_transfer there. "
+                        "Bank transfer is the only live method at launch."
+                    ),
+                    id="payments.W002",
+                )
+            )
+    except (OperationalError, ProgrammingError):
+        pass  # DB not migrated yet (fresh checkout / first migrate) — nothing to say
+
     return issues
