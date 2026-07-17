@@ -38,14 +38,18 @@ def _world(stock=10):
     lagos = Region.objects.create(country_code="NG", name="Lagos", level="state")
     opt = DeliveryOptionFactory(currency=ngn, name="Lagos Flat", price="1500.00")
     opt.regions.add(lagos)
-    # payments/0002 already seeds BOTH bank_transfer and paystack ACTIVE for NG (a
-    # create() would collide on unique_together) — this test needs both, one gateway per
-    # confirmation mode. The account is what makes the manual one usable: checkout
-    # refuses a manual gateway with nowhere to transfer to.
+    # This test needs one gateway per confirmation mode, and paystack is deactivated at
+    # launch — so activate it HERE rather than in the DB the site ships with. The TTL split
+    # is a property of the auto/manual seam, not of which gateways happen to be live, and it
+    # must stay pinned for the day a networked gateway passes its sandbox checkpoint.
+    # update_or_create, not create: 0002/0007 already seeded both rows for NG and a create()
+    # would collide on unique_together.
     for gw in ("bank_transfer", "paystack"):
-        assert CountryPaymentGateway.objects.filter(
-            country=ng, gateway=gw, is_active=True
-        ).exists()
+        CountryPaymentGateway.objects.update_or_create(
+            country=ng, gateway=gw, defaults={"is_active": True}
+        )
+    # The account is what makes the manual one usable: checkout refuses a manual gateway
+    # with nowhere to transfer to.
     BankAccount.objects.create(country=ng, currency=ngn, bank_name="GTBank",
                                account_name="Toke Cosmetics Ltd", account_number="0123456789")
     variant = ProductVariantFactory()

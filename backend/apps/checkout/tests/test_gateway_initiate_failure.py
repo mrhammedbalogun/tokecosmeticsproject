@@ -34,11 +34,15 @@ def _world(stock=10):
     lagos = Region.objects.create(country_code="NG", name="Lagos", level="state")
     opt = DeliveryOptionFactory(currency=ngn, name="Lagos Flat", price="1500.00")
     opt.regions.add(lagos)
-    # Seed migration payments/0002 already marks paystack ACTIVE for NG — a create()
-    # would collide on unique_together(country, gateway). Just assert the seed holds.
-    assert CountryPaymentGateway.objects.filter(
-        country=ng, gateway="paystack", is_active=True
-    ).exists()
+    # paystack is deactivated at launch, so activate it HERE rather than in the DB the site
+    # ships with. What's pinned below is the retry/idempotency seam around a networked
+    # initiate() — that has to stay covered while the gateway sits behind its deferred
+    # sandbox checkpoint, since a reactivation is exactly when the 502 path runs for real.
+    # update_or_create, not create: 0002 already seeded the row and a create() would collide
+    # on unique_together(country, gateway).
+    CountryPaymentGateway.objects.update_or_create(
+        country=ng, gateway="paystack", defaults={"is_active": True}
+    )
     variant = ProductVariantFactory()
     Price.objects.create(variant=variant, currency=ngn, amount=Decimal("1000.00"))
     StockItemFactory(variant=variant, warehouse=wh, quantity=stock)
