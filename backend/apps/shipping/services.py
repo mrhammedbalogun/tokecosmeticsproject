@@ -2,8 +2,10 @@
 freight cash is recorded separately (a later task) as a Payment."""
 from __future__ import annotations
 
+import hashlib
 from decimal import Decimal
 
+from django.db import transaction
 from django.utils import timezone
 
 from apps.orders.state import record_event
@@ -70,3 +72,59 @@ def waive_freight(quote, *, staff_user, note: str) -> None:
     quote.save(update_fields=["status", "settled_at", "note", "updated_at"])
     record_event(quote.order, "freight_waived", actor=staff_user,
                  message=f"{quote.amount} {quote.currency_id} forgiven: {note}")
+
+
+def record_freight_receipt(quote, *, staff_user, amount_received: Decimal,
+                           bank_reference: str, note: str = "") -> None:
+    """Record the freight cash that landed. Creates a Payment(purpose="freight").
+
+    Deliberately does NOT call payments.services.confirm_manual_receipt. That service
+    owns the goods leg's controls (three-way amount match, accept_discrepancy, the
+    duplicate-reference check) and those controls must stay untouchable by freight.
+    The isolation here comes from the CODE PATH, not from the table.
+
+    quoted != received is NORMAL and raises nothing: an intl wire quoted at €40 lands
+    ~€32 after correspondent fees. `quote.amount` is what we asked for; `payment.amount`
+    is cash. Flagging that gap would fire the review flag on every single RoW order and
+    train staff to dismiss it — the failure mode payments.W001 already demonstrates.
+    """
+    from apps.payments.models import Payment
+
+    if quote.is_settled:
+        raise ShippingError("quote_already_settled",
+                            f"This freight quote is already {quote.status}.")
+    if quote.amount is None:
+        raise ShippingError("quote_required_before_receipt",
+                            "Quote the freight before recording a receipt against it.")
+    if amount_received <= Decimal("0"):
+        raise ShippingError("invalid_amount", "A freight receipt must be greater than zero.")
+
+    # One unit of work: the Payment (money) and the quote settlement must both land or
+    # neither. ATOMIC_REQUESTS only covers HTTP callers — a shell/Celery caller is
+    # unprotected, and a Payment booked while the quote stays `quoted` would let a retry
+    # with a different reference double-book freight.
+    with transaction.atomic():
+        Payment.objects.create(
+            order=quote.order,
+            gateway="bank_transfer",
+            purpose="freight",
+            amount=amount_received,          # cash that LANDED, not what was quoted
+            currency=quote.currency,
+            status="succeeded",              # the transfer already happened; no pending phase
+            gateway_reference=bank_reference,
+            # gateway_reference (128 chars) is the real dedup key via the unique
+            # (gateway, gateway_reference) constraint. This key only needs to be bounded:
+            # idempotency_key is varchar(64) and Postgres enforces it, so hash the
+            # reference rather than embed it (a long ref would overflow and 500 in prod).
+            idempotency_key=(
+                f"freight:{quote.order.number}:"
+                f"{hashlib.sha1(bank_reference.encode()).hexdigest()[:16]}"
+            ),
+        )
+        quote.status = "paid"
+        quote.settled_at = timezone.now()
+        _append_note(quote, f"received {amount_received} {quote.currency_id} "
+                            f"(ref {bank_reference}) by {staff_user.get_username()}: {note}")
+        quote.save(update_fields=["status", "settled_at", "note", "updated_at"])
+        record_event(quote.order, "freight_received", actor=staff_user,
+                     message=f"{amount_received} {quote.currency_id} (ref {bank_reference})")
