@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from django.db.models import Q
 
+from apps.core.country_context import resolve_country
 from apps.delivery.models import DeliveryOption
 
 TWO_DP = Decimal("0.01")
@@ -72,8 +73,6 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
     empty result — "no options found => use ZZ" would silently serve international
     pricing to GB customers the day someone deactivates the last GB option.
     """
-    from apps.core.country_context import resolve_country
-
     resolved = resolve_country(address.country_code)
     if resolved is None:
         return []
