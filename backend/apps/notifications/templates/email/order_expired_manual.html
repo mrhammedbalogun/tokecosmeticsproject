@@ -1,0 +1,24 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">We were holding the items on your order while we waited for your bank transfer. That hold has now lapsed and the items have gone back into stock.</p>
+<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }}</p>
+
+<table role="presentation" width="100%" style="background:#fff4f4;border-radius:8px;margin:0 0 20px;">
+  <tr><td style="padding:16px;">
+    <div style="font-weight:600;margin-bottom:10px;color:#b00020;">Already sent the money?</div>
+    <p style="margin:0 0 10px;font-size:14px;">
+      Please <strong>reply to this email and quote {{ number }}</strong>. Your transfer may already have reached us and simply not been matched to this order yet.
+      <strong>We will honour your order</strong> — or refund you in full if we can no longer supply it.
+    </p>
+    <p style="margin:0;font-size:13px;color:#555;">Please don't send the transfer again.</p>
+  </td></tr>
+</table>
+
+<p style="margin:0 0 20px;color:#555;">If you haven't paid, there's nothing to do: nothing was charged, and no payment will be taken. You're welcome to place the order again at any time.</p>
+
+{% include "email/_order_items.html" %}
+
+<p style="margin:24px 0 0;">
+  <a href="{{ tracking_url }}" style="color:#1a1a1a;font-size:13px;">View your order</a>
+</p>
+{% endblock %}

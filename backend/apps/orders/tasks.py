@@ -6,10 +6,23 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
+from apps.orders.emails import enqueue_order_expired_manual
 from apps.orders.models import Order
 from apps.orders.state import IllegalTransition, transition
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task
+def send_order_expired_manual_email(order_pk: int) -> None:
+    """Tell a bank-transfer customer their lapsed reservation was released.
+
+    A task rather than a direct emails.enqueue_* call from the sweep, because the sweep is
+    itself a beat task processing many orders: a template render or a mail-backend hiccup
+    on one customer's email must not surface as a failure of the sweep that already
+    committed their expiry.
+    """
+    enqueue_order_expired_manual(order_pk)
 
 
 def _complete_one(pk: int) -> bool:

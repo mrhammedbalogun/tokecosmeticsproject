@@ -1,0 +1,18 @@
+We were holding the items on order {{ number }} for you while we waited for your bank
+transfer. That hold has now lapsed and the items have gone back into stock.
+
+Order {{ number }} — placed {{ placed_at }}
+
+IF YOU HAVE ALREADY SENT THE MONEY, PLEASE REPLY TO THIS EMAIL AND QUOTE {{ number }}.
+Your transfer may already have reached us and simply not been matched to this order yet.
+We will honour your order — or refund you in full if we can no longer supply it. Please
+do not send the transfer again.
+
+If you have not paid, there is nothing to do: nothing was charged, and no payment will be
+taken. You're welcome to place the order again at any time.
+
+{% include "email/_order_items.txt" %}
+Your order:
+  {{ tracking_url }}
+
+— Toke Cosmetics
