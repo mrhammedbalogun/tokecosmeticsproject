@@ -91,10 +91,27 @@ never disagree.
 - Region matching is guarded so a DE address can never match an NG region option
   (e.g. "Isolo area ₦1000").
 
-**This change activates the delivery-currency risk left open by Plan-08.** That risk has been
-dormant only because no RoW order could complete. The ZZ option's `currency` FK must reconcile
-with the order total currency. It closes here, in the same change, or the first real German
-order becomes the integration test.
+**This change activates the delivery-currency risk left open by Plan-08**, and the exact line
+is now identified. `checkout.py:123` calls
+`compute_totals(lines, country, delivery_amount=Decimal(chosen["price"]))` — it takes the
+option's **price** and ignores its **currency**. The order currency comes from the *browsing
+context* (`X-Country` header → `resolve_country`), while the delivery option comes from the
+*shipping address*, and those can differ. A customer browsing the NG storefront in ₦ who ships
+to Germany resolves to the ZZ option priced **$25**, and `25` is added to an NGN order as
+**₦25** — freight to Germany charged at roughly three pence.
+
+This is unreachable today only because a DE address matches no option at all. Fixing the match
+makes it live, which is why the two cannot be separated.
+
+**Owner's decision: block it.** `options_for_address()` takes the order's `country` and returns
+only options whose `currency` matches `country.currency_id`. A ₦-context customer shipping to
+Germany gets no option and `delivery_option_invalid`, with a message telling them to switch to
+the international storefront. Rejected alternatives: converting freight via an FX rate
+(introduces FX into the totals maths — new rate source, new staleness bug, new class of money
+error, for a rare case) and making order currency follow the shipping address (re-prices the
+whole cart mid-checkout; touches pricing; far larger change). This follows the precedent
+Plan-09b set with `GatewayNotConfigured`: losing a rare sale is recoverable, silently
+mispricing money is not.
 
 ### B. `quote_required` on `DeliveryOption`
 
@@ -105,6 +122,22 @@ Two new fields:
 
 When `quote_required` is true the option **never renders a price and never renders "Free"**,
 and is excluded from `free_over`, from Free badging, and from any price-based sorting.
+
+**Scope boundary — who enforces this.** `storefront/` is currently a bare Next.js scaffold with
+no checkout UI, so "never renders Free" cannot be implemented there yet. The split:
+
+- **This plan (backend, enforceable now):** `options_for_address()` emits `price: None` for a
+  `quote_required` option — there is no number for any client to render as "Free" — plus
+  `quote_required: true` and `disclaimer`. `free_over` never applies. Checkout coerces a
+  `quote_required` option's delivery amount to `0.00` for the goods total.
+- **Plan-14 (storefront checkout) inherits a contract:** when `quote_required` is true, render
+  `disclaimer` in place of any price, and never the word "Free". A `price: None` that a UI
+  renders as "Free" or "—" would reintroduce the exact false promise this field exists to stop.
+  Plan-14 must carry a test for it.
+
+Emitting `None` rather than `0.00` is the load-bearing part: it makes the frontend contract
+*fail loudly* (a template doing arithmetic on null breaks visibly) instead of silently
+rendering a zero that reads as a promise.
 
 The problem being solved: `price=0` renders identically whether it means *"I promise this
 costs nothing"* or *"I have no idea what this costs"*. Those are opposite meanings and the
