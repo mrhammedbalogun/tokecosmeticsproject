@@ -10,8 +10,18 @@ class Payment(models.Model):
         ("refunded", "Refunded"), ("partially_refunded", "Partially refunded"),
     ]
 
+    PURPOSES = [("goods", "Goods"), ("freight", "Freight")]
+
     order = models.ForeignKey("orders.Order", on_delete=models.PROTECT, related_name="payments")
     gateway = models.CharField(max_length=20)  # paystack|flutterwave|stripe|paypal|bank_transfer
+    # What this money is FOR. Default "goods" is load-bearing: every pre-existing row and
+    # every .payments read that was not updated keeps its original meaning, so a missed
+    # call site fails safe rather than silently mixing freight into goods maths.
+    # A freight row is created ONLY by shipping.services.record_freight_receipt (next task),
+    # which never calls confirm_manual_receipt — the amount-match, accept_discrepancy and
+    # duplicate-reference controls live in that SERVICE, not in this model, so freight
+    # cannot reach them.
+    purpose = models.CharField(max_length=10, default="goods", choices=PURPOSES)
     amount = models.DecimalField(max_digits=12, decimal_places=2)
     currency = models.ForeignKey("core.Currency", on_delete=models.PROTECT)
     status = models.CharField(max_length=20, default="initiated", choices=STATUSES)

@@ -116,9 +116,12 @@ class OrderRefundView(APIView):
 
     @staticmethod
     def _pick_payment(order, payment_id):
-        payments = order.payments.all()
+        # purpose="goods": a freight receipt is not what a refund of this order means,
+        # and it must never be picked implicitly. An explicit payment_id can still
+        # reach it — that is a deliberate staff choice, not a default.
+        payments = order.payments.filter(purpose="goods")
         if payment_id:
-            return payments.filter(pk=payment_id).first()
+            return order.payments.filter(pk=payment_id).first()
         return payments.filter(status__in=["succeeded", "partially_refunded"]).first()
 
 
@@ -169,9 +172,12 @@ class ManualRefundView(APIView):
 
     @staticmethod
     def _pick_payment(order, payment_id):
-        payments = order.payments.all()
+        # purpose="goods": a freight receipt is not what a refund of this order means,
+        # and it must never be picked implicitly. An explicit payment_id can still
+        # reach it — that is a deliberate staff choice, not a default.
+        payments = order.payments.filter(purpose="goods")
         if payment_id:
-            return payments.filter(pk=payment_id).first()
+            return order.payments.filter(pk=payment_id).first()
         return payments.filter(status__in=["succeeded", "partially_refunded"]).first()
 
 
@@ -193,7 +199,10 @@ class ConfirmManualReceiptView(APIView):
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)
-        payment = order.payments.filter(gateway="bank_transfer").order_by("-id").first()
+        payment = (
+            order.payments.filter(gateway="bank_transfer", purpose="goods")
+            .order_by("-id").first()
+        )
         if payment is None:
             return Response({"detail": "This order has no bank transfer payment to confirm."},
                             status=400)
