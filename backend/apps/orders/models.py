@@ -17,6 +17,12 @@ class Order(TimeStampedModel):
     status = models.CharField(max_length=24, default="pending_payment")
     # pending_payment → processing → shipped → delivered → completed
     # + cancelled, expired, refunded, partially_refunded, needs_review, on_hold(migrated)
+    # Orthogonal "a human must look at this" carrier — single source of truth for the
+    # admin needs-attention filter. Set in EVERY flag path (including when status flips
+    # to needs_review). The double-payment case sets this WITHOUT changing status, since
+    # an already-`processing` order can't also be `needs_review`. Plan-10's transition()
+    # clears it when the flag is resolved.
+    review_reason = models.TextField(blank=True)
 
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)

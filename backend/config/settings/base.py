@@ -192,6 +192,28 @@ ANYMAIL = {
     "RESEND_API_KEY": env("RESEND_API_KEY", default=""),
 }
 
+# --- Brand ---
+# Shown on gateway-HOSTED checkout pages (Flutterwave/PayPal render these server-side, so
+# the logo must be a PUBLIC url they can fetch — a local file won't do). Stripe and
+# Paystack don't take branding via the API: Stripe is embedded in our own UI (client_secret)
+# so the storefront brands it, and Paystack branding is configured in their dashboard.
+BRAND_NAME = env("BRAND_NAME", default="Toké Cosmetics")
+BRAND_LOGO_URL = env("BRAND_LOGO_URL", default="")
+
+# --- Payment gateways (test-mode keys in dev; never commit real keys) ---
+# Read here, consumed lazily by each gateway adapter so a missing key never breaks
+# imports/migrations — an unconfigured gateway raises GatewayNotConfigured at call time.
+PAYSTACK_SECRET_KEY = env("PAYSTACK_SECRET_KEY", default="")
+PAYSTACK_PUBLIC_KEY = env("PAYSTACK_PUBLIC_KEY", default="")
+FLUTTERWAVE_SECRET_KEY = env("FLUTTERWAVE_SECRET_KEY", default="")
+FLUTTERWAVE_SECRET_HASH = env("FLUTTERWAVE_SECRET_HASH", default="")  # webhook verif-hash
+STRIPE_SECRET_KEY = env("STRIPE_SECRET_KEY", default="")
+STRIPE_WEBHOOK_SECRET = env("STRIPE_WEBHOOK_SECRET", default="")
+PAYPAL_CLIENT_ID = env("PAYPAL_CLIENT_ID", default="")
+PAYPAL_CLIENT_SECRET = env("PAYPAL_CLIENT_SECRET", default="")
+PAYPAL_WEBHOOK_ID = env("PAYPAL_WEBHOOK_ID", default="")
+PAYPAL_API_BASE = env("PAYPAL_API_BASE", default="https://api-m.sandbox.paypal.com")
+
 # --- Celery ---
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
