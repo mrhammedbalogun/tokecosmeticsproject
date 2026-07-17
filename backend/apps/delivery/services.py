@@ -14,11 +14,14 @@ TWO_DP = Decimal("0.01")
 
 
 def _coverage_q(country_code: str, region_ids: set[int]):
-    """An option matches when it covers the address's country OR any covered region
-    (the address's own region or any ancestor)."""
+    """An option matches when it covers the address's resolved country OR any covered
+    region (the address's own region or any ancestor). The region leg is constrained to
+    the same country: a Region carries its own country_code, and without this an option
+    attached only to a Lagos region could be reached by a non-NG address that somehow
+    carried an NG region FK."""
     q = Q(countries__code=country_code)
     if region_ids:
-        q |= Q(regions__id__in=region_ids)
+        q |= Q(regions__id__in=region_ids, regions__country_code=country_code)
     return q
 
 
@@ -55,14 +58,29 @@ def _price_for(option, weight_g: int, subtotal: Decimal) -> Decimal:
     return Decimal(price).quantize(TWO_DP)
 
 
-def options_for_address(address, lines, subtotal: Decimal) -> list[dict]:
+def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict]:
     """Return the active delivery options serving this address, each with a computed
     price and ETA. `lines` = iterable of (ProductVariant, qty); `subtotal` in the
-    order currency (for free_over)."""
+    order currency (for free_over); `country` is the ORDER's country (browsing
+    context), which is not necessarily the address's.
+
+    The address's country is resolved through the same resolve_country() used for
+    pricing context, so delivery and currency can never disagree about what country
+    an address is in. An unknown/inactive ISO code (a real "DE") resolves to the
+    Rest-of-World row; a KNOWN country with no options configured returns [] and the
+    caller raises delivery_option_invalid. The trigger is an unknown code, never an
+    empty result — "no options found => use ZZ" would silently serve international
+    pricing to GB customers the day someone deactivates the last GB option.
+    """
+    from apps.core.country_context import resolve_country
+
+    resolved = resolve_country(address.country_code)
+    if resolved is None:
+        return []
     region_ids = _covered_region_ids(address)
     qs = (
         DeliveryOption.objects.filter(is_active=True)
-        .filter(_coverage_q(address.country_code, region_ids))
+        .filter(_coverage_q(resolved.code, region_ids))
         .prefetch_related("rates", "countries", "regions")
         .distinct()
         .order_by("sort", "name")

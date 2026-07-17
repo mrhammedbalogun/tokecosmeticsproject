@@ -29,7 +29,7 @@ def test_flat_price_when_no_rates():
     ng = _ng()
     opt = DeliveryOptionFactory(currency=ng.currency, price="2500.00")
     opt.countries.add(ng)
-    result = options_for_address(FakeAddress("NG"), lines=[], subtotal=Decimal("0"))
+    result = options_for_address(FakeAddress("NG"), lines=[], subtotal=Decimal("0"), country=ng)
     assert result[0]["price"] == "2500.00"
 
 
@@ -41,7 +41,7 @@ def test_weight_tier_selected_by_total_cart_weight():
     DeliveryOptionRateFactory(option=opt, min_weight_g=1001, max_weight_g=None, price="2000.00")
     variant = ProductVariantFactory(weight_grams=600)
     lines = [(variant, 2)]  # 1200g → second tier
-    result = options_for_address(FakeAddress("NG"), lines=lines, subtotal=Decimal("0"))
+    result = options_for_address(FakeAddress("NG"), lines=lines, subtotal=Decimal("0"), country=ng)
     assert result[0]["price"] == "2000.00"
 
 
@@ -49,5 +49,5 @@ def test_free_over_threshold_zeroes_price():
     ng = _ng()
     opt = DeliveryOptionFactory(currency=ng.currency, price="2500.00", free_over="50000.00")
     opt.countries.add(ng)
-    result = options_for_address(FakeAddress("NG"), lines=[], subtotal=Decimal("60000.00"))
+    result = options_for_address(FakeAddress("NG"), lines=[], subtotal=Decimal("60000.00"), country=ng)
     assert result[0]["price"] == "0.00"

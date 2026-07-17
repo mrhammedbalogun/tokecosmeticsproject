@@ -89,7 +89,7 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
 
         # Server-side delivery re-match — never trust the client's option list.
         subtotal_preview = compute_totals(lines, country).subtotal
-        options = options_for_address(address, lines, subtotal_preview)
+        options = options_for_address(address, lines, subtotal_preview, country)
         chosen = next((o for o in options if o["id"] == delivery_option_id), None)
         if chosen is None:
             raise CheckoutError("delivery_option_invalid", "Delivery option not valid for this address.")
