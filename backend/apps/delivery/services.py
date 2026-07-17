@@ -98,7 +98,10 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
             "name": o.name,
             "kind": o.kind,
             "currency": o.currency_id,
-            "price": str(_price_for(o, weight_g, subtotal)),
+            # None, never "0.00": an unknown cost must not be renderable as "Free".
+            "price": None if o.quote_required else str(_price_for(o, weight_g, subtotal)),
+            "quote_required": o.quote_required,
+            "disclaimer": o.disclaimer,
             "min_days": o.min_days,
             "max_days": o.max_days,
         }
