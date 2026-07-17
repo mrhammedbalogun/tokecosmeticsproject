@@ -7,6 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
+from functools import partial
 
 from django.conf import settings
 from django.db import transaction
@@ -19,8 +20,10 @@ from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
 from apps.delivery.services import options_for_address
 from apps.inventory.services import InsufficientStock, reserve
+from apps.orders.emails import enqueue_order_received
 from apps.orders.models import Order, OrderItem
 from apps.orders.numbers import next_order_number
+from apps.orders.state import record_event
 from apps.payments.gateways.registry import active_gateways_for, get_gateway
 from apps.payments.models import Payment
 from apps.pricing.services import resolve_price
@@ -129,6 +132,9 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             customer_note=notes, reservation_reference=number,
             reservation_expires_at=timezone.now() + timedelta(minutes=settings.RESERVATION_TTL_MINUTES),
         )
+        # A creation, not a transition — there is no prior status to move from, so this
+        # opens the timeline directly rather than going through the state machine.
+        record_event(order, "placed", actor=user, message=f"{chosen['name']} to {country.code}")
         for variant, qty in lines:
             rp = resolve_price(variant, country)
             OrderItem.objects.create(
@@ -157,6 +163,15 @@ def _initiate_payment(payment, order) -> None:
     payment.raw_response = init.data
     payment.save(update_fields=["gateway_reference", "raw_response", "updated_at"])
     order._initiate = init  # stash for the view's response
+
+    # `bank_details` means exactly "the customer leaves checkout owing money and holding
+    # instructions" — and those instructions live ONLY in this response, so closing the
+    # tab loses the account number AND the reference they must quote. Keyed off the
+    # action rather than a gateway flag: it's already the right question, and it stays
+    # right for a future Paystack dedicated account (also not instant, also needs this).
+    # A card customer is mid-redirect and owes nothing on paper, so they get nothing here.
+    if init.action == "bank_details":
+        transaction.on_commit(partial(enqueue_order_received, order.pk, init.data))
 
 
 def _totals_dict(t) -> dict:

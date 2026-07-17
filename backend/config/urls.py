@@ -21,9 +21,11 @@ urlpatterns = [
     path("api/v1/", include("apps.carts.urls")),
     path("api/v1/", include("apps.checkout.urls")),
     path("api/v1/", include("apps.payments.urls")),
+    path("api/v1/", include("apps.orders.urls")),
     path("api/v1/admin/", include("apps.catalog.admin_urls")),
     path("api/v1/admin/", include("apps.inventory.admin_urls")),
     path("api/v1/admin/", include("apps.payments.admin_urls")),
+    path("api/v1/admin/", include("apps.orders.admin_urls")),
     # OpenAPI schema + docs
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),

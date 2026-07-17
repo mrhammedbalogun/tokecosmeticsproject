@@ -1,0 +1,1 @@
+Your Toke Cosmetics order {{ number }} is on its way

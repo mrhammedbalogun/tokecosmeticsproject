@@ -154,6 +154,12 @@ REST_FRAMEWORK = {
 # --- Checkout ---
 RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 
+# How long after DELIVERY an order waits before auto-completing. "completed" means
+# "delivered and the return window has closed" — staff can complete sooner from the
+# admin; whichever happens first wins. Plan-11's verified-purchase review rule and
+# Plan-28's accounting both read this status, so it has to actually get set.
+RETURN_WINDOW_DAYS = env.int("RETURN_WINDOW_DAYS", default=14)
+
 # --- JWT (SimpleJWT) ---
 from datetime import timedelta  # noqa: E402
 
@@ -232,5 +238,9 @@ CELERY_BEAT_SCHEDULE = {
     "expire-pending-orders": {
         "task": "apps.checkout.tasks.expire_pending_orders",
         "schedule": 300.0,  # every 5 min
+    },
+    "complete-delivered-orders": {
+        "task": "apps.orders.tasks.complete_delivered_orders",
+        "schedule": 86400.0,  # daily — the return window is measured in days
     },
 }

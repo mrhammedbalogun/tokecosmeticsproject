@@ -1,5 +1,9 @@
 from apps.core.models import SiteSetting
-from apps.payments.gateways.base import InitiateResult, PaymentGateway
+from apps.payments.gateways.base import (
+    InitiateResult,
+    ManualVerificationOnly,
+    PaymentGateway,
+)
 
 
 class BankTransferGateway(PaymentGateway):
@@ -24,4 +28,14 @@ class BankTransferGateway(PaymentGateway):
                 "reference": order.number,
                 "instructions": "Use your order number as the transfer reference.",
             },
+        )
+
+    def verify(self, payment):
+        """There is no machine to ask — the staff member reading the bank statement IS
+        the verification. Declining in the gateway vocabulary (rather than inheriting the
+        base NotImplementedError) is what keeps the customer's "check my payment" button
+        returning their order status instead of a 500.
+        """
+        raise ManualVerificationOnly(
+            "bank_transfer is confirmed by a human, not by the gateway"
         )

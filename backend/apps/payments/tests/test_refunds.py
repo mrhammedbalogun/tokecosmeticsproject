@@ -3,6 +3,7 @@ fulfillment snapshot, and the failed-gateway path freeing the reserved amount.""
 from decimal import Decimal
 
 import pytest
+from django.core import mail
 from rest_framework.test import APIClient
 
 from apps.catalog.factories import ProductVariantFactory
@@ -77,7 +78,7 @@ def test_partial_refund_math(fakerf):
     payment.refresh_from_db()
     order.refresh_from_db()
     assert payment.status == "partially_refunded"
-    assert order.status == "partially_refunded"
+    assert order.status == "processing"  # lifecycle untouched by a partial refund
     assert refundable_amount(payment) == Decimal("750.00")
 
     # A second partial brings it to fully refunded.
@@ -85,6 +86,58 @@ def test_partial_refund_math(fakerf):
     payment.refresh_from_db()
     assert payment.status == "refunded"
     assert refundable_amount(payment) == Decimal("0")
+
+
+def test_refund_emails_the_customer_with_the_amount_refunded(
+    fakerf, settings, django_capture_on_commit_callbacks
+):
+    """A PARTIAL refund has no transition to hang an effect off — the lifecycle is
+    deliberately untouched — so the email is enqueued explicitly. The customer still
+    needs telling either way."""
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    order, payment, _ = _paid_order(number="TC-700010")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        create_refund(payment=payment, amount=Decimal("250.00"))
+
+    order.refresh_from_db()
+    assert order.status == "processing"  # no transition happened...
+    assert len(mail.outbox) == 1  # ...but the customer was still told
+    assert "₦250.00" in mail.outbox[0].body
+    assert mail.outbox[0].to == ["c@x.com"]
+
+
+def test_refund_completion_webhook_replay_is_idempotent(fakerf):
+    """apply_succeeded_refund is also the entry point for an async refund-completion
+    webhook, and gateways redeliver. A replay must not blow up on refunded -> refunded."""
+    from apps.payments.refunds import apply_succeeded_refund
+
+    order, payment, _ = _paid_order()
+    refund = create_refund(payment=payment, amount=Decimal("1000.00"), reason="returned")
+    order.refresh_from_db()
+    assert order.status == "refunded"
+
+    apply_succeeded_refund(refund)  # the gateway redelivers the same completion event
+
+    order.refresh_from_db()
+    assert order.status == "refunded"
+    assert order.events.filter(type="status:refunded").count() == 1  # not double-logged
+
+
+def test_partial_refund_leaves_order_lifecycle_untouched(fakerf):
+    """A partial refund is a payment-ledger fact, not a lifecycle move. Refunding one
+    damaged item off a shipped order must leave it shipped — stomping the status drops
+    the order out of the packing/delivery pipeline and nobody chases the rest of it."""
+    order, payment, _ = _paid_order()
+    order.status = "shipped"
+    order.save(update_fields=["status"])
+
+    create_refund(payment=payment, amount=Decimal("250.00"))
+
+    payment.refresh_from_db()
+    order.refresh_from_db()
+    assert payment.status == "partially_refunded"  # the ledger records the partial
+    assert order.status == "shipped"  # ...the lifecycle does not
 
 
 def test_refund_over_remaining_is_rejected(fakerf):

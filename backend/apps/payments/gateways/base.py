@@ -36,6 +36,17 @@ class InvalidSignature(GatewayError):
     """A webhook payload failed signature verification — treat as hostile, do not process."""
 
 
+class ManualVerificationOnly(GatewayError):
+    """This gateway cannot be asked whether the money landed — a human must confirm it.
+
+    A GatewayError subclass on purpose: callers already degrade gracefully on GatewayError
+    ("couldn't verify right now, report current state"), which is exactly the right
+    behaviour here, so no caller needs a special case. It is NOT the base `verify()`
+    default — that stays NotImplementedError so a *networked* gateway which forgets to
+    implement verify() fails loudly instead of silently declining to check for money.
+    """
+
+
 class VerificationMismatch(GatewayError):
     """gateway.verify() returned an amount/currency that does not match the order."""
 

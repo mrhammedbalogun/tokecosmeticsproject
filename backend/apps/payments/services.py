@@ -28,15 +28,15 @@ from django.db.models import Sum
 from apps.inventory.models import StockMovement
 from apps.inventory.services import InsufficientStock, commit_sale, release, reserve
 from apps.orders.models import Order
+from apps.orders.state import transition
 from apps.payments.money import to_minor
 
 logger = logging.getLogger(__name__)
 
-# Statuses where the order is already fulfilled (or beyond) — we must not stomp these
-# with needs_review. review_reason carries the "look at this" signal for these instead.
-_FULFILLED_STATES = frozenset(
-    {"processing", "shipped", "delivered", "completed", "refunded", "partially_refunded"}
-)
+# Statuses where the order is already fulfilled (or beyond) — a late payment landing on
+# one of these has nothing left to do. ("partially_refunded" is absent deliberately: it is
+# no longer a status, since a partial refund is a ledger fact, not a lifecycle move.)
+_FULFILLED_STATES = frozenset({"processing", "shipped", "delivered", "completed", "refunded"})
 
 
 class MarkPaidResult(enum.Enum):
@@ -78,9 +78,10 @@ def _fulfil_locked(order, payment) -> None:
 
     payment.status = "succeeded"
     payment.save(update_fields=["status", "updated_at"])
-    order.status = "processing"
     order.reservation_expires_at = None
-    order.save(update_fields=["status", "reservation_expires_at", "updated_at"])
+    order.save(update_fields=["reservation_expires_at", "updated_at"])
+    # Legal from pending_payment (normal) and from expired (the late-payment re-reserve).
+    transition(order, "processing", message=f"payment {payment.pk} verified via {payment.gateway}")
 
 
 @transaction.atomic
@@ -110,18 +111,20 @@ def _amounts_match(result, payment) -> bool:
     return to_minor(result.amount, payment.currency) == to_minor(payment.amount, payment.currency)
 
 
-def _flag_review(order_id: int, reason: str, *, set_status: bool = True) -> None:
-    """Flag an order for human attention. review_reason is the single source of truth;
-    set_status flips status to needs_review too, but only for orders not already
-    fulfilled (an order can be `processing` AND need review — the double-payment case)."""
+def _flag_review(order_id: int, reason: str) -> None:
+    """Flag an order for human attention. `review_reason` is the single source of truth
+    and is ORTHOGONAL to the lifecycle: "a human must look at this" is not a place in the
+    order's life, it's a note pinned to it. A processing order can need review (the
+    double-payment case) and so can an expired one, so the status is left alone —
+    it keeps saying what actually happened, and no information is destroyed.
+
+    Only an explicit admin resolve action clears this (see orders.state), never a
+    status transition — otherwise shipping a flagged order would silently erase an
+    unresolved double-payment and nobody would ever refund the customer."""
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order_id)
         order.review_reason = reason
-        fields = ["review_reason", "updated_at"]
-        if set_status and order.status not in _FULFILLED_STATES:
-            order.status = "needs_review"
-            fields.append("status")
-        order.save(update_fields=fields)
+        order.save(update_fields=["review_reason", "updated_at"])
     logger.warning("Order %s flagged for review: %s", order_id, reason)
 
 
@@ -140,10 +143,27 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order.pk)
         if order.status != "expired":
-            # Raced: another confirm already handled it. If it's fulfilled, we're done;
-            # otherwise fall through to a fresh mark_paid verdict on the current status.
+            # Raced between mark_paid's NOOP_EXPIRED verdict and this lock. Re-dispatch on
+            # what is ACTUALLY true now — never fall through to re-reserve. On a cancelled
+            # order that takes stock for a dead order and then raises IllegalTransition
+            # out of the webhook task; on `on_hold` (on_hold -> processing is legal!) it
+            # silently commits the same stock twice.
             if order.status in _FULFILLED_STATES:
-                return
+                return  # another confirm got there first — nothing owed
+            if order.status == "cancelled":
+                order.review_reason = (
+                    f"payment {payment.pk} received on a cancelled order — refund it"
+                )
+            else:
+                order.review_reason = (
+                    f"late payment {payment.pk}: order moved to {order.status} while "
+                    "confirming — a human must decide whether to fulfil or refund"
+                )
+            order.save(update_fields=["review_reason", "updated_at"])
+            logger.warning(
+                "Order %s: late payment raced to %s — flagged", order.number, order.status
+            )
+            return
         new_ref = _bump_attempt(order.reservation_reference)
         try:
             for item in order.items.all():
@@ -152,11 +172,12 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
                 reserve(item.variant, item.quantity, order.country, reference=new_ref)
         except InsufficientStock as exc:
             release(new_ref)  # clean up any items reserved before the failing one
+            # Stays `expired` — that IS the truth. review_reason says why a human must
+            # look (this is auto-refund territory: we hold their money, not their goods).
             order.review_reason = (
                 f"late payment {payment.pk} after expiry — could not re-reserve stock: {exc}"
             )
-            order.status = "needs_review"
-            order.save(update_fields=["status", "review_reason", "updated_at"])
+            order.save(update_fields=["review_reason", "updated_at"])
             logger.warning("Order %s: late payment could not re-reserve: %s", order.number, exc)
             return
         order.reservation_reference = new_ref
@@ -202,7 +223,6 @@ def confirm_payment(payment) -> None:
         _flag_review(
             payment.order_id,
             f"payment {payment.pk} received on a cancelled order — refund it",
-            set_status=False,
         )
         return
 
@@ -214,5 +234,4 @@ def confirm_payment(payment) -> None:
     _flag_review(
         payment.order_id,
         f"possible double payment — order already processing; refund payment {payment.pk}",
-        set_status=False,
     )

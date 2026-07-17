@@ -7,6 +7,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from apps.inventory.services import release
+from apps.orders.state import transition
 
 
 @shared_task
@@ -24,8 +25,10 @@ def expire_pending_orders() -> int:
             order = Order.objects.select_for_update().get(pk=pk)
             if order.status != "pending_payment" or order.reservation_expires_at >= now:
                 continue  # a payment landed first, or it's no longer due
+            # release() is a synchronous in-transaction effect on purpose: freeing the
+            # stock must be atomic with the status flip, so it stays here rather than
+            # riding on transition()'s deferred (post-commit) effect lane.
             release(reference=order.reservation_reference)
-            order.status = "expired"
-            order.save(update_fields=["status", "updated_at"])
+            transition(order, "expired", message="reservation TTL elapsed — stock released")
             expired += 1
     return expired
