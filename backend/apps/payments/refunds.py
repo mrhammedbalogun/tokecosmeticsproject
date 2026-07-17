@@ -27,7 +27,7 @@ from apps.inventory.models import StockItem
 from apps.inventory.services import adjust
 from apps.orders.emails import enqueue_refund_processed
 from apps.orders.models import Order
-from apps.orders.state import transition
+from apps.orders.state import record_event, transition
 from apps.payments.gateways.base import GatewayError
 from apps.payments.gateways.registry import get_gateway
 from apps.payments.models import Payment, Refund
@@ -59,6 +59,34 @@ def refundable_amount(payment) -> Decimal:
     return payment.amount - used
 
 
+def _validate_refundable(locked, amount: Decimal, restock: bool) -> None:
+    """The money-safety rules every refund must clear, checked against the LOCKED row.
+
+    Shared by both entry points on purpose. These are the rules that stop us paying out
+    money we never collected, or paying it out twice; a second copy in record_manual_refund
+    is a second place for them to drift, and the manual path is the one where the money has
+    already physically left the bank by the time we get here.
+    """
+    if locked.status not in _REFUNDABLE_PAYMENT_STATES:
+        raise RefundError(
+            "payment_not_refundable",
+            f"Payment is {locked.status}; only a collected payment can be refunded.",
+        )
+    remaining = refundable_amount(locked)
+    if amount > remaining:
+        raise RefundError(
+            "amount_exceeds_remaining",
+            f"Refund of {amount} exceeds the remaining {remaining}.",
+            extra={"remaining": str(remaining)},
+        )
+    if restock and amount != locked.amount:
+        raise RefundError(
+            "restock_requires_full_refund",
+            "Restock is only supported on a full refund; refund without restock and "
+            "adjust stock manually for partial returns.",
+        )
+
+
 def create_refund(*, payment, amount: Decimal, reason: str = "", user=None,
                   restock: bool = False) -> Refund:
     amount = Decimal(str(amount))
@@ -68,24 +96,7 @@ def create_refund(*, payment, amount: Decimal, reason: str = "", user=None,
     # --- Phase 1: reserve the amount under the payment lock ---
     with transaction.atomic():
         locked = Payment.objects.select_for_update().get(pk=payment.pk)
-        if locked.status not in _REFUNDABLE_PAYMENT_STATES:
-            raise RefundError(
-                "payment_not_refundable",
-                f"Payment is {locked.status}; only a collected payment can be refunded.",
-            )
-        remaining = refundable_amount(locked)
-        if amount > remaining:
-            raise RefundError(
-                "amount_exceeds_remaining",
-                f"Refund of {amount} exceeds the remaining {remaining}.",
-                extra={"remaining": str(remaining)},
-            )
-        if restock and amount != locked.amount:
-            raise RefundError(
-                "restock_requires_full_refund",
-                "Restock is only supported on a full refund; refund without restock and "
-                "adjust stock manually for partial returns.",
-            )
+        _validate_refundable(locked, amount, restock)
         refund = Refund.objects.create(
             payment=locked, amount=amount, reason=reason, status="pending", created_by=user
         )
@@ -107,6 +118,59 @@ def create_refund(*, payment, amount: Decimal, reason: str = "", user=None,
 
     if refund.status == "succeeded":
         apply_succeeded_refund(refund, restock=restock, user=user)
+    return refund
+
+
+def record_manual_refund(*, payment, amount: Decimal, staff_user, bank_reference: str,
+                         note: str = "", restock: bool = False) -> Refund:
+    """Record a refund a human already sent from the bank. The ONLY refund path for a
+    manual gateway, and — with bank transfer the sole live method at launch — the path
+    every refund in every market now takes.
+
+    Deliberately NOT create_refund's two-phase shape. There is no pending phase because
+    there is no gateway call coming: the transfer has ALREADY left our account by the time
+    staff type the reference in. Writing the row `pending` first would reserve the amount
+    against a network call that never happens, which is precisely the wedge this stage was
+    built to remove.
+
+    `bank_reference` is the statement line the money left on. It is the only thing tying
+    this row to reality — no gateway holds a record to reconcile against — so it is stored
+    on the Refund and repeated in the order timeline.
+    """
+    amount = Decimal(str(amount))
+    if amount <= 0:
+        raise RefundError("invalid_amount", "Refund amount must be positive.")
+
+    with transaction.atomic():
+        locked = Payment.objects.select_for_update().get(pk=payment.pk)
+        _validate_refundable(locked, amount, restock)
+        refund = Refund.objects.create(
+            payment=locked,
+            amount=amount,
+            reason=note,
+            # Born succeeded: the money is already gone. See the docstring.
+            status="succeeded",
+            gateway_reference=bank_reference,
+            created_by=staff_user,
+            raw_response={
+                "manual": True,
+                "bank_reference": bank_reference,
+                "recorded_by": staff_user.get_username(),
+            },
+        )
+
+    # Outside the lock: apply_succeeded_refund takes its own locks and enqueues the
+    # customer email, and the audit event is a plain write that needs no lock at all.
+    record_event(
+        payment.order,
+        "refund_recorded_manually",
+        actor=staff_user,
+        message=(
+            f"{format_money(amount, payment.currency)} refunded by bank transfer, "
+            f"reference {bank_reference}" + (f" — {note}" if note else "")
+        ),
+    )
+    apply_succeeded_refund(refund, restock=restock, user=staff_user)
     return refund
 
 

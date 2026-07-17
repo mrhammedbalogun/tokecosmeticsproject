@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -102,3 +103,37 @@ class WebhookEvent(models.Model):
 
     def __str__(self) -> str:
         return f"{self.gateway}:{self.event_type}:{self.event_id}"
+
+
+class BankAccount(models.Model):
+    """The merchant's bank account for one market. Bank transfer is the only live payment
+    method at launch, so this row IS the payment page for that country — an absent or
+    inactive row must make initiate() fail loudly rather than render blanks."""
+
+    country = models.OneToOneField(
+        "core.Country", on_delete=models.PROTECT, related_name="bank_account"
+    )
+    currency = models.ForeignKey("core.Currency", on_delete=models.PROTECT)
+    bank_name = models.CharField(max_length=120)
+    account_name = models.CharField(max_length=120)
+    account_number = models.CharField(max_length=64)  # or IBAN
+    # Per-market shape: sort_code (GB), routing_number (US), IBAN/SWIFT (intl wires).
+    # A JSON blob rather than columns — every market wants a different subset and this is
+    # display-only data the customer copies into their banking app. Keys BECOME the labels
+    # the customer reads (see gateways.bank_transfer._label): an all-lowercase key is
+    # prettified, so `sort_code` renders as "Sort code", while a key with any capital in it
+    # is left exactly as typed — write `IBAN` or `SWIFT BIC` and that is what is sent.
+    extra = models.JSONField(default=dict, blank=True)
+    instructions = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self) -> str:
+        return f"{self.country_id}: {self.bank_name} {self.account_number}"
+
+    def clean(self):
+        if self.currency_id and self.country_id and self.currency_id != self.country.currency_id:
+            raise ValidationError(
+                {"currency": f"must be {self.country.currency_id} to match {self.country_id}"}
+            )

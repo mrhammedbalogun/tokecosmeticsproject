@@ -293,7 +293,9 @@ expiry-release under the *same* reference would silently reserve nothing. Commit
 expiry-vs-payment race resolves deterministically — whichever grabs the lock first wins, and the loser
 sees the changed status and no-ops. `expire_pending_orders` (Celery beat, every 5 min) runs **one
 transaction per order** (a poison order can't roll back its siblings) and `release()` is
-ledger-idempotent, so a double-run is safe. `RESERVATION_TTL_MINUTES` (default 30) sets the window.
+ledger-idempotent, so a double-run is safe. `RESERVATION_TTL_MINUTES` (default 30) sets the window —
+**per-gateway since Plan-09b**: it tunes the card gateways, while bank transfer is fixed at 24h on the
+gateway class.
 
 **Idempotency.** `POST /checkout/` requires an `Idempotency-Key` header. A two-phase Redis record
 (Django cache) is the fast path: `begin()` reserves the key (`in_progress`), `finish()` stores the
@@ -430,6 +432,11 @@ one real test-mode payment per gateway (Paystack card, Flutterwave card, Stripe 
 PayPal sandbox) runs checkout → webhook → order `processing` + stock committed. **Blocked on
 test-mode API keys from Hammed.**
 
+**Deferred, not dropped (Plan-09b, 2026-07-16).** All four gateways are now **deactivated**
+(migration `0007_launch_bank_transfer_only`), which is what makes deferring this checkpoint safe:
+code that cannot be reached takes no money. The checkpoint is now the **precondition for
+reactivating any of them** — see *Manual payments (Plan-09b) → `is_active` gates*.
+
 ---
 
 ## Order lifecycle (Plan-10)
@@ -512,11 +519,12 @@ called? / which TTL applies?), and a Paystack dedicated account breaks it — no
 but machine-confirmable. When Plan-18 needs the other axis, add
 `confirmation: "gateway" | "manual"`.
 
-> **⚠️ `bank_transfer` is seeded ACTIVE for NG but is UNFINISHED** — nothing can confirm
-> it (no `verify()`; `ManualVerificationOnly`), and `RESERVATION_TTL_MINUTES=30` means it
-> always expires before the money lands. Hammed's call (2026-07-16) was to leave the seed
-> active and document it. **Plan-18 owns the fix and its spec now says so.** Do not launch
-> NG without it: an order can be placed and paid but never fulfilled.
+> **Resolved by Plan-09b (2026-07-16).** This section previously warned that
+> `bank_transfer` was seeded active but unfinished — nothing could confirm it, and a
+> 30-minute TTL meant it always expired before the money landed. Plan-09b closed both
+> (`confirm_manual_receipt`, a 24h per-gateway TTL) and made bank transfer the **only**
+> live method at launch. The `confirmation` axis anticipated below now exists. See
+> **Manual payments (Plan-09b)**.
 
 The refund mail is enqueued explicitly rather than via the effect table: a partial refund
 has no transition to hang an effect off, and the amount isn't derivable from a
@@ -570,3 +578,247 @@ happens first wins. The clock runs from the **delivery event, not `placed_at`**:
 that took three weeks to arrive hasn't had its return window eaten by shipping time. One
 transaction per order, mirroring `expire_pending_orders`, so a poison order can't abort
 the sweep.
+
+---
+
+## Manual payments (Plan-09b)
+
+**We launch on bank transfer only.** The four networked gateways are code-complete but
+their sandbox checkpoint (Plan-09's ⚠️ above) was never done — the test-mode keys never
+arrived. Migration `payments/0007_launch_bank_transfer_only` deactivates all four and
+activates `bank_transfer` in NG/GB/US/CA/ZZ. Deactivating them is what makes deferring
+that checkpoint *safe* rather than reckless: uncertified code that cannot be reached takes
+no money, so the checkpoint stops blocking every stage downstream of it.
+
+The consequence is that manual bank transfer went from a fringe NG option to **the single
+path every order in every market now takes** — NG/NGN, GB/GBP, US/USD, CA/CAD, ZZ→USD.
+Plan-09b is what made it a complete method rather than a hole.
+
+### bank_transfer was a dead end at both ends
+
+Two independent breaks, each of which made the method unusable on its own:
+
+| End | The break | What closed it |
+|---|---|---|
+| Confirm | `mark_paid()` was reachable *only* via `confirm_payment()` → `gateway.verify()`, which `bank_transfer` answers with `ManualVerificationOnly`. **Nothing could ever mark a transfer order paid** — the money landed, the sweep expired the order, the stock went back. | `confirm_manual_receipt()`: a second entry point to the same ladder. The staff member reading the bank statement **IS** the verification. |
+| Refund | `bank_transfer.refund()` inherited `base.py`'s bare `NotImplementedError` — a `RuntimeError`, so `create_refund`'s `except GatewayError` did **not** catch it. | `ManualRefundOnly(GatewayError)` + `record_manual_refund()`. |
+
+The refund end deserves the detail, because it was worse than a 500. `create_refund`
+writes its `pending` Refund row in phase 1 *before* calling the gateway in phase 2. An
+uncaught `NotImplementedError` escaped phase 2, so the request 500'd **and left the pending
+row behind**. `refundable_amount` counts `succeeded + pending`, so that amount stayed
+reserved forever: every later refund against that payment failed `amount_exceeds_remaining`.
+**One 500 poisoned the payment permanently** — and the payment of a customer owed money is
+the last thing that should be unrefundable. Raising in the gateway vocabulary means the
+existing handler marks the row `failed` and frees the amount.
+
+### `confirmation` vs `InitiateResult.action` — adjacent, not interchangeable
+
+These two look like the same bit and are not. **Do not unify them.**
+
+- **`action == "bank_details"`** answers *"did the customer leave checkout holding
+  instructions?"* — which is why `_initiate_payment` keys the `order_received` email off
+  it, and should keep doing so. That email is the customer's only durable copy of the
+  account number and the reference they must quote.
+- **`gateway.confirmation`** (`"gateway" | "manual"`) answers *"can this be `verify()`'d,
+  and which TTL applies?"*
+
+A future **Paystack dedicated account is not instant but IS machine-confirmable**: it
+hands over bank details (so it wants the email) *and* has a webhook and a real `verify()`
+(so it must not go near `confirm_manual_receipt`). One bit cannot serve both questions —
+whichever way you collapse them, that gateway breaks one of the two. The next reader will
+see two flags that agree on today's two gateways and "simplify"; this paragraph is why not.
+
+### Amount discrepancies: explicit acceptance, mandatory reason
+
+Any nonzero delta between the confirmed amount and the order total requires
+`accept_discrepancy=True` **and** a non-blank reason. The asymmetry is deliberate:
+
+- **Overpayment fulfils** (and flags the surplus for refund). They paid enough. Holding
+  the goods hostage over a surplus is the wrong failure to pick — the flag is the thing
+  that gets the surplus back to them.
+- **An unexpected amount raises rather than fulfilling-and-flagging**, because the common
+  cause is a **staff typo**, and with refunds manual the flag **is** the authorisation to
+  wire real money out of the bank. Type `50000` for `5000` and a fulfil-and-flag would
+  produce a flag instructing a human to send ₦45,000 to a customer who is owed nothing.
+  **No gateway ledger will refuse it** — there is no gateway. The typo has to stop at the
+  keyboard, because nothing downstream can catch it.
+- **The mandatory reason is the anti-"staff always tick the box" control.** A checkbox
+  alone becomes reflex; a free-text reason that lands in the order timeline under the
+  confirmer's name does not.
+
+A **refused** attempt writes an `OrderEvent` (`manual_receipt_refused`) and **no** review
+flag. Nothing happened, the caller already has the numbers to show, and a flag would
+outlive the corrected confirm that follows it thirty seconds later — leaving a permanent
+"someone look at this" on an order that is now perfectly fine.
+
+Shortfalls fulfil once accepted, recording who accepted: international wires legitimately
+lose a slice to intermediary banks, and that is a real cost of doing business, not a fraud
+signal.
+
+### `_flag_review` appends; `resolve_review` is still the only clearing act
+
+`_flag_review` appends to `Order.review_reason` (`"; "`-joined, deduped) rather than
+assigning. One order can accumulate several unresolved facts, and an assign silently
+erases whichever was written first. The motivating case: a cancelled order the customer
+overpaid ₦12,000 against ₦10,000 — the verdict ladder writes *"refund it"* (the whole
+payment; the goods never ship) and an assigning delta branch would overwrite it with
+*"refund the difference"* (₦2,000). Staff wire ₦2,000, resolve the flag, **and the
+customer is out ₦10,000 with nothing left in the system recording it.**
+
+`resolve_review` still clears the whole string in one explicit act, so Plan-10's model —
+only an admin resolve clears it, never a status transition — is untouched.
+
+> **Note.** In the shipped code that exact scenario is stopped *twice*: the delta branch
+> also returns early when `fulfilled` is false (see below), so it never writes on a
+> cancelled order. The append is the deeper guard and the one to rely on — flags
+> genuinely accumulate **across** confirms (two distinct payments each landing on the same
+> cancelled order flag separately, and both must survive). `_flag_review`'s own docstring
+> still describes the two-writers-in-one-request case as live; it is defence in depth, not
+> a reachable path.
+>
+> **Uneven:** `_reserve_and_fulfil_after_expiry` writes `order.review_reason` by direct
+> assignment in three branches rather than going through `_flag_review`, so it *can* still
+> erase a pre-existing flag (an amount-mismatch flag raised while `pending_payment`, then
+> the order expires, then a late payment fails to re-reserve). Pre-dates Plan-09b, narrow,
+> and left alone here rather than changed under a docs-only stage — but it is the one place
+> the append rule is not actually enforced.
+
+### `_react_to_verdict` returns a bool
+
+The verdict alone cannot say whether the goods shipped. `NOOP_EXPIRED` may or may not end
+in fulfilment depending on whether `_reserve_and_fulfil_after_expiry` could re-reserve the
+stock — same verdict, opposite outcomes. So the ladder reports what actually happened
+(`payment.status == "succeeded"` ⟺ fulfilled, by the Plan-09 invariant) and
+`confirm_manual_receipt` only writes a delta flag when the goods actually shipped.
+Otherwise the delta flag appends noise to the ladder's own, more urgent instruction — or
+worse, implies a fulfilment that never occurred.
+
+### `is_active` gates the menu and `initiate()` — **never** `confirm_payment()`
+
+`CountryPaymentGateway.is_active` filters the checkout menu (`active_gateways_for`) and
+`place_order`'s gateway check. It is deliberately absent from the confirmation path: **a
+customer who genuinely paid Paystack minutes before the deploy must stay fulfillable.**
+Gating confirm on `is_active` would mean deactivating a gateway silently converts every
+in-flight payment into money we took and goods we never shipped.
+
+**Reactivation procedure — in this order, no shortcuts:**
+
+1. Drive the deferred **Plan-09 sandbox checkpoint** first: one real test-mode payment per
+   gateway, end to end (checkout → webhook → order `processing` + stock committed),
+   demonstrated to Hammed. The suite mocks HTTP, so it encodes our *assumptions* about
+   each API — field names, amount units, status enums — which is exactly where they are
+   wrong.
+2. *Then* flip `is_active` for that gateway.
+
+Migration 0007's reverse is `RunPython.noop` **precisely so a rollback cannot do step 2
+without step 1.** Reactivating a gateway is a human checkpoint, never a side effect of
+`migrate` going backwards.
+
+### The checkout phase-1 gate
+
+`place_order` gates on a missing `BankAccount` **inside phase 1**, alongside the country
+and coupon checks — not at `initiate()`. Phase 1 commits the order, reserves stock for 24h
+and converts the cart; `_initiate_payment` only runs *after* that commit, outside the lock.
+Gating at `initiate()` alone would leave **a day-long stock hold and a consumed cart behind
+every failed attempt, and every retry would burn another** — a market with no bank account
+configured would quietly eat its own inventory.
+
+`initiate()` still refuses (`GatewayNotConfigured` → 503) when it finds no account, because
+the row can be deactivated between the two phases. What it must never do is **render
+blanks**: the old `SiteSetting.get_typed(..., "")` default would have shown a payment page
+with an empty account number, and the customer wires into nowhere. **That money is
+genuinely unrecoverable; a 503 only costs the sale.** Between an unrecoverable loss and a
+lost sale, fail loudly.
+
+### Per-gateway reservation TTL
+
+Bank transfer holds stock for **24h** (`reservation_ttl_minutes = 1440`); cards keep the
+30-minute default. A card resolves in seconds; a transfer waits on staff working hours,
+and a 30-minute TTL guarantees the order expires before anyone reads the bank statement.
+
+`reservation_ttl_minutes` is a **property on the ABC**, not a class attribute:
+`= settings.RESERVATION_TTL_MINUTES` in a class body is evaluated at **import** and would
+ignore `override_settings` and any env change without a restart. Subclasses shadow it with
+a plain int. `RESERVATION_TTL_MINUTES` now tunes **card gateways only**.
+
+The TTL is stamped at order creation from the already-validated gateway, whose `Payment`
+row is created in the same transaction — nothing needs re-stamping at initiate time.
+
+### The expiry sweep's poison isolation
+
+`expire_pending_orders` derives its set of manual gateway codes **once, from the registry**
+(`_manual_gateway_codes`), never `get_gateway()` per order. An order carrying a gateway code
+the registry never heard of — and **879 migrated legacy NG orders arrive in Plan-21/23** —
+would raise `UnknownGateway` inside the loop, kill the task run, and **starve every due
+order behind it, every 5 minutes, forever**. Stock nobody can buy, silently, on a beat.
+
+The per-order `try/except` is what finally makes the task docstring's long-standing promise
+("a poison order can't roll back its siblings") true: until Plan-09b, nothing in the loop
+could raise, so the promise was untested and the lookup would have broken it.
+
+### ⚠️ Accounting caveat — `payment.amount` is not cash-in
+
+On an **accepted discrepancy**, `payment.amount` stays the **order total**. The cash that
+actually arrived lives in `payment.raw_response["manual_receipt"]`, keyed by bank
+reference. Nothing rewrites `payment.amount` — the Plan-09 invariant ties it to the order
+total asserted at Payment creation, and the amount check depends on that.
+
+The consequence: refunding an overpayment surplus through the ledger reads as a **partial
+refund of the order price**, not a return of a surplus. The books say the customer paid
+₦10,000 and got ₦2,000 back; reality is they paid ₦12,000 and got the ₦2,000 that was
+never owed. Net cash agrees; the story doesn't.
+
+**Acceptable at launch** — the true figure is recorded, per reference, and reconcilable
+against the statement. But it is a trap with a fuse on it: **`payment.amount` is NOT
+cash-in, and Plan-20/28 reporting must not treat it as such.** Revenue must come from the
+receipts, or from a real cash-received field if one is ever added.
+
+### Known gaps — deliberate, not oversights
+
+- **Duplicate-`bank_reference` TOCTOU.** `_find_duplicate_reference` and the
+  `raw_response` write are not atomic: check-A → check-B → write-A → write-B lets **two
+  different orders both fulfil and ship against ONE transfer**. Be precise about why the
+  usual protection doesn't help — `mark_paid`'s row lock is **per-order** and gives
+  **zero** cross-order protection, so the duplicate check IS the entire control. Low
+  severity only because the window is two queries wide and needs two staff confirming
+  *different* orders with the *same* reference inside it. The real fix is a DB unique
+  constraint on `(gateway, bank_reference)` — most likely a dedicated `ManualReceipt` row,
+  since **only the database can serialise across rows**. Application-level locking cannot
+  close this.
+- **`_find_duplicate_reference` is unindexed.** `raw_response__manual_receipt__has_key`
+  scans the Payment table on every confirm. Fine at launch volume; wants a **GIN index**
+  as the table grows. (A `ManualReceipt` table would settle this and the point above at
+  once.)
+- **`record_manual_refund` has no duplicate-reference guard at all.** It is bounded
+  per-payment by `refundable_amount`, so it cannot over-refund one payment — but one
+  statement line can be recorded against **two** payments.
+- **`BankAccount.clean()` is not a DB constraint.** The country/currency match is
+  validated by the model's `clean()`, which a shell or data-migration write bypasses
+  entirely, persisting a mismatch. Django admin is the only write path at launch, and it
+  calls `full_clean()`.
+
+### Operating this at launch
+
+- **Bank accounts are Django-admin CRUD** (`payments.BankAccount`) — one per country
+  (`OneToOneField`), and the currency must match the country's. Per-market fields (sort
+  code, routing number, IBAN, SWIFT) go in `extra`, whose keys **become the labels the
+  customer reads**: an all-lowercase key is prettified (`sort_code` → "Sort code"), a key
+  with any capital is passed through exactly as typed (write `IBAN`, not `iban`).
+- **`payments.W002` warns at deploy** for any market with `bank_transfer` live and no
+  active `BankAccount`. Customers there cannot check out at all — checkout now refuses the
+  order outright rather than stranding it, so the market simply sells nothing until the
+  row exists.
+- **Every order needs a human.** Receipt confirmation is
+  `POST /api/v1/admin/orders/{number}/confirm-payment/`; every refund is
+  `POST /api/v1/admin/orders/{number}/manual-refund/`. Both are `IsAdminUser` today
+  (Plan-16 owns fine-grained RBAC). **Plan-18 builds the UI over both** — they are API-only
+  until then, which means launch-day fulfilment runs on someone posting JSON.
+- The `amount_discrepancy` 400 carries `expected` and `received` so the UI can offer
+  "accept and fulfil" with a reason box, rather than just failing at the operator.
+
+> **The intended exit is Paystack dedicated accounts** — webhook-confirmed, a real
+> `verify()`, no human in the loop. **So this manual flow must not grow features that
+> assume it is permanent.** Every hour invested in making manual confirmation comfortable
+> is an hour spent on scaffolding, and comfortable scaffolding is how a stopgap becomes
+> the architecture. Fix the gaps that lose money; build nothing else here.

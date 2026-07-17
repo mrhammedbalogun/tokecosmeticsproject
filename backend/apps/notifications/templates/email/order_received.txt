@@ -4,16 +4,14 @@ Order {{ number }} — placed {{ placed_at }}
 
 {% include "email/_order_items.txt" %}
 HOW TO PAY
-{% if bank_name %}
-  Bank:           {{ bank_name }}
-  Account name:   {{ account_name }}
-  Account number: {{ account_number }}
-{% endif %}
-  Amount:         {{ grand_total }}
-  Reference:      {{ number }}
+{% if bank_details %}{% for label, value in bank_details.items %}  {{ label|add:":"|ljust:"16" }} {{ value }}
+{% endfor %}{% endif %}  Amount:          {{ grand_total }}
+  Reference:       {{ number }}
 
 IMPORTANT: please use {{ number }} as the transfer reference. Without it we may not
 be able to match your payment to this order.
+
+Please transfer within 24 hours — we're holding your items until then.
 
 Once your transfer lands we'll confirm your order by email.
 

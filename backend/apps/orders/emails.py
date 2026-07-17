@@ -92,5 +92,18 @@ def enqueue_delivered(order_pk: int) -> None:
     _send(order_pk, "order_delivered")
 
 
+def enqueue_order_expired_manual(order_pk: int) -> None:
+    """A bank-transfer order whose 24h reservation lapsed before anyone matched a payment
+    to it. Sent ONLY for manual gateways: a card that never completed means the customer
+    never sent money and has nothing to be told.
+
+    This customer might have wired the money and be waiting — the transfer may already be
+    in our account, unmatched. Letting the order die in silence is how a paying customer
+    ends up with neither goods nor a refund, so this mail exists to hand them the one
+    string that unpicks it: their order number.
+    """
+    _send(order_pk, "order_expired_manual")
+
+
 def enqueue_refund_processed(order_pk: int, amount: str = "") -> None:
     _send(order_pk, "refund_processed", refund_amount=amount)

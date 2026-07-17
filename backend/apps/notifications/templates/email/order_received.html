@@ -7,16 +7,17 @@
   <tr><td style="padding:16px;">
     <div style="font-weight:600;margin-bottom:10px;">How to pay</div>
     <table role="presentation" width="100%" style="font-size:14px;">
-      {% if bank_name %}
-      <tr><td style="color:#777;padding:2px 12px 2px 0;">Bank</td><td>{{ bank_name }}</td></tr>
-      <tr><td style="color:#777;padding:2px 12px 2px 0;">Account name</td><td>{{ account_name }}</td></tr>
-      <tr><td style="color:#777;padding:2px 12px 2px 0;">Account number</td><td><strong>{{ account_number }}</strong></td></tr>
-      {% endif %}
+      {% if bank_details %}{% for label, value in bank_details.items %}
+      <tr><td style="color:#777;padding:2px 12px 2px 0;">{{ label }}</td><td><strong>{{ value }}</strong></td></tr>
+      {% endfor %}{% endif %}
       <tr><td style="color:#777;padding:2px 12px 2px 0;">Amount</td><td><strong>{{ grand_total }}</strong></td></tr>
       <tr><td style="color:#777;padding:2px 12px 2px 0;">Reference</td><td><strong>{{ number }}</strong></td></tr>
     </table>
     <p style="margin:12px 0 0;font-size:13px;color:#b00020;">
       Please use <strong>{{ number }}</strong> as the transfer reference — without it we may not be able to match your payment to this order.
+    </p>
+    <p style="margin:8px 0 0;font-size:13px;color:#777;">
+      Please transfer within <strong>24 hours</strong> — we're holding your items until then.
     </p>
   </td></tr>
 </table>

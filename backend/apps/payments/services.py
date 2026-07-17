@@ -10,17 +10,26 @@ idempotent fulfilment primitive:
                                     REPORTS what it found (never silently no-ops). The
                                     invariant: payment.status == "succeeded" is written
                                     ONLY here (via _fulfil_locked).
+  _react_to_verdict(payment, outcome) -> bool
+                                  — the recovery ladder: re-reserve on expiry, flag
+                                    double-payments and payments-on-cancelled-orders for
+                                    review. Reports whether the order ended up fulfilled,
+                                    which the verdict alone cannot say. Shared by every
+                                    confirmation path so none of them can drift.
   confirm_payment(payment)        — the ONLY thing webhook processing and the client
                                     return endpoint call. Verifies with the gateway
                                     (network, OUTSIDE any transaction), checks amount +
-                                    currency, then reacts to mark_paid's verdict:
-                                    re-reserve on expiry, flag double-payments and
-                                    payments-on-cancelled-orders for review.
+                                    currency, then hands the verdict to the ladder.
+  confirm_manual_receipt(payment) — the other entry point, for gateways with no machine to
+                                    ask (bank transfer). A staff member reading the bank
+                                    statement supplies the amount instead of verify(), and
+                                    the same ladder takes it from there.
 """
 from __future__ import annotations
 
 import enum
 import logging
+from decimal import Decimal
 
 from django.db import transaction
 from django.db.models import Sum
@@ -29,7 +38,8 @@ from apps.inventory.models import StockMovement
 from apps.inventory.services import InsufficientStock, commit_sale, release, reserve
 from apps.orders.models import Order
 from apps.orders.state import transition
-from apps.payments.money import to_minor
+from apps.payments.models import Payment
+from apps.payments.money import from_minor, to_minor
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +121,22 @@ def _amounts_match(result, payment) -> bool:
     return to_minor(result.amount, payment.currency) == to_minor(payment.amount, payment.currency)
 
 
+def _append_reason(order, reason: str) -> bool:
+    """Add `reason` to the in-memory order's review_reason, unless it's already there.
+    Returns whether anything changed; the CALLER saves, because callers who already hold
+    the row lock must not re-open a transaction just to write a note.
+
+    Every writer of review_reason goes through here. It is not a formatting helper: a
+    writer that assigns directly erases whatever an earlier writer put there, which is the
+    whole failure this exists to prevent (see _flag_review)."""
+    reasons = [r for r in order.review_reason.split("; ") if r]
+    if reason in reasons:
+        return False
+    reasons.append(reason)
+    order.review_reason = "; ".join(reasons)
+    return True
+
+
 def _flag_review(order_id: int, reason: str) -> None:
     """Flag an order for human attention. `review_reason` is the single source of truth
     and is ORTHOGONAL to the lifecycle: "a human must look at this" is not a place in the
@@ -120,10 +146,21 @@ def _flag_review(order_id: int, reason: str) -> None:
 
     Only an explicit admin resolve action clears this (see orders.state), never a
     status transition — otherwise shipping a flagged order would silently erase an
-    unresolved double-payment and nobody would ever refund the customer."""
+    unresolved double-payment and nobody would ever refund the customer.
+
+    APPENDS rather than assigns, for the same reason: an order accumulates unresolved facts
+    over its life, and while this assigned, whichever writer came second erased the first —
+    leaving staff to act on the survivor alone. A mismatch flagged while pending_payment,
+    then a late payment that can't re-reserve, used to leave only "could not re-reserve
+    stock": staff refund the order total, never learning the gateway reported a different
+    amount. The fact that explained WHY the money was in dispute was the one erased.
+
+    resolve_review still clears the whole string in one explicit act, so Plan-10's model is
+    untouched — an admin decides everything here is handled, not a passing writer."""
     with transaction.atomic():
         order = Order.objects.select_for_update().get(pk=order_id)
-        order.review_reason = reason
+        if not _append_reason(order, reason):
+            return  # already flagged for exactly this — replays are normal here
         order.save(update_fields=["review_reason", "updated_at"])
     logger.warning("Order %s flagged for review: %s", order_id, reason)
 
@@ -151,13 +188,14 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
             if order.status in _FULFILLED_STATES:
                 return  # another confirm got there first — nothing owed
             if order.status == "cancelled":
-                order.review_reason = (
-                    f"payment {payment.pk} received on a cancelled order — refund it"
+                _append_reason(
+                    order, f"payment {payment.pk} received on a cancelled order — refund it"
                 )
             else:
-                order.review_reason = (
+                _append_reason(
+                    order,
                     f"late payment {payment.pk}: order moved to {order.status} while "
-                    "confirming — a human must decide whether to fulfil or refund"
+                    "confirming — a human must decide whether to fulfil or refund",
                 )
             order.save(update_fields=["review_reason", "updated_at"])
             logger.warning(
@@ -174,8 +212,9 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
             release(new_ref)  # clean up any items reserved before the failing one
             # Stays `expired` — that IS the truth. review_reason says why a human must
             # look (this is auto-refund territory: we hold their money, not their goods).
-            order.review_reason = (
-                f"late payment {payment.pk} after expiry — could not re-reserve stock: {exc}"
+            _append_reason(
+                order,
+                f"late payment {payment.pk} after expiry — could not re-reserve stock: {exc}",
             )
             order.save(update_fields=["review_reason", "updated_at"])
             logger.warning("Order %s: late payment could not re-reserve: %s", order.number, exc)
@@ -183,6 +222,45 @@ def _reserve_and_fulfil_after_expiry(order, payment) -> None:
         order.reservation_reference = new_ref
         order.save(update_fields=["reservation_reference", "updated_at"])
         _fulfil_locked(order, payment)
+
+
+def _react_to_verdict(payment, outcome: MarkPaidResult) -> bool:
+    """React to mark_paid's verdict. Returns whether the order ended up FULFILLED.
+
+    Shared by BOTH confirmation paths (gateway verify and manual receipt) — the recovery
+    logic for late/cancelled/duplicate money is identical regardless of who did the
+    verifying, and a copy-paste would let one path silently stop recovering money.
+
+    The return value matters: NOOP_EXPIRED may or may not end in fulfilment depending on
+    whether _reserve_and_fulfil_after_expiry could re-reserve stock, and callers that flag
+    an amount discrepancy must only do so when the goods actually shipped — otherwise they
+    append noise to the ladder's own, more urgent, instruction (see _flag_review).
+    """
+    if outcome is MarkPaidResult.FULFILLED:
+        return True
+
+    if outcome is MarkPaidResult.NOOP_EXPIRED:
+        _reserve_and_fulfil_after_expiry(payment.order, payment)
+        payment.refresh_from_db(fields=["status"])
+        return payment.status == "succeeded"  # succeeded <=> fulfilled, by invariant
+
+    if outcome is MarkPaidResult.NOOP_CANCELLED:
+        _flag_review(
+            payment.order_id,
+            f"payment {payment.pk} received on a cancelled order — refund it",
+        )
+        return False
+
+    # NOOP_ALREADY_PROCESSED: either an idempotent replay of THIS payment, or a second,
+    # distinct payment for an order another payment already fulfilled (double charge).
+    payment.refresh_from_db(fields=["status"])
+    if payment.status == "succeeded":
+        return True  # this payment already fulfilled the order — benign replay
+    _flag_review(
+        payment.order_id,
+        f"possible double payment — order already processing; refund payment {payment.pk}",
+    )
+    return False
 
 
 def confirm_payment(payment) -> None:
@@ -210,28 +288,141 @@ def confirm_payment(payment) -> None:
         return
 
     payment.save(update_fields=["raw_response", "updated_at"])  # persist verify before fulfilling
-    outcome = mark_paid(payment)
+    _react_to_verdict(payment, mark_paid(payment))
 
-    if outcome is MarkPaidResult.FULFILLED:
+
+# --- confirm_manual_receipt: the fulfilment entry point for bank transfer ----
+
+
+class AmountDiscrepancy(Exception):
+    """The confirmed amount is not the order total and staff did not explicitly accept it.
+    Nothing was fulfilled. Carries the numbers so the caller can show them and come back."""
+
+    def __init__(self, expected: Decimal, received: Decimal):
+        self.expected, self.received = expected, received
+        super().__init__(f"received {received}, order is owed {expected}")
+
+
+class DuplicateBankReference(Exception):
+    """This bank reference already confirmed another order — one statement line cannot pay
+    for two orders. Override with allow_duplicate_reference=True."""
+
+
+def _find_duplicate_reference(payment, bank_reference: str):
+    """Another payment already confirmed against this statement line, if any. The cheapest
+    fraud control we have: one transfer quoted as the reference for two orders would
+    otherwise ship goods twice against money that arrived once."""
+    return (
+        Payment.objects.filter(
+            gateway=payment.gateway,
+            raw_response__manual_receipt__has_key=bank_reference,
+        )
+        .exclude(pk=payment.pk)
+        .select_related("order")
+        .first()
+    )
+
+
+def confirm_manual_receipt(
+    payment,
+    *,
+    staff_user,
+    amount_received: Decimal,
+    bank_reference: str,
+    note: str = "",
+    accept_discrepancy: bool = False,
+    allow_duplicate_reference: bool = False,
+) -> None:
+    """Fulfil an order whose money arrived by bank transfer. The staff member reading the
+    bank statement IS the verification — there is no gateway to ask — so this deliberately
+    does NOT call verify(). It reuses mark_paid and the shared verdict ladder, because the
+    recovery logic for late/cancelled/duplicate money doesn't care who did the verifying.
+
+    Any nonzero delta requires accept_discrepancy + a reason. Overpayment then fulfils and
+    flags the surplus for refund (they paid enough — don't hold their goods hostage);
+    shortfall then fulfils and records who accepted it (intl wires legitimately lose a
+    slice to intermediary banks). Without the flag an unexpected amount raises, because the
+    common cause is a typo and the resulting flag is the ONLY authorisation a human needs
+    to wire real money out.
+    """
+    from apps.orders.state import record_event
+    from apps.payments.gateways.registry import get_gateway
+
+    if get_gateway(payment.gateway).confirmation != "manual":
+        # Letting staff hand-wave a Stripe payment into 'succeeded' would break
+        # succeeded <=> money-actually-arrived.
+        raise ValueError(
+            f"{payment.gateway} is machine-confirmed — use confirm_payment(), not manual receipt"
+        )
+
+    expected_minor = to_minor(payment.amount, payment.currency)
+    received_minor = to_minor(amount_received, payment.currency)
+    delta = received_minor - expected_minor
+
+    if delta and not accept_discrepancy:
+        record_event(
+            payment.order, "manual_receipt_refused", actor=staff_user,
+            message=(
+                f"refused: {amount_received} {payment.currency_id} against "
+                f"{payment.amount} (ref {bank_reference})"
+            ),
+        )
+        # Deliberately NO review flag: nothing happened, and the caller already has the
+        # numbers. A flag here would outlive the corrected confirm that follows.
+        raise AmountDiscrepancy(payment.amount, amount_received)
+
+    if delta and not note.strip():
+        raise ValueError("accepting an amount discrepancy requires a reason")
+
+    if not allow_duplicate_reference:
+        other = _find_duplicate_reference(payment, bank_reference)
+        if other is not None:
+            raise DuplicateBankReference(
+                f"bank reference {bank_reference} already confirmed order {other.order.number}"
+            )
+
+    # Keyed by reference rather than replaced: two staff confirming concurrently both save
+    # here unlocked, and last-write-wins would leave the payment recording an amount that
+    # fulfilled nothing. The OrderEvents are the audit trail; this is the ledger detail.
+    receipts = dict((payment.raw_response or {}).get("manual_receipt", {}))
+    receipts[bank_reference] = {
+        "amount_received": str(amount_received),
+        "confirmed_by": staff_user.get_username(),
+        "note": note,
+        "accept_discrepancy": accept_discrepancy,
+    }
+    payment.raw_response = {**(payment.raw_response or {}), "manual_receipt": receipts}
+    payment.save(update_fields=["raw_response", "updated_at"])
+
+    fulfilled = _react_to_verdict(payment, mark_paid(payment))
+
+    # AFTER mark_paid, with the outcome: recording "confirmed" before it would have a
+    # losing racer claim credit for a confirmation that did nothing.
+    record_event(
+        payment.order, "payment_confirmed_manually", actor=staff_user,
+        message=(
+            f"{amount_received} {payment.currency_id} confirmed against bank reference "
+            f"{bank_reference} — {'fulfilled' if fulfilled else 'no fulfilment (see flags)'}"
+            + (f" — {note}" if note else "")
+        ),
+    )
+
+    if not fulfilled:
+        # The ladder already flagged the operative instruction (refund it / could not
+        # re-reserve). A delta flag here would append noise to an unresolved, more urgent
+        # fact — or worse, imply the goods shipped.
         return
 
-    if outcome is MarkPaidResult.NOOP_EXPIRED:
-        _reserve_and_fulfil_after_expiry(payment.order, payment)
-        return
-
-    if outcome is MarkPaidResult.NOOP_CANCELLED:
+    if delta > 0:
         _flag_review(
             payment.order_id,
-            f"payment {payment.pk} received on a cancelled order — refund it",
+            f"overpaid by {from_minor(delta, payment.currency)} {payment.currency_id} "
+            f"(received {amount_received} against {payment.amount}) — refund the difference",
         )
-        return
-
-    # NOOP_ALREADY_PROCESSED: either an idempotent replay of THIS payment, or a second,
-    # distinct payment for an order another payment already fulfilled (double charge).
-    payment.refresh_from_db(fields=["status"])
-    if payment.status == "succeeded":
-        return  # this payment already fulfilled the order — benign replay
-    _flag_review(
-        payment.order_id,
-        f"possible double payment — order already processing; refund payment {payment.pk}",
-    )
+    elif delta < 0:
+        _flag_review(
+            payment.order_id,
+            f"shortfall of {from_minor(-delta, payment.currency)} {payment.currency_id} "
+            f"accepted by {staff_user.get_username()}: {note} "
+            f"(received {amount_received} against {payment.amount})",
+        )
