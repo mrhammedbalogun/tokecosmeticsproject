@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_spectacular.utils import extend_schema
@@ -12,6 +13,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.notifications.tasks import send_email_task
 
 from .serializers import (
+    AddressSerializer,
     LogoutSerializer,
     MeSerializer,
     PasswordChangeSerializer,
@@ -107,3 +109,50 @@ class PasswordResetConfirmView(APIView):
         user.set_password(data["password"])
         user.save(update_fields=["password"])
         return Response({"detail": "Password updated."})
+
+
+class AddressListCreateView(generics.ListCreateAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # a customer's address book is short
+
+    def get_queryset(self):
+        return self.request.user.addresses.all().order_by("-is_default_shipping", "id")
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Scoped to the owner: another user's id resolves to 404, never their data.
+        return self.request.user.addresses.all()
+
+
+class _SetDefaultView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    field = None  # "is_default_shipping" | "is_default_billing"
+
+    def post(self, request, pk):
+        from django.shortcuts import get_object_or_404
+
+        address = get_object_or_404(request.user.addresses, pk=pk)
+        with transaction.atomic():
+            # Exactly one default of this kind per user — clear the rest first.
+            request.user.addresses.exclude(pk=address.pk).filter(
+                **{self.field: True}
+            ).update(**{self.field: False})
+            setattr(address, self.field, True)
+            address.save(update_fields=[self.field, "updated_at"])
+        return Response(AddressSerializer(address).data)
+
+
+class SetDefaultShippingView(_SetDefaultView):
+    field = "is_default_shipping"
+
+
+class SetDefaultBillingView(_SetDefaultView):
+    field = "is_default_billing"
