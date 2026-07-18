@@ -3,7 +3,7 @@
 **Date:** 2026-07-16
 **Status:** approved (shape signed off by Hammed; spec pending review)
 **Depends on:** Plan-08 (cart/checkout), Plan-09b (manual payments), Plan-10 (orders) — all merged to `main`
-**Owns:** the Plan-09b open question "a real Rest-of-World customer may not be able to check out at all"
+**Owns:** the Plan-09b open question "a real Rest-of-World customer may not be able to check out at all" — **implemented on branch `plan-14a-row-delivery-quote` (Tasks 1–12); pending the Task 14 checkpoint + merge.** See `docs/architecture.md` § "Rest-of-World freight quotes (Plan-14a)".
 
 ## Problem
 

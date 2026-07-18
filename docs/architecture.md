@@ -822,3 +822,97 @@ receipts, or from a real cash-received field if one is ever added.
 > assume it is permanent.** Every hour invested in making manual confirmation comfortable
 > is an hour spent on scaffolding, and comfortable scaffolding is how a stopgap becomes
 > the architecture. Fix the gaps that lose money; build nothing else here.
+
+## Rest-of-World freight quotes (Plan-14a)
+
+Closes the Plan-09b open question — *"a real Rest-of-World customer may not be able to
+check out at all."* Two faults were tangled together and had to be cut in one change,
+because fixing the first exposed the second: (a) `options_for_address` matched on the raw
+`address.country_code`, so a `DE` customer matched no `Country`/`Region` row and got **zero**
+delivery options — a silent dead end at checkout; and (b) once RoW customers *could* reach
+checkout, we still had no shipping price for them, because worldwide freight isn't knowable
+until the parcel is weighed and routed.
+
+**The flow — pay for goods first, quote freight after.** A RoW delivery option is
+`quote_required=True`: it carries a `disclaimer`, **not** a price.
+
+1. Customer checks out and pays the **goods-only** total (a `quote_required` option
+   contributes nothing to `shipping_total`).
+2. Placement creates a `ShippingQuote` in status `awaiting_quote`, bound to the order.
+3. Staff weigh/route the parcel and **quote** the freight (`quote_freight`) — an amount in
+   the order's currency. Re-quoting overwrites the live figure and **appends** to an
+   audit `note`; the history is the note, never a silent overwrite.
+4. Customer transfers the freight; staff **record the receipt** (`record_freight_receipt`),
+   which creates a `Payment(purpose="freight")` and moves the quote to `paid`.
+5. The order is now `is_shippable`. Nothing before this releases goods.
+
+Alternatively staff can **waive** freight (a gift/absorbed cost) — but only *after* a quote
+exists (waive-without-quote is a `400`), so the forgiven amount is always a real figure on
+the record, never a blank.
+
+**`Payment.purpose` (`goods` | `freight`), defaulting to `goods`.** Goods and freight are
+two separate transfers, in currencies that may differ (NGN goods, USD freight). The three
+manual-confirm/refund call sites that pick "the payment" are all scoped to
+`purpose="goods"`, so freight never gets mistaken for the goods leg and vice-versa
+(`ConfirmManualReceiptView` still selects the goods payment on an order that also has a
+freight payment — regression-tested).
+
+### The money rules — read these before writing any report (Plan-20/28)
+
+- **Cash-in is `sum(Payment) grouped by currency`, filtered by `purpose` when goods and
+  freight must be told apart — never a single scalar.** NGN goods + USD freight added into
+  one number is a confident wrong answer. There is no FX consolidation in the MVP; a total
+  that crosses currencies is a bug, not a convenience.
+- **`quote.amount` is NOT cash.** It is what we *asked for*. `payment.amount`
+  (`purpose="freight"`) is what *landed* — and the two normally differ by correspondent-bank
+  fees. Reporting must take freight revenue from the **freight payment**, never from the
+  quote. (This is the same trap as the Plan-09b caveat that `payment.amount` is not cash-in
+  on an accepted discrepancy — a different field, the identical mistake.)
+- **Waived freight is its own reporting line** — e.g. *"freight waived: 6 orders, $340 of
+  quoted value."* Silent waiving is exactly the off-books hole this design closed, so
+  surfacing it is a **requirement on Plan-20**, not a nice-to-have.
+- **An order awaiting freight is `sold`, not `reserved`.** Plan-20's reserved-vs-sold split
+  must count it as sold — the goods money is in the bank.
+
+### Traps that look like bugs and are not
+
+- **Every RoW goods payment lands short and routes through `accept_discrepancy`.** Under the
+  default SHA fee terms a correspondent bank takes its cut from the wire in flight, so the
+  customer sends 40 and 32 arrives. This is the **routine** RoW path, expected and
+  documented — **not** a fraud signal. Do **not** widen the amount-matching tolerance to
+  "make it stop"; that would blind the goods leg to genuine shortfalls in every market. The
+  `order_received` email mitigates it by asking non-default-market customers to send with
+  **OUR** charges (Task 12) — a template string that reduces how often the discrepancy
+  fires, never a guarantee it won't.
+- **The freight reference (`TC-100001-F`) is a dedup control, not an identification
+  mechanism.** It keeps goods and freight references from colliding on the
+  `(gateway, gateway_reference)` unique constraint. But SWIFT narration is routinely
+  truncated by intermediaries, so real-world matching is the owner's eyes on a statement
+  (amount + date + name), not the reference. A second order reusing a `bank_reference`
+  is a `409` — that constraint is the freight leg's real serialization, unlike the goods
+  leg's still-open JSON-key check (see *Known gaps* above).
+- **No TTL on the freight wait — ever.** Once real goods money is against an order we
+  **never** auto-cancel or auto-release it. The decline path (a quote the customer won't
+  pay) is a deliberate staff action to a single terminal state, with the goods refund handled
+  manually; there is no automated money movement here.
+
+### The storefront contract (Plan-14 must honour this)
+
+A `quote_required` delivery option serializes as `price: null` + `quote_required: true` +
+a `disclaimer` string. The storefront **must render the disclaimer** and must **never**
+show "Free", "—", or do arithmetic on the null. There is no storefront yet, so this is
+recorded as a contract with a **required test** on Plan-14, not built here. The customer-facing
+"Awaiting shipping cost" order state is likewise Plan-14's to build.
+
+### Accepted risks (carried forward)
+
+- **A derived `is_shippable` gate has no teeth of its own** — it is computed from
+  `{paid, waived}`, not a stored flag, so anything that dispatches goods must *check* it.
+  A ship queue that forgets to is the accepted risk of a derived gate; the alternative
+  (a stored, separately-mutated status) is a worse class of bug (drift).
+- **The goods-leg duplicate-`bank_reference` TOCTOU** (Plan-09b) is still open and still
+  carries most of the money. The freight leg now has the real `(gateway, gateway_reference)`
+  DB constraint the goods leg wants; the cheap fix is to move the goods reference onto it
+  (or a `ManualReceipt` row). Tracked in *Known gaps* above.
+- **`_find_duplicate_reference`'s unindexed JSON scan** runs on every manual confirm — fine
+  at launch volume, wants a GIN index as the table grows.
