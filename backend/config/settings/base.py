@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.delivery",
     "apps.shipping",
+    "apps.wishlist",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
