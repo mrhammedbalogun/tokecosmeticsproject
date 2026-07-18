@@ -8,7 +8,8 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils import timezone
 
-from apps.orders.state import record_event
+from apps.orders.models import Order
+from apps.orders.state import record_event, transition
 
 
 class ShippingError(Exception):
@@ -72,6 +73,66 @@ def waive_freight(quote, *, staff_user, note: str) -> None:
     quote.save(update_fields=["status", "settled_at", "note", "updated_at"])
     record_event(quote.order, "freight_waived", actor=staff_user,
                  message=f"{quote.amount} {quote.currency_id} forgiven: {note}")
+
+
+def cancel_quote(quote, *, staff_user, note: str) -> None:
+    """The customer declined the freight quote, or never answered. Silence and refusal
+    are the same event operationally, so they share the quote's terminal `cancelled`
+    state distinguished by the note — two enum values with identical handling are a
+    liability when the operator is one non-developer.
+
+    What happens to the ORDER depends on whether the goods were paid, because `cancelled`
+    means "no money was ever captured" in this state machine:
+
+    * `pending_payment` / `expired` (goods NOT paid) -> cancel_order, which releases the
+      stock reservation. Nothing was captured, so there is nothing to refund.
+    * `processing` (goods PAID — the dominant quote-after-payment case) -> the order goes
+      to `on_hold`, NOT cancelled: money was captured and a goods refund is now owed. This
+      function does NOT refund and does NOT touch stock — the owner records the goods
+      refund by hand later via record_manual_refund, which handles on_hold -> refunded and
+      the restock. `note` is the authorisation artifact for that manual wire-out, because a
+      customer who paid the goods total exactly produced no discrepancy and so no
+      accept_discrepancy reason exists.
+    * anything else (shipped/delivered/on_hold/completed/refunded/cancelled) -> refuse
+      loudly. A freight quote has no business being cancelled once goods are in transit.
+
+    Bank transfer has no refund rail, so auto-refund is deliberately out of scope.
+    """
+    from apps.orders.services import cancel_order
+
+    if not note.strip():
+        raise ShippingError("reason_required",
+                            "A reason is required — it is the record of why money is going back.")
+
+    with transaction.atomic():
+        # Lock the order row (its OneToOne to the quote is a natural mutex) and re-read the
+        # quote UNDER the lock, so a concurrent record_freight_receipt can't settle it
+        # between our is_settled guard and our write.
+        order = Order.objects.select_for_update().get(pk=quote.order_id)
+        quote.refresh_from_db()
+        if quote.is_settled:
+            raise ShippingError("quote_already_settled",
+                                f"This freight quote is already {quote.status}.")
+
+        quote.status = "cancelled"
+        quote.settled_at = timezone.now()
+        _append_note(quote, f"cancelled by {staff_user.get_username()}: {note}")
+        quote.save(update_fields=["status", "settled_at", "note", "updated_at"])
+
+        if order.status in ("pending_payment", "expired"):
+            cancel_order(order.id, actor=staff_user,
+                         message=f"freight quote cancelled: {note}")
+        elif order.status == "processing":
+            # Money captured -> on_hold, goods refund owed. NO stock change, NO refund here.
+            transition(order, "on_hold", actor=staff_user,
+                       message=f"freight quote cancelled — goods refund owed: {note}")
+        else:
+            # Raise INSIDE the atomic block so the quote-cancel write rolls back too: we
+            # must not mark the quote cancelled if we refuse to act on the order.
+            raise ShippingError(
+                "order_not_cancellable",
+                f"Order is {order.status}; a freight quote cannot be cancelled at this stage.",
+            )
 
 
 def record_freight_receipt(quote, *, staff_user, amount_received: Decimal,

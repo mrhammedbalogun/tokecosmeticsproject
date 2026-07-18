@@ -2,11 +2,15 @@ from decimal import Decimal
 
 import pytest
 
+from apps.catalog.factories import ProductVariantFactory
 from apps.core.models import Country
+from apps.inventory.factories import StockItemFactory, WarehouseFactory
+from apps.inventory.services import reserve
 from apps.orders.factories import OrderFactory
 from apps.shipping.models import ShippingQuote
 from apps.shipping.services import (
     ShippingError,
+    cancel_quote,
     quote_freight,
     record_freight_receipt,
     waive_freight,
@@ -22,6 +26,21 @@ def _order():
     number = f"TC-{next(_counter)}"
     return OrderFactory(number=number, country=ng, currency=ng.currency,
                         status="pending_payment", reservation_reference=number)
+
+
+def _order_with_reserved_stock(qty=2):
+    """An order whose stock is still RESERVED (not yet sold). cancel_order only frees
+    stock that is still reserved — a paid order's stock is already committed via
+    commit_sale, so `pending_payment` is the only state where 'releases stock' is a real,
+    observable effect. Mirrors apps/orders/tests/test_cancel.py::_reserved_order."""
+    ng = Country.objects.get(code="NG")
+    order = _order()
+    wh = WarehouseFactory(name=order.number, location_country="NG", priority=1)
+    wh.serves_countries.add(ng)
+    variant = ProductVariantFactory()
+    StockItemFactory(variant=variant, warehouse=wh, quantity=10)
+    reserve(variant, qty, ng, reference=order.reservation_reference)
+    return order, variant
 
 
 @pytest.fixture
@@ -189,3 +208,77 @@ def test_recording_a_receipt_before_quoting_is_refused(staff):
         )
 
     assert exc.value.code == "quote_required_before_receipt"
+
+
+def test_cancelling_an_unpaid_quote_cancels_the_order_and_releases_stock(staff):
+    """PRE-PAYMENT case: the customer declines before paying goods. No money was captured,
+    so the order is cancelled outright and the stock reservation is freed for real buyers.
+    Cosmetics have shelf life and trend risk — freeing the units recovers value."""
+    order, variant = _order_with_reserved_stock(qty=2)   # pending_payment
+    quote = ShippingQuote.objects.create(order=order, currency=order.currency)
+    quote_freight(quote, staff_user=staff, amount=Decimal("40.00"), note="Adex")
+    assert variant.stock_items.get().reserved == 2
+
+    cancel_quote(quote, staff_user=staff, note="customer declined €40")
+
+    quote.refresh_from_db()
+    order.refresh_from_db()
+    assert quote.status == "cancelled"
+    assert order.status == "cancelled"
+    assert "declined" in quote.note
+    assert variant.stock_items.get().reserved == 0   # freed for real buyers
+
+
+def test_cancelling_a_paid_quote_holds_the_order_and_touches_no_money(staff):
+    """MODAL case (quote-after-payment): the customer paid the goods total, then declined
+    or ignored the freight quote. `cancelled` means no money was captured, so a PAID order
+    must NOT be cancelled — it goes ON_HOLD, a goods refund is owed, and the owner records
+    that refund by hand via record_manual_refund. This function moves NO money and NO
+    stock."""
+    order, variant = _order_with_reserved_stock(qty=2)
+    quote = ShippingQuote.objects.create(order=order, currency=order.currency)
+    quote_freight(quote, staff_user=staff, amount=Decimal("40.00"), note="Adex")
+    order.status = "processing"          # goods paid (mirrors _fulfil_locked's transition)
+    order.save(update_fields=["status"])
+
+    cancel_quote(quote, staff_user=staff, note="no reply after 2 weeks")
+
+    quote.refresh_from_db()
+    order.refresh_from_db()
+    assert quote.status == "cancelled"
+    assert order.status == "on_hold"                     # refund owed, not cancelled
+    assert order.payments.count() == 0                   # no refund/freight Payment created
+    assert not order.payments.filter(purpose="freight").exists()
+    assert variant.stock_items.get().reserved == 2       # stock untouched — restock is the
+    #                                                      manual refund's job, not ours
+
+
+def test_cancelling_is_refused_once_goods_are_in_transit(staff):
+    """A freight quote has no business being cancelled once the parcel has shipped. Fail
+    loud rather than guess, and the atomic rollback must leave the quote untouched."""
+    order = _order()
+    quote = ShippingQuote.objects.create(order=order, currency=order.currency)
+    quote_freight(quote, staff_user=staff, amount=Decimal("40.00"), note="Adex")
+    order.status = "shipped"
+    order.save(update_fields=["status"])
+
+    with pytest.raises(ShippingError) as exc:
+        cancel_quote(quote, staff_user=staff, note="customer changed their mind")
+
+    assert exc.value.code == "order_not_cancellable"
+    quote.refresh_from_db()
+    assert quote.status == "quoted"                      # rollback left it untouched
+
+
+def test_cancelling_requires_a_reason(staff):
+    """The note is the ONLY authorisation artifact for the manual refund wire-out. A
+    customer who paid the goods total exactly produces no discrepancy, so no
+    accept_discrepancy reason string exists to authorise it."""
+    order = _order()
+    quote = ShippingQuote.objects.create(order=order, currency=order.currency)
+    quote_freight(quote, staff_user=staff, amount=Decimal("40.00"), note="Adex")
+
+    with pytest.raises(ShippingError) as exc:
+        cancel_quote(quote, staff_user=staff, note="")
+
+    assert exc.value.code == "reason_required"
