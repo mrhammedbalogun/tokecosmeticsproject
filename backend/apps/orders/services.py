@@ -32,3 +32,30 @@ def cancel_order(order_id: int, *, actor=None, message: str = ""):
         order.reservation_expires_at = None
         order.save(update_fields=["reservation_expires_at", "updated_at"])
         return event
+
+
+def orders_owed_a_refund():
+    """The 'refunds owed' worklist: orders where a paid customer is still owed a manual
+    goods refund because their freight quote was cancelled.
+
+    cancel_quote (apps/shipping/services.py) parks a PAID order at `on_hold` and does not
+    move any money — a human records the goods refund later via record_manual_refund. This
+    debt is otherwise invisible, and a solo operator forgets it, so this is the queue that
+    surfaces it. See docs/architecture.md § "Rest-of-World freight quotes (Plan-14a)".
+
+    The predicate is on the QUOTE, not a new Order status: `on_hold` alone is ambiguous
+    (the model also uses it for migrated orders), so `shipping_quote.status == "cancelled"`
+    is what identifies the freight-decline flow specifically.
+
+    Why `on_hold` needs no explicit "not yet refunded" clause: a FULL manual refund
+    transitions the order off `on_hold` to `refunded` (apply_succeeded_refund), so any
+    order still sitting at `on_hold` here is by definition not fully refunded — the debt is
+    live. A PARTIAL refund leaves the order at `on_hold`, so it correctly STAYS on the
+    queue (money is still owed); the outstanding figure is computed for display, not used
+    to gate membership. Filtering out "any order with a succeeded refund" would instead
+    hide a half-paid debt, which is the opposite of safe.
+    """
+    return (
+        Order.objects.filter(status="on_hold", shipping_quote__status="cancelled")
+        .order_by("placed_at", "pk")
+    )

@@ -896,6 +896,23 @@ freight payment — regression-tested).
   pay) is a deliberate staff action to a single terminal state, with the goods refund handled
   manually; there is no automated money movement here.
 
+### The refunds-owed worklist (Plan-14a follow-up)
+
+Cancelling a freight quote on a **paid** order parks it at `on_hold` and deliberately moves
+no money — the operator records the goods refund by hand later. That debt is otherwise
+invisible, and a solo operator forgets it, leaving a paying customer with neither goods nor
+a refund. `GET /api/v1/admin/refunds-owed/` (staff-only) is the queue that surfaces it:
+`orders_owed_a_refund()` (apps/orders/services.py) selects orders that are `on_hold` **and**
+whose `shipping_quote.status == "cancelled"`. The predicate is on the QUOTE, not a new Order
+status — `on_hold` alone is ambiguous (migrated orders use it too). It needs no explicit
+"not yet refunded" clause because a **full** refund transitions the order off `on_hold` to
+`refunded`; a **partial** refund leaves it on the queue with the outstanding figure shown,
+which is the safe behaviour (money is still owed). Note `goods_amount`/`outstanding` are the
+**nominal** order total minus succeeded refunds — on an accepted-discrepancy order that is
+NOT the cash that landed (see § "Accounting caveat" above), so the operator still refunds
+what the statement shows. API-only until the Plan-18 admin UI; a Django-admin changelist
+filter is the natural add when Order gets a ModelAdmin in Plan-19.
+
 ### The storefront contract (Plan-14 must honour this)
 
 A `quote_required` delivery option serializes as `price: null` + `quote_required: true` +

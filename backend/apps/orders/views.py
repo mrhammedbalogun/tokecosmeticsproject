@@ -19,13 +19,14 @@ from rest_framework.views import APIView
 
 from apps.orders.invoice import render_invoice_pdf
 from apps.orders.models import Order
-from apps.orders.services import cancel_order
+from apps.orders.services import cancel_order, orders_owed_a_refund
 from apps.orders.serializers import (
     AdminOrderListSerializer,
     AdminOrderSerializer,
     OrderListSerializer,
     OrderSerializer,
     OrderTrackingSerializer,
+    RefundOwedSerializer,
 )
 from apps.orders.state import IllegalTransition, record_event, resolve_review, transition_by_id
 from apps.orders.tokens import TrackingTokenError, read_tracking_token
@@ -129,6 +130,21 @@ class AdminOrderListView(generics.ListAPIView):
                 | Q(shipping_address__icontains=v)
             )
         return qs.order_by("-placed_at", "-pk").distinct()
+
+
+class AdminRefundsOwedView(generics.ListAPIView):
+    """GET /api/v1/admin/refunds-owed/ — orders parked at on_hold by a cancelled freight
+    quote, where the customer paid and is still owed a manual goods refund. The reminder
+    that stops a solo operator forgetting the refund cancel_quote deliberately deferred.
+    See apps/orders/services.orders_owed_a_refund for the predicate and its rationale."""
+
+    serializer_class = RefundOwedSerializer
+    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+
+    def get_queryset(self):
+        return orders_owed_a_refund().select_related("currency", "shipping_quote").prefetch_related(
+            "payments__refunds"
+        )
 
 
 class AdminOrderDetailView(generics.RetrieveAPIView):
