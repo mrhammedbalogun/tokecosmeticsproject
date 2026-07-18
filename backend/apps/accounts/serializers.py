@@ -119,3 +119,7 @@ class AddressSerializer(serializers.ModelSerializer):
         if errors:
             raise serializers.ValidationError(errors)
         return attrs
+
+
+class EmailVerifySerializer(serializers.Serializer):
+    token = serializers.CharField()

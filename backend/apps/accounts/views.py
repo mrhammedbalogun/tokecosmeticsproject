@@ -16,6 +16,7 @@ from apps.notifications.tasks import send_email_task
 from .serializers import (
     AccountDeletionSerializer,
     AddressSerializer,
+    EmailVerifySerializer,
     LogoutSerializer,
     MeSerializer,
     PasswordChangeSerializer,
@@ -30,6 +31,44 @@ User = get_user_model()
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+
+    def perform_create(self, serializer):
+        from django.conf import settings
+
+        from apps.accounts.verification import make_verify_token
+
+        user = serializer.save()
+        token = make_verify_token(user.email)
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+        send_email_task.delay(
+            "verify_email", user.email,
+            {"verify_url": verify_url, "first_name": user.first_name},
+        )
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = EmailVerifySerializer
+
+    @extend_schema(request=EmailVerifySerializer, responses={200: None})
+    def post(self, request):
+        from apps.accounts.claims import claim_legacy_orders
+        from apps.accounts.verification import VerifyTokenError, read_verify_token
+
+        serializer = EmailVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            email = read_verify_token(serializer.validated_data["token"])
+        except VerifyTokenError:
+            return Response({"detail": "Invalid or expired verification link."}, status=400)
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            return Response({"detail": "Invalid verification link."}, status=400)
+        if user.email_verified_at is None:
+            user.email_verified_at = timezone.now()
+            user.save(update_fields=["email_verified_at"])
+        claimed = claim_legacy_orders(user)
+        return Response({"detail": "Email verified.", "orders_claimed": claimed})
 
 
 class MeView(generics.RetrieveUpdateAPIView):
@@ -139,6 +178,13 @@ class PasswordResetConfirmView(APIView):
             return Response({"detail": "Invalid or expired reset link."}, status=400)
         user.set_password(data["password"])
         user.save(update_fields=["password"])
+        # A completed reset proves control of the inbox: verify + claim legacy orders.
+        from apps.accounts.claims import claim_legacy_orders
+
+        if user.email_verified_at is None:
+            user.email_verified_at = timezone.now()
+            user.save(update_fields=["email_verified_at"])
+        claim_legacy_orders(user)
         return Response({"detail": "Password updated."})
 
 
