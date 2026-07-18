@@ -14,6 +14,7 @@ from apps.notifications.tasks import send_email_task
 from .serializers import (
     LogoutSerializer,
     MeSerializer,
+    PasswordChangeSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetSerializer,
     RegisterSerializer,
@@ -33,6 +34,20 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class PasswordChangeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PasswordChangeSerializer
+
+    @extend_schema(request=PasswordChangeSerializer, responses={200: None})
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return Response({"detail": "Password updated."})
 
 
 class LogoutView(APIView):

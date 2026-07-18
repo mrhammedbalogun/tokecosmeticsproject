@@ -32,6 +32,17 @@ class MeSerializer(serializers.ModelSerializer):
         read_only_fields = ["email", "toke_id"]
 
 
+class PasswordChangeSerializer(serializers.Serializer):
+    old_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, validators=[validate_password])
+
+    def validate_old_password(self, value):
+        # self.context["request"].user is guaranteed by IsAuthenticated on the view.
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("Current password is incorrect.")
+        return value
+
+
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
 
