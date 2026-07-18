@@ -2,6 +2,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 
+from apps.accounts.models import Address
+from apps.core.address_rules import required_fields_for
+
 User = get_user_model()
 
 
@@ -55,3 +58,55 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
     uid = serializers.CharField()
     token = serializers.CharField()
     password = serializers.CharField(write_only=True, validators=[validate_password])
+
+
+class AddressSerializer(serializers.ModelSerializer):
+    """Structured, per-country address. The per-country required-field rules come from
+    the single source apps.core.address_rules.required_fields_for so the serializer and
+    any admin form can never disagree about what NG vs GB requires."""
+
+    class Meta:
+        model = Address
+        fields = [
+            "id", "label", "first_name", "last_name", "phone",
+            "line1", "line2", "country_code",
+            "state_region", "area_region", "city_text", "state_text", "postcode",
+            "is_default_shipping", "is_default_billing",
+        ]
+        read_only_fields = ["id", "is_default_shipping", "is_default_billing"]
+
+    def validate_country_code(self, value):
+        return (value or "").upper()
+
+    def validate(self, attrs):
+        # On PATCH, fall back to the instance's current values for anything not sent.
+        def get(name):
+            if name in attrs:
+                return attrs[name]
+            return getattr(self.instance, name, None)
+
+        country = (get("country_code") or "").upper()
+        errors = {}
+
+        # 1. Per-country required fields (single source of truth).
+        for field in required_fields_for(country):
+            if not get(field):
+                errors[field] = "This field is required for this country."
+
+        state_region = get("state_region")
+        area_region = get("area_region")
+
+        # 2. A chosen state_region must belong to the declared country.
+        if state_region is not None and state_region.country_code.upper() != country:
+            errors["state_region"] = "That region is not in the selected country."
+
+        # 3. If an area_region (LGA) is given, its parent must be the chosen state_region.
+        if area_region is not None:
+            if state_region is None:
+                errors["area_region"] = "Select a state/region before an area."
+            elif area_region.parent_id != getattr(state_region, "id", None):
+                errors["area_region"] = "That area does not belong to the selected state/region."
+
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
