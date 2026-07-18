@@ -46,6 +46,15 @@ class PasswordChangeSerializer(serializers.Serializer):
         return value
 
 
+class AccountDeletionSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True)
+
+    def validate_password(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("Password is incorrect.")
+        return value
+
+
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
 

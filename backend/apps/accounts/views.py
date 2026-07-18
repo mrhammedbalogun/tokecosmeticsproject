@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_spectacular.utils import extend_schema
@@ -13,6 +14,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.notifications.tasks import send_email_task
 
 from .serializers import (
+    AccountDeletionSerializer,
     AddressSerializer,
     LogoutSerializer,
     MeSerializer,
@@ -50,6 +52,35 @@ class PasswordChangeView(APIView):
         user.set_password(serializer.validated_data["new_password"])
         user.save(update_fields=["password"])
         return Response({"detail": "Password updated."})
+
+
+class AccountDeletionView(APIView):
+    """Soft-delete: deactivate now, anonymise after 30 days (apps.accounts.tasks)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AccountDeletionSerializer
+
+    @extend_schema(request=AccountDeletionSerializer, responses={200: None})
+    def post(self, request):
+        serializer = AccountDeletionSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.is_active = False
+        user.deletion_requested_at = timezone.now()
+        user.save(update_fields=["is_active", "deletion_requested_at"])
+        # Kill every outstanding refresh token so existing sessions end immediately.
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+            from rest_framework_simplejwt.tokens import RefreshToken
+
+            for t in OutstandingToken.objects.filter(user=user):
+                try:
+                    RefreshToken(t.token).blacklist()
+                except Exception:  # noqa: BLE001 — already-expired tokens are fine
+                    pass
+        except Exception:  # noqa: BLE001 — blacklist app optional; deactivation already done
+            pass
+        return Response({"detail": "Your account has been closed."})
 
 
 class LogoutView(APIView):

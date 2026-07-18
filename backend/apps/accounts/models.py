@@ -29,6 +29,14 @@ class User(AbstractBaseUser, PermissionsMixin):
     toke_id = models.CharField(max_length=9, unique=True, editable=False)
     marketing_consent = models.BooleanField(default=False)
 
+    # Set when the customer requests deletion. is_active flips to False immediately;
+    # PII is anonymised 30 days later by apps.accounts.tasks.anonymize_deleted_accounts
+    # (a grace window in case the request was a mistake or fraud recovery is needed).
+    deletion_requested_at = models.DateTimeField(null=True, blank=True)
+    # Set once the customer proves control of their inbox (verify-email or a completed
+    # password reset). Gates legacy guest-order claiming — see apps.accounts.claims.
+    email_verified_at = models.DateTimeField(null=True, blank=True)
+
     # Migration provenance (populated in Plan-22).
     legacy_source = models.CharField(max_length=20, blank=True)  # "", "legacy_ng", "legacy_ng_old", "legacy_intl"
     legacy_wp_id = models.IntegerField(null=True, blank=True)
