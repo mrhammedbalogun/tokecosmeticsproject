@@ -10,7 +10,12 @@ HOW TO PAY
 
 IMPORTANT: please use {{ number }} as the transfer reference. Without it we may not
 be able to match your payment to this order.
-
+{% if ask_our_charges %}
+IMPORTANT: please ask your bank to send this transfer with "OUR" charges — meaning
+you pay all transfer charges. Otherwise intermediary banks deduct their fees from the
+amount in transit, less than the full total reaches us, and we cannot release your
+order until the shortfall is resolved.
+{% endif %}
 Please transfer within 24 hours — we're holding your items until then.
 
 Once your transfer lands we'll confirm your order by email.

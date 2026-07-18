@@ -69,6 +69,24 @@ class Order(TimeStampedModel):
     def __str__(self) -> str:
         return self.number
 
+    @property
+    def is_shippable(self) -> bool:
+        """False while freight is unresolved OR was declined. Deliberately a derived
+        property and NOT an Order.status value: a new status would touch every transition
+        table, serializer, admin filter and status test in the codebase — the largest
+        blast radius in this design — to say something entirely derivable.
+
+        Only `paid` (freight collected) and `waived` (merchant absorbed it) clear shipping.
+        A `cancelled` quote is settled for the service guards (is_settled) but the customer
+        DECLINED freight, so the order must never ship — hence this checks the status set
+        directly rather than reusing ShippingQuote.is_settled.
+
+        The accepted tradeoff: a ship queue written later could forget to filter on this.
+        Anything that dispatches goods MUST check it.
+        """
+        quote = getattr(self, "shipping_quote", None)
+        return quote is None or quote.status in ("paid", "waived")
+
 
 class OrderEvent(models.Model):
     """Append-only timeline: what happened to this order, when, and who did it.

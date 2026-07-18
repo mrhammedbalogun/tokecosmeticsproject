@@ -89,7 +89,7 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
 
         # Server-side delivery re-match — never trust the client's option list.
         subtotal_preview = compute_totals(lines, country).subtotal
-        options = options_for_address(address, lines, subtotal_preview)
+        options = options_for_address(address, lines, subtotal_preview, country)
         chosen = next((o for o in options if o["id"] == delivery_option_id), None)
         if chosen is None:
             raise CheckoutError("delivery_option_invalid", "Delivery option not valid for this address.")
@@ -120,7 +120,13 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
                 raise CheckoutError(f"coupon_{result.error_code}", "Coupon not valid.", http=400)
             coupon = result.coupon
 
-        totals = compute_totals(lines, country, delivery_amount=Decimal(chosen["price"]), coupon=coupon)
+        # A quote_required option has no price yet — the customer pays goods only and
+        # the freight is quoted afterwards (see the ShippingQuote created below). Coerce
+        # to 0 for the goods total rather than letting Decimal(None) raise.
+        delivery_amount = (
+            Decimal("0.00") if chosen["quote_required"] else Decimal(chosen["price"])
+        )
+        totals = compute_totals(lines, country, delivery_amount=delivery_amount, coupon=coupon)
 
         if expected_total is not None and Decimal(str(expected_total)) != totals.grand_total:
             raise CheckoutError("cart_changed", "Totals changed.",
@@ -151,6 +157,13 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         # A creation, not a transition — there is no prior status to move from, so this
         # opens the timeline directly rather than going through the state machine.
         record_event(order, "placed", actor=user, message=f"{chosen['name']} to {country.code}")
+        if chosen["quote_required"]:
+            # Born at placement, in the same transaction as the order: the awaiting_quote
+            # queue is how staff learn this order needs a freight quote at all. Created
+            # later (at quote time) it would be an absence, and absences are invisible.
+            from apps.shipping.models import ShippingQuote
+
+            ShippingQuote.objects.create(order=order, currency=country.currency)
         for variant, qty in lines:
             rp = resolve_price(variant, country)
             OrderItem.objects.create(

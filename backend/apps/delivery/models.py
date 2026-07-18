@@ -12,6 +12,15 @@ class DeliveryOption(TimeStampedModel):
     price = models.DecimalField(max_digits=12, decimal_places=2)  # flat price (common case)
     currency = models.ForeignKey("core.Currency", on_delete=models.PROTECT)
     free_over = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    # "The cost is unknown and will be quoted after the order" — NOT "the cost is zero".
+    # Those are opposite meanings that a bare price=0 renders identically, and the
+    # customer only ever sees the number. When true, services.py emits price=None so
+    # there is no figure any client can render as "Free".
+    quote_required = models.BooleanField(default=False)
+    # Customer-visible text shown INSTEAD of a price. Carry an indicative range here
+    # ("typically $35-70 to Europe") — it is the single biggest lever on the rate at
+    # which customers decline the quote after they have already paid for goods.
+    disclaimer = models.CharField(max_length=200, blank=True)
     min_days = models.PositiveSmallIntegerField()
     max_days = models.PositiveSmallIntegerField()
     countries = models.ManyToManyField("core.Country", blank=True, related_name="delivery_options")

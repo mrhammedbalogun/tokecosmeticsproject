@@ -50,7 +50,7 @@ class DeliveryOptionsView(APIView):
         if not lines:
             raise ValidationError("Cart is empty.")
         totals = compute_totals(lines, request.country)
-        return Response(options_for_address(address, lines, totals.subtotal))
+        return Response(options_for_address(address, lines, totals.subtotal, request.country))
 
 
 class CheckoutView(APIView):

@@ -149,6 +149,36 @@ def test_a_long_bank_label_still_separates_from_its_value(
     assert "  Amount:          CA$3,500.00" in body
 
 
+def test_non_ngn_bank_details_email_asks_for_our_charges(
+    django_user_model, settings, django_capture_on_commit_callbacks
+):
+    """An intl wire under default SHA terms has correspondent fees deducted in flight, so
+    the customer sends 50 and 32 lands — which routes every RoW order through the
+    discrepancy path. OUR charges (sender pays all fees) is the only lever without code."""
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    world = _world("GB", bank_name="Barclays", account_number="12345678",
+                   extra={"sort_code": "04-00-04"})
+    _place(django_user_model, django_capture_on_commit_callbacks, "GB", world, "our-gb@x.com")
+
+    body = mail.outbox[0].body
+    assert "OUR" in body
+    assert "all transfer charges" in body.lower()
+
+
+def test_ng_bank_details_email_does_not_ask_for_our_charges(
+    django_user_model, settings, django_capture_on_commit_callbacks
+):
+    """A domestic NG transfer has no correspondent chain — the paragraph must NOT appear,
+    or it's noise that trains the customer to ignore the email."""
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    world = _world("NG", bank_name="GTBank", account_number="0123456789")
+    _place(django_user_model, django_capture_on_commit_callbacks, "NG", world, "our-ng@x.com")
+
+    body = mail.outbox[0].body
+    assert "OUR" not in body
+    assert "all transfer charges" not in body.lower()
+
+
 def test_order_received_states_the_24_hour_deadline(
     django_user_model, settings, django_capture_on_commit_callbacks
 ):
