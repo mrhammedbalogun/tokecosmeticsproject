@@ -14,9 +14,13 @@ urlpatterns = [
     path("healthz/", healthz),
     # API v1
     path("api/v1/auth/", include("apps.accounts.urls")),
+    path("api/v1/me/", include("apps.accounts.me_urls")),
+    path("api/v1/me/", include("apps.wishlist.urls")),
     path("api/v1/meta/", include("apps.core.urls")),
     path("api/v1/meta/", include("apps.delivery.urls")),
     path("api/v1/", include("apps.catalog.api_urls")),
+    path("api/v1/", include("apps.reviews.urls")),
+    path("api/v1/", include("apps.newsletter.urls")),
     path("api/v1/", include("apps.search.urls")),
     path("api/v1/", include("apps.carts.urls")),
     path("api/v1/", include("apps.checkout.urls")),

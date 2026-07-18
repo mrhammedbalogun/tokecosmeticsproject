@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
+from django.db import transaction
+from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_spectacular.utils import extend_schema
@@ -12,8 +14,12 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.notifications.tasks import send_email_task
 
 from .serializers import (
+    AccountDeletionSerializer,
+    AddressSerializer,
+    EmailVerifySerializer,
     LogoutSerializer,
     MeSerializer,
+    PasswordChangeSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetSerializer,
     RegisterSerializer,
@@ -26,6 +32,44 @@ class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
+    def perform_create(self, serializer):
+        from django.conf import settings
+
+        from apps.accounts.verification import make_verify_token
+
+        user = serializer.save()
+        token = make_verify_token(user.email)
+        verify_url = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+        send_email_task.delay(
+            "verify_email", user.email,
+            {"verify_url": verify_url, "first_name": user.first_name},
+        )
+
+
+class VerifyEmailView(APIView):
+    permission_classes = [permissions.AllowAny]
+    serializer_class = EmailVerifySerializer
+
+    @extend_schema(request=EmailVerifySerializer, responses={200: None})
+    def post(self, request):
+        from apps.accounts.claims import claim_legacy_orders
+        from apps.accounts.verification import VerifyTokenError, read_verify_token
+
+        serializer = EmailVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            email = read_verify_token(serializer.validated_data["token"])
+        except VerifyTokenError:
+            return Response({"detail": "Invalid or expired verification link."}, status=400)
+        user = User.objects.filter(email__iexact=email).first()
+        if user is None:
+            return Response({"detail": "Invalid verification link."}, status=400)
+        if user.email_verified_at is None:
+            user.email_verified_at = timezone.now()
+            user.save(update_fields=["email_verified_at"])
+        claimed = claim_legacy_orders(user)
+        return Response({"detail": "Email verified.", "orders_claimed": claimed})
+
 
 class MeView(generics.RetrieveUpdateAPIView):
     serializer_class = MeSerializer
@@ -33,6 +77,49 @@ class MeView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class PasswordChangeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = PasswordChangeSerializer
+
+    @extend_schema(request=PasswordChangeSerializer, responses={200: None})
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.set_password(serializer.validated_data["new_password"])
+        user.save(update_fields=["password"])
+        return Response({"detail": "Password updated."})
+
+
+class AccountDeletionView(APIView):
+    """Soft-delete: deactivate now, anonymise after 30 days (apps.accounts.tasks)."""
+
+    permission_classes = [permissions.IsAuthenticated]
+    serializer_class = AccountDeletionSerializer
+
+    @extend_schema(request=AccountDeletionSerializer, responses={200: None})
+    def post(self, request):
+        serializer = AccountDeletionSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        user.is_active = False
+        user.deletion_requested_at = timezone.now()
+        user.save(update_fields=["is_active", "deletion_requested_at"])
+        # Kill every outstanding refresh token so existing sessions end immediately.
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+            from rest_framework_simplejwt.tokens import RefreshToken
+
+            for t in OutstandingToken.objects.filter(user=user):
+                try:
+                    RefreshToken(t.token).blacklist()
+                except Exception:  # noqa: BLE001 — already-expired tokens are fine
+                    pass
+        except Exception:  # noqa: BLE001 — blacklist app optional; deactivation already done
+            pass
+        return Response({"detail": "Your account has been closed."})
 
 
 class LogoutView(APIView):
@@ -91,4 +178,58 @@ class PasswordResetConfirmView(APIView):
             return Response({"detail": "Invalid or expired reset link."}, status=400)
         user.set_password(data["password"])
         user.save(update_fields=["password"])
+        # A completed reset proves control of the inbox: verify + claim legacy orders.
+        from apps.accounts.claims import claim_legacy_orders
+
+        if user.email_verified_at is None:
+            user.email_verified_at = timezone.now()
+            user.save(update_fields=["email_verified_at"])
+        claim_legacy_orders(user)
         return Response({"detail": "Password updated."})
+
+
+class AddressListCreateView(generics.ListCreateAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None  # a customer's address book is short
+
+    def get_queryset(self):
+        return self.request.user.addresses.all().order_by("-is_default_shipping", "id")
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+class AddressDetailView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = AddressSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        # Scoped to the owner: another user's id resolves to 404, never their data.
+        return self.request.user.addresses.all()
+
+
+class _SetDefaultView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    field = None  # "is_default_shipping" | "is_default_billing"
+
+    def post(self, request, pk):
+        from django.shortcuts import get_object_or_404
+
+        address = get_object_or_404(request.user.addresses, pk=pk)
+        with transaction.atomic():
+            # Exactly one default of this kind per user — clear the rest first.
+            request.user.addresses.exclude(pk=address.pk).filter(
+                **{self.field: True}
+            ).update(**{self.field: False})
+            setattr(address, self.field, True)
+            address.save(update_fields=[self.field, "updated_at"])
+        return Response(AddressSerializer(address).data)
+
+
+class SetDefaultShippingView(_SetDefaultView):
+    field = "is_default_shipping"
+
+
+class SetDefaultBillingView(_SetDefaultView):
+    field = "is_default_billing"

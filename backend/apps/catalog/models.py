@@ -90,6 +90,11 @@ class Product(TimeStampedModel):
     short_description = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=STATUS, default="draft")
     is_featured = models.BooleanField(default=False)
+    # Denormalised from APPROVED reviews only (apps.reviews.services.recompute_product_rating).
+    # Never hand-write these — a read must never aggregate reviews. rating_avg is 0.00
+    # with rating_count 0 until the first review is approved.
+    rating_avg = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    rating_count = models.PositiveIntegerField(default=0)
     ingredients = models.TextField(blank=True)
     directions = models.TextField(blank=True)
     warnings = models.TextField(blank=True)

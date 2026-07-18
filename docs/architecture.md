@@ -933,3 +933,96 @@ recorded as a contract with a **required test** on Plan-14, not built here. The 
   (or a `ManualReceipt` row). Tracked in *Known gaps* above.
 - **`_find_duplicate_reference`'s unindexed JSON scan** runs on every manual confirm — fine
   at launch volume, wants a GIN index as the table grows.
+
+## Customer accounts (Plan-11)
+
+Everything a logged-in customer can do, API-side: addresses, profile, password change,
+account deletion, wishlist, verified-purchase reviews, plus public newsletter capture and
+legacy guest-order claiming. Backend only — the storefront (Plan-12+) consumes these.
+
+### Addresses — one rule source, consistent region FKs
+
+The structured `Address` model (Plan-03) gets its CRUD API here under `/api/v1/me/addresses/`.
+Per-country required fields come from **one place**, `apps.core.address_rules.required_fields_for(country_code)`
+— `NG` requires `state_region`; `GB`/`US`/`CA` require `postcode` + `city_text`; everything
+else requires `city_text`. `AddressSerializer` is the single enforcement point; it must never
+re-encode the rules. Beyond required-field checks it keeps the region FKs internally consistent:
+a `state_region` must belong to the declared `country_code`, and an `area_region` (LGA) must be
+a child of the chosen `state_region` — an inconsistent pair would misroute delivery. Querysets
+are owner-scoped, so another user's address id resolves to **404, never their data**. Exactly
+one default-shipping and one default-billing per user, enforced server-side in a transaction
+(the `set-default-*` endpoints clear the previous default before setting the new one); two
+"defaults" is an ambiguity checkout would have to guess at.
+
+### Account deletion is two-phase (GDPR/NDPR)
+
+Deleting rows outright would orphan orders and break accounting, so erasure is two-phase:
+
+1. **Immediately** on `POST /api/v1/auth/account/delete/` (password-confirmed): `is_active=False`
+   (login dies — SimpleJWT refuses inactive users), `deletion_requested_at` stamped, and every
+   outstanding refresh token blacklisted so existing sessions end at once.
+2. **After 30 days** the daily `apps.accounts.tasks.anonymize_deleted_accounts` beat task scrubs
+   the PII. It mirrors the `expire_pending_orders` / `complete_delivered_orders` sweeps: one
+   locked transaction per user (`select_for_update`), per-row `try/except` so a poison row can't
+   starve the sweep, and idempotent via the sentinel email (an already-scrubbed user is not
+   re-matched).
+
+**Exact scrub set (D3), applied to the `User`:** `email` → `deleted-<toke_id>@deleted.invalid`,
+`first_name`/`last_name`/`phone` → `""`, `marketing_consent=False`, `set_unusable_password()`.
+`toke_id` is **kept** (it is an opaque id, not PII). Addresses are deleted. The `Order` rows the
+user placed **survive with `order.user` still set** (history stays reconcilable) but their own PII
+snapshot is blanked in the same task: `email` → the same sentinel, `phone` → `""`,
+`shipping_address`/`billing_address` → `{}`. **Plan-28 accounting must not assume a deleted
+user's orders vanish** — the rows and the link persist; only the PII is gone.
+
+### Reviews moderation — a sole writer for the rating fields
+
+A `Review` is born `pending`; anonymous `GET` returns **approved reviews only**. A review may
+only be POSTed by a user with a **verified purchase** of that product — an `Order` for this user
+with `status in ("delivered", "completed")` containing the product (`completed` is `delivered`
+plus the elapsed return window). `unique_together(product, user)` means one review per product
+per user.
+
+The denormalised `Product.rating_avg` / `Product.rating_count` are written by **exactly one
+function**, `apps.reviews.services.recompute_product_rating`, computed from **approved reviews
+only**. They are never writable through any serializer or admin form — treat them as derived.
+Approval happens via the Django-admin "Approve selected reviews" action now; the **approval REST
+API is Plan-18** (only the model, the admin action, and the recompute service land in Plan-11).
+
+### Search sync for ratings (D2)
+
+There is no separate search index to sync today — `apps.search.backends.PostgresSearchBackend`
+reads live `Product` rows. On approval, `recompute_product_rating` saves the `Product`, which fires
+`apps.catalog.signals` → `bump_catalog_cache()`, invalidating every cached product card so the new
+rating shows immediately. No placeholder Meilisearch client was invented (YAGNI). **Plan-07b
+requirement:** when Meilisearch is built, its `Product` document mapping **must include
+`rating_avg` and `rating_count`** so search results carry the denormalised rating.
+
+### Legacy guest-order claiming — verified email only
+
+Migrated WordPress guest orders (Plan-22) land with `user=None` and a stored `email`. On a
+**verified** email only, `apps.accounts.claims.claim_legacy_orders(user)` attaches
+`Order.objects.filter(user__isnull=True, email__iexact=<addr>)` to the account. It **only ever
+attaches `user=None` orders and never re-points an already-owned order** — claiming on bare
+registration (email string match) is rejected precisely because it would hand a registrant the
+victim's full order history and PII. **Plan-22's migration must leave guest orders with
+`user=None` + the real `email`** for this to work.
+
+### Email verification — lightweight signed token
+
+`POST /api/v1/auth/verify-email/` marks `User.email_verified_at` and then claims legacy orders.
+It uses a signed token (`django.core.signing`, mirroring `apps/orders/tokens.py`) — **no new
+table**, HMAC'd with `SECRET_KEY`, email read out of the token. A completed password-reset also
+proves inbox control, so it sets `email_verified_at` and claims too. Verification currently gates
+**only** order-claiming — there is no verified-vs-unverified gate on checkout. A future
+"must verify before ordering" plan can build on `User.email_verified_at`.
+
+### Newsletter — public capture, signed unsubscribe
+
+`POST /api/v1/newsletter/` is public and abuse-prone, so it is throttled 5/min/IP
+(`ScopedRateThrottle`, scope `newsletter`). Subscribe is idempotent (case-insensitive unique
+email) and a returning subscriber's prior opt-out is cleared. Unsubscribe is a **signed-token GET
+link** (no login, no enumerable id, mirroring `apps/orders/tokens.py` but with **no `max_age`** —
+the link lives in an inbox indefinitely) and is enumeration-safe: an unknown or already-unsubscribed
+email still returns 200 so the link never leaks whether an address is on the list. Capture only —
+campaign **sending** is Plan-30.

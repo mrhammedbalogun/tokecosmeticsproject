@@ -1,0 +1,13 @@
+Hi {{ first_name|default:"there" }},
+
+Thanks for creating a Toke Cosmetics account. Please confirm your email address
+by opening the link below (it expires in 7 days):
+
+{{ verify_url }}
+
+Confirming your email also links any past orders placed with this address to your
+new account.
+
+If you didn't create this account, you can safely ignore this email.
+
+— Toke Cosmetics

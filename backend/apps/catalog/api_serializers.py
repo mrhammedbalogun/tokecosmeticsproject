@@ -60,7 +60,8 @@ class ProductListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Product
-        fields = ["name", "slug", "brand", "is_featured", "from_price", "currency", "image"]
+        fields = ["name", "slug", "brand", "is_featured", "from_price", "currency", "image",
+                  "rating_avg", "rating_count"]
 
     def get_from_price(self, obj):
         amount = getattr(obj, "min_price", None)
@@ -92,6 +93,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             "name", "slug", "brand", "description", "short_description",
             "ingredients", "directions", "warnings", "specs", "faqs",
             "seo_title", "seo_description", "variants", "images", "related",
+            "rating_avg", "rating_count",
         ]
 
     def get_variants(self, obj):

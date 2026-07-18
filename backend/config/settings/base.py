@@ -41,6 +41,9 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.delivery",
     "apps.shipping",
+    "apps.wishlist",
+    "apps.reviews",
+    "apps.newsletter",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -149,6 +152,7 @@ REST_FRAMEWORK = {
         "search": "30/min",
         "suggest": "60/min",
         "cart": "120/min",
+        "newsletter": "5/min",
     },
 }
 
@@ -243,5 +247,9 @@ CELERY_BEAT_SCHEDULE = {
     "complete-delivered-orders": {
         "task": "apps.orders.tasks.complete_delivered_orders",
         "schedule": 86400.0,  # daily — the return window is measured in days
+    },
+    "anonymize-deleted-accounts": {
+        "task": "apps.accounts.tasks.anonymize_deleted_accounts",
+        "schedule": 86400.0,  # daily — the grace window is measured in days
     },
 }

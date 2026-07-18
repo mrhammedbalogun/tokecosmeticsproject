@@ -56,6 +56,7 @@ def test_password_reset_sends_email(settings):
     mail.outbox = []
     c = APIClient()
     c.post("/api/v1/auth/register/", {"email": "a@b.com", "password": PW}, format="json")
+    mail.outbox = []  # registration now sends a verify-email (Plan-11 Task 12); isolate the reset mail
     r = c.post("/api/v1/auth/password/reset/", {"email": "a@b.com"}, format="json")
     assert r.status_code == 200
     assert len(mail.outbox) == 1

@@ -1,0 +1,13 @@
+{% extends "email/base.html" %}
+{% block content %}
+  <p>Hi {{ first_name|default:"there" }},</p>
+  <p>Thanks for creating a Toke Cosmetics account. Please confirm your email address to activate it.</p>
+  <p>
+    <a href="{{ verify_url }}"
+       style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
+              padding:12px 20px;border-radius:8px;">Confirm my email</a>
+  </p>
+  <p style="color:#666;font-size:13px;">Confirming also links any past orders placed with this
+    address to your new account. This link expires in 7 days.</p>
+  <p style="color:#666;font-size:13px;">If you didn't create this account, you can safely ignore this email.</p>
+{% endblock %}
