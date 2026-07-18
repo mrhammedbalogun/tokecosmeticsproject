@@ -6,10 +6,14 @@ from apps.orders.views import (
     AdminOrderNoteView,
     AdminOrderTrackingView,
     AdminOrderTransitionView,
+    AdminRefundsOwedView,
     AdminResolveReviewView,
 )
 
 urlpatterns = [
+    # Distinct top-level path (not under orders/<number>/) so the number converter can't
+    # swallow it. The refunds-owed queue reads across orders + shipping + payments.
+    path("refunds-owed/", AdminRefundsOwedView.as_view(), name="admin-refunds-owed"),
     path("orders/", AdminOrderListView.as_view(), name="admin-order-list"),
     path("orders/<str:number>/", AdminOrderDetailView.as_view(), name="admin-order-detail"),
     path("orders/<str:number>/transition/", AdminOrderTransitionView.as_view(),

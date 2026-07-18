@@ -9,10 +9,16 @@ Three audiences, three shapes, and the differences between them are deliberate:
   to whoever the mail got passed on to.
 - `AdminOrderSerializer` — staff. Adds the timeline, the review flag, internal notes.
 """
+from decimal import Decimal
+
 from rest_framework import serializers
 
 from apps.orders.models import Order, OrderEvent, OrderItem
 from apps.payments.money import format_money
+
+# A refund can only be taken against money we actually collected; mirrors
+# refunds._REFUNDABLE_PAYMENT_STATES.
+_REFUNDABLE_PAYMENT_STATES = ("succeeded", "partially_refunded")
 
 
 class OrderItemSerializer(serializers.ModelSerializer):
@@ -105,3 +111,65 @@ class AdminOrderListSerializer(_BaseOrderSerializer):
         model = Order
         fields = ("number", "status", "review_reason", "placed_at", "email",
                   "country", "currency", "grand_total", "grand_total_display", "source")
+
+
+class RefundOwedSerializer(serializers.ModelSerializer):
+    """One row of the refunds-owed worklist. The amounts are the whole point of the
+    screen, so they are computed here from the payment ledger, never from a cached field.
+
+    Read the money rules before trusting `goods_amount`: on an accepted-discrepancy order
+    `payment.amount` is the ORDER TOTAL, not the cash that actually landed (correspondent
+    fees shave an intl wire in flight — see docs/architecture.md § Manual payments). So
+    `goods_amount`/`outstanding` are the NOMINAL figures; the operator refunds what the
+    customer really paid, read off the bank statement, via record_manual_refund. This queue
+    answers "who is owed a refund and roughly how much", not "send exactly this".
+    """
+
+    goods_amount = serializers.SerializerMethodField()
+    refunded = serializers.SerializerMethodField()
+    outstanding = serializers.SerializerMethodField()
+    outstanding_display = serializers.SerializerMethodField()
+    cancel_note = serializers.SerializerMethodField()
+    cancelled_at = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Order
+        fields = ("number", "placed_at", "email", "currency", "goods_amount",
+                  "refunded", "outstanding", "outstanding_display", "cancelled_at",
+                  "cancel_note")
+
+    def _goods_amount(self, order) -> Decimal:
+        # Sum over goods payments still carrying a balance. `.all()` reads the prefetch,
+        # so this is one query for the whole page, not one per row.
+        return sum(
+            (p.amount for p in order.payments.all()
+             if p.purpose == "goods" and p.status in _REFUNDABLE_PAYMENT_STATES),
+            Decimal("0"),
+        )
+
+    def _refunded(self, order) -> Decimal:
+        return sum(
+            (r.amount for p in order.payments.all() if p.purpose == "goods"
+             for r in p.refunds.all() if r.status == "succeeded"),
+            Decimal("0"),
+        )
+
+    def get_goods_amount(self, order) -> str:
+        return f"{self._goods_amount(order):.2f}"
+
+    def get_refunded(self, order) -> str:
+        return f"{self._refunded(order):.2f}"
+
+    def get_outstanding(self, order) -> str:
+        return f"{self._goods_amount(order) - self._refunded(order):.2f}"
+
+    def get_outstanding_display(self, order) -> str:
+        return format_money(self._goods_amount(order) - self._refunded(order), order.currency)
+
+    def get_cancel_note(self, order) -> str:
+        quote = getattr(order, "shipping_quote", None)
+        return quote.note if quote else ""
+
+    def get_cancelled_at(self, order):
+        quote = getattr(order, "shipping_quote", None)
+        return quote.settled_at if quote else None
