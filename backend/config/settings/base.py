@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.shipping",
     "apps.wishlist",
     "apps.reviews",
+    "apps.newsletter",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -151,6 +152,7 @@ REST_FRAMEWORK = {
         "search": "30/min",
         "suggest": "60/min",
         "cart": "120/min",
+        "newsletter": "5/min",
     },
 }
 
