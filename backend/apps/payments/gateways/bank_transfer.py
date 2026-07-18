@@ -63,6 +63,13 @@ class BankTransferGateway(PaymentGateway):
                 "amount": str(order.grand_total),
                 "currency": order.currency_id,
                 "reference": order.number,
+                # Non-default markets settle away from NG's domestic NIP rails. Under the
+                # default SHA fee terms a correspondent bank deducts its cut from the wire
+                # in flight, so less than grand_total lands and every such order routes
+                # through the discrepancy path. Asking for OUR charges (sender pays all
+                # fees) mitigates it — a template string, not a guarantee. NG domestic
+                # transfers have no correspondent chain, so the note is omitted there.
+                "ask_our_charges": not order.country.is_default,
                 "instructions": account.instructions
                 or "Use your order number as the transfer reference.",
             },

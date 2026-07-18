@@ -16,6 +16,15 @@
     <p style="margin:12px 0 0;font-size:13px;color:#b00020;">
       Please use <strong>{{ number }}</strong> as the transfer reference — without it we may not be able to match your payment to this order.
     </p>
+    {% if ask_our_charges %}
+    <p style="margin:12px 0 0;font-size:13px;color:#b00020;">
+      <strong>Important:</strong> please ask your bank to send this transfer with
+      <strong>&quot;OUR&quot; charges</strong> — meaning you pay all transfer charges.
+      Otherwise intermediary banks deduct their fees from the amount in transit, less
+      than the full total reaches us, and we cannot release your order until the
+      shortfall is resolved.
+    </p>
+    {% endif %}
     <p style="margin:8px 0 0;font-size:13px;color:#777;">
       Please transfer within <strong>24 hours</strong> — we're holding your items until then.
     </p>
