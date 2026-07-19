@@ -7,6 +7,8 @@ import { getAccessToken } from "@/lib/session";
 import { CountrySwitcher } from "@/components/layout/CountrySwitcher";
 import { CartButton } from "@/components/layout/CartButton";
 import { AccountMenu } from "@/components/layout/AccountMenu";
+import { MobileNav } from "@/components/layout/MobileNav";
+import { SearchBar } from "@/components/layout/SearchBar";
 
 interface Category { name: string; slug: string; children: Category[] }
 
@@ -25,6 +27,7 @@ export async function Header() {
     <header className="sticky top-0 z-40 border-b border-line bg-background/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-3">
+          <MobileNav categories={categories} />
           <Link href="/" className="flex items-center gap-2">
             <Image src="/logos/toke-logo.png" alt="Toke Cosmetics" width={96} height={56} priority />
           </Link>
@@ -36,6 +39,7 @@ export async function Header() {
             </Link>
           ))}
         </nav>
+        <SearchBar />
         <div className="flex items-center gap-5">
           <CountrySwitcher markets={markets} current={country} />
           <AccountMenu signedIn={signedIn} />
