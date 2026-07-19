@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { apiFetch, ApiError, type ApiFetchOptions } from "@/lib/api";
-import { ACCESS_COOKIE, REFRESH_COOKIE, ACCESS_MAX_AGE, cookieOptions } from "@/lib/auth";
+import {
+  ACCESS_COOKIE, REFRESH_COOKIE, ACCESS_MAX_AGE, REFRESH_MAX_AGE, cookieOptions,
+} from "@/lib/auth";
 
 /** Read the current access token (server-only). */
 export async function getAccessToken(): Promise<string | undefined> {
@@ -24,10 +26,16 @@ export async function fetchWithAuth<T = unknown>(
     if (!(e instanceof ApiError) || e.status !== 401) throw e;
     const refresh = jar.get(REFRESH_COOKIE)?.value;
     if (!refresh) throw e;
-    const out = await apiFetch<{ access: string }>("/auth/token/refresh/", {
+    const out = await apiFetch<{ access: string; refresh?: string }>("/auth/token/refresh/", {
       method: "POST", body: { refresh },
     });
     jar.set(ACCESS_COOKIE, out.access, cookieOptions({ maxAge: ACCESS_MAX_AGE }));
+    // SimpleJWT rotates refresh tokens (ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION):
+    // the old refresh is blacklisted the moment we use it, so the rotated one MUST be
+    // persisted or the next refresh fails and the user is force-logged-out.
+    if (out.refresh) {
+      jar.set(REFRESH_COOKIE, out.refresh, cookieOptions({ maxAge: REFRESH_MAX_AGE }));
+    }
     return apiFetch<T>(path, { ...opts, token: out.access });
   }
 }

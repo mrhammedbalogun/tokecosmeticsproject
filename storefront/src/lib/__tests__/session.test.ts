@@ -33,4 +33,22 @@ describe("fetchWithAuth silent refresh", () => {
     expect(setSpy).toHaveBeenCalledWith("access", "NEW");
     expect(calls.some((u) => u.endsWith("/auth/token/refresh/"))).toBe(true);
   });
+
+  it("persists a rotated refresh token returned by the refresh endpoint", async () => {
+    // Backend has ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION: every refresh
+    // returns a NEW refresh token and blacklists the old one. Failing to store the
+    // rotation would leave a dead refresh cookie and force-log the user out.
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith("/auth/me/") && new Headers(init?.headers).get("Authorization") === "Bearer OLD")
+        return Promise.resolve(new Response("{}", { status: 401 }));
+      if (url.endsWith("/auth/token/refresh/"))
+        return Promise.resolve(new Response(JSON.stringify({ access: "NEW", refresh: "RRR2" }), { status: 200, headers: { "content-type": "application/json" } }));
+      return Promise.resolve(new Response(JSON.stringify({ email: "a@b.com" }), { status: 200, headers: { "content-type": "application/json" } }));
+    }) as unknown as typeof fetch;
+
+    const data = await fetchWithAuth<{ email: string }>("/auth/me/");
+    expect(data.email).toBe("a@b.com");
+    expect(setSpy).toHaveBeenCalledWith("access", "NEW");
+    expect(setSpy).toHaveBeenCalledWith("refresh", "RRR2");
+  });
 });
