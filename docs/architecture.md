@@ -1026,3 +1026,45 @@ link** (no login, no enumerable id, mirroring `apps/orders/tokens.py` but with *
 the link lives in an inbox indefinitely) and is enumeration-safe: an unknown or already-unsubscribed
 email still returns 200 so the link never leaks whether an address is on the list. Capture only —
 campaign **sending** is Plan-30.
+
+## Storefront foundation (Plan-12)
+
+The storefront is a **BFF (Backend-for-Frontend)**: the browser never talks to Django directly.
+Route Handlers under `storefront/src/app/api/*` and Server Components are the *only* callers of the
+Django API, via one client — `storefront/src/lib/api.ts` (`apiFetch`) — which reads `API_URL`
+(server-only env, never shipped to the browser), prefixes `/api/v1`, and sets the `X-Country`,
+`Authorization: Bearer`, and `X-Cart-Id` headers. The browser sees only same-origin `/api/*` JSON.
+
+**Why the browser never sees a JWT.** On `register`/`login` the BFF calls Django's `/auth/token/`,
+takes the `access`/`refresh` pair out of the JSON, and writes them as **httpOnly** cookies
+(`lib/auth.ts` → `cookieOptions`, `secure` in prod). Response bodies are `{ ok: true }` — no token
+crosses the origin, so an XSS payload has no token to steal. `me`/`logout`/`refresh` read the cookie
+server-side and forward the Bearer to Django. Every auth action is a **POST** to
+`/api/auth/<action>` (the `[action]` route has no `GET` — a `GET` is 405 by design).
+
+**Cookie table** (all `SameSite=Lax`, `Path=/`, `secure` in prod):
+
+| Cookie | httpOnly | Set by | Purpose |
+|--------|----------|--------|---------|
+| `access` | **yes** | `/api/auth/*` | short-lived JWT (30 min) — Bearer for Django |
+| `refresh` | **yes** | `/api/auth/*` | long-lived JWT (14 d) — silent re-auth |
+| `cart_id` | **yes** | `/api/cart/*` | guest cart id → `X-Cart-Id` |
+| `country` | **no** | `proxy.ts` + `/api/country` | market/currency — client UI reads it |
+
+**Country model.** Market lives in the non-httpOnly `country` cookie and is forwarded to Django as
+`X-Country`; `lib/country.ts` `normalizeCountry` mirrors the backend's `resolve_country` (missing →
+`NG`; known → itself; unknown-but-present → `ZZ` rest-of-world). `proxy.ts` **seeds** the `NG`
+default on first visit only (an existing choice is never overwritten) and forwards a *trusted*
+geo signal: it overwrites `x-geo-country` from the platform header (`x-vercel-ip-country`) so a
+client-spoofed value can't reach Server Components. Geo is a **suggestion only** — the banner
+(`CountrySuggestionBanner`) never redirects and a dismissal/explicit pick suppresses it for good.
+
+**Next.js 16 note.** The middleware convention was renamed `middleware.ts` → **`proxy.ts`** (Node.js
+runtime); the exported function is `proxy` and its `config.matcher` excludes `_next/*`, `favicon`,
+`logos/`, and `api/`. See `node_modules/next/dist/docs/.../proxy.md`.
+
+**Regenerating API types.** `npm run gen:api` runs `openapi-typescript` against the live Django
+schema (`http://localhost:8000/api/schema/`) → `src/lib/api-types.ts`. Run it (backend up) whenever
+the API contract changes so the typed client stays in sync.
+
+Full detail: `docs/superpowers/plans/2026-07-18-plan-12-storefront-foundation.md`.
