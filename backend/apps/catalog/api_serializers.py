@@ -24,13 +24,17 @@ class CategorySerializer(serializers.ModelSerializer):
         return CategorySerializer(kids, many=True, context=self.context).data
 
 
+LOW_STOCK_MAX = 5  # "only a few left" threshold shown on the storefront PDP
+
+
 class VariantSerializer(serializers.ModelSerializer):
     price = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
+    low_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductVariant
-        fields = ["sku", "name", "option_values", "price", "in_stock"]
+        fields = ["id", "sku", "name", "option_values", "price", "in_stock", "low_stock"]
 
     def get_price(self, obj):
         country = self.context["request"].country
@@ -51,16 +55,26 @@ class VariantSerializer(serializers.ModelSerializer):
         country = self.context["request"].country
         return available_for_country(obj, country) > 0
 
+    def get_low_stock(self, obj):
+        from apps.inventory.services import available_for_country
+
+        available = available_for_country(obj, self.context["request"].country)
+        return 0 < available <= LOW_STOCK_MAX
+
 
 class ProductListSerializer(serializers.ModelSerializer):
     from_price = serializers.SerializerMethodField()
     currency = serializers.SerializerMethodField()
     brand = serializers.SlugRelatedField(slug_field="slug", read_only=True)
     image = serializers.SerializerMethodField()
+    hover_image = serializers.SerializerMethodField()
+    default_variant_id = serializers.SerializerMethodField()
+    default_sku = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
-        fields = ["name", "slug", "brand", "is_featured", "from_price", "currency", "image",
+        fields = ["name", "slug", "brand", "is_featured", "from_price", "currency",
+                  "image", "hover_image", "default_variant_id", "default_sku",
                   "rating_avg", "rating_count"]
 
     def get_from_price(self, obj):
@@ -79,6 +93,24 @@ class ProductListSerializer(serializers.ModelSerializer):
     def get_image(self, obj):
         first = obj.images.all()[:1]
         return first[0].image.url if first else None
+
+    def _default_variant(self, obj):
+        variants = [v for v in obj.variants.all() if v.is_active]
+        if not variants:
+            return None
+        return next((v for v in variants if v.is_default), variants[0])
+
+    def get_default_variant_id(self, obj):
+        v = self._default_variant(obj)
+        return v.id if v else None
+
+    def get_default_sku(self, obj):
+        v = self._default_variant(obj)
+        return v.sku if v else None
+
+    def get_hover_image(self, obj):
+        imgs = list(obj.images.all()[:2])
+        return imgs[1].image.url if len(imgs) > 1 else None
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -101,7 +133,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         return VariantSerializer(active, many=True, context=self.context).data
 
     def get_images(self, obj):
-        return [{"url": i.image.url, "alt": i.alt} for i in obj.images.all()]
+        return [{"url": i.image.url, "alt": i.alt, "variant_id": i.variant_id}
+                for i in obj.images.all()]
 
     def get_related(self, obj):
         from apps.catalog.services import annotate_min_price, sellable_in

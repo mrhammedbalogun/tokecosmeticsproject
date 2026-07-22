@@ -2045,6 +2045,9 @@ export interface components {
             readonly from_price: string;
             readonly currency: string;
             readonly image: string;
+            readonly hover_image: string;
+            readonly default_variant_id: string;
+            readonly default_sku: string;
             /** Format: decimal */
             rating_avg?: string;
             rating_count?: number;
