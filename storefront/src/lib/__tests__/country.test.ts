@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { COUNTRY_COOKIE, DEFAULT_COUNTRY, normalizeCountry, formatMoney } from "@/lib/country";
+import { COUNTRY_COOKIE, DEFAULT_COUNTRY, normalizeCountry, formatMoney, symbolFor } from "@/lib/country";
 
 const MARKETS = ["NG", "GB", "US", "CA", "ZZ"];
 
@@ -24,5 +24,15 @@ describe("country helpers", () => {
   it("formats money per currency", () => {
     expect(formatMoney("12500.00", "NGN", "₦")).toBe("₦12,500.00");
     expect(formatMoney("19.99", "GBP", "£")).toBe("£19.99");
+  });
+});
+
+describe("symbolFor", () => {
+  it("maps the four live currencies and falls back to the code", () => {
+    expect(symbolFor("NGN")).toBe("₦");
+    expect(symbolFor("GBP")).toBe("£");
+    expect(symbolFor("USD")).toBe("$");
+    expect(symbolFor("CAD")).toBe("CA$");
+    expect(symbolFor("EUR")).toBe("EUR ");
   });
 });
