@@ -30,30 +30,37 @@ export function CountrySuggestionBanner({
   geoCountry: string;
 }) {
   const router = useRouter();
-  const [suggest, setSuggest] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [hidden, setHidden] = useState(false);
 
-  // Computed in an effect so the server and first client paint both render nothing (no
-  // hydration mismatch). Re-runs when the current market changes — e.g. after an explicit
-  // switch, which also sets the dismiss flag, so the banner then resolves to null.
+  // One-time post-mount reveal gate. The dismiss flag lives in localStorage (client-only), so
+  // the server and the first (hydration) client render MUST output nothing to stay hydration-
+  // safe; only after mount may we read localStorage and reveal the suggestion. This is the
+  // "subscribe to a browser system" case the rule text white-lists. useSyncExternalStore (the
+  // rule's suggested alternative) was tried but does not reliably re-read the client snapshot
+  // post-hydration under Next 16 / React 19, so the banner never appeared — hence this gate.
+  const [mounted, setMounted] = useState(false);
   useEffect(() => {
-    if (isGeoSuggestionDismissed()) {
-      setSuggest(null);
-      return;
-    }
-    const s = suggestionFor(undefined, geoCountry, MARKET_CODES);
-    setSuggest(s === currentCountry ? null : s);
-  }, [currentCountry, geoCountry]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time mount flag; reveal must wait for the client (localStorage) — see note above
+    setMounted(true);
+  }, []);
 
-  if (!suggest || suggest === currentCountry) return null;
+  // Read at render time (not cached in state) so an explicit CountrySwitcher choice, which
+  // sets the dismiss flag then router.refresh()es, re-renders this to null on the next pass.
+  const suggestion =
+    mounted && !hidden && !isGeoSuggestionDismissed()
+      ? suggestionFor(undefined, geoCountry, MARKET_CODES)
+      : null;
+
+  if (!suggestion || suggestion === currentCountry) return null;
 
   // Reuse the exact mechanism CountrySwitcher uses to set the country cookie:
   // POST /api/country -> route handler writes the (non-httpOnly) cookie server-side, then
   // router.refresh() re-renders Server Components with the new market/prices. Only dismiss
   // and refresh on a successful write, so a failed request leaves the banner up to retry.
   function accept() {
-    const code = suggest;
-    if (!code) return;
+    if (!suggestion) return;
+    const code = suggestion;
     start(async () => {
       const res = await fetch("/api/country", {
         method: "POST",
@@ -62,19 +69,19 @@ export function CountrySuggestionBanner({
       });
       if (!res.ok) return;
       dismissGeoSuggestion();
-      setSuggest(null);
+      setHidden(true);
       router.refresh();
     });
   }
 
   function dismiss() {
     dismissGeoSuggestion();
-    setSuggest(null);
+    setHidden(true);
   }
 
   return (
     <div role="status" className="bg-accent/10 px-4 py-2 text-center text-sm">
-      It looks like you&apos;re in {labelForCode(suggest)}. Shop in your local currency?{" "}
+      It looks like you&apos;re in {labelForCode(suggestion)}. Shop in your local currency?{" "}
       <button
         onClick={accept}
         disabled={pending}
