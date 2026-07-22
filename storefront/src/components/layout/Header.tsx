@@ -24,11 +24,11 @@ export async function Header() {
   const signedIn = Boolean(await getAccessToken());
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-background/95 backdrop-blur">
+    <header data-site-header className="sticky top-0 z-40 border-b border-line bg-background/95 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-3">
           <MobileNav categories={categories} />
-          <Link href="/" className="flex items-center gap-2">
+          <Link href="/" className="site-logo flex items-center gap-2">
             <Image src="/logos/toke-logo.png" alt="Toke Cosmetics" width={96} height={56} priority />
           </Link>
         </div>
