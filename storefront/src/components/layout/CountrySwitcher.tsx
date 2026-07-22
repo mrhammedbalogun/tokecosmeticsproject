@@ -13,6 +13,7 @@ export function CountrySwitcher({ markets, current }: { markets: Market[]; curre
   function change(code: string) {
     setValue(code);
     // An explicit choice supersedes any geo suggestion — suppress the banner for good.
+    // Dismissing before the POST resolves is intentional: an explicit pick signals intent regardless of the request outcome.
     dismissGeoSuggestion();
     start(async () => {
       await fetch("/api/country", {

@@ -22,6 +22,8 @@ describe("proxy country + geo", () => {
     // Vercel injects x-vercel-ip-country; a client tries to spoof x-geo-country directly.
     const res = run({ "x-vercel-ip-country": "GB", "x-geo-country": "US" });
     // The forwarded (overridden) request header must reflect the trusted platform value.
+    // The `x-middleware-request-*` prefix is a Next.js internal encoding for forwarded request
+    // headers — if this breaks on a Next upgrade, the test is what changed, not the proxy.
     expect(res.headers.get("x-middleware-request-x-geo-country")).toBe("GB");
   });
 });
