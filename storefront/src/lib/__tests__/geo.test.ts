@@ -21,6 +21,9 @@ describe("suggestionFor", () => {
   it("suggests ZZ for an unknown geo country (international)", () => {
     expect(suggestionFor(undefined, "FR", MARKETS)).toBe("ZZ");
   });
+  it("uppercases a lowercase geo code before matching", () => {
+    expect(suggestionFor(undefined, "gb", MARKETS)).toBe("GB");
+  });
   it("suggests nothing when geo is absent", () => {
     expect(suggestionFor(undefined, undefined, MARKETS)).toBeNull();
   });

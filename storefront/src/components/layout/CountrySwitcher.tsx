@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { Market } from "@/lib/country";
 import { labelFor } from "@/lib/country";
+import { dismissGeoSuggestion } from "@/lib/geo";
 
 export function CountrySwitcher({ markets, current }: { markets: Market[]; current: string }) {
   const router = useRouter();
@@ -11,6 +12,8 @@ export function CountrySwitcher({ markets, current }: { markets: Market[]; curre
 
   function change(code: string) {
     setValue(code);
+    // An explicit choice supersedes any geo suggestion — suppress the banner for good.
+    dismissGeoSuggestion();
     start(async () => {
       await fetch("/api/country", {
         method: "POST", headers: { "content-type": "application/json" },
