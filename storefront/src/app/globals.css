@@ -1,26 +1,44 @@
 @import "tailwindcss";
 
+/* Toke Cosmetics design tokens — premium beauty: warm cream base, near-black ink,
+   Toke forest-green primary accent + soft gold secondary (docs/design-direction.md). */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-cream: #fbf9f5;      /* page background */
+  --color-beige: #f1eae0;      /* alternate section background, warm cards */
+  --color-ink: #1a1a1a;        /* primary text */
+  --color-ink-soft: #6b6862;   /* secondary text / captions */
+  --color-line: #e7e2d8;       /* hairline borders */
+  --color-accent: #1c7a3e;     /* Toke forest green — buttons, links, active */
+  --color-accent-strong: #145f30;
+  --color-leaf: #8cc63f;       /* light leaf green — subtle highlights */
+  --color-gold: #c9a227;       /* soft gold — ratings, badges, fine luxury details */
+  --color-surface: #ffffff;    /* cards, drawers */
+  --radius-card: 0.75rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-background: var(--color-cream);
+  --color-beige: var(--color-beige);
+  --color-foreground: var(--color-ink);
+  --color-muted: var(--color-ink-soft);
+  --color-line: var(--color-line);
+  --color-accent: var(--color-accent);
+  --color-accent-strong: var(--color-accent-strong);
+  --color-leaf: var(--color-leaf);
+  --color-gold: var(--color-gold);
+  --color-surface: var(--color-surface);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-playfair);
+  --radius-card: var(--radius-card);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display), Georgia, serif;
 }
