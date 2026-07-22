@@ -1,8 +1,12 @@
 "use client";
-/** The ONLY entry point for framer-motion in the storefront. LazyMotion +
- * domAnimation keeps the animation bundle small (Lighthouse budget); every
- * effect respects prefers-reduced-motion. Vocabulary (design-direction.md):
- * fade-up on scroll, subtle hover lift/zoom — calm and expensive, never busy. */
+/** The ONLY entry point for framer-motion in the storefront. `m` + LazyMotion
+ * with the `domAnimation` feature bundle (~half the weight of the full `motion`
+ * feature set) is the Lighthouse-friendly pairing. Note: `domAnimation` is a
+ * static import, so it ships in the shared Providers bundle (loaded site-wide) —
+ * it is NOT lazily fetched per-island; the saving is the smaller feature set,
+ * not deferral. Every effect respects prefers-reduced-motion. Vocabulary
+ * (design-direction.md): fade-up on scroll, subtle hover lift/zoom — calm and
+ * expensive, never busy. */
 import { LazyMotion, domAnimation, m, useReducedMotion } from "framer-motion";
 import type { ReactNode } from "react";
 

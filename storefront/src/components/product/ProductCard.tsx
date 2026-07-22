@@ -58,7 +58,7 @@ export function ProductCard({
             />
           )}
           {product.is_featured && (
-            <span className="absolute left-3 top-3 rounded-full bg-gold/90 px-2.5 py-0.5 text-xs font-medium tracking-wide text-surface shadow-sm">
+            <span className="absolute left-3 top-3 rounded-full bg-gold px-2.5 py-0.5 text-xs font-medium tracking-wide text-foreground shadow-sm">
               Bestseller
             </span>
           )}
