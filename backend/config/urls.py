@@ -35,3 +35,12 @@ urlpatterns = [
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
 ]
+
+# DEV ONLY: serve uploaded media (seeded product/category images) from runserver.
+# django.conf.urls.static.static() is a no-op when DEBUG is False, so this cannot
+# change production behaviour. Prod media is served by the web server/CDN (Plan-22).
+from django.conf import settings  # noqa: E402
+from django.conf.urls.static import static  # noqa: E402
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
