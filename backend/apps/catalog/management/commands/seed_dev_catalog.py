@@ -2,6 +2,10 @@
 verified against real API responses. Seed data ONLY — no schema changes. Idempotent:
 every object is get_or_create'd by slug/sku; re-running never duplicates.
 
+Re-runs never UPDATE existing rows (edits live in the get_or_create defaults, which
+only apply on first creation) — flush or delete the affected rows to pick up edits to
+the data tables above.
+
 DEV-ONLY: refuses to run when DEBUG is False (production backstop).
 """
 import io
@@ -269,9 +273,14 @@ class Command(BaseCommand):
                     variant=variant, warehouse=wh,
                     defaults={"quantity": qty, "reserved": 0})
 
-            if not opts["no_images"] and not product.images.exists():
+            # Count-based (not .exists()) so a crash between the two saves self-heals on
+            # re-run: only the missing positions are (re)created, never duplicated.
+            if not opts["no_images"] and product.images.count() < 2:
                 c1, c2 = PALETTES[idx % len(PALETTES)]
+                existing_positions = {img.position for img in product.images.all()}
                 for pos in range(2):  # two images -> card hover-swap + gallery
+                    if pos in existing_positions:
+                        continue
                     img = ProductImage(product=product, position=pos,
                                        alt=f"{name} — {'packaging' if pos else 'product'} shot")
                     img.image.save(f"{slug}-{pos}.png",
@@ -310,6 +319,7 @@ class Command(BaseCommand):
             col.products.set(picks)
 
         self.stdout.write(self.style.SUCCESS(
-            f"Seeded {len(all_products)} products, "
+            f"Seeded {len(all_products)} products this run. DB-wide totals now: "
+            f"{Product.objects.count()} products, "
             f"{ProductVariant.objects.count()} variants, "
             f"{Review.objects.count()} reviews."))

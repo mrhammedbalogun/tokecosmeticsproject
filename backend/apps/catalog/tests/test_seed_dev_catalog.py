@@ -3,9 +3,11 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
-from apps.catalog.models import Collection, Product
+from apps.catalog.models import Collection, Product, ProductVariant
 from apps.core.models import Country
+from apps.inventory.models import StockItem
 from apps.inventory.services import available_for_country
+from apps.pricing.models import Price
 from apps.pricing.services import resolve_price
 
 
@@ -52,12 +54,30 @@ class TestSeedDevCatalog:
     @override_settings(DEBUG=True)
     def test_is_idempotent(self):
         self._run()
-        first = Product.objects.count()
+        first = {
+            "products": Product.objects.count(),
+            "variants": ProductVariant.objects.count(),
+            "prices": Price.objects.count(),
+            "stock": StockItem.objects.count(),
+        }
         self._run()
-        assert Product.objects.count() == first
+        second = {
+            "products": Product.objects.count(),
+            "variants": ProductVariant.objects.count(),
+            "prices": Price.objects.count(),
+            "stock": StockItem.objects.count(),
+        }
+        assert second == first
 
     @override_settings(DEBUG=False)
     def test_refuses_outside_debug(self):
         from django.core.management.base import CommandError
         with pytest.raises(CommandError):
             call_command("seed_dev_catalog", "--no-images")
+
+    def test_placeholder_png_returns_png_bytes(self):
+        # The generated placeholder must be a real PNG (starts with the PNG magic bytes).
+        from apps.catalog.management.commands.seed_dev_catalog import _placeholder_png
+
+        content = _placeholder_png((16, 16), (10, 20, 30), (200, 210, 220), seed=1)
+        assert content.read().startswith(b"\x89PNG")
