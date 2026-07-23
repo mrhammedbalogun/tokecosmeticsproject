@@ -41,7 +41,7 @@ export default async function HomePage() {
       <BrandStory />
       <ProductRow
         title="Best sellers"
-        products={bestSellers}
+        products={bestSellers.slice(0, 8)}
         href="/products?collection=best-sellers"
         carousel
       />

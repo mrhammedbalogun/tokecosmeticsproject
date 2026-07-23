@@ -47,14 +47,17 @@ export const BRAND_STORY = {
   cta: { label: "Our story", href: "/page/about" },
 };
 
+/** `icon` is a STABLE key into WhyChoose's ICONS map — decoupled from `title` so
+ * editing the copy never blanks an icon. If you add an entry, add a matching icon
+ * in WhyChoose.tsx (a test asserts every key resolves). */
 export const WHY_CHOOSE = [
-  { title: "Dermatologist approved", body: "Formulations reviewed by skin professionals." },
-  { title: "Natural ingredients", body: "African botanicals, no parabens or sulphates." },
-  { title: "Cruelty free", body: "Never tested on animals." },
-  { title: "Worldwide shipping", body: "Lagos to London, New York to Nairobi." },
-  { title: "Secure payments", body: "Bank-grade encryption on every order." },
-  { title: "Money-back promise", body: "14-day returns, no questions asked." },
-];
+  { icon: "clipboard-check", title: "Dermatologist approved", body: "Formulations reviewed by skin professionals." },
+  { icon: "leaf", title: "Natural ingredients", body: "African botanicals, no parabens or sulphates." },
+  { icon: "heart", title: "Cruelty free", body: "Never tested on animals." },
+  { icon: "globe", title: "Worldwide shipping", body: "Lagos to London, New York to Nairobi." },
+  { icon: "shield", title: "Secure payments", body: "Bank-grade encryption on every order." },
+  { icon: "refresh", title: "Money-back promise", body: "14-day returns, no questions asked." },
+] as const;
 
 export const TESTIMONIALS = [
   { quote: "My hyperpigmentation faded in weeks. I have never trusted a brand like this.",

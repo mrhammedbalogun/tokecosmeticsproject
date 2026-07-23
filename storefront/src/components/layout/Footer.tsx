@@ -63,7 +63,7 @@ const SOCIALS: { label: string; href: string; icon: ReactNode }[] = [
   {
     label: "Facebook",
     href: "https://www.facebook.com/tokecosmetics",
-    icon: <path d="M14 8h2V5h-2a3 3 0 0 0-3 3v2H9v3h2v6h3v-6h2l1-3h-3V8a0 0 0 0 1 0 0Z" />,
+    icon: <path d="M15 8h2V5h-2a4 4 0 0 0-4 4v2H9v3h2v6h3v-6h2.5l.5-3H14V9a1 1 0 0 1 1-1Z" />,
   },
   {
     label: "TikTok",

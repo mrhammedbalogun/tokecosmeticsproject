@@ -5,43 +5,39 @@ import { FadeUp } from "@/components/motion/Motion";
 /** Section 10: "Why choose Toke" — icon cards on a warm-beige band. Restrained
  * line icons (forest-green stroke) + a thin gold rule = the "seasoning" luxury
  * detail. Icons are decorative (aria-hidden); the title carries the meaning.
- * Six trust pillars from home-content (D3). */
-const ICONS: Record<string, ReactNode> = {
-  "Dermatologist approved": (
-    // clipboard-check
+ * Six trust pillars from home-content (D3). Keyed on the STABLE `icon` field, not
+ * the (freely editable) title — so editing copy can never blank an icon. The
+ * exported map is asserted complete by WhyChoose.test.tsx. */
+export const ICONS: Record<string, ReactNode> = {
+  "clipboard-check": (
     <>
       <path d="M9 4h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1V5a1 1 0 0 1 1-1Z" />
       <path d="m9 13 2 2 4-4" />
     </>
   ),
-  "Natural ingredients": (
-    // leaf
+  leaf: (
     <>
       <path d="M11 20A7 7 0 0 1 4 13c0-5 4-9 16-9 0 8-4 12-9 12Z" />
       <path d="M4 20c2-6 6-9 12-11" />
     </>
   ),
-  "Cruelty free": (
-    // heart
+  heart: (
     <path d="M12 20s-7-4.35-9.5-8.5A5 5 0 0 1 12 6a5 5 0 0 1 9.5 5.5C19 15.65 12 20 12 20Z" />
   ),
-  "Worldwide shipping": (
-    // globe
+  globe: (
     <>
       <circle cx="12" cy="12" r="9" />
       <path d="M3 12h18" />
       <path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z" />
     </>
   ),
-  "Secure payments": (
-    // shield
+  shield: (
     <>
       <path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6l-8-3Z" />
       <path d="m9 12 2 2 4-4" />
     </>
   ),
-  "Money-back promise": (
-    // rotate/refresh
+  refresh: (
     <>
       <path d="M20 12a8 8 0 1 1-2.34-5.66" />
       <path d="M20 4v4h-4" />
@@ -72,7 +68,7 @@ export function WhyChoose() {
                   strokeLinejoin="round"
                   className="h-7 w-7 text-accent"
                 >
-                  {ICONS[w.title]}
+                  {ICONS[w.icon]}
                 </svg>
                 <div className="mt-3 h-px w-8 bg-gold" aria-hidden />
                 <h3 className="mt-3 text-sm font-semibold">{w.title}</h3>

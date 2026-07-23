@@ -68,6 +68,7 @@ export function organizationJsonLd(): Record<string, any> {
     sameAs: [
       "https://www.instagram.com/tokecosmetics",
       "https://www.facebook.com/tokecosmetics",
+      "https://www.tiktok.com/@tokecosmetics",
     ],
   };
 }
