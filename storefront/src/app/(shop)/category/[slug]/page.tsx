@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { ApiError } from "@/lib/api";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
-import {
-  findCategory, getBrands, getCategoryTree, getProducts,
-  type Paginated, type ProductCard,
-} from "@/lib/catalog";
+import { fetchPlpPage, findCategory, getBrands, getCategoryTree } from "@/lib/catalog";
 import { mediaUrl } from "@/lib/media";
 import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { parsePlpParams, type PlpState } from "@/components/plp/plpParams";
+import { parsePlpParams } from "@/components/plp/plpParams";
 import { Breadcrumbs, type Crumb } from "@/components/plp/Breadcrumbs";
 import { ProductGrid } from "@/components/plp/ProductGrid";
 import { FiltersBar } from "@/components/plp/FiltersBar";
@@ -19,24 +16,15 @@ import { Pagination } from "@/components/plp/Pagination";
 type Params = Promise<{ slug: string }>;
 type Search = Promise<Record<string, string | string[] | undefined>>;
 
+/** Resolve a category by slug. The tree fetch is ROUTING-CRITICAL: if it fails
+ * (5xx / network blip) we must NOT swallow the error, because collapsing it to an
+ * empty tree would make findCategory miss and the caller notFound() — turning a
+ * transient backend fault into a hard 404 on a canonical, indexable URL (crawlers
+ * retry 5xx but can drop 404s). So let a real error throw (→ 500). A `null` here
+ * means the tree loaded fine but the slug genuinely does not exist → notFound(). */
 async function loadCategory(slug: string, country: string) {
-  const tree = await getCategoryTree(country).catch(() => []);
+  const tree = await getCategoryTree(country);
   return findCategory(tree, slug);
-}
-
-const EMPTY_PAGE: Paginated<ProductCard> = { count: 0, next: null, previous: null, results: [] };
-
-/** A `page` beyond the last one makes DRF pagination 404 — that is untrusted URL
- * input (crawlers, stale bookmarks, a shrunk catalog) on a KNOWN category, not a
- * server fault. Treat it as "no results" and render the graceful empty state
- * (never 404 a real category). Mirrors the Task-8 /products fetch wrap. */
-async function fetchCategoryProducts(state: PlpState, slug: string, country: string) {
-  try {
-    return await getProducts({ ...state, category: slug }, country);
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 404) return EMPTY_PAGE;
-    throw err;
-  }
 }
 
 export async function generateMetadata(
@@ -70,7 +58,7 @@ export default async function CategoryPage(
   if (!hit) notFound();
 
   const [page, brands] = await Promise.all([
-    fetchCategoryProducts(state, slug, country),
+    fetchPlpPage({ ...state, category: slug }, country),
     getBrands(country).catch(() => []),
   ]);
 
@@ -88,10 +76,10 @@ export default async function CategoryPage(
       {hit.node.children.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-2">
           {hit.node.children.map((c) => (
-            <a key={c.slug} href={`/category/${c.slug}`}
+            <Link key={c.slug} href={`/category/${c.slug}`}
               className="rounded-full border border-line px-4 py-1.5 text-sm transition hover:border-accent hover:text-accent">
               {c.name}
-            </a>
+            </Link>
           ))}
         </div>
       )}

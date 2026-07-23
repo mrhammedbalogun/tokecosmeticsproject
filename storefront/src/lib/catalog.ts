@@ -2,7 +2,7 @@
  * Cache strategy: pages render dynamically (they read the country cookie), so
  * caching lives in the fetch data-cache — short revalidate + tags, invalidated by
  * POST /api/revalidate (Task 12). Backend also caches catalog GETs for 60 s. */
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 
 // ---------- types (mirror backend serializers; regenerate api-types for drift) ----------
 export interface ProductCard {
@@ -78,6 +78,26 @@ export async function getProducts(params: ProductListParams, country: string) {
   return apiFetch<Paginated<ProductCard>>(`/products/${q ? `?${q}` : ""}`, {
     country, next: { revalidate: CATALOG_REVALIDATE, tags: ["catalog"] },
   });
+}
+
+/** An empty product page — the graceful "no results" state. */
+export const EMPTY_PAGE: Paginated<ProductCard> = {
+  count: 0, next: null, previous: null, results: [],
+};
+
+/** Shared PLP fetch for every listing page (/products, /category/[slug]).
+ * A `page` beyond the last one makes DRF pagination 404 — that is untrusted URL
+ * input (crawlers, stale bookmarks, a shrunk catalog), not a server fault — so it
+ * is swallowed to the empty state rather than surfaced as an error. Any OTHER
+ * error still bubbles. Keeping this policy in ONE place means the two PLPs behave
+ * identically; callers just vary the `params` (e.g. `category`). */
+export async function fetchPlpPage(params: ProductListParams, country: string) {
+  try {
+    return await getProducts(params, country);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return EMPTY_PAGE;
+    throw err;
+  }
 }
 
 export async function getProduct(slug: string, country: string) {
