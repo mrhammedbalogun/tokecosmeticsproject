@@ -5,8 +5,8 @@ export function ProductGrid({ products }: { products: ProductCardData[] }) {
   if (products.length === 0) {
     return (
       <div className="rounded-[var(--radius-card)] bg-beige px-6 py-16 text-center">
-        <p className="font-display text-xl">Nothing matches those filters.</p>
-        <p className="mt-2 text-sm text-muted">Try widening the price range or clearing filters.</p>
+        <p className="font-display text-xl">No products to show here.</p>
+        <p className="mt-2 text-sm text-muted">Try adjusting or clearing your filters, or head back to page one.</p>
       </div>
     );
   }

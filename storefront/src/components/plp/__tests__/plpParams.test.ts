@@ -12,6 +12,11 @@ describe("parsePlpParams", () => {
   it("array params (?brand=a&brand=b) take the first value", () => {
     expect(parsePlpParams({ brand: ["a", "b"] })).toEqual({ brand: "a", page: 1 });
   });
+  it("drops malformed or negative price params (guards the backend Decimal cast)", () => {
+    expect(parsePlpParams({ price_min: "abc", price_max: "-5" })).toEqual({ page: 1 });
+    expect(parsePlpParams({ price_min: "10", price_max: "50" }))
+      .toEqual({ price_min: "10", price_max: "50", page: 1 });
+  });
 });
 
 describe("plpHref", () => {
@@ -20,5 +25,9 @@ describe("plpHref", () => {
       .toBe("/products?brand=x&page=4");
     expect(plpHref("/products", { brand: "x", page: 3 }, { ordering: "price_desc" }))
       .toBe("/products?brand=x&ordering=price_desc");  // changing a filter resets page
+  });
+  it("preserves context params (tag/collection) when paging", () => {
+    expect(plpHref("/products", { tag: "acne", collection: "best-sellers", page: 1 }, { page: 2 }))
+      .toBe("/products?tag=acne&collection=best-sellers&page=2");
   });
 });

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import { ApiError } from "@/lib/api";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
-import { getBrands, getProducts } from "@/lib/catalog";
+import { getBrands, getProducts, type Paginated, type ProductCard } from "@/lib/catalog";
 import { pageMetadata } from "@/lib/seo";
 import { parsePlpParams } from "@/components/plp/plpParams";
 import { ProductGrid } from "@/components/plp/ProductGrid";
@@ -22,11 +23,25 @@ export async function generateMetadata({ searchParams }: { searchParams: Search 
   });
 }
 
+const EMPTY_PAGE: Paginated<ProductCard> = { count: 0, next: null, previous: null, results: [] };
+
+/** A `page` beyond the last one makes DRF pagination 404. That is untrusted URL
+ * input (crawlers, stale bookmarks, a shrunk catalog), not a server fault — treat
+ * it as "no results" and render the empty state. Any other error still bubbles. */
+async function fetchProducts(state: ReturnType<typeof parsePlpParams>, country: string) {
+  try {
+    return await getProducts(state, country);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return EMPTY_PAGE;
+    throw err;
+  }
+}
+
 export default async function ProductsPage({ searchParams }: { searchParams: Search }) {
   const state = parsePlpParams(await searchParams);
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   const [page, brands] = await Promise.all([
-    getProducts(state, country),
+    fetchProducts(state, country),
     getBrands(country).catch(() => []),
   ]);
   return (
@@ -38,7 +53,8 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
       <div className="mt-6">
         <ProductGrid products={page.results} />
       </div>
-      <Pagination base="/products" state={state} count={page.count} />
+      <Pagination base="/products" state={state}
+        hasPrev={page.previous !== null} hasNext={page.next !== null} />
     </section>
   );
 }

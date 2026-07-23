@@ -1,20 +1,22 @@
 import Link from "next/link";
 import { plpHref, type PlpState } from "@/components/plp/plpParams";
 
-export function Pagination({ base, state, count, pageSize = 24 }: {
-  base: string; state: PlpState; count: number; pageSize?: number;
+/** Prev/Next are driven by the API's own `next`/`previous` links (from the
+ * Paginated response), not a computed page count — so we never link to a page
+ * beyond the last (which DRF 404s) and there is no hardcoded page-size coupling. */
+export function Pagination({ base, state, hasPrev, hasNext }: {
+  base: string; state: PlpState; hasPrev: boolean; hasNext: boolean;
 }) {
-  const pages = Math.ceil(count / pageSize);
-  if (pages <= 1) return null;
+  if (!hasPrev && !hasNext) return null;
   const page = state.page;
   return (
     <nav aria-label="Pagination" className="mt-10 flex items-center justify-center gap-2">
-      {page > 1 && (
+      {hasPrev && (
         <Link rel="prev" href={plpHref(base, state, { page: page - 1 })}
           className="rounded-full border border-line px-4 py-2 text-sm hover:border-accent">← Prev</Link>
       )}
-      <span className="px-3 text-sm text-muted">Page {page} of {pages}</span>
-      {page < pages && (
+      <span className="px-3 text-sm text-muted">Page {page}</span>
+      {hasNext && (
         <Link rel="next" href={plpHref(base, state, { page: page + 1 })}
           className="rounded-full border border-line px-4 py-2 text-sm hover:border-accent">Next →</Link>
       )}
