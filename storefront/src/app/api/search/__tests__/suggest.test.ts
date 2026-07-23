@@ -44,4 +44,27 @@ describe("suggest BFF", () => {
     expect(await res.json()).toEqual([]);
     expect(f).not.toHaveBeenCalled();
   });
+
+  it("caps an oversized q at 64 chars before forwarding upstream", async () => {
+    const f = upstream([]);
+    await GET(new Request(`http://localhost:3000/api/search/suggest?q=${"a".repeat(200)}`));
+    const [url] = f.mock.calls[0];
+    expect(url).toBe(`http://backend:8000/api/v1/search/suggest/?q=${"a".repeat(64)}`);
+  });
+
+  it("returns 200 + [] when the upstream errors (best-effort, never surfaced)", async () => {
+    const f = vi.fn().mockResolvedValue(new Response("boom", { status: 500 }));
+    global.fetch = f as unknown as typeof fetch;
+    const res = await GET(new Request("http://localhost:3000/api/search/suggest?q=rad"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  it("returns 200 + [] when the upstream connection rejects (e.g. timeout)", async () => {
+    const f = vi.fn().mockRejectedValue(new DOMException("timed out", "TimeoutError"));
+    global.fetch = f as unknown as typeof fetch;
+    const res = await GET(new Request("http://localhost:3000/api/search/suggest?q=rad"));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
 });

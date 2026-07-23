@@ -1,5 +1,7 @@
 /** searchParams (untrusted URL input) -> a safe, typed PLP state, and back to hrefs.
  * Shareable/crawlable URLs are the master-spec requirement — ALL state is in the URL. */
+import { first } from "@/lib/search-params";
+
 export const ORDERINGS = ["newest", "price_asc", "price_desc", "best_selling"] as const;
 export type Ordering = (typeof ORDERINGS)[number];
 
@@ -9,8 +11,6 @@ export interface PlpState {
   ordering?: Ordering; page: number;
 }
 type Raw = Record<string, string | string[] | undefined>;
-
-const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
 
 export function parsePlpParams(raw: Raw): PlpState {
   const state: PlpState = { page: 1 };

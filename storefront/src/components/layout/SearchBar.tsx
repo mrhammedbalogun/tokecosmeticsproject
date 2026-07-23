@@ -15,15 +15,24 @@ export function SearchBar() {
 
   useEffect(() => {
     clearTimeout(debounce.current);
-    if (q.trim().length < 2) { setItems([]); setOpen(false); return; }
+    const query = q.trim();
+    // Abort the previous request on every keystroke so an out-of-order (stale)
+    // response can never overwrite fresh results or re-open a cleared box.
+    const controller = new AbortController();
+    // State updates live in the deferred callback (not the effect body) — a short
+    // query resets on the next tick (0ms), a real one debounces at 300ms.
     debounce.current = setTimeout(async () => {
+      if (query.length < 2) { setItems([]); setOpen(false); return; }
       try {
-        const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(q.trim())}`);
+        const res = await fetch(`/api/search/suggest?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal });
+        if (controller.signal.aborted) return;             // superseded while awaiting
         const data: Suggestion[] = res.ok ? await res.json() : [];
+        if (controller.signal.aborted) return;             // superseded while parsing
         setItems(data); setOpen(data.length > 0); setActive(-1);
-      } catch { setItems([]); }
-    }, 300);
-    return () => clearTimeout(debounce.current);
+      } catch { /* aborted or network error: leave prior state untouched */ }
+    }, query.length < 2 ? 0 : 300);
+    return () => { clearTimeout(debounce.current); controller.abort(); };
   }, [q]);
 
   useEffect(() => {

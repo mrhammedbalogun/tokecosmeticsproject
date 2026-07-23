@@ -29,6 +29,8 @@ export interface ApiFetchOptions {
   next?: NextFetchRequestConfig;
   cache?: RequestCache;
   headers?: Record<string, string>;
+  /** Optional abort signal (e.g. AbortSignal.timeout(ms)) — aborts the upstream fetch. */
+  signal?: AbortSignal;
 }
 
 function baseUrl(): string {
@@ -52,6 +54,7 @@ export async function apiFetch<T = unknown>(
   }
   if (opts.next) (init as { next?: NextFetchRequestConfig }).next = opts.next;
   if (opts.cache) init.cache = opts.cache;
+  if (opts.signal) init.signal = opts.signal;
 
   const res = await fetch(`${baseUrl()}/api/v1${path}`, init);
 
