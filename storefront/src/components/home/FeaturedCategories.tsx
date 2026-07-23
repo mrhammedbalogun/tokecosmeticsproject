@@ -26,16 +26,18 @@ export function FeaturedCategories({ categories }: { categories: CategoryNode[] 
         </p>
       </FadeUp>
       <div className="mt-12 grid grid-cols-2 gap-x-4 gap-y-8 md:grid-cols-3 lg:grid-cols-6">
-        {roots.map((c, i) => (
+        {roots.map((c, i) => {
+          const img = mediaUrl(c.image);
+          return (
           <FadeUp key={c.slug} delay={i * 0.05}>
             <Link
               href={`/category/${c.slug}`}
               className="group block rounded-[var(--radius-card)] text-center focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
             >
               <div className="relative aspect-square overflow-hidden rounded-full bg-beige shadow-sm ring-1 ring-line/60 transition-shadow duration-300 group-hover:shadow-md">
-                {mediaUrl(c.image) && (
+                {img && (
                   <Image
-                    src={mediaUrl(c.image)!}
+                    src={img}
                     alt=""
                     fill
                     sizes="(max-width:768px) 45vw, 15vw"
@@ -48,7 +50,8 @@ export function FeaturedCategories({ categories }: { categories: CategoryNode[] 
               </p>
             </Link>
           </FadeUp>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
