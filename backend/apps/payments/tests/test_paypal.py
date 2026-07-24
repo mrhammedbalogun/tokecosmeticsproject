@@ -170,3 +170,23 @@ def test_missing_creds_raises_not_configured():
     order, payment = _order_payment()
     with pytest.raises(GatewayNotConfigured):
         PayPalGateway().initiate(payment, order)
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_initiate_exposes_order_id_for_inline_buttons():
+    """The PayPal JS SDK's createOrder() needs the order id client-side; it must ride
+    back in the result data (not only as init.reference), because the checkout response
+    forwards init.data verbatim as payment.data."""
+    order, payment = _order_payment()
+    _mock_token()
+    respx.post(f"{BASE}/v2/checkout/orders").mock(
+        return_value=httpx.Response(201, json={
+            "id": "PAYPAL-ORDER-1",
+            "links": [{"rel": "approve", "href": "https://paypal.com/approve/1"}],
+        })
+    )
+    result = PayPalGateway().initiate(payment, order, return_url="https://shop/ret")
+    assert result.data["order_id"] == "PAYPAL-ORDER-1"
+    # The redirect_url stays for the (unused-in-inline) redirect path and existing tests.
+    assert result.data["redirect_url"] == "https://paypal.com/approve/1"

@@ -119,7 +119,7 @@ class PayPalGateway(PaymentGateway):
             (link["href"] for link in body.get("links", []) if link.get("rel") == "approve"), ""
         )
         return InitiateResult(action="redirect", reference=body["id"],
-                              data={"redirect_url": approve})
+                              data={"redirect_url": approve, "order_id": body["id"]})
 
     def capture(self, payment) -> dict:
         """Capture an approved order. Called on customer return / APPROVED webhook.
