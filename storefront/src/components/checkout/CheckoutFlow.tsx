@@ -8,50 +8,14 @@ import { SignInStep } from "@/components/checkout/SignInStep";
 import { AddressStep } from "@/components/checkout/AddressStep";
 import { DeliveryStep } from "@/components/checkout/DeliveryStep";
 import { PaymentStep } from "@/components/checkout/PaymentStep";
+import { ReviewStep } from "@/components/checkout/ReviewStep";
 import { paymentLabel } from "@/lib/payment-labels";
 
 const STEP_TITLES = ["Sign in", "Address", "Delivery", "Payment", "Review"] as const;
 
-/** Module-scoped (not nested in CheckoutFlow) — eslint's react-hooks/static-components
- * rule flags components declared inside a render function; see OrderSummary.tsx's Row
- * for the same pattern.
- *
- * TODO(Plan-14 Task 10): replace StepStub with the real <ReviewStep/>. The stub
- * just calls `onContinue` with a token selection patch so the shell has something
- * non-empty to work with in the meantime. Step 1 (Sign in) is the real
- * <SignInStep/> (Task 6); step 2 (Address) is the real <AddressStep/> (Task 7);
- * step 3 (Delivery) is the real <DeliveryStep/> (Task 8); step 4 (Payment) is the
- * real <PaymentStep/> (Task 9). */
-function StepStub({ step, label, onContinue }: { step: number; label: string; onContinue: () => void }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-muted">[Step {step} — built in Task {step + 5}]</p>
-      <button
-        type="button"
-        onClick={onContinue}
-        className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong"
-      >
-        Continue{label ? ` (${label})` : ""}
-      </button>
-    </div>
-  );
-}
-
 /** Inner flow — needs useCheckout(), so it must render underneath CheckoutProvider. */
 function CheckoutSteps() {
-  const { currentStep, completed, complete, open, selections } = useCheckout();
-
-  // Token patch so the remaining stub step (and CheckoutContext's own invalidation
-  // logic) has something to chew on before the real step lands in Task 10. Steps
-  // 1-4 no longer need a patch here — SignInStep/AddressStep/DeliveryStep/PaymentStep
-  // complete themselves.
-  const stepPatches: Array<Record<string, unknown> | undefined> = [
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-  ];
+  const { currentStep, completed, open, selections } = useCheckout();
 
   const summaries: Record<number, string> = {
     1: `Signed in as ${selections.userEmail ?? ""}`,
@@ -83,7 +47,7 @@ function CheckoutSteps() {
             ) : step === 4 ? (
               <PaymentStep />
             ) : (
-              <StepStub step={step} label={title} onContinue={() => complete(step, stepPatches[i])} />
+              <ReviewStep />
             )}
           </StepShell>
         );
