@@ -7,6 +7,10 @@ export const TOTAL_STEPS = 5;
 export interface CheckoutSelections {
   userEmail?: string;
   addressId?: number;
+  /** Short "line1, city" display string for the step-2 summary line — set via
+   * `complete(2, { addressDisplay })`'s patch, never via `setAddress` (which only
+   * knows the id). Purely cosmetic; place-order only needs `addressId`. */
+  addressDisplay?: string;
   deliveryOptionId?: number;
   paymentGateway?: string;
   note: string;
