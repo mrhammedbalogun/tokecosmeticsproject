@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
 from rest_framework.exceptions import ValidationError
@@ -9,6 +11,7 @@ from apps.carts.models import Cart, CartItem
 from apps.carts.serializers import serialize_cart
 from apps.carts.services import get_or_create_cart, set_quantity
 from apps.catalog.models import ProductVariant
+from apps.checkout.serializers import QuoteRequestSerializer
 from apps.checkout.services.checkout import CheckoutError, place_order
 from apps.checkout.services.idempotency import (
     IdempotencyConflict,
@@ -18,6 +21,7 @@ from apps.checkout.services.idempotency import (
     finish,
     hash_payload,
 )
+from apps.checkout.services.quote import quote as quote_service
 from apps.payments.gateways.base import GatewayError, GatewayNotConfigured
 from apps.checkout.services.totals import compute_totals
 from apps.core.country_context import resolve_country
@@ -51,6 +55,31 @@ class DeliveryOptionsView(APIView):
             raise ValidationError("Cart is empty.")
         totals = compute_totals(lines, request.country)
         return Response(options_for_address(address, lines, totals.subtotal, request.country))
+
+
+class QuoteView(APIView):
+    """Read-only totals + coupon preview (Plan-14). Never mutates."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        data = QuoteRequestSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        cart = get_object_or_404(Cart, pk=v["cart_id"], user=request.user, status="active")
+        delivery_amount = Decimal("0.00")
+        if v.get("address_id") and v.get("delivery_option_id"):
+            address = get_object_or_404(Address, pk=v["address_id"], user=request.user)
+            lines = _cart_lines(cart)
+            totals = compute_totals(lines, request.country)
+            opts = options_for_address(address, lines, totals.subtotal, request.country)
+            chosen = next((o for o in opts if o["id"] == v["delivery_option_id"] and o["price"] is not None), None)
+            if chosen:
+                delivery_amount = Decimal(chosen["price"])
+        return Response(quote_service(
+            cart, request.country, user=request.user,
+            coupon_code=v.get("coupon_code", ""), delivery_amount=delivery_amount,
+        ))
 
 
 class CheckoutView(APIView):
