@@ -146,6 +146,7 @@ class CheckoutView(APIView):
             "payment": {
                 "gateway": result.payment.gateway,
                 "action": init.action if init else "",
+                "reference": result.payment.gateway_reference,
                 "data": init.data if init else {},
             },
         }
