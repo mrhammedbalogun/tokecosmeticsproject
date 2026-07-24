@@ -12,6 +12,10 @@ export interface CheckoutSelections {
    * knows the id). Purely cosmetic; place-order only needs `addressId`. */
   addressDisplay?: string;
   deliveryOptionId?: number;
+  /** Short "name — price" display string for the step-3 summary line — set via
+   * `complete(3, { deliveryDisplay })`'s patch, mirroring `addressDisplay`. Purely
+   * cosmetic; place-order only needs `deliveryOptionId`. */
+  deliveryDisplay?: string;
   paymentGateway?: string;
   note: string;
 }

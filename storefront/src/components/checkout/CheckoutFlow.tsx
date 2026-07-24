@@ -6,6 +6,7 @@ import { StepShell } from "@/components/checkout/StepShell";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
 import { SignInStep } from "@/components/checkout/SignInStep";
 import { AddressStep } from "@/components/checkout/AddressStep";
+import { DeliveryStep } from "@/components/checkout/DeliveryStep";
 
 const STEP_TITLES = ["Sign in", "Address", "Delivery", "Payment", "Review"] as const;
 
@@ -13,11 +14,12 @@ const STEP_TITLES = ["Sign in", "Address", "Delivery", "Payment", "Review"] as c
  * rule flags components declared inside a render function; see OrderSummary.tsx's Row
  * for the same pattern.
  *
- * TODO(Plan-14 Task 8..10): replace StepStub with the real <DeliveryStep/>,
- * <PaymentStep/>, <ReviewStep/> components. Each stub just calls `onContinue`
- * with a token selection patch so downstream steps (and this shell) have
- * something non-empty to work with in the meantime. Step 1 (Sign in) is the real
- * <SignInStep/> (Task 6); step 2 (Address) is the real <AddressStep/> (Task 7). */
+ * TODO(Plan-14 Task 9..10): replace StepStub with the real <PaymentStep/>,
+ * <ReviewStep/> components. Each stub just calls `onContinue` with a token
+ * selection patch so downstream steps (and this shell) have something
+ * non-empty to work with in the meantime. Step 1 (Sign in) is the real
+ * <SignInStep/> (Task 6); step 2 (Address) is the real <AddressStep/> (Task 7);
+ * step 3 (Delivery) is the real <DeliveryStep/> (Task 8). */
 function StepStub({ step, label, onContinue }: { step: number; label: string; onContinue: () => void }) {
   return (
     <div className="space-y-3">
@@ -38,13 +40,13 @@ function CheckoutSteps() {
   const { currentStep, completed, complete, open, selections } = useCheckout();
 
   // Token patches so later stub steps (and CheckoutContext's own invalidation
-  // logic) have something to chew on before the real steps land in Tasks 8-10.
-  // Steps 1-2 no longer need a patch here — SignInStep/AddressStep complete
-  // themselves.
+  // logic) have something to chew on before the real steps land in Tasks 9-10.
+  // Steps 1-3 no longer need a patch here — SignInStep/AddressStep/DeliveryStep
+  // complete themselves.
   const stepPatches: Array<Record<string, unknown> | undefined> = [
     undefined,
     undefined,
-    { deliveryOptionId: 0 },
+    undefined,
     { paymentGateway: "stub" },
     undefined,
   ];
@@ -52,6 +54,7 @@ function CheckoutSteps() {
   const summaries: Record<number, string> = {
     1: `Signed in as ${selections.userEmail ?? ""}`,
     2: selections.addressDisplay ?? "Address selected",
+    3: selections.deliveryDisplay ?? "Delivery selected",
   };
 
   return (
@@ -72,6 +75,8 @@ function CheckoutSteps() {
               <SignInStep />
             ) : step === 2 ? (
               <AddressStep />
+            ) : step === 3 ? (
+              <DeliveryStep />
             ) : (
               <StepStub step={step} label={title} onContinue={() => complete(step, stepPatches[i])} />
             )}
