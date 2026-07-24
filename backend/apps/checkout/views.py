@@ -74,6 +74,10 @@ class QuoteView(APIView):
             totals = compute_totals(lines, request.country)
             opts = options_for_address(address, lines, totals.subtotal, request.country)
             chosen = next((o for o in opts if o["id"] == v["delivery_option_id"] and o["price"] is not None), None)
+            # Intentional silent fallback: an option id that doesn't match this address
+            # (or is quote_required) just leaves delivery at 0.00 rather than erroring —
+            # this is a non-authoritative preview, not a place_order. place_order does
+            # its own server-side re-match and is the authoritative check.
             if chosen:
                 delivery_amount = Decimal(chosen["price"])
         return Response(quote_service(
