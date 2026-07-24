@@ -158,6 +158,8 @@ describe("ReviewStep", () => {
       coupon_code: "SAVE10",
       expected_total: "23.00",
     });
+    expect(typeof body.idempotency_key).toBe("string");
+    expect(body.idempotency_key.length).toBeGreaterThan(0);
 
     expect(readBankHandoff("TC-100")).toEqual({
       display: { Bank: "GTB", "Account number": "0011" },
@@ -185,6 +187,37 @@ describe("ReviewStep", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/still finishing your previous attempt/i));
     expect(button).not.toBeDisabled();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("reuses the SAME idempotency_key on a retry after a lost-response failure — so the backend can replay the original order instead of orphaning it", async () => {
+    // Simulates a network blip: the backend already created the order but the
+    // response never made it back (a generic fetch rejection). The button
+    // re-enables and the shopper clicks Place order again — that retry must carry
+    // the identical key so the backend's idempotency layer replays the stored 201.
+    const f = mockFetch({
+      [QUOTE_URL]: {
+        status: 200,
+        body: { totals: { subtotal: "20.00", discount: "0.00", delivery: "5.00", tax: "0.00", grand_total: "25.00", currency: "GBP" }, coupon: { ok: true } },
+      },
+      [PLACE_URL]: { status: 409, body: { error: "idempotency_in_progress" } },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByText("£25.00")).toBeInTheDocument());
+    const button = screen.getByRole("button", { name: /place order/i });
+
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    fireEvent.click(button);
+    await waitFor(() => expect(f.mock.calls.filter((c) => c[0] === PLACE_URL)).toHaveLength(2));
+
+    const placeCalls = f.mock.calls.filter((c) => c[0] === PLACE_URL);
+    const firstKey = JSON.parse((placeCalls[0][1] as RequestInit).body as string).idempotency_key;
+    const secondKey = JSON.parse((placeCalls[1][1] as RequestInit).body as string).idempotency_key;
+    expect(firstKey).toBe(secondKey);
+    expect(typeof firstKey).toBe("string");
+    expect(firstKey.length).toBeGreaterThan(0);
   });
 
   it("maps a CheckoutError (insufficient_stock) to a specific message with a cart link, button re-enabled", async () => {

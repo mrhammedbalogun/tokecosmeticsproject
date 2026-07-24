@@ -23,10 +23,20 @@ export async function POST(req: Request) {
     return json({ detail: "Missing checkout fields." }, 400);
   }
   const country = jar.get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
+  // Prefer a client-supplied idempotency key: ReviewStep mints ONE key per checkout
+  // attempt and reuses it across a Place-order retry, so a lost-201 (network blip
+  // after the backend already created the order) resends the SAME key. The backend's
+  // idempotency layer (begin()/finish() in idempotency.py) then replays the stored
+  // 201 — bank details included — instead of hitting the now-converted cart and
+  // returning a spurious cart_not_active. Fall back to minting one server-side for
+  // any caller that doesn't send one. Never forward it in the upstream body — it's
+  // a header concern only.
+  const { idempotency_key: clientKey, ...upstreamBody } = body;
+  const idempotencyKey = typeof clientKey === "string" && clientKey ? clientKey : randomUUID();
   try {
     const out = await fetchWithAuth("/checkout/", {
-      method: "POST", country, body,
-      headers: { "Idempotency-Key": randomUUID() },
+      method: "POST", country, body: upstreamBody,
+      headers: { "Idempotency-Key": idempotencyKey },
     });
     return json(out, 201);
   } catch (e) {

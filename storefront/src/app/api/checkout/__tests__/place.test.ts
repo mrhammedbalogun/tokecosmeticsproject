@@ -39,4 +39,16 @@ describe("place-order BFF", () => {
     const res = await POST(req({ cart_id: "c1" }));
     expect(res.status).toBe(400); expect(f).not.toHaveBeenCalled();
   });
+  it("uses a client-supplied idempotency_key as the header and strips it from the upstream body", async () => {
+    const f = upstream(201, { order_number: "TC-1", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    const res = await POST(req({
+      cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer",
+      idempotency_key: "fixed-key-123",
+    }));
+    expect(res.status).toBe(201);
+    const [, init] = f.mock.calls[0];
+    expect(new Headers((init as RequestInit).headers).get("Idempotency-Key")).toBe("fixed-key-123");
+    const sentBody = JSON.parse((init as RequestInit).body as string);
+    expect(sentBody.idempotency_key).toBeUndefined();
+  });
 });

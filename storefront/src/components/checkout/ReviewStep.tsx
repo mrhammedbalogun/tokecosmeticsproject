@@ -69,9 +69,22 @@ interface QuoteFetchResult {
 
 /** Step 5 of checkout: review + idempotent place-order (Plan-14 Task 10). This is the
  * money-critical step — the grand total shown and sent as `expected_total` is ALWAYS
- * the server's authoritative quote, never computed here. Nothing is placed until the
- * shopper clicks Place order; the BFF attaches the Idempotency-Key, so a double click
- * (or a slow-network retry) can't create two orders. */
+ * the server's authoritative quote, never computed here.
+ *
+ * Double-submit / lost-response safety has two layers:
+ *  1. The common case (an impatient double-click) is caught client-side by the
+ *     `placing` disable below.
+ *  2. The dangerous case is a network blip that loses the 201 response AFTER the
+ *     backend already created the order (cart converted, stock reserved) — the
+ *     button re-enables on any fetch error, so the shopper naturally retries. That
+ *     retry MUST reuse the exact same Idempotency-Key as the original attempt: the
+ *     backend's idempotency layer (begin()/finish() in idempotency.py) replays the
+ *     STORED 201 — bank details included — for a same-key retry, but a fresh key
+ *     would hit the now-converted cart and return a spurious cart_not_active,
+ *     orphaning a real pending order with its bank details never shown. `idemKeyRef`
+ *     is minted once per mount (one key per checkout attempt) and never regenerated,
+ *     so every Place-order click from this component — first try or retry — carries
+ *     the same key through to the BFF (`route.ts`), which forwards it as the header. */
 export function ReviewStep() {
   const { selections, setSelection } = useCheckout();
   const { cart } = useCart();
@@ -80,6 +93,13 @@ export function ReviewStep() {
   const addressId = selections.addressId;
   const deliveryOptionId = selections.deliveryOptionId;
   const cartId = cart.id;
+
+  // Lazy useState initializer — computed exactly once on mount, stable for the
+  // component's lifetime (nothing ever calls the setter again). Deliberately NOT a
+  // ref: eslint's react-hooks/refs rule flags reading `ref.current` during render
+  // even for the standard lazy-ref-init pattern, so useState is the clean way to get
+  // a mount-once, render-stable value here.
+  const [idemKey] = useState<string>(() => crypto.randomUUID());
 
   // Pre-fill from the guest coupon-code stash (read once at mount via lazy init —
   // not an effect, so it can't trip react-hooks/set-state-in-effect). `appliedCoupon`
@@ -173,6 +193,7 @@ export function ReviewStep() {
           coupon_code: appliedCoupon,
           notes: selections.note,
           expected_total: totals.grand_total,
+          idempotency_key: idemKey,
         }),
       });
       const data = await res.json().catch(() => null);
