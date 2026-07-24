@@ -9,6 +9,7 @@ from datetime import timedelta
 from decimal import Decimal
 from functools import partial
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -187,7 +188,14 @@ def _initiate_payment(payment, order) -> None:
     """Call the gateway to start collecting money and persist what it returns. Raises
     GatewayError/GatewayNotConfigured on failure — the order stays pending_payment and
     the attempt is safely retryable (see the durable backstop above)."""
-    init = get_gateway(payment.gateway).initiate(payment, order)
+    # Server-built return URL: the trusted storefront origin + the order's OWN reference.
+    # Never accept a return URL from the client (open-redirect / tampering). Only the
+    # redirect gateway (Flutterwave) acts on it; the inline gateways ignore it.
+    return_url = (
+        f"{settings.STOREFRONT_BASE_URL.rstrip('/')}"
+        f"/checkout/return?ref={order.reservation_reference}"
+    )
+    init = get_gateway(payment.gateway).initiate(payment, order, return_url=return_url)
     payment.gateway_reference = init.reference
     payment.raw_response = init.data
     payment.save(update_fields=["gateway_reference", "raw_response", "updated_at"])
