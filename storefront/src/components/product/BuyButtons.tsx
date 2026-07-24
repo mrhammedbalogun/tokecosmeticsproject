@@ -4,8 +4,7 @@ import { useRouter } from "next/navigation";
 import { useCart } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
 import { usePdp } from "@/components/product/PdpContext";
-
-export const BUYNOW_INTENT_KEY = "toke-buynow-intent";
+import { BUYNOW_INTENT_KEY } from "@/lib/buynow-intent";
 
 /** Amazon-pattern pair (Decision 14): Buy Now = primary (straight to checkout),
  * Add to Cart = secondary (opens the drawer). Guest Buy Now stashes intent and
