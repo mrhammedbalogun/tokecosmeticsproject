@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
+import { useCart } from "@/hooks/useCart";
 import { readBuyNowIntent, clearBuyNowIntent } from "@/lib/buynow-intent";
 
 /** Django field errors come back as `{ field: ["message", ...] }`; a top-level
@@ -24,13 +25,17 @@ type Phase = "checking" | "register" | "login";
  * - If that email already has an account, the backend reports it via a 400 with
  *   an `email` field error ("Account already exists") — flip to a password-only
  *   login form instead of erroring out.
- * - Either path ends with the Buy-Now guest-resume routine: if the shopper
- *   arrived here via a guest "Buy Now" click (intent stashed in sessionStorage
- *   by BuyButtons.tsx), add that item to their now-authenticated cart.
+ * - Either path ends with two best-effort resume steps: (1) merging the guest's
+ *   cart (the one they were shopping with, pre-auth) into their new/matched
+ *   account via POST /api/cart/merge — without this, register/login hands back
+ *   a fresh empty user cart and the shopper's bag is lost; (2) the Buy-Now
+ *   guest-resume: if they arrived via a guest "Buy Now" click (intent stashed in
+ *   sessionStorage by BuyButtons.tsx), add that item to the now-authenticated cart.
  */
 export function SignInStep() {
   const { complete } = useCheckout();
   const queryClient = useQueryClient();
+  const { cart } = useCart();
 
   const [phase, setPhase] = useState<Phase>("checking");
   const [email, setEmail] = useState("");
@@ -68,9 +73,28 @@ export function SignInStep() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount check only
   }, []);
 
-  /** Buy-Now guest resume: best-effort — a failure here must never block checkout,
-   * since the item may already be in the cart (or the shopper can re-add it). */
-  async function runPostAuth(userEmail: string) {
+  /** Runs after a successful register/login (never after the me-check — an
+   * already-signed-in shopper has no guest cart to merge). `guestCartId` is the
+   * cart the shopper was shopping with as a guest, snapshotted BEFORE the
+   * register/login call (once authed, /api/cart starts resolving the user's own
+   * — initially empty — cart, so it must be captured earlier, not read here).
+   *
+   * Both the cart-merge and the Buy-Now resume are best-effort: a failure here
+   * must never block checkout — the merge may legitimately no-op (empty guest
+   * cart) and the Buy-Now item may already be in the cart. One invalidate at the
+   * end covers both, so the refetched cart reflects whichever of them landed. */
+  async function runPostAuth(userEmail: string, guestCartId?: string) {
+    if (guestCartId) {
+      try {
+        await fetch("/api/cart/merge", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cart_id: guestCartId }),
+        });
+      } catch {
+        // swallow — see doc comment above
+      }
+    }
     const intent = readBuyNowIntent();
     if (intent) {
       try {
@@ -83,9 +107,9 @@ export function SignInStep() {
         // swallow — see doc comment above
       } finally {
         clearBuyNowIntent();
-        queryClient.invalidateQueries({ queryKey: ["cart"] });
       }
     }
+    queryClient.invalidateQueries({ queryKey: ["cart"] });
     complete(1, { userEmail });
   }
 
@@ -95,6 +119,10 @@ export function SignInStep() {
 
   async function submitRegister(e: React.FormEvent) {
     e.preventDefault();
+    // Snapshot the guest cart BEFORE authenticating — once register succeeds the
+    // session cookie flips to the new user and /api/cart starts resolving THEIR
+    // (empty) cart, so this id would be unrecoverable if read any later.
+    const guestCartId = cart.id || undefined;
     setSubmitting(true);
     setFormError(null);
     setFieldErrors({});
@@ -105,7 +133,7 @@ export function SignInStep() {
         body: JSON.stringify({ email, password, first_name: firstName }),
       });
       if (res.ok) {
-        await runPostAuth(email);
+        await runPostAuth(email, guestCartId);
         return;
       }
       const body: ApiErrorBody = await res.json().catch(() => ({}));
@@ -128,6 +156,8 @@ export function SignInStep() {
 
   async function submitLogin(e: React.FormEvent) {
     e.preventDefault();
+    // Same snapshot-before-auth reasoning as submitRegister — see its comment.
+    const guestCartId = cart.id || undefined;
     setSubmitting(true);
     setFormError(null);
     setFieldErrors({});
@@ -138,7 +168,7 @@ export function SignInStep() {
         body: JSON.stringify({ email, password }),
       });
       if (res.ok) {
-        await runPostAuth(email);
+        await runPostAuth(email, guestCartId);
         return;
       }
       const body: ApiErrorBody = await res.json().catch(() => ({}));

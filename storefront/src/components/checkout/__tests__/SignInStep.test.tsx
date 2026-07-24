@@ -4,6 +4,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CheckoutProvider, useCheckout } from "@/components/checkout/CheckoutContext";
 import { SignInStep } from "@/components/checkout/SignInStep";
 import { BUYNOW_INTENT_KEY } from "@/lib/buynow-intent";
+import type { Cart } from "@/lib/cart-types";
+import { EMPTY_CART } from "@/lib/cart-types";
+
+// SignInStep now reads useCart() to snapshot the guest cart id before auth (for
+// the cart-merge fix). Mock the hook directly — same pattern as CartView.test.tsx
+// — so each test controls `cart.id` without needing a real /api/cart fetch mock.
+let mockCart: Cart;
+vi.mock("@/hooks/useCart", () => ({
+  useCart: () => ({ cart: mockCart }),
+}));
 
 /** Small harness exposing the checkout machine's completed/selections state next
  * to the real SignInStep, mirroring the pattern in CheckoutContext.test.tsx —
@@ -54,6 +64,7 @@ const originalFetch = global.fetch;
 
 beforeEach(() => {
   sessionStorage.clear();
+  mockCart = EMPTY_CART;
 });
 afterEach(() => {
   global.fetch = originalFetch;
@@ -61,8 +72,12 @@ afterEach(() => {
 });
 
 describe("SignInStep", () => {
-  it("auto-completes step 1 when already signed in (me check)", async () => {
-    mockFetch({
+  it("auto-completes step 1 when already signed in (me check), without merging any cart", async () => {
+    // Even if a cart happens to be present, the me-check branch has no "guest"
+    // cart to speak of (the shopper is already authenticated) — it must never
+    // call /api/cart/merge.
+    mockCart = { ...EMPTY_CART, id: "some-cart-id" };
+    const f = mockFetch({
       "/api/auth/me": { status: 200, body: { email: "jane@example.com", first_name: "Jane" } },
     });
 
@@ -72,6 +87,7 @@ describe("SignInStep", () => {
     expect(screen.getByTestId("userEmail")).toHaveTextContent("jane@example.com");
     // The form never renders for an already-authenticated shopper.
     expect(screen.queryByLabelText(/^email$/i)).toBeNull();
+    expect(f).not.toHaveBeenCalledWith("/api/cart/merge", expect.anything());
   });
 
   it("registers a new email and completes the step", async () => {
@@ -99,6 +115,54 @@ describe("SignInStep", () => {
     );
   });
 
+  it("merges the guest cart into the account after registering (checkout-breaking bug fix)", async () => {
+    // Reproduces the live bug: a guest with a non-empty cart signs up inline at
+    // checkout. Without merging the pre-auth cart id into the new account, the
+    // shopper lands on a fresh empty user cart and can't place an order.
+    mockCart = { ...EMPTY_CART, id: "guest-cart-77" };
+    const f = mockFetch({
+      "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
+      "/api/auth/register": { status: 201, body: { ok: true } },
+      "/api/cart/merge": { status: 200, body: { id: "user-cart-1" } },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "shopper@example.com" } });
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    expect(f).toHaveBeenCalledWith(
+      "/api/cart/merge",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ cart_id: "guest-cart-77" }),
+      })
+    );
+  });
+
+  it("does not attempt a merge when the guest cart is empty (no id yet)", async () => {
+    mockCart = EMPTY_CART; // id: ""
+    const f = mockFetch({
+      "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
+      "/api/auth/register": { status: 201, body: { ok: true } },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "new@example.com" } });
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    expect(f).not.toHaveBeenCalledWith("/api/cart/merge", expect.anything());
+  });
+
   it("flips to the password/login form when the email already has an account", async () => {
     mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
@@ -124,11 +188,13 @@ describe("SignInStep", () => {
     // (separately verified below with its own fetch mock)
   });
 
-  it("logs in after the existing-email flip and completes the step", async () => {
-    mockFetch({
+  it("logs in after the existing-email flip, merges the guest cart, and completes the step", async () => {
+    mockCart = { ...EMPTY_CART, id: "guest-cart-42" };
+    const f = mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
       "/api/auth/register": { status: 400, body: { email: ["Account already exists"] } },
       "/api/auth/login": { status: 200, body: { ok: true } },
+      "/api/cart/merge": { status: 200, body: { id: "user-cart-1" } },
     });
 
     renderHarness();
@@ -145,6 +211,13 @@ describe("SignInStep", () => {
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
     expect(screen.getByTestId("userEmail")).toHaveTextContent("dup@example.com");
+    expect(f).toHaveBeenCalledWith(
+      "/api/cart/merge",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ cart_id: "guest-cart-42" }),
+      })
+    );
   });
 
   it("resumes a stashed Buy-Now intent after registering and clears it", async () => {
