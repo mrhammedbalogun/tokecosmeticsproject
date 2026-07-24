@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/hooks/useCart";
 import { formatMoney } from "@/lib/country";
@@ -18,48 +18,26 @@ type QuoteState =
 
 /** Client cart page. Subtotal always comes from useCart() (works for guests too).
  * Full totals + coupon validation are authoritative from the server-side quote
- * endpoint, which is authed-only — a guest gets a clean subtotal-only fallback,
- * never an error state. */
+ * endpoint, which is authed-only. There is deliberately NO background/mount-time
+ * quote call — everyone (guest or authed) sees a clean subtotal-only OrderSummary
+ * by default ("Delivery & taxes calculated at checkout."); the quote endpoint is
+ * only ever hit from an explicit Apply-coupon click. That avoids a race between a
+ * silent mount fetch and the user's own action, and means a guest never sees a
+ * coupon error/note before they've touched the field. */
 export function CartView() {
   const { cart, isLoading, setQty } = useCart();
   const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
-  // Separate from `quote`'s status: this only gates the Apply button while a
-  // user-initiated coupon check is in flight — it must NOT be set by the silent
-  // background quote on mount, or the button would render disabled before the
-  // shopper ever gets to type a code.
   const [applying, setApplying] = useState(false);
   const [couponInput, setCouponInput] = useState("");
 
-  // Attempt an unauthenticated-coupon quote on load so logged-in shoppers see full
-  // totals immediately; guests silently fall back to subtotal-only (no error shown).
-  useEffect(() => {
-    if (!cart.id || cart.items.length === 0) return;
-    let cancelled = false;
-    fetch("/api/checkout/quote", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cart_id: cart.id }),
-    })
-      .then(async (res) => {
-        if (cancelled) return;
-        if (res.status === 401) {
-          setQuote({ status: "guest" });
-          return;
-        }
-        if (!res.ok) {
-          setQuote({ status: "error" });
-          return;
-        }
-        const data = await res.json();
-        setQuote({ status: "ok", totals: data.totals });
-      })
-      .catch(() => {
-        if (!cancelled) setQuote({ status: "error" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [cart.id, cart.items.length]);
+  // A quantity change or removal can invalidate an already-applied coupon's totals
+  // (different subtotal, maybe a min-spend no longer met) — drop back to
+  // subtotal-only rather than risk showing a stale Total next to a live Subtotal.
+  // The shopper can re-Apply to recompute the discount.
+  function changeQty(variantId: number, quantity: number) {
+    setQty.mutate({ variantId, quantity });
+    setQuote({ status: "idle" });
+  }
 
   async function applyCoupon() {
     const code = couponInput.trim();
@@ -84,7 +62,7 @@ export function CartView() {
       if (data.coupon?.ok) {
         setQuote({ status: "ok", totals: data.totals });
       } else {
-        setQuote({ status: "invalid", code: data.coupon?.error_code ?? "not_found" });
+        setQuote({ status: "invalid", code: data.coupon?.error_code ?? "" });
       }
     } catch {
       setQuote({ status: "error" });
@@ -137,7 +115,7 @@ export function CartView() {
                   <button
                     type="button"
                     aria-label={`Decrease quantity of ${line.name}`}
-                    onClick={() => setQty.mutate({ variantId: line.variant_id, quantity: Math.max(0, line.quantity - 1) })}
+                    onClick={() => changeQty(line.variant_id, Math.max(0, line.quantity - 1))}
                     className="h-8 w-8 rounded-full border border-line text-muted hover:text-foreground"
                   >
                     −
@@ -146,7 +124,7 @@ export function CartView() {
                   <button
                     type="button"
                     aria-label={`Increase quantity of ${line.name}`}
-                    onClick={() => setQty.mutate({ variantId: line.variant_id, quantity: line.quantity + 1 })}
+                    onClick={() => changeQty(line.variant_id, line.quantity + 1)}
                     className="h-8 w-8 rounded-full border border-line text-muted hover:text-foreground"
                   >
                     +
@@ -159,7 +137,7 @@ export function CartView() {
               <button
                 type="button"
                 aria-label={`Remove ${line.name}`}
-                onClick={() => setQty.mutate({ variantId: line.variant_id, quantity: 0 })}
+                onClick={() => changeQty(line.variant_id, 0)}
                 className="text-muted hover:text-foreground"
               >
                 ×

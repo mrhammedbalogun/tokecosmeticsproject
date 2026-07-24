@@ -63,14 +63,22 @@ function mockQuoteFetch(status: number, body: unknown) {
 }
 
 describe("CartView", () => {
-  it("shows the specific message for an invalid coupon", async () => {
-    // initial mount quote (no coupon) is a guest 401, then the Apply-click quote returns invalid
+  it("renders subtotal-only on initial load, with no coupon quote fetched and no coupon message shown", () => {
     const f = vi.fn();
-    f.mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Not authenticated." }), { status: 401 }));
-    f.mockResolvedValueOnce(
-      new Response(JSON.stringify({ totals: null, coupon: { ok: false, error_code: "not_found" } }), { status: 200 })
-    );
     global.fetch = f as unknown as typeof fetch;
+
+    render(<CartView />);
+
+    expect(screen.getByText("Delivery & taxes calculated at checkout.")).toBeInTheDocument();
+    expect(screen.queryByText(/isn't a valid code/i)).toBeNull();
+    expect(screen.queryByText(/apply your code at checkout/i)).toBeNull();
+    expect(screen.queryByText(/couldn.t apply/i)).toBeNull();
+    // No quote request until the shopper explicitly clicks Apply.
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("shows the specific message for an invalid coupon (Apply-click only)", async () => {
+    const f = mockQuoteFetch(200, { totals: null, coupon: { ok: false, error_code: "not_found" } });
 
     render(<CartView />);
     const input = screen.getByLabelText(/coupon code/i);
@@ -78,28 +86,21 @@ describe("CartView", () => {
     fireEvent.click(screen.getByRole("button", { name: /apply/i }));
 
     await waitFor(() => expect(screen.getByText(/isn't a valid code/i)).toBeInTheDocument());
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a Discount row for a valid coupon", async () => {
-    const f = vi.fn();
-    f.mockResolvedValueOnce(new Response(JSON.stringify({ detail: "Not authenticated." }), { status: 401 }));
-    f.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          totals: {
-            subtotal: "18500.00",
-            discount: "5.00",
-            delivery: "0.00",
-            tax: "0.00",
-            grand_total: "18495.00",
-            currency: "NGN",
-          },
-          coupon: { ok: true },
-        }),
-        { status: 200 }
-      )
-    );
-    global.fetch = f as unknown as typeof fetch;
+  it("shows a Discount row for a valid coupon (Apply-click only)", async () => {
+    const f = mockQuoteFetch(200, {
+      totals: {
+        subtotal: "18500.00",
+        discount: "5.00",
+        delivery: "0.00",
+        tax: "0.00",
+        grand_total: "18495.00",
+        currency: "NGN",
+      },
+      coupon: { ok: true },
+    });
 
     render(<CartView />);
     const input = screen.getByLabelText(/coupon code/i);
@@ -107,10 +108,11 @@ describe("CartView", () => {
     fireEvent.click(screen.getByRole("button", { name: /apply/i }));
 
     await waitFor(() => expect(screen.getByText("Discount")).toBeInTheDocument());
+    expect(f).toHaveBeenCalledTimes(1);
   });
 
   it("stashes the code and shows the apply-at-checkout note for a guest", async () => {
-    mockQuoteFetch(401, { detail: "Not authenticated." });
+    const f = mockQuoteFetch(401, { detail: "Not authenticated." });
 
     render(<CartView />);
     const input = screen.getByLabelText(/coupon code/i);
@@ -119,5 +121,32 @@ describe("CartView", () => {
 
     await waitFor(() => expect(screen.getByText(/apply your code at checkout/i)).toBeInTheDocument());
     expect(sessionStorage.getItem("toke-coupon-code")).toBe("GUESTCODE");
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops back to subtotal-only after a qty change following a successful coupon apply", async () => {
+    mockQuoteFetch(200, {
+      totals: {
+        subtotal: "18500.00",
+        discount: "5.00",
+        delivery: "0.00",
+        tax: "0.00",
+        grand_total: "18495.00",
+        currency: "NGN",
+      },
+      coupon: { ok: true },
+    });
+
+    render(<CartView />);
+    const input = screen.getByLabelText(/coupon code/i);
+    fireEvent.change(input, { target: { value: "SAVE5" } });
+    fireEvent.click(screen.getByRole("button", { name: /apply/i }));
+    await waitFor(() => expect(screen.getByText("Discount")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /increase quantity/i }));
+
+    expect(setQtyMutate).toHaveBeenCalledWith({ variantId: 10, quantity: 3 });
+    expect(screen.queryByText("Discount")).toBeNull();
+    expect(screen.getByText("Delivery & taxes calculated at checkout.")).toBeInTheDocument();
   });
 });
