@@ -55,7 +55,7 @@ class ProductListView(CatalogCacheMixin, generics.ListAPIView):
         country = self.request.country
         qs = (
             Product.objects.filter(status="active")
-            .prefetch_related("images")
+            .prefetch_related("images", "variants")  # PLAN-13 D2: variants for card default-variant fields
             .select_related("brand")
         )
         # Restrict to products available in this country (empty available_countries = all).

@@ -21,7 +21,7 @@ class PostgresSearchBackend:
             .filter(Q(available_countries__isnull=True) | Q(available_countries=country))
             .distinct()
             .select_related("brand")
-            .prefetch_related("images")
+            .prefetch_related("images", "variants")  # PLAN-13 D2: variants for card default-variant fields
         )
         return annotate_min_price(qs, country).filter(min_price__isnull=False)  # priced/sellable
 

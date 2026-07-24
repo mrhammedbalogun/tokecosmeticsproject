@@ -1068,3 +1068,50 @@ schema (`http://localhost:8000/api/schema/`) → `src/lib/api-types.ts`. Run it 
 the API contract changes so the typed client stays in sync.
 
 Full detail: `docs/superpowers/plans/2026-07-18-plan-12-storefront-foundation.md`.
+
+## Storefront catalog + SEO (Plan-13)
+
+The catalog storefront — homepage, product listing pages (PLP), category pages, product detail
+pages (PDP), search — plus the enterprise SEO layer. Built on the Plan-12 shell; all Django reads go
+through `lib/api.ts` (server-side, `X-Country`), browser mutations through same-origin BFF routes.
+
+**Canonical policy** (`lib/seo.ts`). Every canonical is **absolute** (`absoluteUrl`, built from
+`NEXT_PUBLIC_SITE_URL`). PLP (`/products`, `/category/[slug]`) canonicals keep **only** the `page`
+param when `page > 1`; the moment any filter/sort param (`brand`, `price_min/max`, `ordering`, `tag`,
+`collection`) is present, the canonical collapses to the **bare base path** — filtered/sorted views
+never compete with the base for indexing. Home, category bases, and PDPs are self-canonical.
+
+**hreflang deliberately omitted.** The store is a **single locale (en) with ONE URL set**. Country
+and currency are an in-session choice (the `country` cookie → `X-Country`), not encoded in the URL,
+so there are no per-country alternate URLs to cross-reference. Adding hreflang would be inventing
+alternates that don't exist (master spec §5). Revisit only if per-locale routes ever ship.
+
+**Slug parity.** Product and category slugs are used **verbatim** — never transformed in the
+storefront. They will be byte-identical to the migrated WordPress slugs (Plan-21/24 guarantee); the
+Plan-24 redirect middleware handles the old URL *shapes*, not the slugs themselves.
+
+**JSON-LD inventory** — emitted by `lib/seo.ts` builders through the XSS-escaped `<JsonLd>` component:
+- **Organization** + **WebSite** (with `SearchAction`) — homepage.
+- **BreadcrumbList** — category pages and PDPs.
+- **Product** (`offers` as `AggregateOffer` low/high across variants) + **AggregateRating** + **FAQPage** — PDP.
+`priceValidUntil` is omitted (the price API exposes no sale end date; the Product schema is valid
+without it).
+
+**Caching + invalidation.** Pages render dynamically (they read the `country` cookie), so freshness
+lives in the **fetch data-cache**: catalog fetches carry `next: { revalidate, tags }` with tags
+`catalog` (lists/tree/brands) and `product:<slug>`. `POST /api/revalidate` (guarded by the
+`REVALIDATE_SECRET` header) calls `revalidateTag(tag, "max")` — Next 16 requires the profile arg;
+`"max"` gives stale-while-revalidate, which the Next docs recommend for product catalogs. The Django
+`post_save` webhook that will drive this in production is **deferred to Plan-22** (D7) — the backend's
+own 60 s catalog cache covers the gap until then.
+
+**Sitemap + robots.** `app/sitemap.ts` emits a **single** sitemap (catalog is far under the 50k-URL
+limit — shard with `generateSitemaps()` only near ~10k) covering `/`, `/products`, every category, and
+every product (paging the API, hard-capped at 100 pages as a runaway guard). `app/robots.ts` allows
+all and disallows `/checkout`, `/account`, `/api/`, `/cart` (user-specific / non-content), and points
+to the absolute sitemap URL. Both serve at `/sitemap.xml` and `/robots.txt`.
+
+**Search is `noindex,follow`** and deliberately **absent from the sitemap** — result pages are
+thin/duplicative; the crawler follows links out but doesn't index the query pages themselves.
+
+Full detail: `docs/superpowers/plans/2026-07-22-plan-13-storefront-catalog-seo.md`.

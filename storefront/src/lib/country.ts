@@ -52,3 +52,13 @@ export function formatMoney(amount: string, currencyCode: string, symbol: string
 export function labelFor(market: Market): string {
   return market.is_rest_of_world ? "International (USD)" : market.name;
 }
+
+/** Display symbols for the live currencies. Server truth is /meta/countries/ —
+ * this map only saves a fetch where just the symbol is needed on a card. */
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  NGN: "₦", GBP: "£", USD: "$", CAD: "CA$",
+};
+
+export function symbolFor(currencyCode: string): string {
+  return CURRENCY_SYMBOLS[currencyCode] ?? `${currencyCode} `;
+}

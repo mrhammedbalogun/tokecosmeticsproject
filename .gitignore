@@ -32,3 +32,6 @@ Thumbs.db
 # Local data volumes / dev DB
 /data/
 *.sqlite3
+
+# Local dev media (seeded placeholder images)
+backend/media/
