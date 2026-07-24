@@ -7,7 +7,10 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
   return (
     <div
       aria-hidden={!open}
-      className={`fixed inset-0 z-50 transition-opacity ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      // overflow-hidden clips the off-canvas <aside> (translate-x-full) when closed —
+      // without it the drawer sits 360px off-screen right and every page can scroll
+      // horizontally on mobile. Harmless when open (drawer is translate-x-0, in-bounds).
+      className={`fixed inset-0 z-50 overflow-hidden transition-opacity ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
     >
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <aside
