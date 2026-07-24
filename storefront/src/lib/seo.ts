@@ -34,17 +34,28 @@ export interface PageMeta {
   title: string; description: string; path: string;
   searchParams?: Record<string, string | undefined>;
   image?: string | null; noindex?: boolean;
+  /** Open Graph object type. Defaults to "website"; the PDP passes "product" so
+   * the og:type matches the Product JSON-LD (existing callers are unchanged). */
+  ogType?: "website" | "product";
 }
 
 export function pageMetadata(meta: PageMeta): Metadata {
   const canonical = canonicalFor(meta.path, meta.searchParams);
+  // Next 16's typed OpenGraph union has NO `product` member (only website/article/
+  // book/profile/music.*/video.*), and its `other` field emits `name=` not the
+  // `property=` an OG tag needs. So for a PDP we omit openGraph.type here (Next emits
+  // og:type only for a known literal) and the PDP page renders the correct
+  // <meta property="og:type" content="product"> itself (React 19 hoists it to head).
+  // Non-product callers keep type:"website" exactly as before.
+  const isProduct = meta.ogType === "product";
   return {
     title: meta.title,
     description: meta.description,
     alternates: { canonical },
     openGraph: {
       title: meta.title, description: meta.description, url: canonical,
-      siteName: SITE_NAME, type: "website",
+      siteName: SITE_NAME,
+      ...(isProduct ? {} : { type: "website" as const }),
       ...(meta.image ? { images: [meta.image] } : {}),
     },
     twitter: {
