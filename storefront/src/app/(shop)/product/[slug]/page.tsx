@@ -14,6 +14,10 @@ import { PdpProvider } from "@/components/product/PdpContext";
 import { ProductGallery } from "@/components/product/ProductGallery";
 import { BuyBox } from "@/components/product/BuyBox";
 import { PdpAccordions } from "@/components/product/PdpAccordions";
+import { ReviewList } from "@/components/product/ReviewList";
+import { RelatedProducts } from "@/components/product/RelatedProducts";
+import { RecentlyViewed } from "@/components/product/RecentlyViewed";
+import { RecentlyViewedTracker } from "@/components/product/RecentlyViewedTracker";
 
 type Params = Promise<{ slug: string }>;
 
@@ -90,7 +94,15 @@ export default async function ProductPage({ params }: { params: Params }) {
       <div className="mx-auto max-w-3xl">
         <PdpAccordions product={product} />
       </div>
-      {/* Task 12 appends: ReviewList, RelatedProducts, RecentlyViewed */}
+      <RecentlyViewedTracker entry={{
+        slug, name: product.name,
+        image: mediaUrl(product.images[0]?.url ?? null),
+        from_price: product.variants.find((v) => v.price)?.price?.amount ?? null,
+        currency: product.variants.find((v) => v.price)?.price?.currency ?? "NGN",
+      }} />
+      <ReviewList slug={slug} ratingAvg={product.rating_avg} ratingCount={product.rating_count} />
+      <RelatedProducts products={product.related} />
+      <RecentlyViewed excludeSlug={slug} />
     </section>
   );
 }

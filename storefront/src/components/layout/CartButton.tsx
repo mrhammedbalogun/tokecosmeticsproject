@@ -1,11 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCart } from "@/hooks/useCart";
+import { onCartDrawerOpen } from "@/lib/cart-ui";
 import { CartDrawer } from "@/components/layout/CartDrawer";
 
 export function CartButton() {
   const [open, setOpen] = useState(false);
   const { cart } = useCart();
+  useEffect(() => onCartDrawerOpen(() => setOpen(true)), []);
   const count = cart.items.reduce((n, l) => n + l.quantity, 0);
   return (
     <>

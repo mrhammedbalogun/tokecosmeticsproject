@@ -4,6 +4,7 @@ import { PriceTag } from "@/components/product/PriceTag";
 import { ReviewStars } from "@/components/product/ReviewStars";
 import { VariantPicker } from "@/components/product/VariantPicker";
 import { QtySelector } from "@/components/product/QtySelector";
+import { BuyButtons } from "@/components/product/BuyButtons";
 import { usePdp } from "@/components/product/PdpContext";
 
 export function BuyBox({ product, deliveryLine }: {
@@ -41,17 +42,7 @@ export function BuyBox({ product, deliveryLine }: {
         <span aria-hidden>🚚</span>{deliveryLine}
       </p>
       <QtySelector />
-      <div className="mt-6 space-y-3">
-        {/* onClick wiring lands in Task 12 (cart-ui event + buy-now BFF). */}
-        <button type="button" disabled data-task12="buy-now"
-          className="w-full rounded-full bg-accent py-3.5 font-medium text-surface transition-colors hover:bg-accent-strong disabled:opacity-50">
-          Buy Now
-        </button>
-        <button type="button" disabled data-task12="add-to-cart"
-          className="w-full rounded-full border border-accent py-3.5 font-medium text-accent transition-colors hover:bg-accent/5 disabled:opacity-50">
-          Add to Cart
-        </button>
-      </div>
+      <BuyButtons />
       <p className="mt-4 text-center text-xs text-muted">Secure worldwide checkout · 14-day returns</p>
     </div>
   );
