@@ -31,10 +31,27 @@ is verifiable without any external gateway.
   cart (both user-owned) — so the delivery step must come **after** the address step.
 - The browser never holds a JWT: all authed calls go through Route Handlers / `fetchWithAuth`
   (Plan-12 pattern). Money strings are displayed verbatim; never computed/rounded in the storefront.
+- **No totals/coupon preview endpoint exists.** `compute_totals` and `validate_coupon` are server-side
+  services never exposed over HTTP; `/cart` returns only `subtotal`; `/checkout/delivery-options/`
+  returns each option's delivery price but not a combined total. Because the storefront may not compute
+  money, Plan-14 adds **one additive, read-only endpoint** (see D4-revised) rather than doing client
+  math. `POST /api/v1/checkout/` additionally requires an **`Idempotency-Key`** header, takes
+  `coupon_code` + `payment_gateway` + `expected_total`, and returns
+  `{order_number, payment:{gateway, action, data}}` — bank-transfer account details ride in
+  `payment.data`.
 
 ## Architecture
 
-Storefront + BFF only — no backend changes in Plan-14.
+Storefront + BFF, plus **one additive read-only backend endpoint** (the quote/totals preview — D4-revised).
+
+**Backend (the only backend change)**
+- `POST /api/v1/checkout/quote/` (authed) — body `{cart_id, address_id?, delivery_option_id?, coupon_code?}`
+  → returns the authoritative `{totals: {subtotal, discount, delivery, tax, grand_total, currency},
+  coupon: {ok, error_code?}}` by reusing `compute_totals` + `validate_coupon` +
+  (`options_for_address` when an address/option is given). Read-only: computes nothing new, places
+  nothing, mutates nothing. Lets the cart page validate coupons inline and the checkout show a correct
+  grand total (incl. tax/discount) **before** the Place-order click, without any client money math.
+  pytest-covered. This is the sole backend edit in Plan-14.
 
 **Pages**
 - `src/app/(shop)/cart/page.tsx` — the cart page (replaces the skeleton).
@@ -98,15 +115,19 @@ final "Place order" click.
   amount + the unique bank reference) with an **"I've paid / I'll pay"** acknowledgement that routes to
   the confirmation page. The order is **pending** until staff confirm the transfer (existing Plan-09b
   flow; storefront does not mark it paid).
-- **Confirmation page (`/checkout/confirmation/[number]`):** order number, items, totals, delivery
-  estimate, **bank details re-shown** (so they aren't trapped only in the email — master-guide
-  follow-up), and — for a guest who just auto-signed-up — a gentle "your account is ready" note (they
-  already have a password). Tracking-link explanation.
+- **Confirmation page (`/checkout/confirmation/[number]`):** order number, items, totals (from
+  `GET /orders/<number>/`), delivery estimate, and — carried from the placement response via a
+  short-lived client handoff (sessionStorage keyed by order number) — the **bank details** shown once
+  more. For a guest who just auto-signed-up, a gentle "your account is ready" note (they already have a
+  password). Tracking-link explanation. (Persistent bank-detail re-show on a later revisit / from the
+  email link needs an order-payment read that belongs to Plan-15's order-detail page — deferred there.)
 - **Failure / abandonment:**
   - Reservation/stock expired before placement → clear message + cart restored; user restarts checkout.
-  - **Customer-visible cancel** on a pending order (surfaces the existing `orders.services.cancel_order`)
-    so an abandoned "see the account number and walk away" checkout doesn't hold thin NG stock for 24h.
-    Placement error (e.g. an item went out of stock mid-checkout) → specific message pointing at the line.
+  - Placement error (e.g. an item went out of stock mid-checkout) → specific message pointing at the line.
+  - **Customer-visible cancel** of a pending order is **deferred to Plan-15** (its natural home is the
+    account order-detail page, and it needs its own `cancel_order` endpoint). Noted so the 24h-stock-hold
+    concern isn't lost — it is no worse than today's live Plan-09b bank-transfer flow, which also has no
+    storefront cancel.
 
 ## Buy-Now guest resume (deferred from Plan-13 D6)
 
@@ -141,10 +162,13 @@ the backend. Blocks merge. On sign-off: merge → main; Plan-14b starts.
   dropped entirely. (Hammed, 2026-07-23.)
 - **D2 — Split 14/14b:** ship a bank-transfer checkout first, layer gateways after. (Hammed.)
 - **D3 — No pure guest:** silent inline account creation, forced by the authed backend. (Constraint.)
-- **D4 — No backend changes** in Plan-14; storefront + BFF only (all endpoints already exist).
+- **D4 (revised 2026-07-23) — One additive read-only backend endpoint** (`POST /checkout/quote/`),
+  reusing existing money services, because the storefront may not compute money and no totals/coupon
+  preview endpoint exists. Everything else is storefront + BFF. (Hammed approved the revision.)
 
 ## Carried gaps / out of scope
 
-- Gateway integrations (14b). Order-history / account order-detail UI (Plan-15). Live delivery quotes
-  beyond the existing options endpoint. Prod throttle/proxy + real media host + Django revalidate
-  webhook (Plan-22). Rich Results public-URL test (deploy).
+- Gateway integrations (14b). Order-history / account order-detail UI, **customer-visible order cancel**,
+  and **persistent bank-detail re-show** (Plan-15). Live delivery quotes beyond the existing options
+  endpoint. Prod throttle/proxy + real media host + Django revalidate webhook (Plan-22). Rich Results
+  public-URL test (deploy).
