@@ -18,13 +18,18 @@ export function ProductGallery({ product }: { product: ProductDetail }) {
   const [reduced, setReduced] = useState(false);
 
   useEffect(() => {
+    // One-shot post-mount read of a browser capability (matchMedia) — hydration-safe by
+    // rendering the non-reduced default on server + first client render, then correcting.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-mount capability read
     setReduced(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   }, []);
 
-  // Variant picked -> jump to its image if one is linked.
+  // Variant picked -> jump to its image if one is linked. Syncs the gallery to an external
+  // selection (the shared PDP variant context); runs only when the variant actually changes.
   useEffect(() => {
     if (!variant) return;
     const i = images.findIndex((img) => img.variant_id === variant.id);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync to external variant selection; only on variant change
     if (i >= 0) setIndex(i);
   }, [variant, images]);
 

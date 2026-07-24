@@ -8,6 +8,11 @@ import { formatMoney, symbolFor } from "@/lib/country";
 export function RecentlyViewed({ excludeSlug }: { excludeSlug: string }) {
   const [items, setItems] = useState<RecentEntry[]>([]);
   useEffect(() => {
+    // One-shot client-only read: the ring buffer lives in localStorage, so the server and
+    // the first (hydration) client render MUST output nothing (items=[] -> null) to stay
+    // hydration-safe; only after mount may we read it. Same "subscribe to a browser system"
+    // case documented in CountrySuggestionBanner (useSyncExternalStore was unreliable here).
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional post-mount localStorage read; see note above
     setItems(listRecentlyViewed().filter((e) => e.slug !== excludeSlug).slice(0, 6));
   }, [excludeSlug]);
   if (items.length === 0) return null;
