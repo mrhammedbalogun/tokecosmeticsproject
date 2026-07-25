@@ -118,8 +118,13 @@ class PayPalGateway(PaymentGateway):
         approve = next(
             (link["href"] for link in body.get("links", []) if link.get("rel") == "approve"), ""
         )
+        # order_id + currency are what the inline Buttons need: the SDK script is loaded
+        # per-currency, and approving an order in a currency other than the loaded one
+        # fails at the buyer's click. Both ride in data because the checkout response
+        # forwards init.data verbatim as payment.data.
         return InitiateResult(action="redirect", reference=body["id"],
-                              data={"redirect_url": approve, "order_id": body["id"]})
+                              data={"redirect_url": approve, "order_id": body["id"],
+                                    "currency": payment.currency_id})
 
     def capture(self, payment) -> dict:
         """Capture an approved order. Called on customer return / APPROVED webhook.
