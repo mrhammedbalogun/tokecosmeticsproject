@@ -44,6 +44,20 @@ log "dumping $PGDB as $PGUSER -> $FILE"
 SIZE=$(stat -c%s "$FILE")
 [ "$SIZE" -ge 10000 ] || fail "dump is only ${SIZE} bytes — refusing to upload or rotate"
 
+# The floor above only catches a dump that failed outright. It would not notice the
+# database losing every order but keeping its schema — today a schema-and-seed-only
+# dump is ~24 KB, comfortably over 10 KB. So also compare against the previous
+# dump: backups grow, they do not halve. Set BACKUP_ALLOW_SHRINK=1 for the one
+# legitimate case, a deliberate data purge.
+PREV=$(find "$BACKUP_DIR" -name 'toke-*.sql.gz' ! -name "$(basename "$FILE")" -printf '%T@ %p\n' \
+       | sort -rn | head -1 | cut -d' ' -f2-)
+if [ -n "$PREV" ] && [ "${BACKUP_ALLOW_SHRINK:-0}" != "1" ]; then
+    PREV_SIZE=$(stat -c%s "$PREV")
+    if [ "$SIZE" -lt $(( PREV_SIZE / 2 )) ]; then
+        fail "dump is ${SIZE} bytes but the previous one ($(basename "$PREV")) was ${PREV_SIZE} — that is a data loss signal, not a backup. Re-run with BACKUP_ALLOW_SHRINK=1 if this shrink is real."
+    fi
+fi
+
 # pipefail catches a pg_dump that dies mid-stream, but not a corrupt gzip.
 gzip -t "$FILE" || fail "dump failed its gzip integrity check"
 log "dump ok: $SIZE bytes"
