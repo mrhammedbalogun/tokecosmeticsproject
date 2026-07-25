@@ -20,6 +20,9 @@ dependencies = [
     "httpx>=0.28.1",
     "stripe>=15.3.1",
     "weasyprint>=69.0",
+    # Production WSGI server (Plan-02). Not used by runserver in dev, but the
+    # container CMD is gunicorn, so it must be a real locked dependency.
+    "gunicorn>=23.0.0",
 ]
 
 [dependency-groups]
