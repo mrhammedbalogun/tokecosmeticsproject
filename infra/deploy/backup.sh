@@ -26,6 +26,15 @@ KEY="backups/postgres/toke-$STAMP.sql.gz"
 log() { echo "[$(date -Is)] $*"; }
 fail() { log "FATAL: $*"; exit 1; }
 
+# Park a dump that failed its checks under a name the size comparison below cannot
+# see. Leaving it as toke-*.sql.gz would make tonight's rejected dump tomorrow's
+# baseline, and the guard would wave the same shrunken database straight through.
+# It is kept, not deleted: a suspicious dump is still evidence.
+reject() {
+    mv "$FILE" "$FILE.rejected"
+    fail "$* (dump parked at ${FILE}.rejected)"
+}
+
 mkdir -p "$BACKUP_DIR"
 
 # Read the credentials from the running container rather than parsing .env.prod.
@@ -42,7 +51,7 @@ log "dumping $PGDB as $PGUSER -> $FILE"
 # classic backup failure is a script that writes an empty file every night for six
 # months and rotates the good copies away behind it.
 SIZE=$(stat -c%s "$FILE")
-[ "$SIZE" -ge 10000 ] || fail "dump is only ${SIZE} bytes — refusing to upload or rotate"
+[ "$SIZE" -ge 10000 ] || reject "dump is only ${SIZE} bytes — refusing to upload or rotate"
 
 # The floor above only catches a dump that failed outright. It would not notice the
 # database losing every order but keeping its schema — today a schema-and-seed-only
@@ -54,12 +63,12 @@ PREV=$(find "$BACKUP_DIR" -name 'toke-*.sql.gz' ! -name "$(basename "$FILE")" -p
 if [ -n "$PREV" ] && [ "${BACKUP_ALLOW_SHRINK:-0}" != "1" ]; then
     PREV_SIZE=$(stat -c%s "$PREV")
     if [ "$SIZE" -lt $(( PREV_SIZE / 2 )) ]; then
-        fail "dump is ${SIZE} bytes but the previous one ($(basename "$PREV")) was ${PREV_SIZE} — that is a data loss signal, not a backup. Re-run with BACKUP_ALLOW_SHRINK=1 if this shrink is real."
+        reject "dump is ${SIZE} bytes but the previous one ($(basename "$PREV")) was ${PREV_SIZE} — that is a data loss signal, not a backup. Re-run with BACKUP_ALLOW_SHRINK=1 if this shrink is real."
     fi
 fi
 
 # pipefail catches a pg_dump that dies mid-stream, but not a corrupt gzip.
-gzip -t "$FILE" || fail "dump failed its gzip integrity check"
+gzip -t "$FILE" || reject "dump failed its gzip integrity check"
 log "dump ok: $SIZE bytes"
 
 # Stream the file into the web container and upload from there. Compare the size
