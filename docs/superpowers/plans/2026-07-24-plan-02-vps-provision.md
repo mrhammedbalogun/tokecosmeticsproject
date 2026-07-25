@@ -847,7 +847,7 @@ git commit -m "feat(infra): nightly Postgres backup to S3 + tested restore proce
 **Files:**
 - Create: `infra/deploy/deploy.sh`, `.github/workflows/deploy-backend.yml`
 
-- [ ] **Step 1: Write `infra/deploy/deploy.sh`**
+- [x] **Step 1: Write `infra/deploy/deploy.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -877,7 +877,7 @@ echo "FATAL: healthz did not come up after 60s — check: docker compose -p toke
 exit 1
 ```
 
-- [ ] **Step 2: Write `.github/workflows/deploy-backend.yml`**
+- [x] **Step 2: Write `.github/workflows/deploy-backend.yml`**
 
 ```yaml
 name: deploy-backend
@@ -902,7 +902,7 @@ jobs:
             "cd /opt/tokecosmetics/repo/infra && ./deploy/deploy.sh ${GITHUB_REF_NAME}"
 ```
 
-- [ ] **Step 3: Generate a CI-only keypair and authorise it**
+- [x] **Step 3: Generate a CI-only keypair and authorise it**
 
 Separate from the deploy key in Task 4 — that one reads GitHub, this one reaches the server.
 
@@ -915,7 +915,7 @@ cat /root/.ssh/gha_deploy'
 
 Hammed adds it at repo → Settings → Secrets and variables → Actions → New repository secret, named `VPS_SSH_KEY`.
 
-- [ ] **Step 4: Tag and watch a real deploy**
+- [x] **Step 4: Tag and watch a real deploy**
 
 ```bash
 git tag backend-v0.1.0 && git push origin backend-v0.1.0
@@ -924,7 +924,7 @@ gh run watch
 
 Expected: the workflow goes green and ends with `deployed backend-v0.1.0 — healthz ok`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/deploy/deploy.sh .github/workflows/deploy-backend.yml
