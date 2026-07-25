@@ -65,8 +65,18 @@ services:
       - /opt/tokecosmetics/data/static:/app/staticfiles
       - /opt/tokecosmetics/data/media:/app/media
     mem_limit: 768m
+    # Both headers are required, for different reasons:
+    #   Host: ALLOWED_HOSTS is api.tokecosmetics.com, so a request arriving as "localhost"
+    #     is rejected with 400 — correctly. Spoofing the Host locally is how the check asks
+    #     the same question a real proxied request asks.
+    #   X-Forwarded-Proto: prod sets SECURE_SSL_REDIRECT=True, so plain HTTP would answer
+    #     301. curl -f does NOT fail on a 3xx, so without this the check would pass on a
+    #     redirect and report a dead app as healthy.
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz/"]
+      test: ["CMD", "curl", "-fsS",
+             "-H", "Host: api.tokecosmetics.com",
+             "-H", "X-Forwarded-Proto: https",
+             "http://localhost:8000/healthz/"]
       interval: 30s
       timeout: 5s
       retries: 3
