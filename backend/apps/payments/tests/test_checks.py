@@ -21,6 +21,35 @@ def _ids():
     return [w.id for w in gateway_configuration_check(None)]
 
 
+def _w001():
+    return [w for w in gateway_configuration_check(None) if w.id == "payments.W001"]
+
+
+def test_no_key_warning_for_a_gateway_that_is_switched_off_everywhere():
+    """Stripe was dropped in Plan-14 and 0009 leaves it inactive in every market. Warning
+    that its keys are missing is noise, and noise is what hides the warning that matters
+    while someone is configuring the OTHER gateways."""
+    assert not any("stripe" in w.msg for w in _w001())
+
+
+def test_warns_for_a_live_gateway_missing_its_keys_and_names_the_markets():
+    # 0009 activates paystack + flutterwave on NG and paypal internationally; no keys are
+    # set in the test environment, so each live gateway is unusable where it is offered.
+    warnings = {w.msg.split("'")[1]: w.msg for w in _w001()}
+    assert {"paystack", "flutterwave", "paypal"} <= set(warnings)
+    # Naming the affected markets is the difference between "go look" and "go fix NG".
+    assert "NG" in warnings["paystack"]
+    assert "NG" not in warnings["paypal"]
+    assert "GB" in warnings["paypal"]
+
+
+def test_no_key_warning_once_the_gateway_is_deactivated_in_every_market():
+    from apps.payments.models import CountryPaymentGateway
+
+    CountryPaymentGateway.objects.filter(gateway="paystack").update(is_active=False)
+    assert not any("paystack" in w.msg for w in _w001())
+
+
 def test_warns_when_a_market_has_bank_transfer_live_but_no_account():
     # Migration 0007 leaves bank_transfer active in all five markets; no BankAccount rows
     # exist in a fresh DB, so every one of them is stranded.
