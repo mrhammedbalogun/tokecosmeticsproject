@@ -1006,7 +1006,7 @@ Expected: an order in the `TC-1000xx` series appears via `docker compose -p toke
 
 ## Task 11: Checkpoint
 
-- [ ] **Step 1: Assemble the report for Hammed**, showing:
+- [x] **Step 1: Assemble the report for Hammed**, showing:
   - `curl https://api.tokecosmetics.com/healthz/` returning ok from the open internet
   - `docker stats` and `free -h` proving the box has headroom
   - `https://tokecosmetics.com/` response time before vs after (the live store is unharmed)
@@ -1014,14 +1014,14 @@ Expected: an order in the `TC-1000xx` series appears via `docker compose -p toke
   - the backup file present in S3, and the restore that was actually run
   - a green `deploy-backend` workflow run
 
-- [ ] **Step 2: Get explicit sign-off** that the WordPress store feels unaffected. He is the only one who can judge that.
+- [x] **Step 2: Get explicit sign-off** that the WordPress store feels unaffected. He is the only one who can judge that.
 
 - [ ] **Step 3: Now do the deferred Plan-14b work**, which this stage unblocks:
   - Paste `https://api.tokecosmetics.com/api/v1/webhooks/paystack/` into Paystack → Settings → API Keys & Webhooks → **Test** Webhook URL (**trailing slash required** — Django's `APPEND_SLASH` will not redirect a POST)
   - Hammed's phone pass (Plan-14b Task 18)
   - Confirm a Paystack-originated webhook lands: a `WebhookEvent` row with `processed_at` set and `error=""`, order fulfilled exactly once
 
-- [ ] **Step 4: Update memory** — `project_tokecosmetics_plan14b` (Task 18 closed) and a new `project_tokecosmetics_plan02`.
+- [x] **Step 4: Update memory** — `project_tokecosmetics_plan14b` (Task 18 closed) and a new `project_tokecosmetics_plan02`.
 
 ---
 
