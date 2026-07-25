@@ -526,19 +526,58 @@ Hammed types the password himself. Do not set it for him and do not record it an
 
 ---
 
-## Task 6: Expose `api.tokecosmetics.com`
+## Task 6: Expose `api.tokecosmetics.com` — ✅ DONE 2026-07-25
 
 > **This task edits Apache config on the live web server.** Back up first, verify ordering, `configtest` before every reload.
+
+### Deviations from the plan as written
+
+**1. Step 3's `Require ip <HAMMED_IP>` was wrong and is now `Require all denied`.**
+This vhost only ever sees Cloudflare edge addresses as the client, and `httpd -M` confirms
+mod_remoteip is not loaded, so the real client IP cannot be recovered for authorisation.
+`Require ip` would have returned 403 to every request, Hammed's included, with no log line
+explaining it. His IP is also dynamic (shared house wifi). The admin is denied at the edge
+until an access route is chosen — see "Django admin access" in `docs/runbooks/vps-stack.md`.
+
+**2. Step 7's local verification used the wrong address.**
+The plan had `curl -H "Host: api.tokecosmetics.com" https://127.0.0.1/healthz/`. The vhost is
+bound to `203.161.38.201:443`, so a connection to `127.0.0.1:443` never matches it and falls
+through to the global default vhost — a passing result would have proved nothing. Verified
+with `curl --resolve api.tokecosmetics.com:443:203.161.38.201` instead, which hits the real
+listener with the correct SNI and Host.
+
+**3. Added an origin lock the plan did not have (approved by Hammed 2026-07-25).**
+Before this, `curl --resolve api.tokecosmetics.com:443:203.161.38.201 https://api.tokecosmetics.com/healthz/`
+returned 200 **from outside the network**. The origin IP is public knowledge because the
+WordPress stores share it, so the entire API was addressable without Cloudflare's WAF or
+rate limiting — and any future Cloudflare Access policy would have been bypassable the
+same way. `<Location />` now allows only Cloudflare's published ranges (15 IPv4 + 7 IPv6,
+fetched 2026-07-25), plus `127.0.0.1` and `203.161.38.201`. The second is needed because an
+on-box `--resolve` check presents the box's public address as its source, not loopback;
+without it every on-box diagnostic and the Task 9 deploy smoke test would 403.
+
+> **Maintenance:** Cloudflare's ranges change rarely but they do change. If the API starts
+> returning 403 for no apparent reason, re-fetch `https://www.cloudflare.com/ips-v4` and
+> `/ips-v6` and diff against `<Location />` **before** debugging anything else.
+
+**4. `/django-admin/` stays denied (Hammed's call 2026-07-25).** Plans 16-20 build the real
+admin portal. The deny depends on `AuthMerging` staying at its default of `Off`, so the
+inner `<Location>` replaces the Cloudflare allowlist rather than being OR'd with it —
+verified externally as 403 after the lock went in.
+
+**Recorded state:** conf.d backup at `/usr/local/apps/apache2/etc/conf.d.bak-20260725-081657`.
+Origin cert valid to 2041-07-21, SANs `*.tokecosmetics.com` + `tokecosmetics.com`, key/cert
+pair verified matching. External: `healthz` 200, `django-admin` 403, `:80` 301 to `:443`.
 
 **Files:**
 - Create: `infra/proxy/zz-api.conf`
 - Server: `/usr/local/apps/apache2/etc/conf.d/zz-api.conf`
 
-- [ ] **Step 1: Hammed issues a Cloudflare Origin CA certificate**
+- [x] **Step 1: Hammed issues a Cloudflare Origin CA certificate**
 
 Cloudflare dashboard → SSL/TLS → Origin Server → **Create Certificate**. Hostnames: `api.tokecosmetics.com` and `*.tokecosmetics.com`. Validity 15 years. He copies out the **certificate** and the **private key** (the key is shown exactly once).
 
-- [ ] **Step 2: Install the cert on the VPS**
+- [x] **Step 2: Install the cert on the VPS**
 
 ```bash
 ssh tokecosmetics 'mkdir -p /etc/ssl/cloudflare && chmod 700 /etc/ssl/cloudflare'
@@ -550,7 +589,7 @@ ssh tokecosmetics 'chmod 600 /etc/ssl/cloudflare/*; openssl x509 -in /etc/ssl/cl
 
 Expected: a subject mentioning Cloudflare Origin CA and a `notAfter` about 15 years out.
 
-- [ ] **Step 3: Write `infra/proxy/zz-api.conf`**
+- [x] **Step 3: Write `infra/proxy/zz-api.conf`**
 
 The `zz-` prefix is load-bearing — see the warning at the top of this plan.
 
@@ -596,13 +635,13 @@ The `zz-` prefix is load-bearing — see the warning at the top of this plan.
 
 Replace `<HAMMED_IP>` with his current public IP (`curl -s https://ifconfig.me` from his machine). If it is dynamic, note in `docs/runbooks/vps-stack.md` that this needs updating — a locked-out admin during an incident is worse than the exposure.
 
-- [ ] **Step 4: Back up the Apache config directory**
+- [x] **Step 4: Back up the Apache config directory**
 
 ```bash
 ssh tokecosmetics 'cp -a /usr/local/apps/apache2/etc/conf.d /usr/local/apps/apache2/etc/conf.d.bak-$(date +%Y%m%d) && ls -d /usr/local/apps/apache2/etc/conf.d.bak-*'
 ```
 
-- [ ] **Step 5: Install the file and PROVE the load order before reloading**
+- [x] **Step 5: Install the file and PROVE the load order before reloading**
 
 ```bash
 ssh tokecosmetics 'cp /opt/tokecosmetics/repo/infra/proxy/zz-api.conf /usr/local/apps/apache2/etc/conf.d/zz-api.conf
@@ -611,7 +650,7 @@ ls /usr/local/apps/apache2/etc/conf.d/*.conf'
 
 Expected order: `modules.cnf` is separate; among `*.conf` you must see `webuzo.conf`, `webuzoVH.conf`, then **`zz-api.conf` last**. If `zz-api.conf` is not last, stop and rename it.
 
-- [ ] **Step 6: Config-test, then confirm the default vhost has not moved**
+- [x] **Step 6: Config-test, then confirm the default vhost has not moved**
 
 ```bash
 ssh tokecosmetics '/usr/local/apps/apache2/bin/httpd -t && /usr/local/apps/apache2/bin/httpd -S 2>&1 | grep -A2 "203.161.38.201:443" | head -20'
@@ -619,7 +658,7 @@ ssh tokecosmetics '/usr/local/apps/apache2/bin/httpd -t && /usr/local/apps/apach
 
 Expected: `Syntax OK`, and the **first** vhost listed for `:443` is still a Webuzo one (`server1.tokecosmetics.com`), **not** `api.tokecosmetics.com`. This is the check that protects the live store. If `api.tokecosmetics.com` appears first, do **not** reload.
 
-- [ ] **Step 7: Graceful reload, then immediately verify WordPress**
+- [x] **Step 7: Graceful reload, then immediately verify WordPress**
 
 ```bash
 ssh tokecosmetics '/usr/local/apps/apache2/bin/httpd -k graceful; sleep 3
@@ -630,11 +669,11 @@ curl -sk -o /dev/null -w "api_local=%{http_code}\n" -H "Host: api.tokecosmetics.
 
 Expected: WordPress still 200 at baseline speed on **both** domains, `api_local=200`. `graceful` finishes in-flight requests rather than dropping shoppers mid-checkout.
 
-- [ ] **Step 8: Hammed sets Cloudflare SSL mode**
+- [x] **Step 8: Hammed sets Cloudflare SSL mode**
 
 Cloudflare → SSL/TLS → Overview → **Full (strict)**. Confirm the `api` A record is `203.161.38.201` and **proxied** (orange cloud).
 
-- [ ] **Step 9: Verify from the outside world**
+- [x] **Step 9: Verify from the outside world**
 
 ```bash
 curl -s https://api.tokecosmetics.com/healthz/
