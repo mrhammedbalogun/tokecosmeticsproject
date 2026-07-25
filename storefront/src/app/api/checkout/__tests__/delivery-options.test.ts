@@ -16,11 +16,11 @@ const req = (qs: string) => new Request(`http://localhost:3000/api/checkout/deli
 
 describe("delivery-options BFF", () => {
   it("forwards address_id + cart_id to /checkout/delivery-options/ with Bearer + country", async () => {
-    const f = upstream(200, [{ id: 1, name: "Standard", price: "5.00", eta_min_days: 2, eta_max_days: 4, quote_required: false }]);
+    const f = upstream(200, [{ id: 1, name: "Standard", price: "5.00", min_days: 2, max_days: 4, quote_required: false }]);
     const res = await GET(req("address_id=7&cart_id=c1"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toEqual([{ id: 1, name: "Standard", price: "5.00", eta_min_days: 2, eta_max_days: 4, quote_required: false }]);
+    expect(body).toEqual([{ id: 1, name: "Standard", price: "5.00", min_days: 2, max_days: 4, quote_required: false }]);
     const [url, init] = f.mock.calls[0];
     expect(url).toBe("http://backend:8000/api/v1/checkout/delivery-options/?address_id=7&cart_id=c1");
     expect(new Headers((init as RequestInit).headers).get("Authorization")).toBe("Bearer TOK");

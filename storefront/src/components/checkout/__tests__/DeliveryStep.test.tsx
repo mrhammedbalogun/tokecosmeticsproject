@@ -84,8 +84,8 @@ describe("DeliveryStep", () => {
 
   it("fetches and renders options as cards with formatted price + ETA", async () => {
     const f = mockFetch(200, [
-      { id: 1, name: "Standard", price: "5.00", eta_min_days: 2, eta_max_days: 4, quote_required: false },
-      { id: 2, name: "Express", price: "12.50", eta_min_days: 1, eta_max_days: 1, quote_required: false },
+      { id: 1, name: "Standard", price: "5.00", min_days: 2, max_days: 4, quote_required: false },
+      { id: 2, name: "Express", price: "12.50", min_days: 1, max_days: 1, quote_required: false },
     ]);
     renderHarness(7);
 
@@ -104,7 +104,7 @@ describe("DeliveryStep", () => {
 
   it("selecting an option completes step 3 with the right deliveryOptionId", async () => {
     mockFetch(200, [
-      { id: 1, name: "Standard", price: "5.00", eta_min_days: 2, eta_max_days: 4, quote_required: false },
+      { id: 1, name: "Standard", price: "5.00", min_days: 2, max_days: 4, quote_required: false },
     ]);
     renderHarness(7);
 
@@ -119,7 +119,7 @@ describe("DeliveryStep", () => {
 
   it("shows 'Quoted after checkout' for a quote_required option and it is still selectable", async () => {
     mockFetch(200, [
-      { id: 3, name: "International Freight", price: null, eta_min_days: 10, eta_max_days: 20, quote_required: true },
+      { id: 3, name: "International Freight", price: null, min_days: 10, max_days: 20, quote_required: true },
     ]);
     renderHarness(9);
 
