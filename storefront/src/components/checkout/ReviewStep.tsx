@@ -218,6 +218,7 @@ export function ReviewStep() {
         setLaunch({
           gateway: payment.gateway,
           reference: payment.reference,
+          orderNumber: data.order_number,
           data: payment.data ?? {},
         });
         return;

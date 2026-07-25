@@ -43,7 +43,12 @@ beforeEach(() => {
   capturedSuccess = null;
 });
 
-const launch = (gateway: string) => ({ gateway, reference: "TC-ref-1", data: {} });
+const launch = (gateway: string) => ({
+  gateway,
+  reference: "TC-ref-1",
+  orderNumber: "TC-200",
+  data: {},
+});
 
 describe("PaymentLauncher", () => {
   it("routes to confirmation when a Paystack success verifies as succeeded", async () => {
@@ -118,6 +123,35 @@ describe("PaymentLauncher", () => {
     });
     await waitFor(() => expect(replace).toHaveBeenCalledTimes(1));
     expect(verifyPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the saved order on the failure screen so the customer knows it exists", async () => {
+    render(<PaymentLauncher launch={launch("paystack")} />);
+    fireEvent.click(screen.getByText("ps-abort"));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByText(/TC-200/)).toBeInTheDocument();
+  });
+
+  it("retries into the same gateway launch after an abort", async () => {
+    // The order is already placed and the cart converted, so there is nowhere to go back
+    // to: retry must re-open THIS launch. The access code / PayPal order id is still
+    // valid, which is exactly what resuming an abandoned transaction is for.
+    verifyPayment.mockResolvedValue({
+      ok: true,
+      orderNumber: "TC-200",
+      paymentStatus: "succeeded",
+      orderStatus: "processing",
+    });
+    render(<PaymentLauncher launch={launch("paystack")} />);
+    fireEvent.click(screen.getByText("ps-abort"));
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+
+    // Back to collecting: the child is mounted again and can still complete the payment.
+    await waitFor(() => expect(screen.getByText("ps-ok")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("ps-ok"));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/checkout/confirmation/TC-200"));
   });
 
   it("renders the PayPal child for a paypal launch", () => {

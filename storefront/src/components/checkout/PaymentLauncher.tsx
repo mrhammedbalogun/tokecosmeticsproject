@@ -9,6 +9,7 @@ import { FlutterwaveLaunch } from "@/components/checkout/FlutterwaveLaunch";
 export interface LaunchInfo {
   gateway: string;
   reference: string; // = payment.gateway_reference (verify keys on it)
+  orderNumber: string; // the order already exists — name it if collection fails
   data: Record<string, unknown>; // payment.data from the 201
 }
 
@@ -21,6 +22,9 @@ type Phase = "collecting" | "verifying" | "pending" | "failed";
 export function PaymentLauncher({ launch }: { launch: LaunchInfo }) {
   const router = useRouter();
   const [phase, setPhase] = useState<Phase>("collecting");
+  // Bumped on retry and used as the child's key, so the SDK child remounts and re-opens
+  // (its own open-once guard is per-mount).
+  const [attempt, setAttempt] = useState(0);
   // A gateway can report success more than once (SDK retries, double callback). Verify is
   // idempotent server-side, but firing it twice would race two navigations.
   const verified = useRef(false);
@@ -42,15 +46,34 @@ export function PaymentLauncher({ launch }: { launch: LaunchInfo }) {
 
   const onGatewayAbort = useCallback(() => setPhase("failed"), []);
 
+  function retry() {
+    verified.current = false;
+    setAttempt((n) => n + 1);
+    setPhase("collecting");
+  }
+
   if (phase === "failed") {
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
         <p role="alert" className="text-sm text-red-700">
-          Your payment didn&apos;t go through. You can try again or choose another method.
+          Your payment didn&apos;t go through.
         </p>
-        <a href="/checkout" className="text-sm underline">
-          Choose another method
-        </a>
+        {/* Placing the order already converted the cart, so there is no bag to go back
+            to — retry has to re-open THIS payment. The gateway material we hold (Paystack
+            access code / PayPal order id) stays valid for a resumed attempt. Naming the
+            order matters: it exists and is waiting, and saying so stops the customer
+            fearing they have lost it (or re-ordering). */}
+        <p className="text-sm text-muted">
+          Your order <span className="font-medium text-foreground">{launch.orderNumber}</span> is
+          saved — you can try the payment again.
+        </p>
+        <button
+          type="button"
+          onClick={retry}
+          className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm font-medium text-surface transition-colors hover:bg-accent-strong"
+        >
+          Try again
+        </button>
       </div>
     );
   }
@@ -70,6 +93,7 @@ export function PaymentLauncher({ launch }: { launch: LaunchInfo }) {
     case "paystack":
       return (
         <PaystackLaunch
+          key={attempt}
           data={launch.data}
           onGatewaySuccess={onGatewaySuccess}
           onGatewayAbort={onGatewayAbort}
@@ -78,13 +102,14 @@ export function PaymentLauncher({ launch }: { launch: LaunchInfo }) {
     case "paypal":
       return (
         <PaypalLaunch
+          key={attempt}
           data={launch.data}
           onGatewaySuccess={onGatewaySuccess}
           onGatewayAbort={onGatewayAbort}
         />
       );
     case "flutterwave":
-      return <FlutterwaveLaunch data={launch.data} />;
+      return <FlutterwaveLaunch key={attempt} data={launch.data} />;
     default:
       return (
         <p role="alert" className="text-sm text-red-700">
