@@ -78,7 +78,7 @@
 - Create: `backend/Dockerfile`
 - Create: `backend/.dockerignore`
 
-- [ ] **Step 1: Write `backend/.dockerignore`**
+- [x] **Step 1: Write `backend/.dockerignore`**
 
 ```
 .venv/
@@ -94,7 +94,7 @@ htmlcov/
 .ruff_cache/
 ```
 
-- [ ] **Step 2: Write `backend/Dockerfile`**
+- [x] **Step 2: Write `backend/Dockerfile`**
 
 `libpango-1.0-0` and `libpangoft2-1.0-0` are not optional. WeasyPrint is a *binding* over Pango/cairo — `pip install weasyprint` succeeds without them and then `ImportError`s at runtime, so every invoice download 500s. This is recorded in the master guide under Plan-02 item 3. `worker` doesn't need them but shares the image.
 
@@ -136,7 +136,7 @@ CMD ["gunicorn", "config.wsgi:application", \
      "--error-logfile", "-"]
 ```
 
-- [ ] **Step 3: Build the image locally**
+- [x] **Step 3: Build the image locally**
 
 Run from `tokecosmetics-platform/backend`:
 
@@ -146,7 +146,7 @@ docker build -t toke-api:test .
 
 Expected: `Successfully tagged toke-api:test`. If `uv pip install --requirement pyproject.toml` errors on the dependency-group syntax, switch that line to `uv sync --frozen --no-dev` and copy `uv.lock` explicitly — record whichever worked in `docs/runbooks/vps-stack.md`.
 
-- [ ] **Step 4: Prove Pango is really there — this is the whole point of Step 2**
+- [x] **Step 4: Prove Pango is really there — this is the whole point of Step 2**
 
 ```bash
 docker run --rm toke-api:test python -c "import weasyprint; print('weasyprint ok', weasyprint.__version__)"
@@ -154,7 +154,7 @@ docker run --rm toke-api:test python -c "import weasyprint; print('weasyprint ok
 
 Expected: `weasyprint ok <version>`, no `OSError`/`ImportError` about `libpango`. This cannot be checked on the Windows dev box — there is no Pango — so this container run **is** the verification.
 
-- [ ] **Step 5: Prove Django loads in the image**
+- [x] **Step 5: Prove Django loads in the image**
 
 ```bash
 docker run --rm -e DJANGO_SETTINGS_MODULE=config.settings.dev toke-api:test python manage.py check
@@ -162,7 +162,7 @@ docker run --rm -e DJANGO_SETTINGS_MODULE=config.settings.dev toke-api:test pyth
 
 Expected: `System check identified some issues` listing only `payments.W001`/`W002` warnings (no keys in this container), and **no** `ERRORS`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/Dockerfile backend/.dockerignore
@@ -176,7 +176,7 @@ git commit -m "feat(infra): backend Docker image with WeasyPrint native deps (Pl
 **Files:**
 - Create: `infra/docker-compose.prod.yml`
 
-- [ ] **Step 1: Write the compose file**
+- [x] **Step 1: Write the compose file**
 
 Every published port is `127.0.0.1:`-prefixed. That is a security control, not tidiness: Docker writes its own iptables rules that bypass UFW, so a bare `"8001:8000"` would expose Django to the internet regardless of the firewall.
 
@@ -257,7 +257,7 @@ services:
     mem_limit: 128m
 ```
 
-- [ ] **Step 2: Validate the file parses**
+- [x] **Step 2: Validate the file parses**
 
 From `tokecosmetics-platform/infra` on the dev box:
 
@@ -267,7 +267,7 @@ docker compose -f docker-compose.prod.yml config --quiet
 
 Expected: no output, exit 0. (Warnings about unset `POSTGRES_*` are fine — those come from `.env.prod`, which only exists on the server.)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add infra/docker-compose.prod.yml
@@ -374,7 +374,7 @@ Expected: `json-file`.
 **Files:**
 - Server: `/opt/tokecosmetics/` (clone), `/opt/tokecosmetics/.env.prod`
 
-- [ ] **Step 1: Generate a deploy-only keypair on the VPS**
+- [x] **Step 1: Generate a deploy-only keypair on the VPS**
 
 Never reuse Hammed's personal key.
 
@@ -382,11 +382,11 @@ Never reuse Hammed's personal key.
 ssh tokecosmetics 'ssh-keygen -t ed25519 -N "" -C "tokecosmetics-vps-deploy" -f /root/.ssh/github_deploy && cat /root/.ssh/github_deploy.pub'
 ```
 
-- [ ] **Step 2: Hammed adds that public key to the repo**
+- [x] **Step 2: Hammed adds that public key to the repo**
 
 GitHub → `mrhammedbalogun/tokecosmeticsproject` → Settings → Deploy keys → Add deploy key. Title `VPS /opt/tokecosmetics`. **Leave "Allow write access" unchecked** — the server only ever pulls.
 
-- [ ] **Step 3: Clone**
+- [x] **Step 3: Clone**
 
 ```bash
 ssh tokecosmetics 'set -e
@@ -404,7 +404,7 @@ cd /opt/tokecosmetics/repo && git log --oneline -1'
 
 Expected: the clone succeeds and prints the `Merge Plan-14b` commit.
 
-- [ ] **Step 4: Generate a Django SECRET_KEY and a Postgres password**
+- [x] **Step 4: Generate a Django SECRET_KEY and a Postgres password**
 
 ```bash
 ssh tokecosmetics 'echo "SECRET_KEY=$(head -c 50 /dev/urandom | base64 | tr -d "=+/" | head -c 64)"; echo "POSTGRES_PASSWORD=$(head -c 32 /dev/urandom | base64 | tr -d "=+/" | head -c 40)"; echo "REVALIDATE_SECRET=$(head -c 32 /dev/urandom | base64 | tr -d "=+/" | head -c 40)"'
@@ -412,7 +412,7 @@ ssh tokecosmetics 'echo "SECRET_KEY=$(head -c 50 /dev/urandom | base64 | tr -d "
 
 Copy these three values into the next step. Keep `REVALIDATE_SECRET` — Task 10 puts the same value in Vercel.
 
-- [ ] **Step 5: Write `/opt/tokecosmetics/.env.prod`**
+- [x] **Step 5: Write `/opt/tokecosmetics/.env.prod`**
 
 Every name below is read by `config/settings/base.py` or `prod.py`. **Names matter exactly** — a misspelled key is silently ignored and the feature just fails (this cost a day during Plan-14b, when `Paystack_Test_Secret_Key` was pasted instead of `PAYSTACK_SECRET_KEY`).
 
@@ -456,7 +456,7 @@ ls -l /opt/tokecosmetics/.env.prod'
 
 Expected: `-rw------- 1 root root`.
 
-- [ ] **Step 6: Assert no live payment key slipped in**
+- [x] **Step 6: Assert no live payment key slipped in**
 
 ```bash
 ssh tokecosmetics 'grep -c "sk_live_\|FLWSECK-[^T]" /opt/tokecosmetics/.env.prod || echo "0 live keys — good"'
@@ -470,13 +470,13 @@ Expected: `0 live keys — good`. If this ever prints a count, stop and remove t
 
 **Files:** none (server state only)
 
-- [ ] **Step 1: Build and start the stack**
+- [x] **Step 1: Build and start the stack**
 
 ```bash
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo/infra && docker compose --env-file /opt/tokecosmetics/.env.prod -f docker-compose.prod.yml up -d --build'
 ```
 
-- [ ] **Step 2: Confirm all five containers are up**
+- [x] **Step 2: Confirm all five containers are up**
 
 ```bash
 ssh tokecosmetics 'docker compose -p tokecosmetics ps --format "table {{.Service}}\t{{.Status}}"'
@@ -484,7 +484,7 @@ ssh tokecosmetics 'docker compose -p tokecosmetics ps --format "table {{.Service
 
 Expected: `postgres` healthy, `redis`, `web` healthy, `worker`, `beat` all `Up`. If `web` is restarting, read `docker compose -p tokecosmetics logs web --tail 50` — the usual cause is a typo in `DATABASE_URL`.
 
-- [ ] **Step 3: Migrate and collect static**
+- [x] **Step 3: Migrate and collect static**
 
 ```bash
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo/infra
@@ -494,7 +494,7 @@ docker compose -p tokecosmetics exec -T web python manage.py collectstatic --noi
 
 Expected: migrations apply cleanly including `catalog.0004_product_name_trgm` (`CREATE EXTENSION pg_trgm`). That needs DB superuser — the compose `POSTGRES_USER` is one, so it works; if it ever errors, that is why.
 
-- [ ] **Step 4: Verify health from inside the box**
+- [x] **Step 4: Verify health from inside the box**
 
 ```bash
 ssh tokecosmetics 'curl -s http://127.0.0.1:8001/healthz/'
@@ -502,7 +502,7 @@ ssh tokecosmetics 'curl -s http://127.0.0.1:8001/healthz/'
 
 Expected exactly: `{"status": "ok", "db": true, "redis": true}`. **Do not proceed past this line until it does.** Everything downstream assumes it.
 
-- [ ] **Step 5: Seed the reference data the storefront needs**
+- [x] **Step 5: Seed the reference data the storefront needs**
 
 ```bash
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo/infra
@@ -516,7 +516,7 @@ print(\"currencies:\", list(Currency.objects.values_list(\"code\", flat=True)))
 
 Expected: countries `['NG','GB','US','CA','ZZ']`, currencies `['NGN','GBP','USD','CAD']` — these arrive via seed migrations, not a command. If any are missing, a seed migration was skipped; do not hand-insert rows, find out which migration did not run.
 
-- [ ] **Step 6: Create Hammed's staff account**
+- [x] **Step 6: Create Hammed's staff account**
 
 ```bash
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo/infra && docker compose -p tokecosmetics exec -it web python manage.py createsuperuser --email billztechnologiesofficial@gmail.com'
