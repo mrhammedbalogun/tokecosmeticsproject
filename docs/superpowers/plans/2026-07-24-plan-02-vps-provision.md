@@ -951,7 +951,7 @@ Vercel → the storefront project → Settings → Environment Variables (Produc
 
 `API_URL` is the one that matters — it is what server components and Route Handlers call. It is currently unset, which is why `/products` renders nothing.
 
-- [ ] **Step 2: Confirm CORS already allows the storefront**
+- [x] **Step 2: Confirm CORS already allows the storefront**
 
 `CORS_ALLOWED_ORIGINS` is derived from `FRONTEND_URL`/`ADMIN_URL` in `base.py:191`, and Task 4 set `FRONTEND_URL=https://next.tokecosmetics.com`.
 
