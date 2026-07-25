@@ -681,7 +681,7 @@ curl -s https://api.tokecosmetics.com/healthz/
 
 Expected: `{"status": "ok", "db": true, "redis": true}` — the 526 is gone. This is the moment the API is real.
 
-- [ ] **Step 10: Prove it survives Webuzo**
+- [x] **Step 10: Prove it survives Webuzo**
 
 Have Hammed open Webuzo and save any Apache-related setting, then:
 
@@ -691,7 +691,7 @@ ssh tokecosmetics 'ls /usr/local/apps/apache2/etc/conf.d/zz-api.conf && /usr/loc
 
 Expected: file still present, count ≥ 1. If Webuzo removed it, fall back to the master guide's option (b): an `nginx:alpine` container on host port 8443 with the same Origin CA cert, plus a Cloudflare Origin Rule rewriting `api.tokecosmetics.com` to port 8443. Record whichever route won in `docs/runbooks/vps-stack.md`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add infra/proxy/zz-api.conf
@@ -739,7 +739,7 @@ git commit -m "docs: VPS stack runbook (Plan-02)"
 **Files:**
 - Create: `infra/deploy/backup.sh`, `infra/deploy/restore.sh`, `docs/runbooks/restore.md`
 
-- [ ] **Step 1: Write `infra/deploy/backup.sh`**
+- [x] **Step 1: Write `infra/deploy/backup.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -771,7 +771,7 @@ echo "backup ok: $FILE ($SIZE bytes)"
 
 The size check matters: the classic backup failure is a script that dumps nothing every night for six months and rotates the good copies away.
 
-- [ ] **Step 2: Write `infra/deploy/restore.sh`**
+- [x] **Step 2: Write `infra/deploy/restore.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -798,7 +798,7 @@ docker compose -p tokecosmetics exec -T postgres psql -U "$POSTGRES_USER" -d "$S
 echo "restored into $SCRATCH"
 ```
 
-- [ ] **Step 3: Install and run a backup once**
+- [x] **Step 3: Install and run a backup once**
 
 ```bash
 ssh tokecosmetics 'chmod +x /opt/tokecosmetics/repo/infra/deploy/*.sh
@@ -807,7 +807,7 @@ cd /opt/tokecosmetics/repo/infra && /opt/tokecosmetics/repo/infra/deploy/backup.
 
 Expected: `backup ok: … (N bytes)` with N comfortably over 10000. If `aws` is missing, `apt-get install -y awscli` first.
 
-- [ ] **Step 4: Actually test the restore — a backup you have not restored is a hope, not a backup**
+- [x] **Step 4: Actually test the restore — a backup you have not restored is a hope, not a backup**
 
 ```bash
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo/infra && ./deploy/restore.sh $(ls -t /opt/tokecosmetics/backups/*.sql.gz | head -1)'
@@ -819,7 +819,7 @@ Expected: an `orders` count printed. Then drop the scratch DB:
 ssh tokecosmetics 'docker compose -p tokecosmetics exec -T postgres psql -U toke -d postgres -c "DROP DATABASE toke_restore_test"'
 ```
 
-- [ ] **Step 5: Schedule it nightly**
+- [x] **Step 5: Schedule it nightly**
 
 ```bash
 ssh tokecosmetics 'cat > /etc/cron.d/tokecosmetics-backup <<EOF
@@ -831,9 +831,9 @@ chmod 644 /etc/cron.d/tokecosmetics-backup && crontab -l 2>/dev/null; ls -l /etc
 
 02:30 server time is chosen to sit clear of WordPress's own backup window.
 
-- [ ] **Step 6: Write `docs/runbooks/restore.md`** — the exact commands to restore into scratch, verify, then promote to live (stop `web`/`worker`/`beat`, rename databases, restart), with the S3 path where dumps land.
+- [x] **Step 6: Write `docs/runbooks/restore.md`** — the exact commands to restore into scratch, verify, then promote to live (stop `web`/`worker`/`beat`, rename databases, restart), with the S3 path where dumps land.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add infra/deploy/backup.sh infra/deploy/restore.sh docs/runbooks/restore.md
