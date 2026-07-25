@@ -188,9 +188,15 @@ SPECTACULAR_SETTINGS = {
 # --- Frontend origins / URLs ---
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
 ADMIN_URL = env("ADMIN_URL", default="http://localhost:3001")
+# Default to the two origins we already know about rather than hardcoded localhost.
+# Those literals were identical to the FRONTEND_URL/ADMIN_URL defaults, so this
+# changes nothing in dev — but in production FRONTEND_URL was correctly set to
+# https://next.tokecosmetics.com while CORS silently stayed on localhost, so every
+# browser-side call from the deployed storefront would have been blocked. Deriving
+# it means the two cannot disagree again. CORS_ALLOWED_ORIGINS still overrides.
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:3000", "http://localhost:3001"],
+    default=[FRONTEND_URL, ADMIN_URL],
 )
 
 # --- Email ---
