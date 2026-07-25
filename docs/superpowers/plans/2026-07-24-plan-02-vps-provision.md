@@ -313,7 +313,7 @@ restart no longer stops running containers.
 
 **Files:** none (server state only)
 
-- [ ] **Step 1: Record the "before" picture so any regression is provable**
+- [x] **Step 1: Record the "before" picture so any regression is provable**
 
 ```bash
 ssh tokecosmetics 'free -h; echo ---; uptime; echo ---; systemctl is-active httpd mysql exim named; echo ---; curl -s -o /dev/null -w "wp_home=%{http_code} %{time_total}s\n" https://tokecosmetics.com/'
@@ -321,7 +321,7 @@ ssh tokecosmetics 'free -h; echo ---; uptime; echo ---; systemctl is-active http
 
 Save the output into the checkpoint report. The WordPress timing is the number that matters — if it degrades later, this is the baseline.
 
-- [ ] **Step 2: Check for a docker0 subnet clash before installing**
+- [x] **Step 2: Check for a docker0 subnet clash before installing**
 
 ```bash
 ssh tokecosmetics 'ip -o -4 addr show | awk "{print \$2, \$4}"; echo ---; ip route | grep -E "172\.1[6-9]\.|172\.2[0-9]\.|172\.3[01]\." || echo "no 172.16/12 routes — docker0 default is free"'
@@ -329,7 +329,7 @@ ssh tokecosmetics 'ip -o -4 addr show | awk "{print \$2, \$4}"; echo ---; ip rou
 
 Expected: `no 172.16/12 routes`. If something *is* using 172.17.0.0/16, add `{"bip": "172.26.0.1/16"}` to `/etc/docker/daemon.json` before starting Docker, or the bridge will blackhole existing traffic.
 
-- [ ] **Step 3: Install Docker Engine from the official repo**
+- [x] **Step 3: Install Docker Engine from the official repo**
 
 Ubuntu's `docker.io` package lags; use Docker's repo so the compose plugin comes with it.
 
@@ -343,7 +343,7 @@ apt-get update -qq
 apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin'
 ```
 
-- [ ] **Step 4: Verify Docker runs and the live site is unharmed**
+- [x] **Step 4: Verify Docker runs and the live site is unharmed**
 
 ```bash
 ssh tokecosmetics 'docker --version; docker compose version; docker run --rm hello-world | tail -3; echo ---; free -h; echo ---; curl -s -o /dev/null -w "wp_home=%{http_code} %{time_total}s\n" https://tokecosmetics.com/'
@@ -351,7 +351,7 @@ ssh tokecosmetics 'docker --version; docker compose version; docker run --rm hel
 
 Expected: versions print, `hello-world` succeeds, `httpd` still active, WordPress still 200 at roughly the Step-1 timing.
 
-- [ ] **Step 5: Cap the Docker journal so logs cannot fill the disk**
+- [x] **Step 5: Cap the Docker journal so logs cannot fill the disk**
 
 An unbounded `json-file` driver has taken production boxes down. 56 GB free is not a licence to skip this.
 
