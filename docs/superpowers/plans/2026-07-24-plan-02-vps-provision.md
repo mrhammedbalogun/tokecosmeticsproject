@@ -276,9 +276,40 @@ git commit -m "feat(infra): production compose stack — postgres, redis, web, w
 
 ---
 
-## Task 3: Install Docker Engine on the VPS
+## Task 3: Install Docker Engine on the VPS — ✅ DONE 2026-07-25
 
-> **STOP. Get Hammed's explicit go-ahead before Step 2.** This is a system-level install on the box that serves the live stores. Show him the commands first.
+> **STOP. Get Hammed's explicit go-ahead before Step 2.** This is a system-level install on the box that serves the live stores. Show him the commands first. *(Given 2026-07-25.)*
+
+**Outcome:** Docker Engine **29.6.2**, Compose **v5.3.1**, containerd **v2.2.6** — installed,
+active, `hello-world` passes. `docker0` took `172.17.0.1/16`, no clash. Live stores checked
+before, during and after: `tokecosmetics.com` and `tokecosmeticsintl.com` 200 throughout, at
+**2.4–2.8 s after vs 2.4–4.5 s before** — no degradation. Memory unchanged at 3.8 GB
+available. Log driver capped at 10 MB × 3, plus `live-restore: true` so a Docker daemon
+restart no longer stops running containers.
+
+> ### Step 0 (unplanned): repair a dpkg state broken since 12 March 2026
+>
+> `apt-get install` failed with *"dpkg was interrupted"*. Pre-existing, dated **2026-03-12**
+> (`/var/lib/dpkg/updates/`) — **this box had been unable to install any package or security
+> update for four months**, on a server that was compromised in June 2026.
+>
+> Six packages were unconfigured: `openssh-server` (`iF`), `fdisk` (`iU`), and trigger-pending
+> `libc-bin`, `ufw`, `man-db`, `mailcap`. The hazard was `openssh-server`'s postinst
+> restarting `sshd` and locking us out. Mitigations taken first: `sshd -t` confirmed the live
+> config parses, `/etc/ssh` copied to `/root/ssh-backup-20260725`, `authorized_keys` confirmed
+> intact, Namecheap console access noted as the recovery path. Hammed approved explicitly.
+>
+> ```bash
+> DEBIAN_FRONTEND=noninteractive dpkg --configure -a --force-confold
+> ```
+>
+> `--force-confold` keeps every existing config file. Exit 0. It **generated missing ECDSA and
+> ED25519 host keys**, so a host-key mismatch was possible — a fresh SSH connection was tested
+> immediately and succeeded.
+>
+> **Consequence to remember:** this server can now take security updates again. Nobody has
+> applied four months of them. That belongs in Plan-25 (QA hardening), not here, but it should
+> not be forgotten — `apt list --upgradable` is the starting point.
 
 **Files:** none (server state only)
 
