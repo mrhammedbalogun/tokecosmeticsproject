@@ -1,10 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+type CookieOptions = { httpOnly?: boolean; sameSite?: string; maxAge?: number };
+
 const store = new Map<string, string>();
-const setSpy = vi.fn((n: string, v: string) => store.set(n, v));
+// The options parameter is declared (and forwarded below) precisely so the httpOnly
+// assertion can read calls[0][2] — typing the spy with only two parameters made that
+// index a type error while the runtime value was there all along.
+const setSpy = vi.fn((n: string, v: string, _options?: CookieOptions) => store.set(n, v));
 // Forward ALL args (incl. the options object) so calls[0][2] is observable.
 vi.mock("next/headers", () => ({
-  cookies: async () => ({ set: (...args: unknown[]) => setSpy(...(args as [string, string])) }),
+  cookies: async () => ({
+    set: (...args: unknown[]) => setSpy(...(args as [string, string, CookieOptions?])),
+  }),
 }));
 
 import { POST } from "@/app/api/country/route";
@@ -21,8 +28,8 @@ describe("country set route", () => {
     expect(setSpy).toHaveBeenCalled();
     expect(setSpy.mock.calls[0][0]).toBe("country");
     expect(setSpy.mock.calls[0][1]).toBe("GB");
-    const options = setSpy.mock.calls[0][2] as { httpOnly?: boolean };
-    expect(options.httpOnly).toBeFalsy();
+    const options = setSpy.mock.calls[0][2];
+    expect(options?.httpOnly).toBeFalsy();
   });
 
   it("rejects an empty code", async () => {
