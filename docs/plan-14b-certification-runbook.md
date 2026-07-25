@@ -13,10 +13,13 @@ What remains is **manual** and needs a human with the gateway dashboards: Tasks 
 
 | Gateway | Keys | Task 16 (UI payment) | Task 17 (webhook) |
 | --- | --- | --- | --- |
-| **Paystack** (NG) | ✅ test key configured | ✅ **certified** — TC-100041 → `processing` | ⬜ not yet |
+| **Paystack** (NG) | ✅ test key configured | ✅ **certified** — TC-100041 → `processing` | ✅ **signature + idempotency certified**; one Paystack-*originated* delivery still owed (needs the dashboard URL — do it at deploy) |
 | Flutterwave (NG) | ⬜ no credentials yet | ⬜ | ⬜ |
 | PayPal (intl) | ⬜ no credentials yet | ⬜ | ⬜ |
 | Bank transfer | n/a | ✅ still works — TC-100042 | n/a |
+
+Confirmation emails from the Task 16 orders all landed at
+`billztechnologiesofficial+paystacktest1@gmail.com` — confirmed by Hammed 2026-07-24.
 
 Hammed's call (2026-07-24): Flutterwave and PayPal stay **switched on** in their markets
 while unconfigured, so customers choosing them get a 503 until the keys land. CA/US
@@ -151,11 +154,91 @@ the customer back to localhost.
   double fulfilment, no error.
 - Confirm an amount/currency mismatch still flags `needs_review` and does **not** fulfil.
 
+### Paystack — done 2026-07-24
+
+Driven over a **public URL**, not a test client: `cloudflared tunnel --url http://localhost:8000`
+gave `https://<random>.trycloudflare.com`, and every request below crossed the real
+internet into `POST /api/v1/webhooks/paystack/`. `cloudflared.exe` was downloaded to the
+session scratchpad and never installed — quick tunnels need no Cloudflare account, and the
+URL dies with the process.
+
+The webhook body was **Paystack's own data**: the script pulled the live
+`transaction/verify/TC-100041` response (`id=6389173914`, `domain=test`, `amount=659899`,
+`requested_amount=640000`, NGN) and enveloped it as `charge.success`, then signed the raw
+bytes with HMAC-SHA512 of `PAYSTACK_SECRET_KEY` — the exact scheme `parse_webhook` checks.
+Note the two amounts in that payload: ₦6,598.99 debited against ₦6,400.00 requested. That
+is the fee-bearing overage from bug 1, visible in a real transaction.
+
+| Delivery | Result |
+| --- | --- |
+| Signature replaced with `0`×128 | **HTTP 400** `invalid_signature`, **no** `WebhookEvent` row written |
+| Valid signature | **HTTP 200** `accepted` — one `WebhookEvent`, `kind=payment`, `processed_at` set, `error=""` |
+| Same event delivered again | **HTTP 200** `duplicate` — still exactly one ledger row, not reprocessed |
+| Unsigned POST (plain curl) | **HTTP 400** `invalid_signature` |
+
+**Idempotency against the return-verify — the point of the exercise.** TC-100041 was
+already `processing`, fulfilled minutes earlier by the customer-return verify. After the
+webhook:
+
+- order still `processing`, one payment (43, `succeeded`, ₦6,400.00) — no second payment,
+  no re-flip;
+- order timeline unchanged — still a single `payment 43 verified via paystack`, so
+  `confirm_payment` recognised the replay and did nothing;
+- `StockMovement` for reference `TC-100041` still exactly two rows — `reservation`
+  (+1 reserved) and `sale` (−1 qty, −1 reserved). **No third movement: stock was not
+  committed twice.** This is the failure the whole ladder exists to prevent, and it is the
+  one thing unit tests with a fake gateway can only approximate.
+
+**Amount/currency mismatch — already proven with real money data, not re-staged.** Both
+paths call the *same* `confirm_payment`, so the guard cannot differ between them. Its
+real-world evidence is TC-100039, which Paystack really did report differently:
+
+```
+status: pending_payment
+review_reason: payment 41: gateway reported 14619.29 NGN, order total is 14300.00 NGN — not fulfilling
+```
+
+Flagged, and **not fulfilled** — no stock committed, order left awaiting payment. Unit
+cover: `test_confirm_amount_mismatch_flags_for_review`,
+`test_confirm_currency_mismatch_flags_for_review`, and
+`test_verify_reports_the_short_amount_when_the_customer_underpaid` (which is what stops the
+bug-1 fix from swallowing a genuine shortfall). Manufacturing a fresh live mismatch would
+have meant either corrupting the TC-100039 evidence or hand-editing an order total, so it
+was not done.
+
+**Still owed: one delivery that Paystack itself sends.** Everything above proves our
+verification is correct; it does not prove Paystack's dashboard can reach us, or that
+Paystack signs the same bytes it transmits. That needs the webhook URL pasted into
+**Paystack → Settings → API Keys & Webhooks → Test Webhook URL** and one payment driven
+afterwards. Since that URL is a per-environment setting Hammed sets again at deploy, it is
+folded into Task 18 / the deploy checklist rather than done twice against a throwaway
+tunnel. **Trailing slash is required** (`…/api/v1/webhooks/paystack/`) — Django's
+`APPEND_SLASH` will not redirect a POST.
+
+Script used: `task17_signed_replay.py` (session scratchpad; read-only against Paystack).
+
 ## Task 18 — sign-off
 
-- Hammed does a test-mode purchase on his phone through **each** of the three gateways.
-- Explicit sign-off that all three certify, bank transfer still works as the fallback, and
-  no real money moves until Plan-27.
+> **Deferred to deploy, by Hammed 2026-07-24.** A phone pass against `localhost` needs the
+> dev box exposed to his handset; against the preview URL it is just "open the site and
+> buy something". So Task 18 runs on the first deployed preview, and it now carries the
+> last-mile webhook step from Task 17.
+
+At deploy, before the phone pass:
+
+1. Set `STOREFRONT_BASE_URL` to the preview origin (Flutterwave builds its return URL from
+   it; a stale value sends customers back to localhost).
+2. Paste `https://<preview-api-origin>/api/v1/webhooks/paystack/` into **Paystack →
+   Settings → API Keys & Webhooks → Test Webhook URL**. Trailing slash required.
+
+Then:
+
+- Hammed does a test-mode purchase on his phone through **each** configured gateway.
+- Confirm Paystack's own delivery lands: a `WebhookEvent` row appears with
+  `processed_at` set and `error=""`, and the order it names is fulfilled exactly once
+  (compare against the Task 17 evidence above).
+- Explicit sign-off that the configured gateways certify, bank transfer still works as the
+  fallback, and no real money moves until Plan-27.
 
 ---
 

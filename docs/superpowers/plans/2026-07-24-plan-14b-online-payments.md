@@ -1528,22 +1528,30 @@ git commit -m "test(checkout): green backend + storefront suites and production 
 
 ### Task 16: Drive one test-mode payment per gateway through the real UI
 
-- [ ] **Paystack (NG):** place an order → inline pop-up → Paystack **test card** → order flips to `processing`, stock commits, confirmation page shown, confirmation email sent.
+- [x] **Paystack (NG):** done 2026-07-24 — TC-100041 flipped to `processing`, stock committed, confirmation page correct, confirmation email delivered.
 - [ ] **PayPal (international market):** place an order → inline Buttons → **sandbox** buyer approves → capture → `processing` + email.
 - [ ] **Flutterwave (NG):** place an order → redirect to hosted page → **test card** → return page → `processing` + email.
-- [ ] **Bank transfer** still works as the fallback in NG and in an international market (unchanged path).
+- [x] **Bank transfer** still works as the fallback in NG — re-checked on TC-100042. (International market re-check still owed.)
 - [ ] Walk **mobile viewport** for at least Paystack (NG primary) and PayPal.
 - [ ] **Cancel/close** a pop-up (Paystack and PayPal) and a hosted-page payment (Flutterwave) → the retry state appears; retrying the same order succeeds.
 
 ### Task 17: Prove each webhook signature path once
 
-- [ ] For each gateway, deliver one signed webhook (gateway dashboard simulator or a temporary tunnel, e.g. cloudflared) and confirm it verifies and is idempotent against the return-verify (no double fulfilment, no error).
-- [ ] Confirm an **amount/currency mismatch** still flags `needs_review` and does NOT fulfil (existing test proves the code; spot-check once live-style if feasible).
+- [x] **Paystack** — done 2026-07-24 over a cloudflared quick tunnel: valid signature → 200 `accepted`, tampered → 400 with no ledger row, replay → 200 `duplicate`. Idempotent against the return-verify on TC-100041: order stayed `processing`, timeline unchanged, stock movements still exactly `reservation` + `sale` (no double commit). Body was Paystack's own live transaction data. Full evidence in `docs/plan-14b-certification-runbook.md`.
+- [ ] Flutterwave / PayPal — blocked on credentials.
+- [x] Confirm an **amount/currency mismatch** still flags `needs_review` and does NOT fulfil — real-world evidence is TC-100039 (`review_reason` records Paystack reporting 14619.29 vs a 14300.00 total, order left `pending_payment`, no stock committed); unit cover in `test_confirm_amount_mismatch_flags_for_review` / `..._currency_mismatch_...` / `test_verify_reports_the_short_amount_when_the_customer_underpaid`. Both confirmation paths call the same `confirm_payment`, so the guard cannot differ between them.
+- [ ] **Last mile, deferred to deploy (Task 18):** one delivery that Paystack itself sends, via the dashboard's Test Webhook URL. Proves reachability + that Paystack signs the bytes it transmits.
 
 ### Task 18: Hammed's checkpoint sign-off
 
-- [ ] Hammed does a **test-mode** purchase himself on his phone through **each** of the three gateways on the preview site and sees the order confirm.
-- [ ] Explicit sign-off that: (a) all three certify, (b) bank transfer still works as fallback, (c) he understands **no real money moves** until live keys at cutover (Plan-27).
+> **Deferred to deploy by Hammed, 2026-07-24** — a phone pass is only meaningful against a
+> real preview URL. This task now also carries Task 17's last mile.
+
+- [ ] Set `STOREFRONT_BASE_URL` to the preview origin, and paste `https://<preview-api>/api/v1/webhooks/paystack/` into Paystack → Settings → API Keys & Webhooks → **Test** Webhook URL (trailing slash required).
+- [ ] Hammed does a **test-mode** purchase himself on his phone through each configured gateway on the preview site and sees the order confirm.
+- [ ] Confirm Paystack's own webhook delivery lands: `WebhookEvent` row with `processed_at` set, `error=""`, order fulfilled exactly once.
+- [x] Confirmation emails from the Task 16 orders arrived at `billztechnologiesofficial+paystacktest1@gmail.com` — confirmed by Hammed 2026-07-24.
+- [ ] Explicit sign-off that: (a) the configured gateways certify, (b) bank transfer still works as fallback, (c) he understands **no real money moves** until live keys at cutover (Plan-27).
 - [ ] Record the sign-off in the memory entry for Plan-14b.
 
 ---
