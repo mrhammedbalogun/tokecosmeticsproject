@@ -191,7 +191,7 @@ Baseline, 2026-07-25, ~11 h uptime, idle traffic:
 |---|---|---|---|
 | `web` | 272 MB | 768 MB | 35% |
 | `worker` | 183 MB | 512 MB | 36% |
-| `beat` | 98 MB | 128 MB | **77%** |
+| `beat` | 100 MB | 256 MB | 39% |
 | `postgres` | 34 MB | 1 GB | 3% |
 | `redis` | 9 MB | 256 MB | 3% |
 | **Total** | **596 MB** | 2.66 GB | |
