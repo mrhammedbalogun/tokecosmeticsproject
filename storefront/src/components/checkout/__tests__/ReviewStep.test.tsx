@@ -12,6 +12,16 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
 }));
 
+/** The launcher owns the inline-SDK collection step; stub it so these tests can assert
+ * WHICH launch info ReviewStep hands over without loading gateway SDKs. */
+vi.mock("@/components/checkout/PaymentLauncher", () => ({
+  PaymentLauncher: ({ launch }: { launch: { gateway: string; reference: string } }) => (
+    <div data-testid="launcher">
+      {launch.gateway}:{launch.reference}
+    </div>
+  ),
+}));
+
 /** ReviewStep reads cart.id/items/currency/subtotal from useCart() — mock it the
  * same way DeliveryStep.test.tsx does so each test can pin the cart independently. */
 let mockCart: Cart;
@@ -255,5 +265,63 @@ describe("ReviewStep", () => {
     const [, init] = f.mock.calls[0];
     const body = JSON.parse((init as RequestInit).body as string);
     expect(body.coupon_code).toBe("WELCOME");
+  });
+
+  it("renders PaymentLauncher (not a redirect to confirmation) for an online gateway", async () => {
+    mockFetch({
+      [QUOTE_URL]: {
+        status: 200,
+        body: { totals: { subtotal: "20.00", discount: "0.00", delivery: "5.00", tax: "0.00", grand_total: "25.00", currency: "GBP" }, coupon: { ok: true } },
+      },
+      [PLACE_URL]: {
+        status: 201,
+        body: { order_number: "TC-200", payment: { gateway: "paystack", action: "redirect", reference: "TC-ref-1", data: { access_code: "ac_1" } } },
+      },
+    });
+    renderHarness();
+    await waitFor(() => expect(screen.getByText("£25.00")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /place order/i }));
+    await waitFor(() => expect(screen.getByTestId("launcher")).toHaveTextContent("paystack:TC-ref-1"));
+    expect(push).not.toHaveBeenCalled(); // no confirmation redirect for the inline path
+  });
+
+  it("does NOT stash a bank handoff for an online gateway", async () => {
+    // payment.data for an online gateway holds SDK material (access_code, order_id) --
+    // stashing it as a bank handoff would make the confirmation page show bank-transfer
+    // instructions for a card order.
+    mockFetch({
+      [QUOTE_URL]: {
+        status: 200,
+        body: { totals: { subtotal: "20.00", discount: "0.00", delivery: "5.00", tax: "0.00", grand_total: "25.00", currency: "GBP" }, coupon: { ok: true } },
+      },
+      [PLACE_URL]: {
+        status: 201,
+        body: { order_number: "TC-201", payment: { gateway: "paystack", action: "redirect", reference: "TC-ref-2", data: { access_code: "ac_2" } } },
+      },
+    });
+    renderHarness();
+    await waitFor(() => expect(screen.getByText("£25.00")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /place order/i }));
+    await waitFor(() => expect(screen.getByTestId("launcher")).toBeInTheDocument());
+    expect(readBankHandoff("TC-201")).toBeNull();
+  });
+
+  it("clears the guest coupon stash on the online-gateway path too", async () => {
+    sessionStorage.setItem("toke-coupon-code", "SAVE10");
+    mockFetch({
+      [QUOTE_URL]: {
+        status: 200,
+        body: { totals: { subtotal: "20.00", discount: "2.00", delivery: "5.00", tax: "0.00", grand_total: "23.00", currency: "GBP" }, coupon: { ok: true } },
+      },
+      [PLACE_URL]: {
+        status: 201,
+        body: { order_number: "TC-202", payment: { gateway: "paypal", action: "redirect", reference: "TC-ref-3", data: { order_id: "PP-1", currency: "GBP" } } },
+      },
+    });
+    renderHarness();
+    await waitFor(() => expect(screen.getByText("£23.00")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: /place order/i }));
+    await waitFor(() => expect(screen.getByTestId("launcher")).toHaveTextContent("paypal:TC-ref-3"));
+    expect(sessionStorage.getItem("toke-coupon-code")).toBeNull();
   });
 });
