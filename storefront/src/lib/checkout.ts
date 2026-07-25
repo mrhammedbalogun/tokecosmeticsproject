@@ -10,12 +10,20 @@ export interface Totals {
 }
 export interface QuoteResult { totals: Totals; coupon: { ok: boolean; error_code?: string } }
 export interface DeliveryOption {
+  /** `min_days`/`max_days` are the names the API actually uses (delivery/services.py).
+   * These were `eta_*_days` here, and the fixtures were written from this type rather
+   * than from a real response — so the tests passed while every customer saw
+   * "undefined days" on every delivery option. */
   id: number; name: string; price: string | null;
-  eta_min_days: number; eta_max_days: number; quote_required: boolean;
+  min_days: number; max_days: number; quote_required: boolean;
 }
 export interface PaymentMethod { gateway: string; sort_order: number }
 export interface OrderItem {
-  product_name: string; variant_name: Record<string, string>; sku: string;
+  /** A pre-joined STRING ("Size: 150ml"), not the cart's {option: value} map — an order
+   * line is a point-in-time snapshot and OrderItem.variant_name is a CharField on the
+   * backend. Typing it as a Record made the confirmation page call Object.values() on a
+   * string and render it one character at a time ("S / i / z / e / ..."). */
+  product_name: string; variant_name: string; sku: string;
   quantity: number; unit_price: string; line_total: string;
   unit_price_display: string; line_total_display: string; image_url: string | null;
 }
@@ -24,7 +32,7 @@ export interface OrderDetail {
   subtotal: string; discount_total: string; shipping_total: string; tax_total: string;
   grand_total: string; grand_total_display: string; delivery_option_name: string | null;
   shipping_address: Record<string, unknown> | null; billing_address: Record<string, unknown> | null;
-  customer_note: string; items: OrderItem[];
+  customer_note: string; payment_gateway: string; items: OrderItem[];
 }
 
 /** Public (AllowAny) — safe with apiFetch + country. */
