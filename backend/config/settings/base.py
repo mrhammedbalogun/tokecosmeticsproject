@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import environ
+from corsheaders.defaults import default_headers as cors_default_headers
 
 # backend/  (this file is config/settings/base.py -> parents[2] = backend/)
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -198,6 +199,14 @@ CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
     default=[FRONTEND_URL, ADMIN_URL],
 )
+
+# The storefront sends X-Country on EVERY request and X-Cart-Id on cart requests
+# (storefront/src/lib/api.ts). Neither is in django-cors-headers' default allow
+# list, so without this every browser-side call fails its preflight — and the
+# browser reports that as an opaque network error, which reads like "the API is
+# down" rather than "one header is missing". Same-origin dev never hits a
+# preflight at all, so this only ever breaks in deployment.
+CORS_ALLOW_HEADERS = (*cors_default_headers, "x-country", "x-cart-id")
 
 # --- Email ---
 # Dev/test default = console; prod switches to Resend via anymail (set EMAIL_BACKEND in .env).
