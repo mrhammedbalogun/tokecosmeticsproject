@@ -938,7 +938,7 @@ git commit -m "feat(ci): tag-triggered backend deploy to the VPS (Plan-02)"
 **Files:**
 - Vercel project settings (no repo change)
 
-- [ ] **Step 1: Hammed sets the Vercel environment variables**
+- [x] **Step 1: Hammed sets the Vercel environment variables**
 
 Vercel → the storefront project → Settings → Environment Variables (Production **and** Preview):
 
@@ -965,7 +965,7 @@ print(settings.CORS_ALLOWED_ORIGINS)"'
 
 Expected: a list containing `https://next.tokecosmetics.com`.
 
-- [ ] **Step 3: Redeploy the storefront** — Vercel → Deployments → Redeploy (env changes need a rebuild).
+- [x] **Step 3: Redeploy the storefront** — Vercel → Deployments → Redeploy (env changes need a rebuild).
 
 - [ ] **Step 4: Verify products actually render — the real acceptance test**
 
@@ -980,6 +980,27 @@ Expected: a count **greater than zero**. Right now it is zero, and that single n
 Add to cart → checkout → inline signup → address → delivery option → **bank transfer** → place order → confirmation page shows the order number and bank details → confirmation email arrives. Use a `+test` address, not a customer's.
 
 Expected: an order in the `TC-1000xx` series appears via `docker compose -p tokecosmetics exec -T web python manage.py shell`. This proves API, DB, Redis, Celery, and Resend all work together in production — five things one test covers.
+
+> **BLOCKED 2026-07-25 — Steps 4 and 5 cannot pass yet, and this is not a defect.**
+> The production catalogue is empty: `/api/v1/products/` returns `count: 0` and
+> `/api/v1/categories/` returns `[]`, so Step 4's "count greater than zero" is
+> structurally unreachable and Step 5 has nothing to put in a cart. Products arrive
+> in **Plan-21-migration-products**, which is not built.
+>
+> Steps 1–3 ARE verified: the storefront's server components are calling the
+> production API (6/6 requests 200 in the Apache log, `user-agent: node`, hitting
+> `/api/v1/products/`, `/api/v1/categories/`, `/api/v1/meta/countries/`),
+> `NEXT_PUBLIC_SITE_URL` is live in the canonical tag and sitemap, and
+> `REVALIDATE_SECRET` matches on both sides (wrong secret 401, real secret 200).
+> `NEXT_PUBLIC_API_URL` is the one variable that could NOT be verified from
+> outside — it is only read by `lib/media.ts` to build absolute product-image URLs,
+> and with no products there is no image URL to inspect. It gets exercised for real
+> at Plan-21.
+>
+> **Do Steps 4 and 5 immediately after Plan-21, not before.** Seeding a throwaway
+> product into production to force Step 5 early would put fake data in the live
+> catalogue and burn a number out of the `TC-1000xx` order sequence for a test —
+> the wrong trade when the real thing is one plan away.
 
 ---
 
