@@ -705,7 +705,7 @@ git commit -m "feat(infra): Apache vhost proxying api.tokecosmetics.com to the D
 **Files:**
 - Create: `docs/runbooks/vps-stack.md`
 
-- [ ] **Step 1: Measure the stack under load**
+- [x] **Step 1: Measure the stack under load**
 
 ```bash
 ssh tokecosmetics 'docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}"; echo ---; free -h; echo ---; df -h / | tail -1'
@@ -713,7 +713,7 @@ ssh tokecosmetics 'docker stats --no-stream --format "table {{.Name}}\t{{.MemUsa
 
 Expected: total container memory **under ~2.6 GB**, and `available` still comfortably above 1 GB. If not, drop gunicorn to 2 workers and Celery to `-c 1` before going further — the live store shares this RAM and losing it costs real money.
 
-- [ ] **Step 2: Confirm nothing new is publicly exposed**
+- [x] **Step 2: Confirm nothing new is publicly exposed**
 
 ```bash
 ssh tokecosmetics 'ss -tlnp | grep -E ":(5433|6380|8001) "'
@@ -721,11 +721,11 @@ ssh tokecosmetics 'ss -tlnp | grep -E ":(5433|6380|8001) "'
 
 Expected: every line begins `127.0.0.1:`. A `0.0.0.0:` here means Postgres or Redis is on the public internet — fix the compose port binding immediately.
 
-- [ ] **Step 3: Write `docs/runbooks/vps-stack.md`**
+- [x] **Step 3: Write `docs/runbooks/vps-stack.md`**
 
 Cover, in plain language for a non-developer: what the five containers do; `docker compose -p tokecosmetics ps` / `logs <service>`; where `.env.prod` lives and that it is never in git; how to restart one service; how to roll back (`git checkout <previous-tag> && docker compose up -d --build`); the `zz-` filename warning and why; and that Meilisearch is deliberately absent until Plan-07b.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/runbooks/vps-stack.md
