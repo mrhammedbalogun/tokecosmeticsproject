@@ -84,6 +84,43 @@ def test_verify_success_maps_amount_and_currency():
 
 @override_settings(PAYSTACK_SECRET_KEY=SECRET)
 @respx.mock
+def test_verify_reports_requested_amount_when_the_customer_bore_the_fee():
+    """With "customers bear transaction fees" on in the Paystack dashboard, `amount` is the
+    order total PLUS Paystack's fee, while `requested_amount` is what we asked for and what
+    the merchant is credited. Reporting `amount` made confirm_payment's equality check fail
+    on EVERY Paystack order — each one flagged needs_review and never fulfilled."""
+    order, payment = _order_payment()
+    respx.get(f"{API_BASE}/transaction/verify/{payment.gateway_reference}").mock(
+        return_value=httpx.Response(200, json={
+            "status": True,
+            "data": {"status": "success", "amount": 102284, "requested_amount": 100000,
+                     "fees": 2284, "currency": "NGN"},
+        })
+    )
+    result = PaystackGateway().verify(payment)
+    assert result.status == "succeeded"
+    assert result.amount == Decimal("1000.00")  # the order total, not the fee-inclusive charge
+
+
+@override_settings(PAYSTACK_SECRET_KEY=SECRET)
+@respx.mock
+def test_verify_reports_the_short_amount_when_the_customer_underpaid():
+    """The mirror of the above, and the reason this is not "just trust requested_amount":
+    if less money arrived than we asked for, the amount that MATTERS is what arrived, so the
+    mismatch guard still trips and the order is not fulfilled."""
+    order, payment = _order_payment()
+    respx.get(f"{API_BASE}/transaction/verify/{payment.gateway_reference}").mock(
+        return_value=httpx.Response(200, json={
+            "status": True,
+            "data": {"status": "success", "amount": 40000, "requested_amount": 100000,
+                     "currency": "NGN"},
+        })
+    )
+    assert PaystackGateway().verify(payment).amount == Decimal("400.00")
+
+
+@override_settings(PAYSTACK_SECRET_KEY=SECRET)
+@respx.mock
 def test_verify_failed_maps_failed():
     order, payment = _order_payment()
     respx.get(f"{API_BASE}/transaction/verify/{payment.gateway_reference}").mock(

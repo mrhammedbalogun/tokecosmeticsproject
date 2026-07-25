@@ -77,8 +77,37 @@ class PaystackGateway(PaymentGateway):
         data = resp.json().get("data") or {}
         status = {"success": "succeeded", "failed": "failed"}.get(data.get("status"), "pending")
         currency = data.get("currency", payment.currency_id)
-        amount = from_minor(data.get("amount", 0), payment.currency)
+        amount = from_minor(self._settled_minor(data), payment.currency)
         return VerifyResult(status=status, amount=amount, currency=currency, raw=data)
+
+    @staticmethod
+    def _settled_minor(data: dict) -> int:
+        """How much this transaction settles the order by, in kobo.
+
+        Paystack reports TWO amounts and which one is "the payment" depends on a dashboard
+        setting we do not control:
+
+          * `requested_amount` — what we asked for in initialize. Always the order total.
+          * `amount`           — what the customer was actually debited.
+
+        With "customers bear transaction fees" ON (Settings -> Preferences), `amount` is
+        `requested_amount` plus Paystack's fee — e.g. we ask for NGN 14,300.00 and the
+        customer is charged NGN 14,619.29. The merchant is still credited the 14,300.00;
+        the extra is the fee, and it never lands in our account. Comparing the debited
+        amount against the order total therefore mismatched on EVERY order, flagging each
+        one needs_review and fulfilling none of them (found driving the Plan-14b test-mode
+        certification, order TC-100039).
+
+        So an overage is the fee and we report the requested amount. A SHORTFALL is not:
+        less money arrived than we asked for, and the caller's equality check must still
+        trip, so we report what actually arrived. `requested_amount` is absent on older
+        transactions — fall back to `amount` rather than inventing a settlement.
+        """
+        charged = int(data.get("amount") or 0)
+        requested = int(data.get("requested_amount") or 0)
+        if requested and charged >= requested:
+            return requested
+        return charged
 
     def refund(self, payment, amount, reason: str = "") -> RefundResult:
         payload = {
