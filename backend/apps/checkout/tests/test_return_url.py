@@ -1,7 +1,6 @@
 """_initiate_payment builds the gateway return URL server-side from a trusted setting +
 the order's own reference, and passes it to the adapter. It must never come from request
 data (open-redirect / tampering vector)."""
-from decimal import Decimal
 
 import pytest
 from django.test import override_settings
