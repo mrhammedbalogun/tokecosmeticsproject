@@ -99,6 +99,47 @@ def test_owner_sees_the_full_order(buyer):
     assert resp.data["items"][0]["product_name"] == "Shea Butter"
 
 
+def test_the_owner_view_says_which_gateway_the_order_was_paid_with(buyer):
+    """The confirmation page has to know. Without it, it assumed bank transfer and told a
+    customer who had just paid by card to go and make a transfer (found certifying
+    Paystack, Plan-14b). It cannot be derived from `status`: a bank-transfer order awaiting
+    funds and a card order whose payment failed are both pending_payment."""
+    from apps.payments.factories import PaymentFactory
+
+    order = _order("TC-900030", user=buyer)
+    PaymentFactory(order=order, currency=order.currency, gateway="paystack",
+                   amount=order.grand_total, status="succeeded")
+
+    client = APIClient()
+    client.force_authenticate(buyer)
+    resp = client.get("/api/v1/orders/TC-900030/")
+
+    assert resp.status_code == 200
+    assert resp.data["payment_gateway"] == "paystack"
+
+
+def test_an_order_with_no_payment_yet_reports_an_empty_gateway(buyer):
+    """Legacy imported orders carry no Payment row. The page must render, not 500."""
+    _order("TC-900031", user=buyer)
+
+    client = APIClient()
+    client.force_authenticate(buyer)
+    resp = client.get("/api/v1/orders/TC-900031/")
+
+    assert resp.status_code == 200
+    assert resp.data["payment_gateway"] == ""
+
+
+def test_the_token_view_does_not_leak_the_gateway():
+    """The redacted view stays redacted: how someone paid is not "where is my parcel"."""
+    _order("TC-900032")
+
+    resp = APIClient().get(f"/api/v1/orders/TC-900032/?token={make_tracking_token('TC-900032')}")
+
+    assert resp.status_code == 200
+    assert "payment_gateway" not in resp.data
+
+
 # --- guest tracking token ---------------------------------------------------
 
 

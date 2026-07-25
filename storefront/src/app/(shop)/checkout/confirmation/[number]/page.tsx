@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { ApiError } from "@/lib/api";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY, formatMoney, symbolFor } from "@/lib/country";
 import { getOrder, type OrderDetail } from "@/lib/checkout";
+import { confirmationCopy } from "@/lib/confirmation-copy";
 import { ConfirmationBankDetails } from "@/components/checkout/ConfirmationBankDetails";
 
 type Params = Promise<{ number: string }>;
@@ -58,6 +59,7 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   const order = await loadOrder(number, country);
   const sym = symbolFor(order.currency);
+  const copy = confirmationCopy({ gateway: order.payment_gateway, status: order.status });
 
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
@@ -68,8 +70,7 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
       </p>
 
       <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-beige p-4 text-sm">
-        Your order is reserved. Complete your bank transfer using the details below; we&apos;ll
-        confirm and dispatch once payment arrives.
+        {copy.banner}
       </div>
 
       <div className="mt-8 space-y-3">
@@ -78,9 +79,7 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
           <div key={i} className="flex items-center justify-between gap-4 border-b border-line pb-3 text-sm">
             <div>
               <p className="font-medium">{item.product_name}</p>
-              {Object.values(item.variant_name).length > 0 && (
-                <p className="text-muted">{Object.values(item.variant_name).join(" / ")}</p>
-              )}
+              {item.variant_name && <p className="text-muted">{item.variant_name}</p>}
               <p className="text-muted">Qty {item.quantity}</p>
             </div>
             <span className="font-medium">{item.line_total_display}</span>
@@ -133,13 +132,15 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
         </div>
       )}
 
-      <div className="mt-8 border-t border-line pt-6">
-        <ConfirmationBankDetails
-          number={order.number}
-          amount={order.grand_total}
-          currency={order.currency}
-        />
-      </div>
+      {copy.showBankDetails && (
+        <div className="mt-8 border-t border-line pt-6">
+          <ConfirmationBankDetails
+            number={order.number}
+            amount={order.grand_total}
+            currency={order.currency}
+          />
+        </div>
+      )}
 
       <p className="mt-8 text-sm text-muted">
         Your account is ready — you can track this order any time.

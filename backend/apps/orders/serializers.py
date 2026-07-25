@@ -72,13 +72,33 @@ class OrderListSerializer(_BaseOrderSerializer):
 
 
 class OrderSerializer(_BaseOrderSerializer):
+    payment_gateway = serializers.SerializerMethodField()
+
     class Meta:
         model = Order
         fields = ("number", "status", "placed_at", "email", "phone", "currency",
                   "subtotal", "discount_total", "shipping_total", "tax_total",
                   "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",
-                  "tracking_carrier", "tracking_number", "items")
+                  "tracking_carrier", "tracking_number", "payment_gateway", "items")
+
+    def get_payment_gateway(self, order) -> str:
+        """How this order was paid — the gateway of its most recent payment attempt.
+
+        The confirmation page needs it and cannot infer it: `status` conflates "bank
+        transfer awaiting funds" with "card payment failed" (both pending_payment), so
+        without this the page assumed bank transfer and instructed a customer who had
+        just paid by card to go and make a transfer.
+
+        Most RECENT, not first: after a method switch (POST /orders/{n}/pay/) the live
+        attempt is the last one, and that is the one the customer is looking at. "" when
+        there is no payment at all — legacy imported orders have none.
+
+        Deliberately absent from OrderTrackingSerializer: how someone paid is not part of
+        "where is my parcel", and that view goes to whoever the mail was forwarded to.
+        """
+        payment = max(order.payments.all(), key=lambda p: p.pk, default=None)
+        return payment.gateway if payment else ""
 
 
 class OrderTrackingSerializer(_BaseOrderSerializer):

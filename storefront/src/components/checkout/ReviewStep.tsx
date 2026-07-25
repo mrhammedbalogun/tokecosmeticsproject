@@ -8,6 +8,7 @@ import { OrderSummary } from "@/components/checkout/OrderSummary";
 import { couponMessage } from "@/lib/coupon-messages";
 import { paymentLabel } from "@/lib/payment-labels";
 import { stashBankHandoff } from "@/lib/bank-handoff";
+import { PaymentLauncher, type LaunchInfo } from "@/components/checkout/PaymentLauncher";
 import type { Totals } from "@/lib/checkout";
 
 // Matches CartView's sessionStorage key for a guest's applied coupon — not exported
@@ -172,6 +173,9 @@ export function ReviewStep() {
 
   const [placing, setPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<{ message: string; cartLink: boolean } | null>(null);
+  // Set once the order is placed with an ONLINE gateway: the review UI gives way to the
+  // launcher, which collects the money and routes onward.
+  const [launch, setLaunch] = useState<LaunchInfo | null>(null);
 
   function applyCoupon() {
     setAppliedCoupon(couponInput.trim());
@@ -198,11 +202,25 @@ export function ReviewStep() {
       });
       const data = await res.json().catch(() => null);
       if (res.status === 201 && data?.order_number) {
-        if (data.payment?.data) stashBankHandoff(data.order_number, data.payment.data);
         // Guest coupon stash has done its job (pre-filled + applied) — clear it so a
         // later cart/checkout doesn't silently re-apply a code from a finished order.
         if (typeof sessionStorage !== "undefined") sessionStorage.removeItem(COUPON_STORAGE_KEY);
-        router.push(`/checkout/confirmation/${data.order_number}`);
+        const payment = data.payment ?? {};
+        if (payment.action === "bank_details") {
+          if (payment.data) stashBankHandoff(data.order_number, payment.data);
+          router.push(`/checkout/confirmation/${data.order_number}`);
+          return;
+        }
+        // Online gateway: hand off to the launcher (inline pop-up / redirect), which
+        // owns verify + routing to confirmation from here. Deliberately NOT stashed as
+        // a bank handoff — payment.data here is SDK material (access_code / order_id),
+        // and stashing it would show bank instructions for a card order.
+        setLaunch({
+          gateway: payment.gateway,
+          reference: payment.reference,
+          orderNumber: data.order_number,
+          data: payment.data ?? {},
+        });
         return;
       }
       setPlaceError(mapPlaceOrderError(data));
@@ -215,6 +233,16 @@ export function ReviewStep() {
 
   if (!addressId || !deliveryOptionId || !selections.paymentGateway) {
     return <p className="text-sm text-muted">Complete the previous steps first.</p>;
+  }
+
+  // The order exists and is awaiting money — show only the payment step, so nothing on
+  // screen invites re-placing an order that has already been created.
+  if (launch) {
+    return (
+      <div className="space-y-4">
+        <PaymentLauncher launch={launch} />
+      </div>
+    );
   }
 
   return (

@@ -24,20 +24,40 @@ def missing_settings_for(gateway: str) -> list[str]:
     ]
 
 
+def _live_markets() -> dict[str, list[str]]:
+    """{gateway: [country codes where it is switched on]}. Empty if the DB isn't ready."""
+    try:
+        from apps.payments.models import CountryPaymentGateway
+
+        live: dict[str, list[str]] = {}
+        for row in CountryPaymentGateway.objects.filter(is_active=True):
+            live.setdefault(row.gateway, []).append(str(row.country_id))
+        return {g: sorted(codes) for g, codes in live.items()}
+    except (OperationalError, ProgrammingError):
+        return {}
+
+
 @register()
 def gateway_configuration_check(app_configs, **kwargs):
     issues = []
+    # Only gateways that are actually OFFERED somewhere. A gateway switched off in every
+    # market (Stripe, dropped in Plan-14) cannot strand a customer, and warning about its
+    # keys is noise — noise that hides the warning that matters while someone is
+    # configuring the gateways that ARE live. Matches how W002 has always behaved.
+    live = _live_markets()
     for gateway in sorted(GATEWAY_REQUIRED_SETTINGS):
+        markets = live.get(gateway, [])
+        if not markets:
+            continue
         missing = missing_settings_for(gateway)
         if missing:
             issues.append(
                 Warning(
-                    f"Payment gateway '{gateway}' is not configured "
-                    f"(missing: {', '.join(missing)}).",
+                    f"Payment gateway '{gateway}' is active in {', '.join(markets)} but is "
+                    f"not configured (missing: {', '.join(missing)}).",
                     hint=(
-                        f"Customers whose country has '{gateway}' active in "
-                        f"CountryPaymentGateway will get a 503 at checkout. Either set the "
-                        f"env vars or deactivate the gateway for those countries."
+                        f"Customers in those countries will get a 503 at checkout. Either "
+                        f"set the env vars or deactivate '{gateway}' for those countries."
                     ),
                     id="payments.W001",
                 )

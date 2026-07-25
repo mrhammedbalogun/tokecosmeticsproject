@@ -225,6 +225,10 @@ PAYPAL_CLIENT_SECRET = env("PAYPAL_CLIENT_SECRET", default="")
 PAYPAL_WEBHOOK_ID = env("PAYPAL_WEBHOOK_ID", default="")
 PAYPAL_API_BASE = env("PAYPAL_API_BASE", default="https://api-m.sandbox.paypal.com")
 
+# Storefront origin, used ONLY to build the gateway return URL (Flutterwave redirect).
+# Never derived from a request — a client-supplied return URL is an open-redirect vector.
+STOREFRONT_BASE_URL = env("STOREFRONT_BASE_URL", default="http://localhost:3000")
+
 # --- Celery ---
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)

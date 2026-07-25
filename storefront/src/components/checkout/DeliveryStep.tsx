@@ -108,9 +108,9 @@ export function DeliveryStep() {
               ? "Quoted after checkout"
               : formatMoney(option.price as string, cart.currency, symbolFor(cart.currency));
             const etaLabel =
-              option.eta_min_days === option.eta_max_days
-                ? `${option.eta_min_days} days`
-                : `${option.eta_min_days}–${option.eta_max_days} days`;
+              option.min_days === option.max_days
+                ? `${option.min_days} days`
+                : `${option.min_days}–${option.max_days} days`;
             return (
               <button
                 key={option.id}
