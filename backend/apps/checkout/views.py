@@ -12,7 +12,7 @@ from apps.carts.serializers import serialize_cart
 from apps.carts.services import get_or_create_cart, set_quantity
 from apps.catalog.models import ProductVariant
 from apps.checkout.serializers import QuoteRequestSerializer
-from apps.checkout.services.checkout import CheckoutError, place_order
+from apps.checkout.services.checkout import CheckoutError, place_order, retry_payment
 from apps.checkout.services.idempotency import (
     IdempotencyConflict,
     IdempotencyKeyReused,
@@ -140,18 +140,61 @@ class CheckoutView(APIView):
                              "detail": "Payment provider is temporarily unavailable. Please retry."},
                             status=502)
 
-        init = getattr(result.order, "_initiate", None)
-        body = {
-            "order_number": result.order.number,
-            "payment": {
-                "gateway": result.payment.gateway,
-                "action": init.action if init else "",
-                "reference": result.payment.gateway_reference,
-                "data": init.data if init else {},
-            },
-        }
+        body = _payment_envelope(result)
         finish(request.user.id, key, request_hash, status.HTTP_201_CREATED, body)
         return Response(body, status=status.HTTP_201_CREATED)
+
+
+def _payment_envelope(result) -> dict:
+    """The payment block the storefront drives its launcher from. Shared by place_order
+    and retry so the client has exactly one shape to understand."""
+    init = getattr(result.order, "_initiate", None)
+    return {
+        "order_number": result.order.number,
+        "payment": {
+            "gateway": result.payment.gateway,
+            "action": init.action if init else "",
+            "reference": result.payment.gateway_reference,
+            "data": init.data if init else {},
+        },
+    }
+
+
+class OrderPayView(APIView):
+    """POST /api/v1/orders/{number}/pay/ — re-open payment on an order that is still
+    awaiting it, optionally switching gateway. The customer-facing escape hatch for a
+    declined card: placement already converted the cart, so there is no checkout to redo.
+
+    Not idempotency-tracked through begin()/finish() like CheckoutView: there is no cart
+    to convert and no order to duplicate here, so the Payment row's unique idempotency_key
+    is protection enough — a repeated key replays the same attempt (see retry_payment).
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, number: str):
+        key = request.headers.get("Idempotency-Key")
+        if not key:
+            return Response({"error": "idempotency_key_required"},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            result = retry_payment(
+                user=request.user, order_number=number,
+                payment_gateway=request.data.get("payment_gateway"), key=key,
+            )
+        except CheckoutError as exc:
+            return Response({"error": exc.code, "detail": exc.detail, **exc.extra},
+                            status=exc.http)
+        except GatewayNotConfigured:
+            return Response({"error": "gateway_not_configured",
+                             "detail": "Payment method is not available right now."}, status=503)
+        except GatewayError:
+            # The attempt exists but never got a reference. Retrying with the SAME key
+            # resumes it rather than opening yet another attempt.
+            return Response({"error": "gateway_error",
+                             "detail": "Payment provider is temporarily unavailable. Please retry."},
+                            status=502)
+        return Response(_payment_envelope(result), status=status.HTTP_200_OK)
 
 
 class BuyNowView(APIView):

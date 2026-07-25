@@ -95,21 +95,11 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         if chosen is None:
             raise CheckoutError("delivery_option_invalid", "Delivery option not valid for this address.")
 
-        # Gateway must be active for the country.
-        if payment_gateway not in {g["gateway"] for g in active_gateways_for(country)}:
-            raise CheckoutError("gateway_unavailable", "Payment method not available.", http=400)
-
-        # A manual gateway needs a configured account BEFORE we reserve stock. Failing at
-        # initiate() (phase 2, post-commit) would leave an order holding stock for the full
-        # 24h TTL and a converted cart, and every retry would burn another hold.
-        gateway = get_gateway(payment_gateway)
-        if gateway.confirmation == "manual":
-            from apps.payments.models import BankAccount
-
-            if not BankAccount.objects.filter(country=country, is_active=True).exists():
-                raise CheckoutError(
-                    "gateway_unavailable", "Payment method not available.", http=400
-                )
+        # Gateway must be active for the country, and a manual gateway needs a configured
+        # account BEFORE we reserve stock: failing at initiate() (phase 2, post-commit)
+        # would leave an order holding stock for the full 24h TTL and a converted cart,
+        # and every retry would burn another hold.
+        gateway = _gateway_offered(payment_gateway, country)
 
         # Coupon (optional).
         coupon = None
@@ -180,6 +170,94 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         cart.save(update_fields=["status", "updated_at"])
 
     # Phase 2 — external call AFTER commit, no lock held.
+    _initiate_payment(payment, order)
+    return CheckoutResult(order=order, payment=payment)
+
+
+def _gateway_offered(payment_gateway: str, country):
+    """The shared "may this customer pay with this, here?" gate. Returns the gateway.
+
+    Both entry points must ask BOTH questions — is it switched on for the market, and (for
+    a manual gateway) is there an account to pay into. A retry that skipped the second
+    would hand the customer a payment page with no account number on it.
+    """
+    if payment_gateway not in {g["gateway"] for g in active_gateways_for(country)}:
+        raise CheckoutError("gateway_unavailable", "Payment method not available.", http=400)
+    gateway = get_gateway(payment_gateway)
+    if gateway.confirmation == "manual":
+        from apps.payments.models import BankAccount
+
+        if not BankAccount.objects.filter(country=country, is_active=True).exists():
+            raise CheckoutError("gateway_unavailable", "Payment method not available.", http=400)
+    return gateway
+
+
+def retry_payment(*, user, order_number: str, payment_gateway: str, key: str) -> CheckoutResult:
+    """Open a NEW payment attempt for an order that is still awaiting payment, possibly on
+    a different gateway.
+
+    Why this exists: place_order converts the cart in the same transaction that creates the
+    order, BEFORE initiate. So a customer whose card is declined has no bag to return to,
+    and the durable backstop in place_order only re-initiates when the payment never got a
+    gateway_reference — after a successful initiate that a customer then abandoned, it
+    replays a response with no SDK material in it. Without this, that order is unpayable.
+
+    Deliberately narrow: the order's lines, addresses, totals and stock reservation are NOT
+    recomputed. Re-quoting here would let a price move between attempts change what the
+    customer already agreed to. Only the money leg is re-opened.
+
+    The previous attempt is left exactly as it is. Its transaction may still settle at the
+    gateway, and if it does, confirm_payment's NOOP_ALREADY_PROCESSED branch flags the
+    order for a refund — which is the correct outcome and already covered. Cancelling the
+    row here would only make our records disagree with the gateway's.
+    """
+    # Durable backstop, same shape as place_order: a payment already exists for this key.
+    existing = (
+        Payment.objects.filter(idempotency_key=key, order__user=user)
+        .select_related("order").first()
+    )
+    if existing:
+        if not existing.gateway_reference:
+            _initiate_payment(existing, existing.order)
+        return CheckoutResult(order=existing.order, payment=existing)
+
+    order = (
+        Order.objects.filter(number=order_number, user=user)
+        .select_related("country", "currency").first()
+    )
+    if order is None:
+        # Same code for "no such order" and "not yours" — never confirm an order number
+        # exists to someone who doesn't own it.
+        raise CheckoutError("order_not_found", "Order not found.", http=404)
+    if order.status != "pending_payment":
+        raise CheckoutError(
+            "order_not_payable", "This order is no longer awaiting payment.", http=409
+        )
+
+    gateway = _gateway_offered(payment_gateway, order.country)
+
+    # Mirror the amount of the last goods attempt rather than order.grand_total: a
+    # quote_required (RoW) order is deliberately paid goods-only, with freight quoted
+    # afterwards, so grand_total would ask for money nobody has quoted yet.
+    previous = order.payments.filter(purpose="goods").order_by("-created_at").first()
+    amount = previous.amount if previous else order.grand_total
+
+    with transaction.atomic():
+        payment = Payment.objects.create(
+            order=order, gateway=payment_gateway, amount=amount, currency=order.currency,
+            status="initiated", idempotency_key=key, purpose="goods",
+        )
+        # Switching to a slower method (card -> bank transfer) must not leave the order
+        # expiring in minutes while the customer is actively paying. Forward only: a retry
+        # can never shorten a hold that is already longer.
+        new_expiry = timezone.now() + timedelta(minutes=gateway.reservation_ttl_minutes)
+        if order.reservation_expires_at and new_expiry > order.reservation_expires_at:
+            order.reservation_expires_at = new_expiry
+            order.save(update_fields=["reservation_expires_at", "updated_at"])
+        record_event(order, "payment_retried", actor=user,
+                     message=f"new attempt via {payment_gateway}")
+
+    # Phase 2 — external call AFTER commit, no lock held (same rule as place_order).
     _initiate_payment(payment, order)
     return CheckoutResult(order=order, payment=payment)
 

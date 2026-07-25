@@ -4,11 +4,13 @@ from apps.checkout.views import (
     BuyNowView,
     CheckoutView,
     DeliveryOptionsView,
+    OrderPayView,
     PaymentMethodsView,
     QuoteView,
 )
 
 urlpatterns = [
+    path("orders/<str:number>/pay/", OrderPayView.as_view(), name="order-pay"),
     path("checkout/quote/", QuoteView.as_view(), name="checkout-quote"),
     path("checkout/", CheckoutView.as_view(), name="checkout"),
     path("checkout/payment-methods/", PaymentMethodsView.as_view(), name="checkout-payment-methods"),
