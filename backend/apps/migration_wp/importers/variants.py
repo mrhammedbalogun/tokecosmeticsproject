@@ -52,6 +52,15 @@ def import_variants_and_prices(data, skip_prices) -> tuple[int, int]:
         live_skus: set[str] = set()
 
         if children:
+            # A variation with an empty _weight inherits the parent product's
+            # weight -- that is WooCommerce's own semantics, and the merchant set
+            # the parent weight precisely BECAUSE it is inherited. Reading only
+            # the child's meta left 43 of 122 live variants with no weight at
+            # all, and delivery/services.py sums `weight_grams or 0`, so each of
+            # them quietly shipped at 0 g. Not replicating the inheritance is the
+            # corruption; replicating it is the fix. Woo stores an unset weight
+            # as "" rather than NULL, which `or` handles along with None.
+            parent_weight = meta_all.get(str(wp_id), {}).get("_weight")
             for position, child in enumerate(children):
                 cmeta = meta_all.get(str(child["ID"]), {})
                 attrs = {k: v for k, v in cmeta.items() if k.startswith("attribute_")}
@@ -61,7 +70,7 @@ def import_variants_and_prices(data, skip_prices) -> tuple[int, int]:
                     sku=sku,
                     name=child["post_title"].split(" - ")[-1],
                     option_values=parse_option_values(attrs, term_names),
-                    weight_grams=_grams(cmeta.get("_weight"), sku=sku),
+                    weight_grams=_grams(cmeta.get("_weight") or parent_weight, sku=sku),
                     is_default=(position == 0),
                     position=position,
                 )
@@ -188,10 +197,13 @@ def _grams(raw, *, sku):
     missing/invalid input, meaning "unknown" here -- NOTE this is weaker
     protection than it sounds: apps/delivery/services.py:42 sums
     `v.weight_grams or 0`, so the delivery layer currently treats an unknown
-    weight as zero anyway. 52 published/draft items in the live catalogue have
-    no weight. Changing that delivery math is out of scope for Plan-21, so it's
-    left alone here -- this docstring exists only so it doesn't claim a
-    protection the system doesn't actually provide.
+    weight as zero anyway. Measured against the live catalogue 2026-07-26:
+    of 122 sellable variants, 71 carry their own _weight, 43 inherit the
+    parent's (see the caller), and **8 have no weight anywhere in WordPress**
+    and will therefore quote 0 g until a human enters one. Changing that
+    delivery math is out of scope for Plan-21, so it's left alone here -- this
+    docstring exists only so it doesn't claim a protection the system doesn't
+    actually provide.
 
     Also logs a WARNING (does not clamp or reject) when the converted value
     exceeds 50kg -- almost certainly a kg/g data-entry error upstream (e.g.

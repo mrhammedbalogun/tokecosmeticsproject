@@ -294,9 +294,27 @@ def test_weight_converts_kilograms_to_grams(artifact_path):
 
 
 def test_missing_weight_is_null_not_zero(artifact_path):
-    """Null means unknown; 0 would be a lie that delivery pricing would trust."""
+    """Null means unknown; 0 would be a lie that delivery pricing would trust.
+
+    Product 103 carries no _weight of its own, so there is nothing for 5002 to
+    inherit -- contrast test_variation_inherits_parent_weight."""
     call_command("import_catalog", str(artifact_path), "--skip-media")
     assert ProductVariant.objects.get(sku="TC-WP-5002").weight_grams is None
+
+
+def test_variation_inherits_parent_weight(artifact_path):
+    """WooCommerce semantics: a variation with an empty _weight inherits the
+    parent product's. Reading only the child's meta left 43 of 122 live variants
+    weightless, and delivery sums `weight_grams or 0` -- so each one shipped at
+    0 g and undercharged. A variation's own weight still wins."""
+    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+    data["meta"]["103"]["_weight"] = "0.75"
+    artifact_path.write_text(json.dumps(data), encoding="utf-8")
+
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    assert ProductVariant.objects.get(sku="TC-WP-5002").weight_grams == 750
+    assert ProductVariant.objects.get(sku="TC-WP-5001").weight_grams == 400
 
 
 def test_regular_price_creates_one_ngn_price(artifact_path):

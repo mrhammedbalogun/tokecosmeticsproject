@@ -3,6 +3,19 @@ from django.db import models
 
 from apps.core.models import TimeStampedModel
 
+# Django's ImageField default is max_length=100, and Django does not raise when a
+# generated path exceeds it -- the storage layer silently TRUNCATES the filename
+# to fit. The migration importer saves to
+# "catalog/products/<product-slug>/<attachment-id>-<filename>", and Product.slug
+# alone is up to 280 characters, so 100 was never enough: 39 of the first 207
+# imported images came back truncated. A truncated name still points at a real
+# object, so nothing errors -- it just no longer matches the key the importer
+# de-duplicates on, which would re-upload and duplicate those images on every
+# subsequent run. 500 clears the worst case (17 + 280 + 1 + attachment id +
+# filename) with room to spare; in Postgres a varchar length is only a check
+# constraint, so widening costs nothing.
+IMAGE_PATH_MAX = 500
+
 
 class Category(TimeStampedModel):
     name = models.CharField(max_length=150)
@@ -11,7 +24,9 @@ class Category(TimeStampedModel):
         "self", null=True, blank=True, on_delete=models.CASCADE, related_name="children"
     )
     description = models.TextField(blank=True)
-    image = models.ImageField(upload_to="catalog/categories/", blank=True, null=True)
+    image = models.ImageField(
+        upload_to="catalog/categories/", blank=True, null=True, max_length=IMAGE_PATH_MAX
+    )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
     legacy_wp_id = models.IntegerField(null=True, blank=True, db_index=True)
@@ -45,7 +60,9 @@ class Category(TimeStampedModel):
 class Brand(TimeStampedModel):
     name = models.CharField(max_length=150)
     slug = models.SlugField(max_length=170, unique=True)
-    logo = models.ImageField(upload_to="catalog/brands/", blank=True, null=True)
+    logo = models.ImageField(
+        upload_to="catalog/brands/", blank=True, null=True, max_length=IMAGE_PATH_MAX
+    )
     description = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
 
@@ -75,7 +92,9 @@ class Collection(TimeStampedModel):
     name = models.CharField(max_length=150)
     slug = models.SlugField(max_length=170, unique=True)
     description = models.TextField(blank=True)
-    image = models.ImageField(upload_to="catalog/collections/", blank=True, null=True)
+    image = models.ImageField(
+        upload_to="catalog/collections/", blank=True, null=True, max_length=IMAGE_PATH_MAX
+    )
     is_active = models.BooleanField(default=True)
     rule = models.CharField(max_length=20, choices=RULES, default="manual")
     products = models.ManyToManyField("Product", blank=True, related_name="collections")
@@ -162,7 +181,7 @@ class ProductVariant(TimeStampedModel):
 
 class ProductImage(TimeStampedModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
-    image = models.ImageField(upload_to="catalog/products/")
+    image = models.ImageField(upload_to="catalog/products/", max_length=IMAGE_PATH_MAX)
     alt = models.CharField(max_length=255, blank=True)
     position = models.PositiveIntegerField(default=0)
     variant = models.ForeignKey(
