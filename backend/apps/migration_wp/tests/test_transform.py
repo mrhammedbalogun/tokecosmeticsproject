@@ -191,7 +191,7 @@ def test_parse_option_values_merges_multiple_axes():
     }
 
 
-from apps.migration_wp.transform import collect_attachment_ids
+from apps.migration_wp.transform import collect_attachment_ids, ordered_attachment_ids
 
 
 def test_collects_thumbnail_gallery_and_acf_ids_deduped_and_sorted():
@@ -214,3 +214,34 @@ def test_ignores_blank_and_non_numeric_attachment_refs():
 
 def test_product_with_no_meta_is_safe():
     assert collect_attachment_ids([999], {}) == []
+
+
+def test_ordered_attachment_ids_puts_thumbnail_first_even_with_a_higher_id():
+    """4 live products have an ACF image whose attachment id is LOWER than
+    their thumbnail's -- sorting by id (like collect_attachment_ids does)
+    would put that ACF image at position 0 instead of the thumbnail."""
+    meta = {
+        "_thumbnail_id": "9001",
+        "_product_image_gallery": "9002",
+        "Small_Image_1": "8999",  # uploaded before the thumbnail was set
+    }
+    assert ordered_attachment_ids(meta) == [9001, 9002, 8999]
+
+
+def test_ordered_attachment_ids_dedupes_by_first_occurrence():
+    meta = {
+        "_thumbnail_id": "9001",
+        "_product_image_gallery": "9002,9003",
+        "Small_Image_1": "9004",
+        "Medium_Image_2": "9001",  # duplicate of the thumbnail -- must not move it
+    }
+    assert ordered_attachment_ids(meta) == [9001, 9002, 9003, 9004]
+
+
+def test_ordered_attachment_ids_ignores_blank_and_non_numeric_refs():
+    meta = {"_thumbnail_id": "", "_product_image_gallery": " , ,abc", "Small_Image_1": "n/a"}
+    assert ordered_attachment_ids(meta) == []
+
+
+def test_ordered_attachment_ids_with_no_meta_is_safe():
+    assert ordered_attachment_ids({}) == []

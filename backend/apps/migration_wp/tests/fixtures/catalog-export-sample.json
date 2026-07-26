@@ -43,7 +43,7 @@
       "Testimonial_1_Review_Text": "My skin feels nourished.",
       "Testimonial_1_Skin_Concern": "",
       "Testimonial_1_Number_of_Item_Bought": "1",
-      "Small_Image_1": "9003"
+      "Small_Image_1": "8999"
     },
     "102": {"_sku": "TOKE-COCO", "_regular_price": "3500", "_stock_status": "instock",
             "_weight": "1.5", "_thumbnail_id": "9004"},
@@ -87,6 +87,7 @@
     {"object_id": 104, "taxonomy": "product_cat", "term_id": 21, "slug": "body-soaps"}
   ],
   "attachments": {
+    "8999": "2025/11/toke-shea-acf-early.jpg",
     "9001": "2025/11/toke-shea.jpg",
     "9002": "2025/11/toke-shea-2.jpg",
     "9003": "2025/11/toke-shea-small.jpg",

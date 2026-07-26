@@ -20,7 +20,7 @@ from pathlib import Path
 from django.core.files.base import ContentFile
 
 from apps.catalog.models import Product, ProductImage
-from apps.migration_wp.transform import collect_attachment_ids
+from apps.migration_wp.transform import ordered_attachment_ids
 
 from .common import LEGACY_SOURCE, logger
 
@@ -33,12 +33,12 @@ def import_media(data, uploads_root, dry_run) -> tuple[int, int, list[tuple[str,
     owns stdout) decides how to display them. This function only logs them
     via `logger.warning`.
 
-    Ordering comes from `collect_attachment_ids` (transform.py) -- thumbnail,
-    then gallery, then ACF Small_Image_*/Medium_Image_* slots -- not
-    reimplemented here. That function is normally called across many products
-    at once (by extract_wp_catalog, to build the set of ids to fetch); calling
-    it with a single-product id list yields exactly that one product's
-    ordered ids, which is what position=<index> below relies on.
+    Ordering comes from `ordered_attachment_ids` (transform.py) -- thumbnail,
+    then gallery, then ACF Small_Image_*/Medium_Image_* slots, in that
+    display order -- not reimplemented here. Do NOT swap this for
+    `collect_attachment_ids`: that one sorts its result, and 4 live products
+    have an ACF image with a lower attachment id than their thumbnail's, which
+    would put the wrong image at position 0.
     """
     uploads_root = Path(uploads_root)
     attachments: dict[str, str] = data["attachments"]
@@ -58,12 +58,8 @@ def import_media(data, uploads_root, dry_run) -> tuple[int, int, list[tuple[str,
         if product is None:
             continue
 
-        # collect_attachment_ids expects a {wp_id: meta} dict keyed the same
-        # way as the product_ids list it's given (ints) -- the artifact itself
-        # stores meta keyed by string wp_id, so bridge that here rather than
-        # inside the shared transform helper.
         product_meta = meta_all.get(str(wp_id), {})
-        attachment_ids = collect_attachment_ids([wp_id], {wp_id: product_meta})
+        attachment_ids = ordered_attachment_ids(product_meta)
 
         existing_filenames = {Path(img.image.name).name for img in product.images.all()}
 

@@ -147,6 +147,14 @@ def collect_attachment_ids(product_ids: list[int], meta: dict[int, dict[str, str
     Pure logic over WooCommerce/ACF naming and comma-separated gallery format —
     no SQL, no ORM — so it belongs alongside the rest of this module's meta
     parsing rather than living in the extract command.
+
+    Returns a sorted, DEDUPED SET, not display order -- fine for its only
+    caller, extract_wp_catalog, which just needs the id set to look up file
+    paths and doesn't care what order they come back in. Do NOT use this for
+    anything that displays images in order (e.g. ProductImage.position) --
+    use `ordered_attachment_ids` for that. 4 live products have an ACF image
+    with a lower attachment id than their thumbnail's, so sorting here would
+    silently reorder which image is "first" for a customer-facing caller.
     """
     ids: set[int] = set()
     for pid in product_ids:
@@ -162,3 +170,39 @@ def collect_attachment_ids(product_ids: list[int], meta: dict[int, dict[str, str
             if val.isdigit():
                 ids.add(int(val))
     return sorted(ids)
+
+
+def ordered_attachment_ids(meta: dict) -> list[int]:
+    """Attachment ids in DISPLAY order: thumbnail, gallery, then ACF slots.
+
+    Deliberately NOT sorted. Attachment ids reflect upload order, not display
+    order — 4 live products have an ACF image whose id is lower than their
+    thumbnail's, so sorting would put the wrong image at position 0 and change
+    the main product image customers see.
+
+    Dedupes by first occurrence (not by sorting a set), so an id repeated
+    later in the sequence (e.g. an ACF slot duplicating the thumbnail) is
+    dropped from its second position rather than moving the whole set out of
+    display order.
+    """
+    ids: list[int] = []
+    seen: set[int] = set()
+
+    def _add(raw: str | None) -> None:
+        val = (raw or "").strip()
+        if not val.isdigit():
+            return
+        attachment_id = int(val)
+        if attachment_id in seen:
+            return
+        seen.add(attachment_id)
+        ids.append(attachment_id)
+
+    _add(meta.get("_thumbnail_id"))
+    gallery = (meta.get("_product_image_gallery") or "").strip()
+    for part in gallery.split(","):
+        _add(part)
+    for key in _ACF_IMAGE_KEYS:
+        _add(meta.get(key))
+
+    return ids
