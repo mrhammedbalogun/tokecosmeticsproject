@@ -276,3 +276,95 @@ def test_variants_do_not_duplicate_on_rerun(artifact_path):
     call_command("import_catalog", str(artifact_path), "--skip-media")
     call_command("import_catalog", str(artifact_path), "--skip-media")
     assert ProductVariant.objects.count() == 8
+
+
+def test_orphaned_variant_is_deactivated_not_deleted_and_default_stays_singular(artifact_path):
+    """If a variation is removed from WooCommerce between runs (or its _sku changes,
+    which orphans the old row the same way), its ProductVariant must not be deleted
+    -- historical order items may reference it -- and must not keep is_default=True
+    forever, or a product can end up with two default variants at once."""
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+    data["variations"] = [v for v in data["variations"] if v["ID"] != 5002]
+    del data["meta"]["5002"]
+    artifact_path.write_text(json.dumps(data), encoding="utf-8")
+
+    out = io.StringIO()
+    call_command("import_catalog", str(artifact_path), "--skip-media", stdout=out)
+
+    p = Product.objects.get(slug="toke-body-lotion")
+    orphan = ProductVariant.objects.get(sku="TC-WP-5002")
+    assert orphan.is_active is False
+    assert orphan.is_default is False
+    assert p.variants.filter(is_default=True).count() == 1
+    assert "orphan_variants: 1" in out.getvalue()
+
+
+def test_unparseable_post_date_does_not_abort_import(artifact_path):
+    """WordPress stores "0000-00-00 00:00:00" for unset dates -- truthy, so it must
+    not silently raise ValueError and abort the whole atomic import."""
+    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+    for row in data["products"]:
+        if row["ID"] == 106:
+            row["post_date_gmt"] = "0000-00-00 00:00:00"
+    artifact_path.write_text(json.dumps(data), encoding="utf-8")
+
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    p = Product.objects.get(slug="toke-draft-item")
+    assert p.published_at is None
+    assert Product.objects.filter(legacy_source="wp_ng").count() == 7
+
+
+def test_diverging_existing_price_logs_a_warning(artifact_path, caplog):
+    """No provenance marker on Price means a human-edited amount looks identical
+    to a migrated one -- the warning is the only audit trail available."""
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    variant = ProductVariant.objects.get(sku="TC-WP-101")
+    price = variant.prices.get()
+    price.amount = Decimal("9999.00")
+    price.save()
+
+    with caplog.at_level(logging.WARNING, logger=IMPORT_CATALOG_LOGGER):
+        call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    assert any(
+        "TC-WP-101" in r.getMessage() and "9999.00" in r.getMessage()
+        for r in caplog.records
+    )
+    # The migrated value still wins when the flag isn't used -- this is an audit
+    # trail, not a block.
+    assert ProductVariant.objects.get(sku="TC-WP-101").prices.get().amount == Decimal("5000.00")
+
+
+def test_skip_prices_leaves_existing_prices_untouched(artifact_path):
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    variant = ProductVariant.objects.get(sku="TC-WP-101")
+    price = variant.prices.get()
+    price.amount = Decimal("9999.00")
+    price.save()
+
+    call_command("import_catalog", str(artifact_path), "--skip-media", "--skip-prices")
+
+    assert ProductVariant.objects.get(sku="TC-WP-101").prices.get().amount == Decimal("9999.00")
+    # Products and variants still import/update normally -- only pricing is skipped.
+    assert Product.objects.filter(legacy_source="wp_ng").count() == 7
+    assert ProductVariant.objects.count() == 8
+
+
+def test_grams_upper_bound_logs_warning_but_does_not_clamp(artifact_path, caplog):
+    """A data-entry error like _weight="99999" becomes 99,999,000g and would
+    silently feed shipping pricing -- make it visible, don't guess a fix."""
+    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+    data["meta"]["102"]["_weight"] = "99999"
+    artifact_path.write_text(json.dumps(data), encoding="utf-8")
+
+    with caplog.at_level(logging.WARNING, logger=IMPORT_CATALOG_LOGGER):
+        call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    v = ProductVariant.objects.get(sku="TOKE-COCO")
+    assert v.weight_grams == 99999000
+    assert any("TOKE-COCO" in r.getMessage() for r in caplog.records)

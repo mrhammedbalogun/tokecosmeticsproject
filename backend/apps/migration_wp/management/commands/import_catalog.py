@@ -54,6 +54,15 @@ class Command(BaseCommand):
             help="overwrite stock a human has edited (dangerous — see spec)",
         )
         parser.add_argument(
+            "--skip-prices",
+            action="store_true",
+            help=(
+                "skip writing Price rows entirely -- use for a post-cutover corrective "
+                "run that must not clobber NGN prices a human has since edited in the "
+                "admin (see _rewrite_prices)"
+            ),
+        )
+        parser.add_argument(
             "--uploads-root",
             default="/mnt/wp-uploads-ng",
             help="read-only mount of wp-content/uploads",
@@ -61,6 +70,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         self.dry_run = options["dry_run"]
+        self.skip_prices = options["skip_prices"]
         data = json.loads(Path(options["artifact"]).read_text(encoding="utf-8"))
 
         if self.dry_run:
@@ -70,10 +80,11 @@ class Command(BaseCommand):
             cats, orphans = self._import_categories(data)
             tags = self._import_tags(data)
             products = self._import_products(data)
-            variants = self._import_variants_and_prices(data)
+            variants, orphan_variants = self._import_variants_and_prices(data)
             self.stdout.write(
                 f"categories: {cats}  tags: {tags}  orphan_parent_refs: {orphans}  "
-                f"products: {products}  variants: {variants}"
+                f"products: {products}  variants: {variants}  "
+                f"orphan_variants: {orphan_variants}"
             )
             if self.dry_run:
                 transaction.set_rollback(True)
@@ -190,7 +201,9 @@ class Command(BaseCommand):
                 "description": description,
                 "short_description": clean_description(row.get("post_excerpt")),
                 "status": self.STATUS_MAP.get(row["post_status"], "draft"),
-                "published_at": self._parse_dt(row.get("post_date_gmt")),
+                "published_at": self._parse_dt(
+                    row.get("post_date_gmt"), wp_id=wp_id, slug=row["slug"]
+                ),
                 "usps": parse_usps(meta),
                 "testimonials": parse_testimonials(meta),
             }
@@ -232,19 +245,38 @@ class Command(BaseCommand):
         return count
 
     @staticmethod
-    def _parse_dt(value):
+    def _parse_dt(value, *, wp_id, slug):
+        """Parse WP's post_date_gmt, tolerating WordPress's unset-date sentinel.
+
+        WordPress stores "0000-00-00 00:00:00" for an unset date -- truthy, so it
+        passes a bare `if not value` guard and strptime then raises ValueError,
+        which would abort the whole atomic import with a traceback that doesn't
+        name the offending product. Treat anything unparseable as unknown (None,
+        mirroring the weight/_grams "unknown, not a lie" approach) and warn with
+        enough context (wp_id, slug) to act on it.
+        """
         if not value:
             return None
-        return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(
-            tzinfo=dt_timezone.utc
-        )
+        try:
+            return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(
+                tzinfo=dt_timezone.utc
+            )
+        except ValueError:
+            logger.warning(
+                "Unparseable post_date_gmt %r for product wp_id=%s slug=%r -- "
+                "published_at left null",
+                value, wp_id, slug,
+            )
+            return None
 
-    def _import_variants_and_prices(self, data) -> int:
+    def _import_variants_and_prices(self, data) -> tuple[int, int]:
         """WP variations (or the product itself, if simple) -> ProductVariant + Price.
 
         `sku` is the idempotency key for ProductVariant -- it has no legacy_wp_id.
         A variation's SKU MUST derive from the variation's own post ID, never the
         parent's, or every variable product's variations collide into one row.
+
+        Returns (variant_count, orphan_variant_count).
         """
         meta_all = data["meta"]
         ngn = Currency.objects.get(code="NGN")
@@ -263,42 +295,64 @@ class Command(BaseCommand):
         }
 
         count = 0
+        orphan_variant_count = 0
         for row in data["products"]:
             wp_id = row["ID"]
             product = products_by_wp_id.get(wp_id)
             if product is None:
                 continue
             children = variations_by_parent.get(wp_id, [])
+            live_skus: set[str] = set()
 
             if children:
                 for position, child in enumerate(children):
                     cmeta = meta_all.get(str(child["ID"]), {})
                     attrs = {k: v for k, v in cmeta.items() if k.startswith("attribute_")}
+                    sku = generate_sku(cmeta.get("_sku"), child["ID"])
                     variant = self._upsert_variant(
                         product=product,
-                        sku=generate_sku(cmeta.get("_sku"), child["ID"]),
+                        sku=sku,
                         name=child["post_title"].split(" - ")[-1],
                         option_values=parse_option_values(attrs, term_names),
-                        weight_grams=self._grams(cmeta.get("_weight")),
+                        weight_grams=self._grams(cmeta.get("_weight"), sku=sku),
                         is_default=(position == 0),
                         position=position,
                     )
                     self._rewrite_prices(variant, cmeta, ngn)
+                    live_skus.add(sku)
                     count += 1
             else:
                 pmeta = meta_all.get(str(wp_id), {})
+                sku = generate_sku(pmeta.get("_sku"), wp_id)
                 variant = self._upsert_variant(
                     product=product,
-                    sku=generate_sku(pmeta.get("_sku"), wp_id),
+                    sku=sku,
                     name="Default",
                     option_values={},
-                    weight_grams=self._grams(pmeta.get("_weight")),
+                    weight_grams=self._grams(pmeta.get("_weight"), sku=sku),
                     is_default=True,
                     position=0,
                 )
                 self._rewrite_prices(variant, pmeta, ngn)
+                live_skus.add(sku)
                 count += 1
-        return count
+
+            # A variant row from a previous run that is no longer in the source --
+            # its variation was deleted in WooCommerce, or its _sku changed so
+            # generate_sku now yields a different value for the same underlying
+            # variation -- must be deactivated, never deleted: historical order
+            # items may reference it, and a re-run must not destroy migrated data.
+            # is_default is cleared too, otherwise the row would keep is_default=True
+            # from its last live run while the new first variation also becomes the
+            # default, leaving two is_default=True rows on one product.
+            orphans = product.variants.exclude(sku__in=live_skus)
+            for orphan in orphans:
+                logger.warning(
+                    "Variant %s (product %s) is no longer in the source — deactivating",
+                    orphan.sku, product.slug,
+                )
+            orphan_variant_count += orphans.update(is_active=False, is_default=False)
+        return count, orphan_variant_count
 
     @staticmethod
     def _upsert_variant(*, product, sku, name, option_values, weight_grams, is_default, position):
@@ -321,15 +375,45 @@ class Command(BaseCommand):
         The unique constraint is (variant, currency, country, starts_at); Postgres
         treats NULL starts_at as distinct, so update-or-skip would stack a fresh
         base price on every run without ever raising.
+
+        Price carries no provenance marker to say "a human edited this row after
+        migration" -- adding one is over-engineering for a tool retired at cutover.
+        Instead: `--skip-prices` lets a post-cutover corrective run leave pricing
+        entirely alone, and any run that touches pricing logs a WARNING when the
+        existing amount differs from the incoming one, so there's an audit trail
+        even when the flag isn't used.
         """
+        if self.skip_prices:
+            return
+
         regular = self._decimal(meta.get("_regular_price"))
         if regular is None:
             return
 
+        existing_base = variant.prices.filter(
+            currency=currency, country__isnull=True, starts_at__isnull=True
+        ).first()
+        if existing_base is not None and existing_base.amount != regular:
+            logger.warning(
+                "Price divergence for variant %s: existing base amount=%s, incoming=%s "
+                "-- the incoming value will overwrite it",
+                variant.sku, existing_base.amount, regular,
+            )
+
+        sale = self._decimal(meta.get("_sale_price"))
+        existing_sale = variant.prices.filter(
+            currency=currency, country__isnull=True, starts_at__isnull=False
+        ).first()
+        if existing_sale is not None and sale is not None and existing_sale.amount != sale:
+            logger.warning(
+                "Price divergence for variant %s: existing sale amount=%s, incoming=%s "
+                "-- the incoming value will overwrite it",
+                variant.sku, existing_sale.amount, sale,
+            )
+
         variant.prices.filter(currency=currency, country__isnull=True).delete()
         Price.objects.create(variant=variant, currency=currency, amount=regular)
 
-        sale = self._decimal(meta.get("_sale_price"))
         if sale is None:
             return
         Price.objects.create(
@@ -351,16 +435,36 @@ class Command(BaseCommand):
             return None
 
     @staticmethod
-    def _grams(raw):
-        """WooCommerce _weight is in kilograms for this store. Returns None (unknown)
-        rather than 0 for missing/invalid -- 0 would be a lie delivery pricing trusts."""
+    def _grams(raw, *, sku):
+        """WooCommerce _weight is in kilograms for this store. Returns None for
+        missing/invalid input, meaning "unknown" here -- NOTE this is weaker
+        protection than it sounds: apps/delivery/services.py:42 sums
+        `v.weight_grams or 0`, so the delivery layer currently treats an unknown
+        weight as zero anyway. 52 published/draft items in the live catalogue have
+        no weight. Changing that delivery math is out of scope for Plan-21, so it's
+        left alone here -- this docstring exists only so it doesn't claim a
+        protection the system doesn't actually provide.
+
+        Also logs a WARNING (does not clamp or reject) when the converted value
+        exceeds 50kg -- almost certainly a kg/g data-entry error upstream (e.g.
+        "99999" meant as grams, not kilograms) that would otherwise silently
+        distort a shipping quote, worst on Rest-of-World freight.
+        """
         if raw is None or str(raw).strip() == "":
             return None
         try:
             grams = int(round(float(str(raw).strip()) * 1000))
         except (TypeError, ValueError):
             return None
-        return grams if grams > 0 else None
+        if grams <= 0:
+            return None
+        if grams > 50_000:
+            logger.warning(
+                "Variant %s has a suspiciously high weight: %s g (source _weight=%r) "
+                "-- check for a kg/g data-entry error",
+                sku, grams, raw,
+            )
+        return grams
 
     @staticmethod
     def _epoch(raw):
