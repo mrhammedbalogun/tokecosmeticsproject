@@ -21,6 +21,13 @@ class Category(TimeStampedModel):
     class Meta:
         verbose_name_plural = "categories"
         ordering = ["sort_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["legacy_wp_id"],
+                condition=models.Q(legacy_wp_id__isnull=False),
+                name="uniq_category_legacy_wp_id",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name
@@ -122,6 +129,13 @@ class Product(TimeStampedModel):
         ordering = ["-published_at", "name"]
         indexes = [
             GinIndex(name="product_name_trgm", fields=["name"], opclasses=["gin_trgm_ops"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["legacy_source", "legacy_wp_id"],
+                condition=models.Q(legacy_wp_id__isnull=False),
+                name="uniq_product_legacy_ref",
+            ),
         ]
 
     def __str__(self) -> str:
