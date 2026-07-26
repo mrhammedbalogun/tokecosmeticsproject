@@ -13,6 +13,7 @@ from django.db import transaction
 
 from apps.migration_wp.importers.categories import import_categories, import_tags
 from apps.migration_wp.importers.products import import_products
+from apps.migration_wp.importers.stock import import_stock
 from apps.migration_wp.importers.variants import import_variants_and_prices
 
 
@@ -65,10 +66,19 @@ class Command(BaseCommand):
             tags = import_tags(data)
             products = import_products(data)
             variants, orphan_variants = import_variants_and_prices(data, self.skip_prices)
-            self.stdout.write(
+            summary = (
                 f"categories: {cats}  tags: {tags}  orphan_parent_refs: {orphans}  "
                 f"products: {products}  variants: {variants}  "
                 f"orphan_variants: {orphan_variants}"
             )
+
+            if options["skip_stock"]:
+                self.stdout.write(summary)
+            else:
+                seeded, protected = import_stock(data, options["force_stock"], self.stdout)
+                self.stdout.write(
+                    f"{summary}  stock: {seeded} seeded, {protected} protected"
+                )
+
             if self.dry_run:
                 transaction.set_rollback(True)
