@@ -84,3 +84,45 @@ def parse_testimonials(meta: dict[str, str]) -> list[dict]:
             }
         )
     return out
+
+
+SKU_PREFIX = "TC-WP-"
+
+
+def generate_sku(existing_sku: str | None, wp_id: int) -> str:
+    """Real SKU if WooCommerce has one, else a generated stable fallback.
+
+    Only 1 SKU exists across the whole catalogue (audited 2026-07-25), so the
+    fallback is the primary path. `wp_id` MUST be the ID of the row the variant
+    represents — the variation's post ID for variable products, the product's
+    post ID for simple ones. Passing a parent ID for variations collides.
+    """
+    if existing_sku and existing_sku.strip():
+        return existing_sku.strip()
+    return f"{SKU_PREFIX}{wp_id}"
+
+
+def _axis_label(axis: str) -> str:
+    """`attribute_pa_product-size` -> `Product Size`; `attribute_shea-variant` -> `Shea Variant`."""
+    name = axis[len("attribute_"):] if axis.startswith("attribute_") else axis
+    if name.startswith("pa_"):
+        name = name[3:]
+    return name.replace("-", " ").replace("_", " ").title()
+
+
+def parse_option_values(
+    attributes: dict[str, str], term_names: dict[tuple[str, str], str]
+) -> dict[str, str]:
+    """Build ProductVariant.option_values from a variation's attribute_* meta.
+
+    `term_names` maps (taxonomy, term_slug) -> human term name, so taxonomy-backed
+    axes show "50 ml" rather than the slug. Non-taxonomy axes (shea-variant) and
+    unmapped slugs fall back to the raw value.
+    """
+    out: dict[str, str] = {}
+    for axis, value in attributes.items():
+        if not value or not value.strip():
+            continue
+        taxonomy = axis[len("attribute_"):] if axis.startswith("attribute_") else axis
+        out[_axis_label(axis)] = term_names.get((taxonomy, value), value)
+    return out

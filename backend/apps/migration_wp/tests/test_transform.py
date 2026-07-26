@@ -120,3 +120,44 @@ def test_parse_testimonials_tolerates_non_numeric_quantity():
         "Testimonial_1_Number_of_Item_Bought": "a few",
     }
     assert parse_testimonials(meta)[0]["qty_bought"] is None
+
+
+from apps.migration_wp.transform import generate_sku, parse_option_values
+
+
+def test_generate_sku_prefers_real_sku():
+    assert generate_sku(existing_sku="TOKE-SHEA-50", wp_id=1234) == "TOKE-SHEA-50"
+
+
+def test_generate_sku_falls_back_to_wp_id():
+    assert generate_sku(existing_sku="", wp_id=1234) == "TC-WP-1234"
+    assert generate_sku(existing_sku=None, wp_id=99) == "TC-WP-99"
+
+
+def test_generate_sku_uses_variation_id_not_parent():
+    """The whole point: two variations of one parent must not collide."""
+    a = generate_sku(existing_sku="", wp_id=5001)
+    b = generate_sku(existing_sku="", wp_id=5002)
+    assert a != b
+
+
+def test_parse_option_values_maps_taxonomy_axis_to_term_name():
+    attrs = {"attribute_pa_product-size": "50ml"}
+    term_names = {("pa_product-size", "50ml"): "50 ml"}
+    assert parse_option_values(attrs, term_names) == {"Product Size": "50 ml"}
+
+
+def test_parse_option_values_handles_non_taxonomy_axis():
+    """shea-variant is a raw meta axis, not a pa_* taxonomy (4 variations use it)."""
+    assert parse_option_values({"attribute_shea-variant": "Unscented"}, {}) == {
+        "Shea Variant": "Unscented"
+    }
+
+
+def test_parse_option_values_falls_back_to_slug_when_term_missing():
+    attrs = {"attribute_pa_size": "large"}
+    assert parse_option_values(attrs, {}) == {"Size": "large"}
+
+
+def test_parse_option_values_ignores_blank_values():
+    assert parse_option_values({"attribute_pa_size": ""}, {}) == {}
