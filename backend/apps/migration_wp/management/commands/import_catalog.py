@@ -12,6 +12,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from apps.migration_wp.importers.categories import import_categories, import_tags
+from apps.migration_wp.importers.media import import_media
 from apps.migration_wp.importers.products import import_products
 from apps.migration_wp.importers.stock import import_stock
 from apps.migration_wp.importers.variants import import_variants_and_prices
@@ -72,17 +73,23 @@ class Command(BaseCommand):
                 f"orphan_variants: {orphan_variants}"
             )
 
-            if options["skip_stock"]:
-                self.stdout.write(summary)
-            else:
+            if not options["skip_stock"]:
                 seeded, protected, protected_messages = import_stock(
                     data, options["force_stock"]
                 )
                 for message in protected_messages:
                     self.stdout.write(message)
-                self.stdout.write(
-                    f"{summary}  stock: {seeded} seeded, {protected} protected"
+                summary = f"{summary}  stock: {seeded} seeded, {protected} protected"
+
+            if not options["skip_media"]:
+                copied, missing, missing_report = import_media(
+                    data, options["uploads_root"], self.dry_run
                 )
+                for slug, rel_path in missing_report:
+                    self.stdout.write(f"missing image: {slug} -> {rel_path}")
+                summary = f"{summary}  media: {copied} copied, {missing} missing"
+
+            self.stdout.write(summary)
 
             if self.dry_run:
                 transaction.set_rollback(True)
