@@ -2313,7 +2313,7 @@ This is the check that makes the whole credential argument real. If it returns a
 ssh tokecosmetics 'set -a; . /root/wp-readonly.env; set +a; mysql -u wp_readonly -p"$WP_DB_PASSWORD" tokecosm_wp481 -e "SELECT COUNT(*) FROM wp_posts WHERE post_type=\"product\";"'
 ```
 
-Expected: a count around 181.
+Expected: **99** (all statuses; the extract itself takes only the 69 `publish` + 2 `draft`). Measured 2026-07-26 — the plan originally said 181, which was wrong.
 
 - [ ] **Step 4: Write the runbook**
 
@@ -2379,7 +2379,7 @@ path, and a password that never reaches the shell history:
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo && set -a && . /root/wp-readonly.env && set +a && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f infra/docker-compose.prod.yml run --rm -v /var/lib/mysql/mysql.sock:/run/wp-mysql/mysql.sock:ro -e WP_DB_HOST=/run/wp-mysql/mysql.sock -e WP_DB_NAME=tokecosm_wp481 -e WP_DB_USER=wp_readonly -e WP_DB_PASSWORD web python manage.py extract_wp_catalog --out /mnt/exports/catalog-export.json'
 ```
 
-Expected: `Wrote /mnt/exports/catalog-export.json: 181 products, 71 variations, ...`
+Expected: `Wrote /mnt/exports/catalog-export.json: 71 products, 71 variations, 222 terms, ...` — 71 products = 69 publish + 2 draft; 222 terms = 40 product_cat + 137 product_tag + 45 pa_* attribute terms.
 
 If the connection is refused, the socket mount is missing or MariaDB moved its
 socket — confirm with `mysql -e "SHOW VARIABLES LIKE 'socket';"`. Do not fall back
@@ -2499,6 +2499,18 @@ git commit -m "docs(plan-21): migration worklists from the production run"
 
 **Known soft spots for the implementer:**
 
-1. `WP_DB_HOST=172.17.0.1` in Task 15 assumes the default Docker bridge gateway. If the connection is refused, run `ip route | grep default` inside the container and check MariaDB is not bound to `127.0.0.1` only.
-2. Task 15 Step 2's expected product count is 181 (publish + draft), while Step 3's published-only count is 69. Both are correct — they count different things.
+1. ~~`WP_DB_HOST=172.17.0.1` in Task 15 assumes the default Docker bridge gateway.~~ **Confirmed broken 2026-07-26 and fixed** — MariaDB binds `127.0.0.1` only, the container uses a socket mount. See the correction at the head of Task 14.
+2. ~~Task 15 Step 2's expected product count is 181 (publish + draft), while Step 3's published-only count is 69.~~ **The 181 was wrong.** Measured against the live DB 2026-07-26 with the scoped reader:
+
+   | `post_type` | `post_status` | rows |
+   |---|---|---|
+   | product | publish | 69 |
+   | product | importing | 27 |
+   | product | draft | 2 |
+   | product | private | 1 |
+   | product_variation | publish | 71 |
+
+   So `post_type='product'` (all statuses) = **99**, and the extract's `publish`+`draft` filter yields **71 products, 71 variations, 40 categories, 137 tags**. The 27 `importing` rows are a stalled WooCommerce importer's leftovers and are correctly excluded — but check none of them is a product you expect to see in the catalogue before signing off Task 16.
+
+   This is the right database: 80 simple / 19 variable matches the audit's NG-current 79/20 (one product changed type since).
 3. `Category.objects.update_or_create(legacy_wp_id=...)` would raise on a slug clash if a category with the same slug but no `legacy_wp_id` were ever created by hand. Not possible today (0 categories), but worth knowing if the import is ever re-run after manual category work.

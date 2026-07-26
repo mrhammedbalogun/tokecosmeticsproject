@@ -113,10 +113,12 @@ def fetch_variations(conn, parent_ids: list[int]) -> list[dict]:
     """Published variations only.
 
     Deliberately asymmetric with fetch_products: products are pulled for both
-    'publish' and 'draft' so the reviewer can see the full 181-product
-    catalogue and judge what's being excluded, but variations are import
-    candidates only — a draft variation isn't sellable and doesn't need to
-    reach the artifact, so only 'publish' rows are fetched here.
+    'publish' and 'draft' (69 + 2 = 71 rows, measured 2026-07-26) so the
+    reviewer can see what is being excluded — notably the 27 rows left in
+    WooCommerce's 'importing' status, which no filter here will ever pick up.
+    Variations, by contrast, are import candidates only — a draft variation
+    isn't sellable and doesn't need to reach the artifact, so only 'publish'
+    rows are fetched here.
     """
     if not parent_ids:
         return []

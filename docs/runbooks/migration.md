@@ -68,7 +68,24 @@ Expected: `ERROR 1142 (42000): SELECT command denied to user 'wp_readonly'@'loca
 mysql -u wp_readonly -p"$WP_DB_PASSWORD" tokecosm_wp481 -e "SELECT COUNT(*) FROM wp_posts WHERE post_type='product';"
 ```
 
-Expected: a count around 181.
+Expected: **99**. That is the source-of-truth baseline, measured 2026-07-26:
+
+| `post_type` | `post_status` | rows |
+|---|---|---|
+| product | publish | 69 |
+| product | importing | 27 |
+| product | draft | 2 |
+| product | private | 1 |
+| product_variation | publish | 71 |
+
+The extract takes `publish` + `draft` only, so it emits **71 products, 71
+variations, 222 terms** (40 `product_cat` + 137 `product_tag` + 45 `pa_*`). The 27
+`importing` rows are a stalled WooCommerce importer's leftovers and are excluded
+by design — confirm none of them is a product you expect to sell before signing
+off the import.
+
+If the count is not 99, you are pointed at the wrong database. Cross-check with
+`product_type`: this store is 80 simple / 19 variable.
 
 ### Create the exports directory (once)
 
@@ -104,7 +121,7 @@ docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod \
 write `-e WP_DB_PASSWORD=<secret>`: that puts the credential in root's shell
 history and in `docker inspect` on a box that has been compromised before.
 
-Expected: `Wrote /mnt/exports/catalog-export.json: 181 products, 71 variations, ...`
+Expected: `Wrote /mnt/exports/catalog-export.json: 71 products, 71 variations, 222 terms, ...`
 
 ## 3. Review, then dry run
 
