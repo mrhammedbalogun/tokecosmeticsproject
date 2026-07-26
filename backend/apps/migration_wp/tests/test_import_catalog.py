@@ -1,11 +1,13 @@
 import io
 import json
 import logging
+from decimal import Decimal
 
 import pytest
 from django.core.management import call_command
 
-from apps.catalog.models import Category, Product, Tag
+from apps.catalog.models import Category, Product, ProductVariant, Tag
+from apps.pricing.models import Price
 from apps.reviews.models import Review
 
 pytestmark = pytest.mark.django_db
@@ -193,3 +195,84 @@ def test_product_with_existing_slug_but_no_legacy_id_is_adopted(artifact_path):
     assert p.legacy_wp_id == 101
     assert p.name == "Toke Scented Shea Butter"
     assert Product.objects.filter(slug="toke-scented-shea-butter").count() == 1
+
+
+def test_simple_product_gets_one_default_variant_with_generated_sku(artifact_path):
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    p = Product.objects.get(slug="toke-scented-shea-butter")
+    variants = list(p.variants.all())
+    assert len(variants) == 1
+    assert variants[0].sku == "TC-WP-101"
+    assert variants[0].is_default is True
+
+
+def test_existing_sku_is_preserved(artifact_path):
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    assert Product.objects.get(slug="toke-coconut-oil").variants.get().sku == "TOKE-COCO"
+
+
+def test_variable_product_gets_one_variant_per_variation_keyed_on_variation_id(artifact_path):
+    """Keying on the parent ID would collide both variations into one."""
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    p = Product.objects.get(slug="toke-body-lotion")
+    assert sorted(p.variants.values_list("sku", flat=True)) == ["TC-WP-5001", "TC-WP-5002"]
+
+
+def test_variant_option_values_use_term_names_across_all_axes(artifact_path):
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    v = ProductVariant.objects.get(sku="TC-WP-5001")
+    assert v.option_values == {
+        "Product Size": "100 ml",
+        "Price Options": "Single",
+        "Shea Variant": "Unscented",
+    }
+
+
+def test_weight_converts_kilograms_to_grams(artifact_path):
+    """WooCommerce stores kg; ProductVariant.weight_grams is an integer of grams.
+    delivery/services.py sums this to price delivery, so a wrong unit is a
+    silently wrong shipping quote."""
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    assert ProductVariant.objects.get(sku="TC-WP-101").weight_grams == 266
+    assert ProductVariant.objects.get(sku="TOKE-COCO").weight_grams == 1500
+    assert ProductVariant.objects.get(sku="TC-WP-5001").weight_grams == 400
+
+
+def test_missing_weight_is_null_not_zero(artifact_path):
+    """Null means unknown; 0 would be a lie that delivery pricing would trust."""
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    assert ProductVariant.objects.get(sku="TC-WP-5002").weight_grams is None
+
+
+def test_regular_price_creates_one_ngn_price(artifact_path):
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    price = ProductVariant.objects.get(sku="TC-WP-101").prices.get()
+    assert price.amount == Decimal("5000.00")
+    assert price.currency_id == "NGN"
+    assert price.starts_at is None
+
+
+def test_sale_price_creates_a_second_dated_row_with_compare_at(artifact_path):
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    v = ProductVariant.objects.get(sku="TC-WP-104")
+    sale = v.prices.exclude(starts_at=None).get()
+    assert sale.amount == Decimal("1500.00")
+    assert sale.compare_at_amount == Decimal("2000.00")
+    assert sale.starts_at is not None
+    assert sale.ends_at is not None
+    assert v.prices.count() == 2
+
+
+def test_prices_do_not_duplicate_on_rerun(artifact_path):
+    """Postgres treats NULL starts_at as distinct, so the unique constraint alone
+    does NOT protect against this. Delete-and-recreate is what makes it safe."""
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    assert ProductVariant.objects.get(sku="TC-WP-101").prices.count() == 1
+    assert Price.objects.filter(variant__sku="TC-WP-104").count() == 2
+
+
+def test_variants_do_not_duplicate_on_rerun(artifact_path):
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    assert ProductVariant.objects.count() == 8

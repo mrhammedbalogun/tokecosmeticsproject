@@ -8,19 +8,24 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone as dt_timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
-from apps.catalog.models import Category, Product, Tag
+from apps.catalog.models import Category, Product, ProductVariant, Tag
+from apps.core.models import Currency
 from apps.migration_wp.transform import (
     append_benefits,
     clean_description,
+    generate_sku,
     parse_benefits,
+    parse_option_values,
     parse_testimonials,
     parse_usps,
 )
+from apps.pricing.models import Price
 
 LEGACY_SOURCE = "wp_ng"
 
@@ -65,9 +70,10 @@ class Command(BaseCommand):
             cats, orphans = self._import_categories(data)
             tags = self._import_tags(data)
             products = self._import_products(data)
+            variants = self._import_variants_and_prices(data)
             self.stdout.write(
                 f"categories: {cats}  tags: {tags}  orphan_parent_refs: {orphans}  "
-                f"products: {products}"
+                f"products: {products}  variants: {variants}"
             )
             if self.dry_run:
                 transaction.set_rollback(True)
@@ -232,3 +238,132 @@ class Command(BaseCommand):
         return datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S").replace(
             tzinfo=dt_timezone.utc
         )
+
+    def _import_variants_and_prices(self, data) -> int:
+        """WP variations (or the product itself, if simple) -> ProductVariant + Price.
+
+        `sku` is the idempotency key for ProductVariant -- it has no legacy_wp_id.
+        A variation's SKU MUST derive from the variation's own post ID, never the
+        parent's, or every variable product's variations collide into one row.
+        """
+        meta_all = data["meta"]
+        ngn = Currency.objects.get(code="NGN")
+
+        term_names = {
+            (t["taxonomy"], t["slug"]): t["name"]
+            for t in data["terms"]
+            if t["taxonomy"].startswith("pa_")
+        }
+        variations_by_parent: dict[int, list[dict]] = {}
+        for v in data["variations"]:
+            variations_by_parent.setdefault(v["post_parent"], []).append(v)
+
+        products_by_wp_id = {
+            p.legacy_wp_id: p for p in Product.objects.filter(legacy_source=LEGACY_SOURCE)
+        }
+
+        count = 0
+        for row in data["products"]:
+            wp_id = row["ID"]
+            product = products_by_wp_id.get(wp_id)
+            if product is None:
+                continue
+            children = variations_by_parent.get(wp_id, [])
+
+            if children:
+                for position, child in enumerate(children):
+                    cmeta = meta_all.get(str(child["ID"]), {})
+                    attrs = {k: v for k, v in cmeta.items() if k.startswith("attribute_")}
+                    variant = self._upsert_variant(
+                        product=product,
+                        sku=generate_sku(cmeta.get("_sku"), child["ID"]),
+                        name=child["post_title"].split(" - ")[-1],
+                        option_values=parse_option_values(attrs, term_names),
+                        weight_grams=self._grams(cmeta.get("_weight")),
+                        is_default=(position == 0),
+                        position=position,
+                    )
+                    self._rewrite_prices(variant, cmeta, ngn)
+                    count += 1
+            else:
+                pmeta = meta_all.get(str(wp_id), {})
+                variant = self._upsert_variant(
+                    product=product,
+                    sku=generate_sku(pmeta.get("_sku"), wp_id),
+                    name="Default",
+                    option_values={},
+                    weight_grams=self._grams(pmeta.get("_weight")),
+                    is_default=True,
+                    position=0,
+                )
+                self._rewrite_prices(variant, pmeta, ngn)
+                count += 1
+        return count
+
+    @staticmethod
+    def _upsert_variant(*, product, sku, name, option_values, weight_grams, is_default, position):
+        variant, _ = ProductVariant.objects.update_or_create(
+            sku=sku,
+            defaults={
+                "product": product,
+                "name": name,
+                "option_values": option_values,
+                "weight_grams": weight_grams,
+                "is_default": is_default,
+                "position": position,
+            },
+        )
+        return variant
+
+    def _rewrite_prices(self, variant, meta, currency) -> None:
+        """Delete-and-recreate, NOT update-or-skip.
+
+        The unique constraint is (variant, currency, country, starts_at); Postgres
+        treats NULL starts_at as distinct, so update-or-skip would stack a fresh
+        base price on every run without ever raising.
+        """
+        regular = self._decimal(meta.get("_regular_price"))
+        if regular is None:
+            return
+
+        variant.prices.filter(currency=currency, country__isnull=True).delete()
+        Price.objects.create(variant=variant, currency=currency, amount=regular)
+
+        sale = self._decimal(meta.get("_sale_price"))
+        if sale is None:
+            return
+        Price.objects.create(
+            variant=variant,
+            currency=currency,
+            amount=sale,
+            compare_at_amount=regular,
+            starts_at=self._epoch(meta.get("_sale_price_dates_from")),
+            ends_at=self._epoch(meta.get("_sale_price_dates_to")),
+        )
+
+    @staticmethod
+    def _decimal(raw):
+        if raw is None or str(raw).strip() == "":
+            return None
+        try:
+            return Decimal(str(raw)).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError):
+            return None
+
+    @staticmethod
+    def _grams(raw):
+        """WooCommerce _weight is in kilograms for this store. Returns None (unknown)
+        rather than 0 for missing/invalid -- 0 would be a lie delivery pricing trusts."""
+        if raw is None or str(raw).strip() == "":
+            return None
+        try:
+            grams = int(round(float(str(raw).strip()) * 1000))
+        except (TypeError, ValueError):
+            return None
+        return grams if grams > 0 else None
+
+    @staticmethod
+    def _epoch(raw):
+        if not raw or not str(raw).strip().isdigit():
+            return None
+        return datetime.fromtimestamp(int(raw), tz=dt_timezone.utc)
