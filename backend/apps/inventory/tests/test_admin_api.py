@@ -46,3 +46,24 @@ def test_stock_list_and_adjust_and_history():
     r = c.get(f"/api/v1/admin/stock/movements/?variant={v.id}")
     assert r.status_code == 200
     assert any(m["reason"] == "restock" for m in r.data["results"])
+
+
+@pytest.mark.django_db
+def test_adjust_rejects_migration_as_a_reason():
+    """"migration" is a machine-only sentinel the Plan-21 importer uses to
+    detect stock nobody has touched since the last migration run. If a staff
+    member could write it here, they could silently strip an item's
+    clobber-guard protection -- see apps/migration_wp/importers/stock.py."""
+    v = ProductVariantFactory()
+    w = WarehouseFactory()
+    si = StockItemFactory(variant=v, warehouse=w, quantity=10)
+    c = APIClient()
+    c.force_authenticate(user=staff_user())
+
+    r = c.post(
+        f"/api/v1/admin/stock/{si.id}/adjust/",
+        {"quantity": 25, "reason": "migration", "note": "trying to sneak one in"},
+        format="json",
+    )
+    assert r.status_code == 400
+    assert "reason" in r.data

@@ -10,7 +10,7 @@ from apps.catalog.models import Category, Tag
 from .common import logger
 
 
-def import_categories(data, stdout) -> tuple[int, int]:
+def import_categories(data) -> tuple[int, int]:
     """WP product_cat terms -> Category, keyed on legacy_wp_id, slug preserved.
 
     A category is matched by legacy_wp_id first. If no row carries that WP

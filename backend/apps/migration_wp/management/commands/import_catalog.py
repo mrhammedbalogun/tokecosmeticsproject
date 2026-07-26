@@ -62,7 +62,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("DRY RUN — no writes will be made"))
 
         with transaction.atomic():
-            cats, orphans = import_categories(data, self.stdout)
+            cats, orphans = import_categories(data)
             tags = import_tags(data)
             products = import_products(data)
             variants, orphan_variants = import_variants_and_prices(data, self.skip_prices)
@@ -75,7 +75,11 @@ class Command(BaseCommand):
             if options["skip_stock"]:
                 self.stdout.write(summary)
             else:
-                seeded, protected = import_stock(data, options["force_stock"], self.stdout)
+                seeded, protected, protected_messages = import_stock(
+                    data, options["force_stock"]
+                )
+                for message in protected_messages:
+                    self.stdout.write(message)
                 self.stdout.write(
                     f"{summary}  stock: {seeded} seeded, {protected} protected"
                 )

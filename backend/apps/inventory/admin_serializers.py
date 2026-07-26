@@ -19,7 +19,15 @@ class StockItemSerializer(serializers.ModelSerializer):
 
 class StockAdjustSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=0)
-    reason = serializers.ChoiceField(choices=[c[0] for c in StockMovement.REASONS])
+    # "migration" is excluded: it's a machine-only sentinel the Plan-21
+    # import_catalog importer relies on to detect stock nobody has touched
+    # since the last migration run (apps/migration_wp/importers/stock.py). A
+    # human must never be able to write it via this endpoint -- doing so
+    # would silently strip that item's clobber-guard protection, exposing it
+    # to being overwritten by the next migration re-run.
+    reason = serializers.ChoiceField(
+        choices=[c[0] for c in StockMovement.REASONS if c[0] != "migration"]
+    )
     note = serializers.CharField()  # required — no silent stock changes
 
 
