@@ -104,14 +104,31 @@ def test_rerunning_does_not_duplicate_categories(artifact_path):
 
 def test_import_catalog_never_touches_mariadb():
     """The extract/import split is a security boundary: import must not be able
-    to reach the WordPress database even if credentials were present."""
-    import inspect
+    to reach the WordPress database even if credentials were present.
 
+    The import phases were split out of this command into the
+    apps.migration_wp.importers package (Part A of the Task 11 refactor). If
+    this test only inspected the now-thin orchestrator, it would no longer
+    actually verify the boundary -- the real work (and any future MariaDB
+    reach-in) lives in the importer modules. So it walks every module in the
+    importers package too. This is a strengthening of the guarantee, not a
+    weakening of the test.
+    """
+    import importlib
+    import inspect
+    import pkgutil
+
+    from apps.migration_wp import importers
     from apps.migration_wp.management.commands import import_catalog
 
-    source = inspect.getsource(import_catalog)
-    assert "wp_reader" not in source
-    assert "pymysql" not in source
+    sources = [inspect.getsource(import_catalog)]
+    for module_info in pkgutil.walk_packages(importers.__path__, importers.__name__ + "."):
+        module = importlib.import_module(module_info.name)
+        sources.append(inspect.getsource(module))
+
+    for source in sources:
+        assert "wp_reader" not in source
+        assert "pymysql" not in source
 
 
 def test_imports_product_with_cleaned_description_and_benefits(artifact_path):
