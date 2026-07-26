@@ -161,3 +161,31 @@ def test_parse_option_values_falls_back_to_slug_when_term_missing():
 
 def test_parse_option_values_ignores_blank_values():
     assert parse_option_values({"attribute_pa_size": ""}, {}) == {}
+
+
+def test_axis_label_preserves_acronyms_and_apostrophes():
+    """`.title()` would give 'Uv Protection' and "It'S Scented" — both wrong."""
+    assert parse_option_values({"attribute_pa_UV-protection": "high"}, {}) == {
+        "UV Protection": "high"
+    }
+    assert parse_option_values({"attribute_pa_it's-scented": "yes"}, {}) == {
+        "It's Scented": "yes"
+    }
+
+
+def test_parse_option_values_merges_multiple_axes():
+    """Real variations carry several axes at once — taxonomy-backed and raw together."""
+    attrs = {
+        "attribute_pa_product-size": "100ml",
+        "attribute_pa_price-options": "single",
+        "attribute_shea-variant": "Unscented",
+    }
+    term_names = {
+        ("pa_product-size", "100ml"): "100 ml",
+        ("pa_price-options", "single"): "Single",
+    }
+    assert parse_option_values(attrs, term_names) == {
+        "Product Size": "100 ml",
+        "Price Options": "Single",
+        "Shea Variant": "Unscented",
+    }

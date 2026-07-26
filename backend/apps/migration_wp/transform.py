@@ -109,7 +109,8 @@ def _axis_label(axis: str) -> str:
     name = axis[len("attribute_"):] if axis.startswith("attribute_") else axis
     if name.startswith("pa_"):
         name = name[3:]
-    return name.replace("-", " ").replace("_", " ").title()
+    name = name.replace("-", " ").replace("_", " ")
+    return " ".join(w[:1].upper() + w[1:] for w in name.split())
 
 
 def parse_option_values(
@@ -120,6 +121,10 @@ def parse_option_values(
     `term_names` maps (taxonomy, term_slug) -> human term name, so taxonomy-backed
     axes show "50 ml" rather than the slug. Non-taxonomy axes (shea-variant) and
     unmapped slugs fall back to the raw value.
+
+    Assumes axis labels are distinct after normalisation: two different
+    `attribute_*` keys that normalise to the same label (e.g. via case or
+    separator differences) will silently clobber each other in the output dict.
     """
     out: dict[str, str] = {}
     for axis, value in attributes.items():
