@@ -45,6 +45,9 @@ class _FakeConn:
     def cursor(self):
         return _FakeCursor(self._rows)
 
+    def close(self):
+        pass
+
 
 def test_fetch_meta_drops_noise_keeps_allowlist_and_logs_dropped(caplog):
     """A known-noise key is dropped; every allowlisted key/prefix survives."""
@@ -109,6 +112,49 @@ def test_fetch_meta_drops_noise_keeps_allowlist_and_logs_dropped(caplog):
     assert "_edit_lock" in dropped_log
     assert "total_sales" in dropped_log
     assert "_Benefits" in dropped_log
+
+
+class _RecordingConnect:
+    """Stands in for pymysql.connect and remembers how it was called."""
+
+    def __init__(self):
+        self.kwargs = None
+
+    def __call__(self, **kwargs):
+        self.kwargs = kwargs
+        return _FakeConn([])
+
+
+def test_wp_connection_dials_tcp_for_a_hostname(monkeypatch, settings):
+    settings.WP_DB_NAME = "tokecosm_wp481"
+    settings.WP_DB_HOST = "172.17.0.1"
+    settings.WP_DB_PORT = 3306
+    connect = _RecordingConnect()
+    monkeypatch.setattr(wp_reader.pymysql, "connect", connect)
+
+    with wp_reader.wp_connection():
+        pass
+
+    assert connect.kwargs["host"] == "172.17.0.1"
+    assert connect.kwargs["port"] == 3306
+    assert "unix_socket" not in connect.kwargs
+
+
+def test_wp_connection_uses_a_unix_socket_when_the_host_is_a_path(monkeypatch, settings):
+    """MariaDB on the VPS binds 127.0.0.1 only, so the container dials the
+    bind-mounted socket instead. pymysql ignores host/port in socket mode, so
+    passing them alongside would be a lie about where the data came from."""
+    settings.WP_DB_NAME = "tokecosm_wp481"
+    settings.WP_DB_HOST = "/run/wp-mysql/mysql.sock"
+    connect = _RecordingConnect()
+    monkeypatch.setattr(wp_reader.pymysql, "connect", connect)
+
+    with wp_reader.wp_connection():
+        pass
+
+    assert connect.kwargs["unix_socket"] == "/run/wp-mysql/mysql.sock"
+    assert "host" not in connect.kwargs
+    assert "port" not in connect.kwargs
 
 
 @_needs_live_db

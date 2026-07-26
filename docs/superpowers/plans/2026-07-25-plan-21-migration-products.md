@@ -2231,8 +2231,28 @@ git commit -m "feat(migration): verify_catalog with orphan detection and worklis
 
 ## Task 14: Infrastructure — mount, grant, runbook
 
+> **CORRECTION 2026-07-26, applied during execution.** Two assumptions below were
+> wrong against the real box, and Tasks 15–16 inherit the fixes:
+> - **`WP_DB_HOST=172.17.0.1` cannot work.** MariaDB binds `127.0.0.1` only
+>   (`/etc/my.cnf:47`). The container reaches it through a read-only bind mount of
+>   `/var/lib/mysql/mysql.sock` instead — passed per-invocation, never in compose,
+>   so the long-lived containers hold no open path to the WordPress database.
+>   `wp_reader` now treats a `WP_DB_HOST` starting with `/` as a socket path.
+>   Rebinding MariaDB was rejected: it restarts the database behind the live store
+>   and widens the listening surface on a box with `ufw` inactive.
+>   (Bonus: the grant below is `@'localhost'`, which is exactly what a socket
+>   connection authenticates as — over the bridge it would have needed `@'172.17.%'`
+>   and would have failed auth even if the port had been open.)
+> - **The checkout is at `/opt/tokecosmetics/repo`, not `/opt/tokecosmetics`.**
+>   Every `cd /opt/tokecosmetics && docker compose -f infra/...` below is wrong.
+>
+> `docs/runbooks/migration.md` is the corrected, operational source of truth.
+> Prefer it over the command text in this plan.
+
 **Files:**
 - Modify: `infra/docker-compose.prod.yml`
+- Modify: `backend/apps/migration_wp/wp_reader.py` (unix socket support)
+- Modify: `backend/apps/migration_wp/tests/test_wp_reader.py`
 - Create: `docs/runbooks/migration.md`
 - Modify: `docs/audit.md`
 
@@ -2245,25 +2265,44 @@ In `infra/docker-compose.prod.yml`, add to the `web` service's `volumes:` list:
       - /opt/tokecosmetics/exports:/mnt/exports
 ```
 
+The MariaDB socket is deliberately **not** added here — it is passed on the one-off
+`run --rm` instead, so `web`/`worker`/`beat` never hold an open path to the
+WordPress database between migrations.
+
+Then create the exports directory owned by the container's uid. Letting Docker
+autocreate the mount point leaves it `root:root` and every export fails on
+permission:
+
+```bash
+ssh tokecosmetics 'install -d -o 10001 -g 10001 -m 755 /opt/tokecosmetics/exports'
+```
+
 - [ ] **Step 2: Create the scoped MySQL user on the VPS**
 
 Generate a password and create the user. **Show Hammed this command before running it** — it is a write to the live database server.
 
+The password is written straight to a `600` file and never printed: echoing it
+would put a live credential into the session transcript, and every later command
+reads it back with `set -a; . /root/wp-readonly.env; set +a`.
+
 ```bash
-ssh tokecosmetics 'PW=$(openssl rand -base64 24); echo "PASSWORD: $PW"; mysql -e "
+ssh tokecosmetics 'PW=$(openssl rand -base64 24); umask 077; printf "WP_DB_PASSWORD=%s\n" "$PW" > /root/wp-readonly.env; mysql -e "
 CREATE USER IF NOT EXISTS \"wp_readonly\"@\"localhost\" IDENTIFIED BY \"$PW\";
 GRANT SELECT ON tokecosm_wp481.wp_posts TO \"wp_readonly\"@\"localhost\";
 GRANT SELECT ON tokecosm_wp481.wp_postmeta TO \"wp_readonly\"@\"localhost\";
 GRANT SELECT ON tokecosm_wp481.wp_terms TO \"wp_readonly\"@\"localhost\";
 GRANT SELECT ON tokecosm_wp481.wp_term_taxonomy TO \"wp_readonly\"@\"localhost\";
 GRANT SELECT ON tokecosm_wp481.wp_term_relationships TO \"wp_readonly\"@\"localhost\";
-FLUSH PRIVILEGES;"'
+FLUSH PRIVILEGES;"; unset PW; echo "grant done, password in /root/wp-readonly.env"'
 ```
+
+`@'localhost'` is correct **because** the connection arrives over the unix socket.
+Do not change it to `@'172.17.%'`.
 
 - [ ] **Step 3: Prove the grant is actually limited**
 
 ```bash
-ssh tokecosmetics 'mysql -u wp_readonly -p"<PW>" tokecosm_wp481 -e "SELECT COUNT(*) FROM wp_users;"'
+ssh tokecosmetics 'set -a; . /root/wp-readonly.env; set +a; mysql -u wp_readonly -p"$WP_DB_PASSWORD" tokecosm_wp481 -e "SELECT COUNT(*) FROM wp_users;"'
 ```
 
 Expected: `ERROR 1142 (42000): SELECT command denied to user 'wp_readonly'@'localhost' for table 'wp_users'`
@@ -2271,82 +2310,24 @@ Expected: `ERROR 1142 (42000): SELECT command denied to user 'wp_readonly'@'loca
 This is the check that makes the whole credential argument real. If it returns a count instead of an error, stop and fix the grant.
 
 ```bash
-ssh tokecosmetics 'mysql -u wp_readonly -p"<PW>" tokecosm_wp481 -e "SELECT COUNT(*) FROM wp_posts WHERE post_type=\"product\";"'
+ssh tokecosmetics 'set -a; . /root/wp-readonly.env; set +a; mysql -u wp_readonly -p"$WP_DB_PASSWORD" tokecosm_wp481 -e "SELECT COUNT(*) FROM wp_posts WHERE post_type=\"product\";"'
 ```
 
 Expected: a count around 181.
 
 - [ ] **Step 4: Write the runbook**
 
-Create `docs/runbooks/migration.md` with exactly this content:
+Create `docs/runbooks/migration.md`. **Superseded during execution:** the draft
+that was inlined here assumed `WP_DB_HOST=172.17.0.1` and `cd /opt/tokecosmetics`,
+and its `chown -R tokecosm:tokecosm /opt/tokecosmetics/exports` would have made
+the exports directory unwritable by the container (uid 10001) on the very next
+run. The file as written is the source of truth; read it there.
 
-````markdown
-# Runbook — catalogue migration (Plan-21)
-
-## 1. Create the scoped reader (once)
-
-See Task 14 of the Plan-21 plan. The user is granted SELECT on five `wp_` tables
-and nothing else; `SELECT ... FROM wp_users` must return ERROR 1142.
-
-## 2. Extract
-
-```bash
-cd /opt/tokecosmetics
-docker compose -p tokecosmetics -f infra/docker-compose.prod.yml run --rm \
-  -e WP_DB_HOST=172.17.0.1 -e WP_DB_NAME=tokecosm_wp481 \
-  -e WP_DB_USER=wp_readonly -e WP_DB_PASSWORD="<PW>" \
-  web python manage.py extract_wp_catalog --out /mnt/exports/catalog-export.json
-```
-
-Credentials are passed per-invocation. They must never be added to `.env.prod`.
-
-## 3. Review, then dry run
-
-Inspect `exports/catalog-export.json`, then:
-
-```bash
-docker compose -p tokecosmetics -f infra/docker-compose.prod.yml exec -T web \
-  python manage.py import_catalog /mnt/exports/catalog-export.json --dry-run
-```
-
-## 4. Back up, then import
-
-```bash
-/opt/tokecosmetics/infra/deploy/backup.sh
-docker compose -p tokecosmetics -f infra/docker-compose.prod.yml exec -T web \
-  python manage.py import_catalog /mnt/exports/catalog-export.json
-```
-
-## 5. THE STOCK RULE — read before any re-run
-
-Once Hammed's team has entered real Lagos/UK counts, **every subsequent run must
-pass `--skip-stock`**, including the Plan-27 cutover run:
-
-```bash
-... python manage.py import_catalog /mnt/exports/catalog-export.json --skip-stock
-```
-
-The importer also refuses on its own to touch a `StockItem` whose latest movement
-is not `migration`, and prints `protected <sku>` for each. `--force-stock`
-overrides that guard and will destroy hand-entered counts. Do not use it.
-
-## 6. Verify
-
-```bash
-docker compose -p tokecosmetics -f infra/docker-compose.prod.yml exec -T web \
-  python manage.py verify_catalog /mnt/exports/catalog-export.json --out-dir /mnt/exports
-chown -R tokecosm:tokecosm /opt/tokecosmetics/exports
-```
-
-Worklists land in `/opt/tokecosmetics/exports/`: `pricing-todo.csv`,
-`stock-todo.csv`, `description-review.csv`.
-
-## 7. After cutover
-
-```sql
-DROP USER 'wp_readonly'@'localhost';
-```
-````
+It must cover, in order: how the container reaches MariaDB and why not over TCP ·
+creating the scoped reader and proving ERROR 1142 on `wp_users` · creating
+`/opt/tokecosmetics/exports` owned by 10001 · extract · review + dry run · back up
+then import · verify and hand over the worklists by copy · THE STOCK RULE ·
+teardown after cutover.
 
 - [ ] **Step 5: Correct docs/audit.md**
 
@@ -2391,13 +2372,18 @@ Watch the `deploy-backend` workflow to green.
 
 - [ ] **Step 2: Extract**
 
+Use section 2 of `docs/runbooks/migration.md` verbatim — socket transport, repo
+path, and a password that never reaches the shell history:
+
 ```bash
-ssh tokecosmetics 'cd /opt/tokecosmetics && docker compose -p tokecosmetics -f infra/docker-compose.prod.yml run --rm -e WP_DB_HOST=172.17.0.1 -e WP_DB_NAME=tokecosm_wp481 -e WP_DB_USER=wp_readonly -e WP_DB_PASSWORD="<PW>" web python manage.py extract_wp_catalog --out /mnt/exports/catalog-export.json'
+ssh tokecosmetics 'cd /opt/tokecosmetics/repo && set -a && . /root/wp-readonly.env && set +a && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f infra/docker-compose.prod.yml run --rm -v /var/lib/mysql/mysql.sock:/run/wp-mysql/mysql.sock:ro -e WP_DB_HOST=/run/wp-mysql/mysql.sock -e WP_DB_NAME=tokecosm_wp481 -e WP_DB_USER=wp_readonly -e WP_DB_PASSWORD web python manage.py extract_wp_catalog --out /mnt/exports/catalog-export.json'
 ```
 
 Expected: `Wrote /mnt/exports/catalog-export.json: 181 products, 71 variations, ...`
 
-If the connection is refused, the container cannot reach the host MariaDB — check the host gateway IP with `ip route | grep default` inside the container and that MariaDB is not bound to `127.0.0.1` only.
+If the connection is refused, the socket mount is missing or MariaDB moved its
+socket — confirm with `mysql -e "SHOW VARIABLES LIKE 'socket';"`. Do not fall back
+to a TCP host; see the correction at the head of Task 14.
 
 - [ ] **Step 3: Review the artifact before importing anything**
 
@@ -2418,7 +2404,7 @@ Expected: published 69, variations 71, categories 40.
 - [ ] **Step 4: Dry run the import**
 
 ```bash
-ssh tokecosmetics 'cd /opt/tokecosmetics && docker compose -p tokecosmetics -f infra/docker-compose.prod.yml exec -T web python manage.py import_catalog /mnt/exports/catalog-export.json --dry-run'
+ssh tokecosmetics 'cd /opt/tokecosmetics/repo && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f infra/docker-compose.prod.yml exec -T web python manage.py import_catalog /mnt/exports/catalog-export.json --dry-run'
 ```
 
 Expected: `DRY RUN` banner, then counts. Confirm the production catalogue is still empty afterwards.
@@ -2434,7 +2420,7 @@ Expected: `DRY RUN` banner, then counts. Confirm the production catalogue is sti
 - [ ] **Step 1: Back up Postgres first**
 
 ```bash
-ssh tokecosmetics '/opt/tokecosmetics/infra/deploy/backup.sh && ls -la /opt/tokecosmetics/backups/ | tail -3'
+ssh tokecosmetics '/opt/tokecosmetics/repo/infra/deploy/backup.sh && ls -la /opt/tokecosmetics/backups/ | tail -3'
 ```
 
 Expected: a fresh dump. Do not proceed without it.
@@ -2442,21 +2428,26 @@ Expected: a fresh dump. Do not proceed without it.
 - [ ] **Step 2: Run the import for real**
 
 ```bash
-ssh tokecosmetics 'cd /opt/tokecosmetics && docker compose -p tokecosmetics -f infra/docker-compose.prod.yml exec -T web python manage.py import_catalog /mnt/exports/catalog-export.json'
+ssh tokecosmetics 'cd /opt/tokecosmetics/repo && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f infra/docker-compose.prod.yml exec -T web python manage.py import_catalog /mnt/exports/catalog-export.json'
 ```
 
 Expected: counts for categories, tags, products, variants, stock, media; missing-image warnings are acceptable and listed.
 
-- [ ] **Step 3: Fix ownership — the wp-cli gotcha's Django equivalent**
+- [ ] **Step 3: Hand the worklists over — by copy, not by chown**
+
+The exports directory belongs to uid 10001 because the container writes into it.
+`chown -R tokecosm:tokecosm` (what this step originally said) would break the next
+export with a permission error. Copy instead, to a directory outside `public_html`
+— the worklists carry pricing columns and must not be web-served.
 
 ```bash
-ssh tokecosmetics 'chown -R tokecosm:tokecosm /opt/tokecosmetics/exports'
+ssh tokecosmetics 'install -d -o tokecosm -g tokecosm -m 750 /home/tokecosm/migration-worklists && cp /opt/tokecosmetics/exports/*.csv /home/tokecosm/migration-worklists/ && chown tokecosm:tokecosm /home/tokecosm/migration-worklists/*.csv'
 ```
 
 - [ ] **Step 4: Verify**
 
 ```bash
-ssh tokecosmetics 'cd /opt/tokecosmetics && docker compose -p tokecosmetics -f infra/docker-compose.prod.yml exec -T web python manage.py verify_catalog /mnt/exports/catalog-export.json --out-dir /mnt/exports'
+ssh tokecosmetics 'cd /opt/tokecosmetics/repo && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f infra/docker-compose.prod.yml exec -T web python manage.py verify_catalog /mnt/exports/catalog-export.json --out-dir /mnt/exports'
 ```
 
 Expected: source→dest counts match, no orphans, `wp-content` scan clean, 5 samples printed.

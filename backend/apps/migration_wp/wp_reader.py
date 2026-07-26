@@ -60,9 +60,22 @@ def wp_connection():
             "  docker compose run --rm -e WP_DB_USER=wp_readonly -e WP_DB_PASSWORD=... web \\\n"
             "    python manage.py extract_wp_catalog --out /mnt/exports/catalog-export.json"
         )
+    # WP_DB_HOST doubles as a socket path when it starts with "/". MariaDB on
+    # the VPS binds 127.0.0.1 only (/etc/my.cnf: bind-address=127.0.0.1), so a
+    # container cannot reach it over TCP at all; it dials a bind-mounted
+    # /var/lib/mysql/mysql.sock instead. That is also why the grant is
+    # 'wp_readonly'@'localhost' — a socket connection authenticates as
+    # localhost. Rebinding MariaDB to reach it over the docker bridge would
+    # mean restarting the database behind the live WordPress store, and would
+    # leave it listening on a box where ufw is inactive; the socket costs
+    # neither. pymysql ignores host/port when unix_socket is set, so they are
+    # omitted rather than passed alongside.
+    if settings.WP_DB_HOST.startswith("/"):
+        endpoint = {"unix_socket": settings.WP_DB_HOST}
+    else:
+        endpoint = {"host": settings.WP_DB_HOST, "port": settings.WP_DB_PORT}
     conn = pymysql.connect(
-        host=settings.WP_DB_HOST,
-        port=settings.WP_DB_PORT,
+        **endpoint,
         user=settings.WP_DB_USER,
         password=settings.WP_DB_PASSWORD,
         database=settings.WP_DB_NAME,
