@@ -148,27 +148,23 @@ def collect_attachment_ids(product_ids: list[int], meta: dict[int, dict[str, str
     no SQL, no ORM — so it belongs alongside the rest of this module's meta
     parsing rather than living in the extract command.
 
-    Returns a sorted, DEDUPED SET, not display order -- fine for its only
-    caller, extract_wp_catalog, which just needs the id set to look up file
-    paths and doesn't care what order they come back in. Do NOT use this for
+    Returns a sorted, DEDUPED SET, not display order. Order is irrelevant to
+    both of this function's callers -- extract_wp_catalog (building the id
+    set to fetch file paths for) and verify_catalog (counting referenced
+    images) -- neither displays anything in this order. Do NOT use this for
     anything that displays images in order (e.g. ProductImage.position) --
     use `ordered_attachment_ids` for that. 4 live products have an ACF image
     with a lower attachment id than their thumbnail's, so sorting here would
-    silently reorder which image is "first" for a customer-facing caller.
+    silently reorder which image is "first" for a display-ordered caller.
+
+    Delegates the actual thumbnail/gallery/ACF-key parsing to
+    `ordered_attachment_ids` (per product, then unioned and sorted here) so
+    that parsing logic has exactly one implementation -- a future change to
+    the ACF key list only has to happen in one place.
     """
     ids: set[int] = set()
     for pid in product_ids:
-        m = meta.get(pid, {})
-        if (m.get("_thumbnail_id") or "").strip().isdigit():
-            ids.add(int(m["_thumbnail_id"]))
-        gallery = (m.get("_product_image_gallery") or "").strip()
-        for part in gallery.split(","):
-            if part.strip().isdigit():
-                ids.add(int(part.strip()))
-        for key in _ACF_IMAGE_KEYS:
-            val = (m.get(key) or "").strip()
-            if val.isdigit():
-                ids.add(int(val))
+        ids.update(ordered_attachment_ids(meta.get(pid, {})))
     return sorted(ids)
 
 

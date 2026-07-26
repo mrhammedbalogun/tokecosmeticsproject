@@ -14,12 +14,23 @@ def test_verify_reports_counts_and_writes_worklists(artifact_path, tmp_path, cap
 
     assert "products" in capsys.readouterr().out
 
-    rows = list(csv.DictReader((tmp_path / "pricing-todo.csv").open(encoding="utf-8")))
+    rows = list(csv.DictReader((tmp_path / "pricing-todo.csv").open(encoding="utf-8-sig")))
     assert {"sku", "product", "ngn_price", "gbp", "usd", "cad"} <= set(rows[0].keys())
     assert len(rows) == 8  # one per variant
 
     assert (tmp_path / "stock-todo.csv").exists()
     assert (tmp_path / "description-review.csv").exists()
+
+
+def test_verify_reports_correct_category_count_not_a_false_shortfall(artifact_path, tmp_path, capsys):
+    """dest_categories must count Category rows directly, not walk imported
+    products' category links -- the fixture's orphan-cat term has no product
+    linked to it but is still a correctly-imported Category, and undercounting
+    it would falsely tell the review team categories are missing."""
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+    call_command("verify_catalog", str(artifact_path), "--out-dir", str(tmp_path))
+    out = capsys.readouterr().out
+    assert "categories: 4 -> 4" in out
 
 
 def test_verify_flags_orphans(artifact_path, tmp_path, capsys):
@@ -56,6 +67,6 @@ def test_description_review_marks_missing_copy(artifact_path, tmp_path):
     call_command("verify_catalog", str(artifact_path), "--out-dir", str(tmp_path))
     rows = {
         r["slug"]: r
-        for r in csv.DictReader((tmp_path / "description-review.csv").open(encoding="utf-8"))
+        for r in csv.DictReader((tmp_path / "description-review.csv").open(encoding="utf-8-sig"))
     }
     assert rows["toke-scented-shea-butter"]["ingredients"] == "MISSING"

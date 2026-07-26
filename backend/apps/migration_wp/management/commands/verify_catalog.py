@@ -14,9 +14,9 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
-from apps.catalog.models import Product, ProductImage, ProductVariant
+from apps.catalog.models import Category, Product, ProductImage, ProductVariant
 from apps.migration_wp.importers.common import LEGACY_SOURCE
-from apps.migration_wp.transform import collect_attachment_ids
+from apps.migration_wp.transform import collect_attachment_ids, ordered_attachment_ids
 
 WP_CONTENT_NEEDLE = "wp-content"
 
@@ -64,7 +64,13 @@ class Command(BaseCommand):
         source_products = len(data["products"])
 
         source_categories = len([t for t in data["terms"] if t["taxonomy"] == "product_cat"])
-        dest_categories = len({c.pk for p in products for c in p.categories.all()})
+        # Count Category rows directly (not by walking imported products'
+        # category links) -- a category with no products currently linked
+        # (e.g. the fixture's orphan-cat, parentless but still imported) is
+        # still a real, correctly-imported Category row. Walking product
+        # links undercounts and would print a false shortfall that tells the
+        # review team categories are missing when they aren't.
+        dest_categories = Category.objects.filter(legacy_wp_id__isnull=False).count()
 
         variations_by_parent = {}
         for v in data["variations"]:
@@ -105,16 +111,52 @@ class Command(BaseCommand):
 
     def _write_orphans(self, data, products):
         source_wp_ids = {row["ID"] for row in data["products"]}
-        orphans = [p for p in products if p.legacy_wp_id not in source_wp_ids]
-        self.stdout.write(f"Orphans (in Postgres, not in artifact): {len(orphans)}")
-        if orphans:
+        orphan_products = [p for p in products if p.legacy_wp_id not in source_wp_ids]
+        self.stdout.write(f"Orphans (in Postgres, not in artifact): {len(orphan_products)}")
+        if orphan_products:
             self.stdout.write(
                 "  update_or_create never deletes -- these products were removed "
                 "from WordPress since the last import and must be handled by hand "
                 "(unpublish/archive), the importer will never do it for you:"
             )
-            for p in orphans:
+            for p in orphan_products:
                 self.stdout.write(f"    - {p.slug} (legacy_wp_id={p.legacy_wp_id})")
+
+        orphan_images = self._orphan_images(data, products)
+        self.stdout.write(
+            f"Orphan images (no longer referenced by the source): {len(orphan_images)}"
+        )
+        if orphan_images:
+            self.stdout.write(
+                "  never deleted -- ProductImage has no provenance marker to tell a "
+                "stale source image apart from a staff upload, so import_media only "
+                "pushes these after the current source-backed images each run; a "
+                "human still has to decide whether to remove them:"
+            )
+            for slug, filename in orphan_images:
+                self.stdout.write(f"    - {slug}: {filename}")
+
+    def _orphan_images(self, data, products):
+        """Mirrors import_media's own orphan check (read-only here): a
+        ProductImage whose <attachment_id>-<filename> key no longer matches
+        anything the current artifact resolves for that product.
+        """
+        meta_all = data["meta"]
+        attachments = data["attachments"]
+        orphans = []
+        for p in products:
+            product_meta = meta_all.get(str(p.legacy_wp_id), {})
+            current_keys = set()
+            for attachment_id in ordered_attachment_ids(product_meta):
+                rel_path = attachments.get(str(attachment_id))
+                if rel_path is None:
+                    continue
+                current_keys.add(f"{attachment_id}-{Path(rel_path).name}")
+            for img in p.images.all():
+                key = Path(img.image.name).name
+                if key not in current_keys:
+                    orphans.append((p.slug, key))
+        return orphans
 
     def _write_wp_content_scan(self, products):
         hits = [
@@ -163,12 +205,18 @@ class Command(BaseCommand):
     # --- CSV worklists -------------------------------------------------------
 
     def _write_pricing_todo(self, out_dir, products):
+        # utf-8-sig (not plain utf-8): these CSVs are handed to a non-developer
+        # team to open in Excel, which mojibakes accented product names
+        # without a BOM. Matches the convention already established by
+        # apps/catalog/csv_io.py and apps/inventory/csv_io.py.
         path = out_dir / "pricing-todo.csv"
-        with path.open("w", newline="", encoding="utf-8") as f:
+        with path.open("w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow(["sku", "product", "ngn_price", "gbp", "usd", "cad"])
-            for p in products:
-                for v in p.variants.all():
+            # Explicit order (not Product.Meta's newest-first) -- someone
+            # scanning this sheet by eye needs to find a product by name.
+            for p in sorted(products, key=lambda p: p.name):
+                for v in sorted(p.variants.all(), key=lambda v: v.sku):
                     ngn = next(
                         (
                             pr.amount
@@ -183,24 +231,27 @@ class Command(BaseCommand):
         from apps.inventory.models import StockItem
 
         path = out_dir / "stock-todo.csv"
-        with path.open("w", newline="", encoding="utf-8") as f:
+        with path.open("w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow(["sku", "product", "warehouse", "seeded_qty", "real_qty"])
-            for item in StockItem.objects.select_related(
-                "variant", "variant__product", "warehouse"
-            ).filter(variant__product__legacy_source=LEGACY_SOURCE):
+            items = (
+                StockItem.objects.select_related("variant", "variant__product", "warehouse")
+                .filter(variant__product__legacy_source=LEGACY_SOURCE)
+                .order_by("variant__product__name", "variant__sku")
+            )
+            for item in items:
                 writer.writerow(
                     [item.variant.sku, item.variant.product.name, item.warehouse.name, item.quantity, ""]
                 )
 
     def _write_description_review(self, out_dir, products):
         path = out_dir / "description-review.csv"
-        with path.open("w", newline="", encoding="utf-8") as f:
+        with path.open("w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             writer.writerow(
                 ["slug", "product", "description_chars", "ingredients", "directions", "warnings"]
             )
-            for p in products:
+            for p in sorted(products, key=lambda p: p.name):
                 writer.writerow(
                     [
                         p.slug,

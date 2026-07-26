@@ -82,12 +82,15 @@ class Command(BaseCommand):
                 summary = f"{summary}  stock: {seeded} seeded, {protected} protected"
 
             if not options["skip_media"]:
-                copied, missing, missing_report = import_media(
+                copied, missing, orphan_images, missing_report = import_media(
                     data, options["uploads_root"], self.dry_run
                 )
                 for slug, rel_path in missing_report:
                     self.stdout.write(f"missing image: {slug} -> {rel_path}")
-                summary = f"{summary}  media: {copied} copied, {missing} missing"
+                summary = (
+                    f"{summary}  media: {copied} copied, {missing} missing, "
+                    f"{orphan_images} orphan_images"
+                )
 
             self.stdout.write(summary)
 
