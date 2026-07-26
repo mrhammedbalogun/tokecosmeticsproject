@@ -20,7 +20,10 @@
      "post_date_gmt": "2025-11-28 10:00:00"},
     {"ID": 106, "post_title": "Toke Draft Item", "slug": "toke-draft-item",
      "post_content": "Not published.", "post_excerpt": "", "post_status": "draft",
-     "post_date_gmt": "2025-11-29 10:00:00"}
+     "post_date_gmt": "2025-11-29 10:00:00"},
+    {"ID": 107, "post_title": "Toke Lip Balm", "slug": "toke-lip-balm",
+     "post_content": "No image at all.", "post_excerpt": "", "post_status": "publish",
+     "post_date_gmt": "2025-11-30 10:00:00"}
   ],
   "variations": [
     {"ID": 5001, "post_parent": 103, "post_title": "Toke Body Lotion - 100ml",
@@ -51,8 +54,11 @@
     "105": {"_sku": "", "_regular_price": "4000", "_stock_status": "outofstock",
             "_thumbnail_id": "9007"},
     "106": {"_sku": "", "_regular_price": "1000", "_stock_status": "instock"},
+    "107": {"_sku": "", "_regular_price": "1200", "_stock_status": "instock"},
     "5001": {"_sku": "", "_regular_price": "4000", "_weight": "0.4",
-             "attribute_pa_product-size": "100ml"},
+             "attribute_pa_product-size": "100ml",
+             "attribute_pa_price-options": "single",
+             "attribute_shea-variant": "Unscented"},
     "5002": {"_sku": "", "_regular_price": "7000", "attribute_pa_product-size": "250ml"}
   },
   "terms": [
@@ -60,15 +66,22 @@
      "parent": 0, "description": "Soaps for the body"},
     {"term_id": 30, "name": "Lotions", "slug": "lotions", "taxonomy": "product_cat",
      "parent": 0, "description": ""},
+    {"term_id": 45, "name": "Shea Butters", "slug": "shea-butters", "taxonomy": "product_cat",
+     "parent": 21, "description": ""},
+    {"term_id": 46, "name": "Orphan Cat", "slug": "orphan-cat", "taxonomy": "product_cat",
+     "parent": 999, "description": ""},
     {"term_id": 77, "name": "bestseller", "slug": "bestseller", "taxonomy": "product_tag",
      "parent": 0, "description": ""},
     {"term_id": 90, "name": "100 ml", "slug": "100ml", "taxonomy": "pa_product-size",
      "parent": 0, "description": ""},
     {"term_id": 91, "name": "250 ml", "slug": "250ml", "taxonomy": "pa_product-size",
+     "parent": 0, "description": ""},
+    {"term_id": 92, "name": "Single", "slug": "single", "taxonomy": "pa_price-options",
      "parent": 0, "description": ""}
   ],
   "term_links": [
     {"object_id": 101, "taxonomy": "product_cat", "term_id": 21, "slug": "body-soaps"},
+    {"object_id": 101, "taxonomy": "product_cat", "term_id": 30, "slug": "lotions"},
     {"object_id": 101, "taxonomy": "product_tag", "term_id": 77, "slug": "bestseller"},
     {"object_id": 103, "taxonomy": "product_cat", "term_id": 30, "slug": "lotions"},
     {"object_id": 104, "taxonomy": "product_cat", "term_id": 21, "slug": "body-soaps"}
