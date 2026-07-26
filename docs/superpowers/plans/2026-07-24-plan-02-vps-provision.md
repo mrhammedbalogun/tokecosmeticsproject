@@ -526,19 +526,58 @@ Hammed types the password himself. Do not set it for him and do not record it an
 
 ---
 
-## Task 6: Expose `api.tokecosmetics.com`
+## Task 6: Expose `api.tokecosmetics.com` — ✅ DONE 2026-07-25
 
 > **This task edits Apache config on the live web server.** Back up first, verify ordering, `configtest` before every reload.
+
+### Deviations from the plan as written
+
+**1. Step 3's `Require ip <HAMMED_IP>` was wrong and is now `Require all denied`.**
+This vhost only ever sees Cloudflare edge addresses as the client, and `httpd -M` confirms
+mod_remoteip is not loaded, so the real client IP cannot be recovered for authorisation.
+`Require ip` would have returned 403 to every request, Hammed's included, with no log line
+explaining it. His IP is also dynamic (shared house wifi). The admin is denied at the edge
+until an access route is chosen — see "Django admin access" in `docs/runbooks/vps-stack.md`.
+
+**2. Step 7's local verification used the wrong address.**
+The plan had `curl -H "Host: api.tokecosmetics.com" https://127.0.0.1/healthz/`. The vhost is
+bound to `203.161.38.201:443`, so a connection to `127.0.0.1:443` never matches it and falls
+through to the global default vhost — a passing result would have proved nothing. Verified
+with `curl --resolve api.tokecosmetics.com:443:203.161.38.201` instead, which hits the real
+listener with the correct SNI and Host.
+
+**3. Added an origin lock the plan did not have (approved by Hammed 2026-07-25).**
+Before this, `curl --resolve api.tokecosmetics.com:443:203.161.38.201 https://api.tokecosmetics.com/healthz/`
+returned 200 **from outside the network**. The origin IP is public knowledge because the
+WordPress stores share it, so the entire API was addressable without Cloudflare's WAF or
+rate limiting — and any future Cloudflare Access policy would have been bypassable the
+same way. `<Location />` now allows only Cloudflare's published ranges (15 IPv4 + 7 IPv6,
+fetched 2026-07-25), plus `127.0.0.1` and `203.161.38.201`. The second is needed because an
+on-box `--resolve` check presents the box's public address as its source, not loopback;
+without it every on-box diagnostic and the Task 9 deploy smoke test would 403.
+
+> **Maintenance:** Cloudflare's ranges change rarely but they do change. If the API starts
+> returning 403 for no apparent reason, re-fetch `https://www.cloudflare.com/ips-v4` and
+> `/ips-v6` and diff against `<Location />` **before** debugging anything else.
+
+**4. `/django-admin/` stays denied (Hammed's call 2026-07-25).** Plans 16-20 build the real
+admin portal. The deny depends on `AuthMerging` staying at its default of `Off`, so the
+inner `<Location>` replaces the Cloudflare allowlist rather than being OR'd with it —
+verified externally as 403 after the lock went in.
+
+**Recorded state:** conf.d backup at `/usr/local/apps/apache2/etc/conf.d.bak-20260725-081657`.
+Origin cert valid to 2041-07-21, SANs `*.tokecosmetics.com` + `tokecosmetics.com`, key/cert
+pair verified matching. External: `healthz` 200, `django-admin` 403, `:80` 301 to `:443`.
 
 **Files:**
 - Create: `infra/proxy/zz-api.conf`
 - Server: `/usr/local/apps/apache2/etc/conf.d/zz-api.conf`
 
-- [ ] **Step 1: Hammed issues a Cloudflare Origin CA certificate**
+- [x] **Step 1: Hammed issues a Cloudflare Origin CA certificate**
 
 Cloudflare dashboard → SSL/TLS → Origin Server → **Create Certificate**. Hostnames: `api.tokecosmetics.com` and `*.tokecosmetics.com`. Validity 15 years. He copies out the **certificate** and the **private key** (the key is shown exactly once).
 
-- [ ] **Step 2: Install the cert on the VPS**
+- [x] **Step 2: Install the cert on the VPS**
 
 ```bash
 ssh tokecosmetics 'mkdir -p /etc/ssl/cloudflare && chmod 700 /etc/ssl/cloudflare'
@@ -550,7 +589,7 @@ ssh tokecosmetics 'chmod 600 /etc/ssl/cloudflare/*; openssl x509 -in /etc/ssl/cl
 
 Expected: a subject mentioning Cloudflare Origin CA and a `notAfter` about 15 years out.
 
-- [ ] **Step 3: Write `infra/proxy/zz-api.conf`**
+- [x] **Step 3: Write `infra/proxy/zz-api.conf`**
 
 The `zz-` prefix is load-bearing — see the warning at the top of this plan.
 
@@ -596,13 +635,13 @@ The `zz-` prefix is load-bearing — see the warning at the top of this plan.
 
 Replace `<HAMMED_IP>` with his current public IP (`curl -s https://ifconfig.me` from his machine). If it is dynamic, note in `docs/runbooks/vps-stack.md` that this needs updating — a locked-out admin during an incident is worse than the exposure.
 
-- [ ] **Step 4: Back up the Apache config directory**
+- [x] **Step 4: Back up the Apache config directory**
 
 ```bash
 ssh tokecosmetics 'cp -a /usr/local/apps/apache2/etc/conf.d /usr/local/apps/apache2/etc/conf.d.bak-$(date +%Y%m%d) && ls -d /usr/local/apps/apache2/etc/conf.d.bak-*'
 ```
 
-- [ ] **Step 5: Install the file and PROVE the load order before reloading**
+- [x] **Step 5: Install the file and PROVE the load order before reloading**
 
 ```bash
 ssh tokecosmetics 'cp /opt/tokecosmetics/repo/infra/proxy/zz-api.conf /usr/local/apps/apache2/etc/conf.d/zz-api.conf
@@ -611,7 +650,7 @@ ls /usr/local/apps/apache2/etc/conf.d/*.conf'
 
 Expected order: `modules.cnf` is separate; among `*.conf` you must see `webuzo.conf`, `webuzoVH.conf`, then **`zz-api.conf` last**. If `zz-api.conf` is not last, stop and rename it.
 
-- [ ] **Step 6: Config-test, then confirm the default vhost has not moved**
+- [x] **Step 6: Config-test, then confirm the default vhost has not moved**
 
 ```bash
 ssh tokecosmetics '/usr/local/apps/apache2/bin/httpd -t && /usr/local/apps/apache2/bin/httpd -S 2>&1 | grep -A2 "203.161.38.201:443" | head -20'
@@ -619,7 +658,7 @@ ssh tokecosmetics '/usr/local/apps/apache2/bin/httpd -t && /usr/local/apps/apach
 
 Expected: `Syntax OK`, and the **first** vhost listed for `:443` is still a Webuzo one (`server1.tokecosmetics.com`), **not** `api.tokecosmetics.com`. This is the check that protects the live store. If `api.tokecosmetics.com` appears first, do **not** reload.
 
-- [ ] **Step 7: Graceful reload, then immediately verify WordPress**
+- [x] **Step 7: Graceful reload, then immediately verify WordPress**
 
 ```bash
 ssh tokecosmetics '/usr/local/apps/apache2/bin/httpd -k graceful; sleep 3
@@ -630,11 +669,11 @@ curl -sk -o /dev/null -w "api_local=%{http_code}\n" -H "Host: api.tokecosmetics.
 
 Expected: WordPress still 200 at baseline speed on **both** domains, `api_local=200`. `graceful` finishes in-flight requests rather than dropping shoppers mid-checkout.
 
-- [ ] **Step 8: Hammed sets Cloudflare SSL mode**
+- [x] **Step 8: Hammed sets Cloudflare SSL mode**
 
 Cloudflare → SSL/TLS → Overview → **Full (strict)**. Confirm the `api` A record is `203.161.38.201` and **proxied** (orange cloud).
 
-- [ ] **Step 9: Verify from the outside world**
+- [x] **Step 9: Verify from the outside world**
 
 ```bash
 curl -s https://api.tokecosmetics.com/healthz/
@@ -642,7 +681,7 @@ curl -s https://api.tokecosmetics.com/healthz/
 
 Expected: `{"status": "ok", "db": true, "redis": true}` — the 526 is gone. This is the moment the API is real.
 
-- [ ] **Step 10: Prove it survives Webuzo**
+- [x] **Step 10: Prove it survives Webuzo**
 
 Have Hammed open Webuzo and save any Apache-related setting, then:
 
@@ -652,7 +691,7 @@ ssh tokecosmetics 'ls /usr/local/apps/apache2/etc/conf.d/zz-api.conf && /usr/loc
 
 Expected: file still present, count ≥ 1. If Webuzo removed it, fall back to the master guide's option (b): an `nginx:alpine` container on host port 8443 with the same Origin CA cert, plus a Cloudflare Origin Rule rewriting `api.tokecosmetics.com` to port 8443. Record whichever route won in `docs/runbooks/vps-stack.md`.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add infra/proxy/zz-api.conf
@@ -666,7 +705,7 @@ git commit -m "feat(infra): Apache vhost proxying api.tokecosmetics.com to the D
 **Files:**
 - Create: `docs/runbooks/vps-stack.md`
 
-- [ ] **Step 1: Measure the stack under load**
+- [x] **Step 1: Measure the stack under load**
 
 ```bash
 ssh tokecosmetics 'docker stats --no-stream --format "table {{.Name}}\t{{.MemUsage}}\t{{.CPUPerc}}"; echo ---; free -h; echo ---; df -h / | tail -1'
@@ -674,7 +713,7 @@ ssh tokecosmetics 'docker stats --no-stream --format "table {{.Name}}\t{{.MemUsa
 
 Expected: total container memory **under ~2.6 GB**, and `available` still comfortably above 1 GB. If not, drop gunicorn to 2 workers and Celery to `-c 1` before going further — the live store shares this RAM and losing it costs real money.
 
-- [ ] **Step 2: Confirm nothing new is publicly exposed**
+- [x] **Step 2: Confirm nothing new is publicly exposed**
 
 ```bash
 ssh tokecosmetics 'ss -tlnp | grep -E ":(5433|6380|8001) "'
@@ -682,11 +721,11 @@ ssh tokecosmetics 'ss -tlnp | grep -E ":(5433|6380|8001) "'
 
 Expected: every line begins `127.0.0.1:`. A `0.0.0.0:` here means Postgres or Redis is on the public internet — fix the compose port binding immediately.
 
-- [ ] **Step 3: Write `docs/runbooks/vps-stack.md`**
+- [x] **Step 3: Write `docs/runbooks/vps-stack.md`**
 
 Cover, in plain language for a non-developer: what the five containers do; `docker compose -p tokecosmetics ps` / `logs <service>`; where `.env.prod` lives and that it is never in git; how to restart one service; how to roll back (`git checkout <previous-tag> && docker compose up -d --build`); the `zz-` filename warning and why; and that Meilisearch is deliberately absent until Plan-07b.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/runbooks/vps-stack.md
@@ -700,7 +739,7 @@ git commit -m "docs: VPS stack runbook (Plan-02)"
 **Files:**
 - Create: `infra/deploy/backup.sh`, `infra/deploy/restore.sh`, `docs/runbooks/restore.md`
 
-- [ ] **Step 1: Write `infra/deploy/backup.sh`**
+- [x] **Step 1: Write `infra/deploy/backup.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -732,7 +771,7 @@ echo "backup ok: $FILE ($SIZE bytes)"
 
 The size check matters: the classic backup failure is a script that dumps nothing every night for six months and rotates the good copies away.
 
-- [ ] **Step 2: Write `infra/deploy/restore.sh`**
+- [x] **Step 2: Write `infra/deploy/restore.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -759,7 +798,7 @@ docker compose -p tokecosmetics exec -T postgres psql -U "$POSTGRES_USER" -d "$S
 echo "restored into $SCRATCH"
 ```
 
-- [ ] **Step 3: Install and run a backup once**
+- [x] **Step 3: Install and run a backup once**
 
 ```bash
 ssh tokecosmetics 'chmod +x /opt/tokecosmetics/repo/infra/deploy/*.sh
@@ -768,7 +807,7 @@ cd /opt/tokecosmetics/repo/infra && /opt/tokecosmetics/repo/infra/deploy/backup.
 
 Expected: `backup ok: … (N bytes)` with N comfortably over 10000. If `aws` is missing, `apt-get install -y awscli` first.
 
-- [ ] **Step 4: Actually test the restore — a backup you have not restored is a hope, not a backup**
+- [x] **Step 4: Actually test the restore — a backup you have not restored is a hope, not a backup**
 
 ```bash
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo/infra && ./deploy/restore.sh $(ls -t /opt/tokecosmetics/backups/*.sql.gz | head -1)'
@@ -780,7 +819,7 @@ Expected: an `orders` count printed. Then drop the scratch DB:
 ssh tokecosmetics 'docker compose -p tokecosmetics exec -T postgres psql -U toke -d postgres -c "DROP DATABASE toke_restore_test"'
 ```
 
-- [ ] **Step 5: Schedule it nightly**
+- [x] **Step 5: Schedule it nightly**
 
 ```bash
 ssh tokecosmetics 'cat > /etc/cron.d/tokecosmetics-backup <<EOF
@@ -792,9 +831,9 @@ chmod 644 /etc/cron.d/tokecosmetics-backup && crontab -l 2>/dev/null; ls -l /etc
 
 02:30 server time is chosen to sit clear of WordPress's own backup window.
 
-- [ ] **Step 6: Write `docs/runbooks/restore.md`** — the exact commands to restore into scratch, verify, then promote to live (stop `web`/`worker`/`beat`, rename databases, restart), with the S3 path where dumps land.
+- [x] **Step 6: Write `docs/runbooks/restore.md`** — the exact commands to restore into scratch, verify, then promote to live (stop `web`/`worker`/`beat`, rename databases, restart), with the S3 path where dumps land.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add infra/deploy/backup.sh infra/deploy/restore.sh docs/runbooks/restore.md
@@ -808,7 +847,7 @@ git commit -m "feat(infra): nightly Postgres backup to S3 + tested restore proce
 **Files:**
 - Create: `infra/deploy/deploy.sh`, `.github/workflows/deploy-backend.yml`
 
-- [ ] **Step 1: Write `infra/deploy/deploy.sh`**
+- [x] **Step 1: Write `infra/deploy/deploy.sh`**
 
 ```bash
 #!/usr/bin/env bash
@@ -838,7 +877,7 @@ echo "FATAL: healthz did not come up after 60s — check: docker compose -p toke
 exit 1
 ```
 
-- [ ] **Step 2: Write `.github/workflows/deploy-backend.yml`**
+- [x] **Step 2: Write `.github/workflows/deploy-backend.yml`**
 
 ```yaml
 name: deploy-backend
@@ -863,7 +902,7 @@ jobs:
             "cd /opt/tokecosmetics/repo/infra && ./deploy/deploy.sh ${GITHUB_REF_NAME}"
 ```
 
-- [ ] **Step 3: Generate a CI-only keypair and authorise it**
+- [x] **Step 3: Generate a CI-only keypair and authorise it**
 
 Separate from the deploy key in Task 4 — that one reads GitHub, this one reaches the server.
 
@@ -876,7 +915,7 @@ cat /root/.ssh/gha_deploy'
 
 Hammed adds it at repo → Settings → Secrets and variables → Actions → New repository secret, named `VPS_SSH_KEY`.
 
-- [ ] **Step 4: Tag and watch a real deploy**
+- [x] **Step 4: Tag and watch a real deploy**
 
 ```bash
 git tag backend-v0.1.0 && git push origin backend-v0.1.0
@@ -885,7 +924,7 @@ gh run watch
 
 Expected: the workflow goes green and ends with `deployed backend-v0.1.0 — healthz ok`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add infra/deploy/deploy.sh .github/workflows/deploy-backend.yml
@@ -899,7 +938,7 @@ git commit -m "feat(ci): tag-triggered backend deploy to the VPS (Plan-02)"
 **Files:**
 - Vercel project settings (no repo change)
 
-- [ ] **Step 1: Hammed sets the Vercel environment variables**
+- [x] **Step 1: Hammed sets the Vercel environment variables**
 
 Vercel → the storefront project → Settings → Environment Variables (Production **and** Preview):
 
@@ -912,7 +951,7 @@ Vercel → the storefront project → Settings → Environment Variables (Produc
 
 `API_URL` is the one that matters — it is what server components and Route Handlers call. It is currently unset, which is why `/products` renders nothing.
 
-- [ ] **Step 2: Confirm CORS already allows the storefront**
+- [x] **Step 2: Confirm CORS already allows the storefront**
 
 `CORS_ALLOWED_ORIGINS` is derived from `FRONTEND_URL`/`ADMIN_URL` in `base.py:191`, and Task 4 set `FRONTEND_URL=https://next.tokecosmetics.com`.
 
@@ -926,7 +965,7 @@ print(settings.CORS_ALLOWED_ORIGINS)"'
 
 Expected: a list containing `https://next.tokecosmetics.com`.
 
-- [ ] **Step 3: Redeploy the storefront** — Vercel → Deployments → Redeploy (env changes need a rebuild).
+- [x] **Step 3: Redeploy the storefront** — Vercel → Deployments → Redeploy (env changes need a rebuild).
 
 - [ ] **Step 4: Verify products actually render — the real acceptance test**
 
@@ -942,11 +981,32 @@ Add to cart → checkout → inline signup → address → delivery option → *
 
 Expected: an order in the `TC-1000xx` series appears via `docker compose -p tokecosmetics exec -T web python manage.py shell`. This proves API, DB, Redis, Celery, and Resend all work together in production — five things one test covers.
 
+> **BLOCKED 2026-07-25 — Steps 4 and 5 cannot pass yet, and this is not a defect.**
+> The production catalogue is empty: `/api/v1/products/` returns `count: 0` and
+> `/api/v1/categories/` returns `[]`, so Step 4's "count greater than zero" is
+> structurally unreachable and Step 5 has nothing to put in a cart. Products arrive
+> in **Plan-21-migration-products**, which is not built.
+>
+> Steps 1–3 ARE verified: the storefront's server components are calling the
+> production API (6/6 requests 200 in the Apache log, `user-agent: node`, hitting
+> `/api/v1/products/`, `/api/v1/categories/`, `/api/v1/meta/countries/`),
+> `NEXT_PUBLIC_SITE_URL` is live in the canonical tag and sitemap, and
+> `REVALIDATE_SECRET` matches on both sides (wrong secret 401, real secret 200).
+> `NEXT_PUBLIC_API_URL` is the one variable that could NOT be verified from
+> outside — it is only read by `lib/media.ts` to build absolute product-image URLs,
+> and with no products there is no image URL to inspect. It gets exercised for real
+> at Plan-21.
+>
+> **Do Steps 4 and 5 immediately after Plan-21, not before.** Seeding a throwaway
+> product into production to force Step 5 early would put fake data in the live
+> catalogue and burn a number out of the `TC-1000xx` order sequence for a test —
+> the wrong trade when the real thing is one plan away.
+
 ---
 
 ## Task 11: Checkpoint
 
-- [ ] **Step 1: Assemble the report for Hammed**, showing:
+- [x] **Step 1: Assemble the report for Hammed**, showing:
   - `curl https://api.tokecosmetics.com/healthz/` returning ok from the open internet
   - `docker stats` and `free -h` proving the box has headroom
   - `https://tokecosmetics.com/` response time before vs after (the live store is unharmed)
@@ -954,14 +1014,14 @@ Expected: an order in the `TC-1000xx` series appears via `docker compose -p toke
   - the backup file present in S3, and the restore that was actually run
   - a green `deploy-backend` workflow run
 
-- [ ] **Step 2: Get explicit sign-off** that the WordPress store feels unaffected. He is the only one who can judge that.
+- [x] **Step 2: Get explicit sign-off** that the WordPress store feels unaffected. He is the only one who can judge that.
 
 - [ ] **Step 3: Now do the deferred Plan-14b work**, which this stage unblocks:
   - Paste `https://api.tokecosmetics.com/api/v1/webhooks/paystack/` into Paystack → Settings → API Keys & Webhooks → **Test** Webhook URL (**trailing slash required** — Django's `APPEND_SLASH` will not redirect a POST)
   - Hammed's phone pass (Plan-14b Task 18)
   - Confirm a Paystack-originated webhook lands: a `WebhookEvent` row with `processed_at` set and `error=""`, order fulfilled exactly once
 
-- [ ] **Step 4: Update memory** — `project_tokecosmetics_plan14b` (Task 18 closed) and a new `project_tokecosmetics_plan02`.
+- [x] **Step 4: Update memory** — `project_tokecosmetics_plan14b` (Task 18 closed) and a new `project_tokecosmetics_plan02`.
 
 ---
 

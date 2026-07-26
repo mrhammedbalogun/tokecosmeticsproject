@@ -108,4 +108,11 @@ services:
         condition: service_healthy
       web:
         condition: service_started
-    mem_limit: 128m
+    # 256m, not the 128m the plan specified. Measured 2026-07-25: beat sits at
+    # ~100 MB and reaches it within seconds of starting — that is its baseline, not
+    # a leak, but it leaves 22% headroom for any spike. The failure mode is the
+    # problem: exceeding mem_limit gets the container OOM-killed, restart:
+    # unless-stopped brings it straight back, and nothing anywhere reports an
+    # error. You would not find out until you noticed pending orders had stopped
+    # expiring. 128 MB of a 3.2 GB surplus is not worth that.
+    mem_limit: 256m

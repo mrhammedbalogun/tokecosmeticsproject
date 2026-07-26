@@ -1,0 +1,47 @@
+name: deploy-backend
+
+on:
+  push:
+    tags: ["backend-v*"]
+
+# Two deploys running at once would race on `git checkout` in the same working
+# tree. Queue them instead of cancelling: a half-finished deploy is worse than a
+# slow one.
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Deploy over SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$VPS_SSH_KEY" || { echo "::error::secret VPS_SSH_KEY is empty or unset"; exit 1; }
+
+          mkdir -p ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          # The host key is PINNED, not discovered. `ssh-keyscan` on every run
+          # trusts whatever answers on the day, which is exactly the thing host
+          # keys exist to prevent. This value was read from the server itself on
+          # 2026-07-25 and cross-checked over an already-trusted connection.
+          # If the VPS is ever rebuilt, this line has to be updated by hand — and
+          # a deploy failing closed is the correct outcome until someone does.
+          printf '%s\n' '203.161.38.201 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEycxGVkY/Y4wDjS1vyI2Xe2hCukEOi2VzH+ewTRuHSk' > ~/.ssh/known_hosts
+
+          # The key is pinned server-side to a forced command that accepts only a
+          # tag name, so this is the whole vocabulary available to it — there is no
+          # shell here even if the secret leaks.
+          ssh -i ~/.ssh/id_ed25519 \
+              -o IdentitiesOnly=yes \
+              -o StrictHostKeyChecking=yes \
+              root@203.161.38.201 "${GITHUB_REF_NAME}"

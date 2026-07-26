@@ -2,6 +2,7 @@
 from pathlib import Path
 
 import environ
+from corsheaders.defaults import default_headers as cors_default_headers
 
 # backend/  (this file is config/settings/base.py -> parents[2] = backend/)
 BASE_DIR = Path(__file__).resolve().parents[2]
@@ -188,10 +189,24 @@ SPECTACULAR_SETTINGS = {
 # --- Frontend origins / URLs ---
 FRONTEND_URL = env("FRONTEND_URL", default="http://localhost:3000")
 ADMIN_URL = env("ADMIN_URL", default="http://localhost:3001")
+# Default to the two origins we already know about rather than hardcoded localhost.
+# Those literals were identical to the FRONTEND_URL/ADMIN_URL defaults, so this
+# changes nothing in dev — but in production FRONTEND_URL was correctly set to
+# https://next.tokecosmetics.com while CORS silently stayed on localhost, so every
+# browser-side call from the deployed storefront would have been blocked. Deriving
+# it means the two cannot disagree again. CORS_ALLOWED_ORIGINS still overrides.
 CORS_ALLOWED_ORIGINS = env.list(
     "CORS_ALLOWED_ORIGINS",
-    default=["http://localhost:3000", "http://localhost:3001"],
+    default=[FRONTEND_URL, ADMIN_URL],
 )
+
+# The storefront sends X-Country on EVERY request and X-Cart-Id on cart requests
+# (storefront/src/lib/api.ts). Neither is in django-cors-headers' default allow
+# list, so without this every browser-side call fails its preflight — and the
+# browser reports that as an opaque network error, which reads like "the API is
+# down" rather than "one header is missing". Same-origin dev never hits a
+# preflight at all, so this only ever breaks in deployment.
+CORS_ALLOW_HEADERS = (*cors_default_headers, "x-country", "x-cart-id")
 
 # --- Email ---
 # Dev/test default = console; prod switches to Resend via anymail (set EMAIL_BACKEND in .env).
