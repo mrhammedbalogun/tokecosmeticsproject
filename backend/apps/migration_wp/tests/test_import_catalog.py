@@ -71,6 +71,44 @@ def test_imports_tags(artifact_path):
     assert tag.name == "bestseller"
 
 
+def _add_tag(artifact_path, *, term_id, name, slug, link_to=101):
+    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+    data["terms"].append(
+        {"term_id": term_id, "name": name, "slug": slug,
+         "taxonomy": "product_tag", "parent": 0, "description": ""}
+    )
+    data["term_links"].append(
+        {"object_id": link_to, "taxonomy": "product_tag", "term_id": term_id, "slug": slug}
+    )
+    artifact_path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_hashtag_blobs_are_skipped_not_imported(artifact_path):
+    """WooCommerce's tag box was used as an Instagram caption field: 83 of the 137
+    live product_tag terms are hashtag dumps pasted as a single term. They are not
+    taxonomy -- each matches exactly one product -- so they are skipped on the '#'
+    marker, not on length. Skipping on length instead would let the 62 blobs that
+    happen to fit under 100 characters through, which is how this nearly shipped."""
+    _add_tag(artifact_path, term_id=901,
+             name="#AcneCareRoutine #AcneFreeSkin #PimpleFreeSkin", slug="acnecareroutine-acnefreeskin")
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    assert not Tag.objects.filter(slug="acnecareroutine-acnefreeskin").exists()
+    # The clean tag in the same artifact still imports -- skipping is per-term.
+    assert Tag.objects.filter(slug="bestseller").exists()
+
+
+def test_an_overlong_clean_tag_is_skipped_rather_than_crashing_the_run(artifact_path):
+    """Tag.name is varchar(100). A term with no '#' that still overflows is
+    unexpected junk: it must not abort a 122-unit import, and it must not be
+    silently truncated into a different tag either."""
+    _add_tag(artifact_path, term_id=902, name="x" * 150, slug="x" * 130)
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    assert not Tag.objects.filter(slug="x" * 130).exists()
+    assert Tag.objects.filter(slug="bestseller").exists()
+
+
 def test_rerunning_updates_renamed_tag(artifact_path):
     """Regression guard: Tag has no legacy id, so a rename in WordPress between
     rehearsal and cutover must still propagate on a rerun."""

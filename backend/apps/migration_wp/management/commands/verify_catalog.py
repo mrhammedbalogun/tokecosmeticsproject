@@ -3,7 +3,7 @@
 Read-only against the database: this command never writes to Postgres. It
 compares what the artifact says should exist against what import_catalog
 actually wrote, flags a few specific gaps import_catalog's own summary can't
-see, and writes three CSV worklists for the humans who pick this up after
+see, and writes four CSV worklists for the humans who pick this up after
 the code is done.
 """
 from __future__ import annotations
@@ -15,6 +15,7 @@ from pathlib import Path
 from django.core.management.base import BaseCommand
 
 from apps.catalog.models import Category, Product, ProductImage, ProductVariant
+from apps.migration_wp.importers.categories import tag_skip_reason
 from apps.migration_wp.importers.common import LEGACY_SOURCE
 from apps.migration_wp.transform import collect_attachment_ids, ordered_attachment_ids
 
@@ -25,7 +26,7 @@ class Command(BaseCommand):
     """Verify a completed import_catalog run against its source artifact.
 
     Entirely read-only -- it issues no writes to Postgres. The only output
-    side effects are the three CSV worklists under --out-dir.
+    side effects are the four CSV worklists under --out-dir.
     """
 
     help = "Verify an import_catalog run and write manual-worklist CSVs."
@@ -56,6 +57,7 @@ class Command(BaseCommand):
         self._write_pricing_todo(out_dir, products)
         self._write_stock_todo(out_dir)
         self._write_description_review(out_dir, products)
+        self._write_tags_todo(out_dir, data)
 
     # --- stdout report -----------------------------------------------------
 
@@ -243,6 +245,41 @@ class Command(BaseCommand):
                 writer.writerow(
                     [item.variant.sku, item.variant.product.name, item.warehouse.name, item.quantity, ""]
                 )
+
+    def _write_tags_todo(self, out_dir, data):
+        """Every product_tag the import refused, and which products wanted it.
+
+        Recomputed from the artifact with the importer's own predicate rather
+        than passed across from import_catalog, so this stays correct when
+        verify_catalog is run on its own -- and so there is exactly one
+        definition of what counts as a junk tag.
+        """
+        titles = {p["ID"]: p["post_title"] for p in data["products"]}
+        products_for_term: dict[int, list[str]] = {}
+        for link in data.get("term_links") or []:
+            if link.get("taxonomy") != "product_tag":
+                continue
+            name = titles.get(link["object_id"])
+            if name:
+                products_for_term.setdefault(link["term_id"], []).append(name)
+
+        rows = []
+        for term in data["terms"]:
+            if term["taxonomy"] != "product_tag":
+                continue
+            reason = tag_skip_reason(term)
+            if reason:
+                rows.append((term, reason, products_for_term.get(term["term_id"], [])))
+
+        path = out_dir / "tags-todo.csv"
+        with path.open("w", newline="", encoding="utf-8-sig") as f:
+            writer = csv.writer(f)
+            writer.writerow(["wp_term_id", "reason", "products", "original_tag_text"])
+            for term, reason, names in sorted(rows, key=lambda r: r[0]["name"]):
+                writer.writerow(
+                    [term["term_id"], reason, "; ".join(sorted(names)), term["name"]]
+                )
+        self.stdout.write(f"skipped tags: {len(rows)} (see {path.name})")
 
     def _write_description_review(self, out_dir, products):
         path = out_dir / "description-review.csv"

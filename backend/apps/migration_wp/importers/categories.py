@@ -75,15 +75,54 @@ def import_categories(data) -> tuple[int, int]:
     return len(terms), orphan_count
 
 
-def import_tags(data) -> int:
+def tag_skip_reason(term) -> str | None:
+    """Why this product_tag must not become a Tag, or None if it's fine.
+
+    WooCommerce's tag box was used as an Instagram caption field. 83 of the 137
+    live product_tag terms are hashtag dumps pasted in as a single term, e.g.
+    "#AcneCareRoutine #AcneFreeSkin #PimpleFreeSkin #BreakoutControl ...". Each
+    blob is unique, so it matches exactly one product and is worthless for
+    filtering; several run to 200 characters.
+
+    The filter is the '#' marker, NOT length. Only 21 of the 83 overflow
+    Tag.name's varchar(100) -- filtering on length would have let the other 62
+    blobs through, and the first sign of trouble would have been junk in the
+    admin's tag list. Length is still checked second, because a term that
+    overflows without a '#' is unexpected junk that would otherwise abort the
+    whole import with a DataError at the database layer.
+    """
+    name = term.get("name") or ""
+    slug = term.get("slug") or ""
+    if "#" in name:
+        return "hashtag blob — re-tag by hand in WooCommerce, then re-import"
+    name_max = Tag._meta.get_field("name").max_length
+    slug_max = Tag._meta.get_field("slug").max_length
+    if len(name) > name_max or len(slug) > slug_max:
+        return f"too long (name {len(name)}/{name_max}, slug {len(slug)}/{slug_max})"
+    return None
+
+
+def import_tags(data) -> tuple[int, list[dict]]:
     """WP product_tag terms -> Tag, keyed on slug.
 
     Tag has no legacy_wp_id, so slug is the only stable identity we have.
     update_or_create (not get_or_create) so a tag renamed in WordPress
     between rehearsal and cutover has its name refreshed here too, instead
     of being created once and left stale forever.
+
+    Returns (imported_count, skipped) -- see tag_skip_reason. Skipped terms are
+    reported, never truncated: a truncated tag is a *different* tag that would
+    then be indistinguishable from a real one on the next run.
     """
     terms = [t for t in data["terms"] if t["taxonomy"] == "product_tag"]
+    imported = 0
+    skipped: list[dict] = []
     for t in terms:
+        reason = tag_skip_reason(t)
+        if reason:
+            logger.warning("Skipping product_tag %r: %s", (t.get("name") or "")[:60], reason)
+            skipped.append({**t, "skip_reason": reason})
+            continue
         Tag.objects.update_or_create(slug=t["slug"], defaults={"name": t["name"]})
-    return len(terms)
+        imported += 1
+    return imported, skipped

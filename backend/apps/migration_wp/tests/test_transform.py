@@ -1,4 +1,14 @@
-from apps.migration_wp.transform import clean_description
+from apps.migration_wp.transform import (
+    append_benefits,
+    clean_description,
+    collect_attachment_ids,
+    generate_sku,
+    ordered_attachment_ids,
+    parse_benefits,
+    parse_option_values,
+    parse_testimonials,
+    parse_usps,
+)
 
 
 def test_strips_editor_data_attributes():
@@ -19,14 +29,6 @@ def test_preserves_real_markup():
 def test_empty_input_returns_empty_string():
     assert clean_description("") == ""
     assert clean_description(None) == ""
-
-
-from apps.migration_wp.transform import (
-    append_benefits,
-    parse_benefits,
-    parse_testimonials,
-    parse_usps,
-)
 
 
 def test_parse_benefits_splits_on_double_space():
@@ -122,9 +124,6 @@ def test_parse_testimonials_tolerates_non_numeric_quantity():
     assert parse_testimonials(meta)[0]["qty_bought"] is None
 
 
-from apps.migration_wp.transform import generate_sku, parse_option_values
-
-
 def test_generate_sku_prefers_real_sku():
     assert generate_sku(existing_sku="TOKE-SHEA-50", wp_id=1234) == "TOKE-SHEA-50"
 
@@ -189,9 +188,6 @@ def test_parse_option_values_merges_multiple_axes():
         "Price Options": "Single",
         "Shea Variant": "Unscented",
     }
-
-
-from apps.migration_wp.transform import collect_attachment_ids, ordered_attachment_ids
 
 
 def test_collects_thumbnail_gallery_and_acf_ids_deduped_and_sorted():
