@@ -11,9 +11,11 @@ import re
 
 # Editor paste artifacts: <p data-start="162" data-end="542">
 _DATA_ATTR_RE = re.compile(r'\s+data-(?:start|end)="[^"]*"')
+_NBSP_RE = re.compile(r"(&nbsp;| )")
+
+
 _BENEFIT_SPLIT_RE = re.compile(r"\s{2,}")
 _TESTIMONIAL_SLOTS = (1, 2, 3)
-_NBSP_RE = re.compile(r"(&nbsp;| )")
 
 
 def clean_description(html: str | None) -> str:
