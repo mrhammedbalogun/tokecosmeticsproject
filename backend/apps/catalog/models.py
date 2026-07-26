@@ -14,6 +14,7 @@ class Category(TimeStampedModel):
     image = models.ImageField(upload_to="catalog/categories/", blank=True, null=True)
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
+    legacy_wp_id = models.IntegerField(null=True, blank=True, db_index=True)
     seo_title = models.CharField(max_length=255, blank=True)
     seo_description = models.TextField(blank=True)
 
@@ -109,6 +110,13 @@ class Product(TimeStampedModel):
     published_at = models.DateTimeField(null=True, blank=True)
     legacy_source = models.CharField(max_length=50, blank=True)
     legacy_wp_id = models.IntegerField(null=True, blank=True)
+    # Plan-21: marketing content migrated from WooCommerce ACF fields.
+    # usps: ["Daily hydration, all-day softness.", ...]
+    usps = models.JSONField(default=list, blank=True)
+    # testimonials: [{"name":.., "text":.., "skin_concern":.., "qty_bought":..}]
+    # NOT reviews — these carry no rating and must never touch rating_avg/rating_count
+    # or the schema.org aggregateRating in storefront/src/lib/seo.ts.
+    testimonials = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ["-published_at", "name"]

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.wishlist",
     "apps.reviews",
     "apps.newsletter",
+    "apps.migration_wp",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -272,3 +273,14 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 86400.0,  # daily — the grace window is measured in days
     },
 }
+
+# --- WordPress migration source (Plan-21) ---
+# Deliberately unset in normal operation: credentials are passed per-invocation to
+# `extract_wp_catalog` only, against a MariaDB user granted SELECT on five wp_* tables
+# and nothing else. `import_catalog` never reads these.
+WP_DB_HOST = env("WP_DB_HOST", default="")
+WP_DB_PORT = env.int("WP_DB_PORT", default=3306)
+WP_DB_NAME = env("WP_DB_NAME", default="")
+WP_DB_USER = env("WP_DB_USER", default="")
+WP_DB_PASSWORD = env("WP_DB_PASSWORD", default="")
+WP_TABLE_PREFIX = env("WP_TABLE_PREFIX", default="wp_")
