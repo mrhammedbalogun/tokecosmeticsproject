@@ -356,6 +356,54 @@ def test_orphaned_variant_is_deactivated_not_deleted_and_default_stays_singular(
     assert "orphan_variants: 1" in out.getvalue()
 
 
+def test_products_with_a_blank_slug_are_skipped_not_merged(artifact_path):
+    """Two live drafts ("Nature's Root Hair Growth System (Copy)", wp ids 14089
+    and 14090) carry an empty post_name. Product.slug is unique, so the second
+    one's slug-adoption fallback matched the first one's row and overwrote its
+    legacy_wp_id -- two distinct WordPress products silently collapsing into
+    one, with one identity destroyed and the pair flip-flopping on every re-run.
+
+    A product with no post_name has no URL on the live site either, so it is
+    skipped and reported rather than given an invented slug."""
+    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+    template = dict(data["products"][0])
+    for wp_id in (14089, 14090):
+        data["products"].append(
+            {**template, "ID": wp_id, "slug": "", "post_title": "Untitled Copy",
+             "post_status": "draft"}
+        )
+    artifact_path.write_text(json.dumps(data), encoding="utf-8")
+
+    out = io.StringIO()
+    call_command("import_catalog", str(artifact_path), "--skip-media", stdout=out)
+
+    assert not Product.objects.filter(legacy_wp_id=14089).exists()
+    assert not Product.objects.filter(legacy_wp_id=14090).exists()
+    assert not Product.objects.filter(slug="").exists()
+    assert "skipped_no_slug: 2" in out.getvalue()
+
+
+def test_iso_dates_from_the_real_extract_are_parsed(artifact_path):
+    """The extract writes datetimes through .isoformat(), so every real
+    post_date_gmt arrives T-separated ('2025-11-24T09:06:28'). This fixture is
+    hand-written with MySQL's space separator, which is why 100% of these tests
+    passed while 100% of live products would have imported with published_at
+    NULL. Assert the format the extract actually emits."""
+    data = json.loads(artifact_path.read_text(encoding="utf-8"))
+    for row in data["products"]:
+        if row["ID"] == 101:
+            row["post_date_gmt"] = "2025-11-24T09:06:28"
+    artifact_path.write_text(json.dumps(data), encoding="utf-8")
+
+    call_command("import_catalog", str(artifact_path), "--skip-media")
+
+    p = Product.objects.get(legacy_wp_id=101)
+    assert p.published_at is not None, "T-separated ISO dates must parse"
+    assert p.published_at.year == 2025
+    assert p.published_at.hour == 9
+    assert p.published_at.tzinfo is not None
+
+
 def test_unparseable_post_date_does_not_abort_import(artifact_path):
     """WordPress stores "0000-00-00 00:00:00" for unset dates -- truthy, so it must
     not silently raise ValueError and abort the whole atomic import."""

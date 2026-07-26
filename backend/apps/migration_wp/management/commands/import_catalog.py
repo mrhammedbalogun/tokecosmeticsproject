@@ -65,11 +65,11 @@ class Command(BaseCommand):
         with transaction.atomic():
             cats, orphans = import_categories(data)
             tags, skipped_tags = import_tags(data)
-            products = import_products(data)
+            products, skipped_no_slug = import_products(data)
             variants, orphan_variants = import_variants_and_prices(data, self.skip_prices)
             summary = (
                 f"categories: {cats}  tags: {tags} ({len(skipped_tags)} skipped)  "
-                f"orphan_parent_refs: {orphans}  "
+                f"orphan_parent_refs: {orphans}  skipped_no_slug: {skipped_no_slug}  "
                 f"products: {products}  variants: {variants}  "
                 f"orphan_variants: {orphan_variants}"
             )
