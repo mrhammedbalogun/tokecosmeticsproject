@@ -133,3 +133,32 @@ def parse_option_values(
         taxonomy = axis[len("attribute_"):] if axis.startswith("attribute_") else axis
         out[_axis_label(axis)] = term_names.get((taxonomy, value), value)
     return out
+
+
+_ACF_IMAGE_KEYS = [f"Small_Image_{i}" for i in range(1, 5)] + [
+    f"Medium_Image_{i}" for i in range(1, 3)
+]
+
+
+def collect_attachment_ids(product_ids: list[int], meta: dict[int, dict[str, str]]) -> list[int]:
+    """Thumbnail + gallery + the ACF Small_Image_*/Medium_Image_* slots.
+
+    The ACF image fields hold attachment IDs, not URLs (verified 2026-07-25).
+    Pure logic over WooCommerce/ACF naming and comma-separated gallery format —
+    no SQL, no ORM — so it belongs alongside the rest of this module's meta
+    parsing rather than living in the extract command.
+    """
+    ids: set[int] = set()
+    for pid in product_ids:
+        m = meta.get(pid, {})
+        if (m.get("_thumbnail_id") or "").strip().isdigit():
+            ids.add(int(m["_thumbnail_id"]))
+        gallery = (m.get("_product_image_gallery") or "").strip()
+        for part in gallery.split(","):
+            if part.strip().isdigit():
+                ids.add(int(part.strip()))
+        for key in _ACF_IMAGE_KEYS:
+            val = (m.get(key) or "").strip()
+            if val.isdigit():
+                ids.add(int(val))
+    return sorted(ids)
