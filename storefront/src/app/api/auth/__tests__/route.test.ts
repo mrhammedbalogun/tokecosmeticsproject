@@ -34,13 +34,65 @@ function upstream(status: number, body: unknown) {
     new Response(nullBody ? null : JSON.stringify(body), { status, headers: { "content-type": "application/json" } }),
   ) as unknown as typeof fetch;
 }
-function req(body: unknown) {
+function req(body: unknown, headers: Record<string, string> = {}) {
   return new Request("http://localhost:3000/api/auth/login", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      // Browsers always send Origin on POST; the handler rejects requests without a
+      // matching one (session fixation). Real callers are all same-origin fetches.
+      origin: "http://localhost:3000",
+      host: "localhost:3000",
+      ...headers,
+    },
     body: JSON.stringify(body),
   });
 }
+
+describe("auth BFF — same-origin gate", () => {
+  // A cross-site form POST with the ATTACKER's credentials would otherwise get our
+  // Set-Cookie response, logging the victim into the attacker's account; mergeGuestCart
+  // then folds the victim's bag into it. SameSite=Lax does not prevent this, because
+  // the attack needs no existing cookie — it is the response that does the damage.
+  it("rejects a cross-site origin without calling upstream or setting cookies", async () => {
+    upstream(200, { access: "AAA", refresh: "RRR" });
+    const res = await POST(
+      req({ email: "attacker@evil.com", password: "pw" }, { origin: "https://evil.example" }),
+      { params: Promise.resolve({ action: "login" }) },
+    );
+    expect(res.status).toBe(403);
+    expect(setSpy).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a POST with no Origin header at all", async () => {
+    upstream(200, { access: "AAA", refresh: "RRR" });
+    const bare = new Request("http://localhost:3000/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json", host: "localhost:3000" },
+      body: JSON.stringify({ email: "a@b.com", password: "pw" }),
+    });
+    const res = await POST(bare, { params: Promise.resolve({ action: "login" }) });
+    expect(res.status).toBe(403);
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it("honours x-forwarded-host, since Vercel terminates in front of the handler", async () => {
+    upstream(200, { access: "AAA", refresh: "RRR" });
+    const fwd = new Request("http://internal/api/auth/login", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://next.tokecosmetics.com",
+        host: "internal",
+        "x-forwarded-host": "next.tokecosmetics.com",
+      },
+      body: JSON.stringify({ email: "a@b.com", password: "pw" }),
+    });
+    const res = await POST(fwd, { params: Promise.resolve({ action: "login" }) });
+    expect(res.status).toBe(200);
+  });
+});
 
 describe("auth BFF", () => {
   it("login stores access+refresh cookies and does NOT leak tokens in the body", async () => {

@@ -10,8 +10,18 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.notifications.tasks import send_email_task
+
+from .throttling import (
+    LoginBurstThrottle,
+    LoginSustainedThrottle,
+    PasswordResetEmailThrottle,
+    PasswordResetIPThrottle,
+    RegisterEmailThrottle,
+    RegisterIPThrottle,
+)
 
 from .serializers import (
     AccountDeletionSerializer,
@@ -28,9 +38,23 @@ from .serializers import (
 User = get_user_model()
 
 
+class LoginView(TokenObtainPairView):
+    """`/auth/token/` with throttles attached.
+
+    Stock `TokenObtainPairView` carried only the global anon rate, which was bypassable
+    by rotating X-Forwarded-For. Listing throttle_classes here REPLACES the global
+    default for this view, which is intended: both classes below are spoof-resistant.
+    """
+
+    throttle_classes = [LoginBurstThrottle, LoginSustainedThrottle]
+
+
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+    # IP first: it is the cap that protects the sending domain. The email throttle only
+    # stops one address being spammed repeatedly; it cannot stop volume.
+    throttle_classes = [RegisterIPThrottle, RegisterEmailThrottle]
 
     def perform_create(self, serializer):
         from django.conf import settings
@@ -140,6 +164,7 @@ class LogoutView(APIView):
 class PasswordResetView(APIView):
     permission_classes = [permissions.AllowAny]
     serializer_class = PasswordResetSerializer
+    throttle_classes = [PasswordResetIPThrottle, PasswordResetEmailThrottle]
 
     @extend_schema(request=PasswordResetSerializer, responses={200: None})
     def post(self, request):

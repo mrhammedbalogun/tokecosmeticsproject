@@ -161,9 +161,13 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 24,
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+    # Our own subclasses, NOT rest_framework.throttling.*: DRF's get_ident keys on the
+    # whole X-Forwarded-For chain when NUM_PROXIES is unset, so a rotating junk prefix
+    # mints a fresh bucket per request. Swapping the DEFAULTS (not just the auth views)
+    # is what closes that bypass project-wide. See apps/accounts/throttling.py.
     "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
+        "apps.accounts.throttling.AnonRateThrottle",
+        "apps.accounts.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/min",
@@ -172,6 +176,16 @@ REST_FRAMEWORK = {
         "suggest": "60/min",
         "cart": "120/min",
         "newsletter": "5/min",
+        # Auth. Email-keyed unless the name says _ip. Two windows on login so that
+        # pacing just under the burst rate does not buy an attacker unlimited time.
+        "login_burst": "5/min",
+        "login_sustained": "20/hour",
+        # Registration mails the submitted address. register_ip is the volume cap and
+        # the one that actually protects the sending domain's reputation.
+        "register_ip": "10/hour",
+        "register_email": "3/hour",
+        "password_reset_email": "5/hour",
+        "password_reset_ip": "10/hour",
     },
 }
 
