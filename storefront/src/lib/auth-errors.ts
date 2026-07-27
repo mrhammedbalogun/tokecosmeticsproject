@@ -30,6 +30,47 @@ function fieldMessages(body: ErrorBody): string[] {
     );
 }
 
+export interface RegisterError {
+  message: string;
+  /** True when the address already has an account, so the page can offer sign-in. */
+  emailTaken: boolean;
+}
+
+/**
+ * Registration errors, which are shaped differently from sign-in errors on purpose.
+ *
+ * Registration unavoidably reveals whether an address is taken — `RegisterSerializer`
+ * answers "Account already exists" and no wording on our side can hide it. Given that,
+ * pretending otherwise only produces an error the user cannot act on, so a duplicate is
+ * reported as its own outcome and the page offers to sign in instead. (Sign-in errors stay
+ * deliberately uniform; see `loginErrorMessage`.)
+ *
+ * Django's password validators ARE echoed verbatim: "must contain at least 8 characters"
+ * is exactly the instruction the user needs.
+ */
+export function registerErrorMessage(status: number, body: unknown): RegisterError {
+  if (status === 429) return { message: THROTTLED, emailTaken: false };
+
+  const shape: ErrorBody = body && typeof body === "object" ? (body as ErrorBody) : {};
+
+  if (status === 400) {
+    const emailMessages = Array.isArray(shape.email)
+      ? shape.email.filter((v): v is string => typeof v === "string")
+      : [];
+    if (emailMessages.some((m) => /already exists/i.test(m))) {
+      return {
+        message: "An account with this email already exists.",
+        emailTaken: true,
+      };
+    }
+    const messages = fieldMessages(shape);
+    if (messages.length) return { message: messages.join(" "), emailTaken: false };
+    if (typeof shape.detail === "string") return { message: shape.detail, emailTaken: false };
+  }
+
+  return { message: UNEXPECTED, emailTaken: false };
+}
+
 export function loginErrorMessage(status: number, body: unknown): string {
   // Identical copy for every credential rejection — see the file comment.
   if (status === 401 || status === 403) return REJECTED;

@@ -9,7 +9,9 @@ const jar = {
   delete: (n: string) => deleteSpy(n),
 };
 
-import { clearTokens, establishSession, type Jar } from "@/lib/auth-session";
+import {
+  clearTokens, establishSession, registerSession, type Jar,
+} from "@/lib/auth-session";
 
 /** The real Jar is Next's cookie store (iterable, getAll, size…); these tests only
  * exercise get/set/delete, so the stub goes through `unknown` deliberately. */
@@ -121,6 +123,59 @@ describe("establishSession", () => {
     await expect(
       establishSession(asJar, { email: "a@b.com", password: "bad" }),
     ).rejects.toMatchObject({ status: 401 });
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("registerSession", () => {
+  it("creates the account and then signs the user straight in", async () => {
+    // Django's register endpoint does NOT return tokens, so registration is two calls.
+    // Both surfaces (the /register Server Action and the JSON BFF) must do the same two,
+    // in the same order, with the same merge afterwards — hence one shared function.
+    const f = upstreamOk();
+
+    await registerSession(asJar, {
+      email: "a@b.com", password: "pw", first_name: "A", last_name: "B",
+    });
+
+    const urls = f.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.endsWith("/auth/register/"))).toBe(true);
+    expect(urls.some((u) => u.endsWith("/auth/token/"))).toBe(true);
+    expect(urls.indexOf(urls.find((u) => u.endsWith("/auth/register/"))!))
+      .toBeLessThan(urls.indexOf(urls.find((u) => u.endsWith("/auth/token/"))!));
+    expect(setSpy).toHaveBeenCalledWith("access", "AAA");
+    expect(setSpy).toHaveBeenCalledWith("refresh", "RRR");
+  });
+
+  it("merges the guest cart, exactly like signing in does", async () => {
+    store.set("cart_id", "guest-cart-1");
+    const f = upstreamOk();
+
+    await registerSession(asJar, { email: "a@b.com", password: "pw", first_name: "A" });
+
+    expect(f.mock.calls.some((c) => String(c[0]).includes("/cart/merge/"))).toBe(true);
+  });
+
+  it("does not attempt a login when registration itself is rejected", async () => {
+    // A duplicate email must surface as the register error, not be followed by a login
+    // attempt against a password that may belong to someone else's account.
+    const f = vi.fn((url: string) => {
+      if (String(url).endsWith("/auth/register/")) {
+        return Promise.resolve(new Response(JSON.stringify({ email: ["Account already exists"] }), {
+          status: 400, headers: { "content-type": "application/json" },
+        }));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ access: "AAA", refresh: "RRR" }), {
+        status: 200, headers: { "content-type": "application/json" },
+      }));
+    });
+    global.fetch = f as unknown as typeof fetch;
+
+    await expect(
+      registerSession(asJar, { email: "a@b.com", password: "pw", first_name: "A" }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    expect(f.mock.calls.some((c) => String(c[0]).endsWith("/auth/token/"))).toBe(false);
     expect(setSpy).not.toHaveBeenCalled();
   });
 });

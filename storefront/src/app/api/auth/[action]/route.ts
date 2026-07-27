@@ -1,7 +1,9 @@
 import { cookies } from "next/headers";
 import { apiFetch, ApiError } from "@/lib/api";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth";
-import { clearTokens, establishSession, setTokens } from "@/lib/auth-session";
+import {
+  clearTokens, establishSession, registerSession, setTokens,
+} from "@/lib/auth-session";
 
 type Action = "login" | "register" | "logout" | "refresh" | "me";
 
@@ -33,9 +35,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
         return json({ ok: true });
       }
       case "register": {
-        // Django register does NOT return tokens; create the account, then log in.
-        await apiFetch("/auth/register/", { method: "POST", body });
-        await establishSession(jar, { email: body.email, password: body.password });
+        // Django register does NOT return tokens; registerSession creates the account and
+        // then logs in. Shared with the /register Server Action so the two cannot drift.
+        await registerSession(jar, body);
         return json({ ok: true }, 201);
       }
       case "logout": {

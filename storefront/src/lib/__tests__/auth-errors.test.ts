@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loginErrorMessage } from "@/lib/auth-errors";
+import { loginErrorMessage, registerErrorMessage } from "@/lib/auth-errors";
 
 describe("loginErrorMessage", () => {
   it("gives ONE message for a rejected credential, whatever the backend said", () => {
@@ -55,5 +55,43 @@ describe("loginErrorMessage", () => {
     // A 500 body is not a user-facing message and may carry internals.
     expect(loginErrorMessage(500, { detail: "psycopg.OperationalError at /auth/token/" }))
       .not.toMatch(/psycopg/);
+  });
+});
+
+describe("registerErrorMessage", () => {
+  it("flags a duplicate email as a distinct outcome the page can act on", () => {
+    // Registration unavoidably reveals whether an address is taken — the backend says
+    // "Account already exists" and no UI wording can hide that. So unlike login, the
+    // honest thing is to detect it and offer to sign in instead of hiding it behind a
+    // vague error the user cannot act on.
+    const out = registerErrorMessage(400, { email: ["Account already exists"] });
+    expect(out.emailTaken).toBe(true);
+  });
+
+  it("does not mistake an ordinary email validation error for a duplicate", () => {
+    const out = registerErrorMessage(400, { email: ["Enter a valid email address."] });
+    expect(out.emailTaken).toBe(false);
+    expect(out.message).toBe("Enter a valid email address.");
+  });
+
+  it("surfaces Django's password rules verbatim — they tell the user what to fix", () => {
+    const out = registerErrorMessage(400, {
+      password: ["This password is too short. It must contain at least 8 characters.",
+                 "This password is too common."],
+    });
+    expect(out.message).toContain("at least 8 characters");
+    expect(out.message).toContain("too common");
+  });
+
+  it("reports a throttled attempt as such", () => {
+    expect(registerErrorMessage(429, { detail: "Request was throttled." }).message)
+      .toMatch(/too many/i);
+  });
+
+  it("falls back without echoing upstream internals on a 5xx", () => {
+    const out = registerErrorMessage(500, { detail: "psycopg.OperationalError" });
+    expect(out.message).toMatch(/went wrong/i);
+    expect(out.message).not.toMatch(/psycopg/);
+    expect(out.emailTaken).toBe(false);
   });
 });

@@ -97,3 +97,31 @@ export async function establishSession(
   await mergeGuestCart(jar, tokens.access);
   return tokens;
 }
+
+export interface RegisterPayload {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name?: string;
+  phone?: string;
+  marketing_consent?: boolean;
+}
+
+/**
+ * Create an account and sign the new user straight in.
+ *
+ * Two calls, because Django's register endpoint does not return tokens. Shared so the
+ * `/register` Server Action and the JSON BFF cannot drift apart on the order of
+ * operations or on the guest-cart merge.
+ *
+ * A rejected registration throws before any login is attempted — following a 400 with a
+ * token request would mean submitting the supplied password against an account that may
+ * belong to somebody else (the usual 400 here is "Account already exists").
+ */
+export async function registerSession(
+  jar: Jar,
+  payload: RegisterPayload,
+): Promise<TokenPair> {
+  await apiFetch("/auth/register/", { method: "POST", body: payload });
+  return establishSession(jar, { email: payload.email, password: payload.password });
+}
