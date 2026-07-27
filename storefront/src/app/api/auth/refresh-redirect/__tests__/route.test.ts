@@ -88,6 +88,41 @@ describe("refresh-redirect", () => {
     expect(res.headers.get("location")).toBe("http://localhost:3000/login?next=%2Faccount");
   });
 
+  it("does NOT destroy the session when the API is merely unreachable", async () => {
+    // A bare catch treated every failure as "token dead". So a 502, a timeout, or a
+    // deploy blip logged out every user whose access token happened to be stale during
+    // it — throwing away a valid 14-day refresh token over a transient error.
+    // The loop stays impossible: the next attempt either succeeds or 401s properly.
+    store.set("refresh", "STILL-GOOD-R");
+    mockRefresh(502, { detail: "Bad gateway" });
+
+    const res = await call("%2Faccount");
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe("http://localhost:3000/login?next=%2Faccount");
+  });
+
+  it("does NOT destroy the session when the refresh call throws outright", async () => {
+    // Network-level failure (DNS, connection refused) — not an ApiError at all.
+    store.set("refresh", "STILL-GOOD-R");
+    global.fetch = vi.fn(() => Promise.reject(new Error("ECONNREFUSED"))) as unknown as typeof fetch;
+
+    const res = await call("%2Faccount");
+
+    expect(deleteSpy).not.toHaveBeenCalled();
+    expect(res.headers.get("location")).toBe("http://localhost:3000/login?next=%2Faccount");
+  });
+
+  it("DOES clear on a 400, which is how SimpleJWT reports a spent token", async () => {
+    store.set("refresh", "DEAD-R");
+    mockRefresh(400, { detail: "Token is invalid or expired" });
+
+    await call("%2Faccount");
+
+    expect(deleteSpy).toHaveBeenCalledWith("refresh");
+    expect(deleteSpy).toHaveBeenCalledWith("access");
+  });
+
   it("refuses to redirect off-site even after a successful refresh", async () => {
     store.set("refresh", "OLD-R");
     mockRefresh(200, { access: "NEW-A", refresh: "NEW-R" });

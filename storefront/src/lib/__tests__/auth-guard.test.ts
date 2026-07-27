@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideAuth } from "@/lib/auth-guard";
+import { decideAuth, decideLoginEntry } from "@/lib/auth-guard";
 
 /**
  * The decision is kept pure and separate from the redirect that acts on it, because
@@ -53,6 +53,54 @@ describe("decideAuth", () => {
     expect(decideAuth(undefined, undefined, "/account/orders?page=2")).toEqual({
       kind: "login",
       to: "/login?next=%2Faccount%2Forders%3Fpage%3D2",
+    });
+  });
+});
+
+/**
+ * The login page asks a DIFFERENT question from decideAuth, which is why this is a
+ * separate function rather than a reuse of it.
+ *
+ * `decideAuth` answers "may this request proceed?" for a gated page, where an access
+ * token alone is enough to attempt the fetch. The login page answers "should I skip the
+ * form?" — and there, an access cookie alone is NOT enough, because the proxy gate keys
+ * on the REFRESH cookie (`src/proxy.ts:40`). Skipping the form for an access-only
+ * visitor sends them to /account, which the proxy bounces straight back to /login,
+ * which skips the form again: an infinite redirect that never touches the API.
+ */
+describe("decideLoginEntry", () => {
+  it("skips the form only when BOTH cookies are present", () => {
+    expect(decideLoginEntry("a-token", "r-token", "/account/orders")).toEqual({
+      kind: "go",
+      to: "/account/orders",
+    });
+  });
+
+  it("shows the form for an access cookie with no refresh — the redirect-loop case", () => {
+    // proxy.ts:40 redirects /account* to /login whenever the refresh cookie is absent.
+    // Honouring the access cookie here would ping-pong the visitor forever, and no API
+    // call is involved so nothing would ever break the cycle.
+    expect(decideLoginEntry("a-token", undefined, "/account")).toEqual({ kind: "form" });
+  });
+
+  it("shows the form when there is no session at all", () => {
+    expect(decideLoginEntry(undefined, undefined, "/account")).toEqual({ kind: "form" });
+  });
+
+  it("renews instead of asking for a password when only the refresh survives", () => {
+    // The rotation-race heal: the loser of a concurrent refresh arrives with a live
+    // refresh and no access. Prompting for a password there is the bug this fixes.
+    expect(decideLoginEntry(undefined, "r-token", "/account/orders")).toEqual({
+      kind: "renew",
+      to: "/api/auth/refresh-redirect?next=%2Faccount%2Forders",
+    });
+  });
+
+  it("never round-trips an off-site destination", () => {
+    expect(decideLoginEntry("a", "r", "//evil.example")).toEqual({ kind: "go", to: "/account" });
+    expect(decideLoginEntry(undefined, "r", "https://evil.example")).toEqual({
+      kind: "renew",
+      to: "/api/auth/refresh-redirect?next=%2Faccount",
     });
   });
 });

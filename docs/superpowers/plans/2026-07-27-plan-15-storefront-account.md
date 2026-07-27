@@ -168,7 +168,57 @@ NEXT_REDIRECT swallowing, open redirect.
    test or smoke check; and a stale-session user briefly sees the page shell before bouncing.
    **Still unverified (Fable's open question):** the same bounce during a *soft* client-side
    navigation. Nothing links to a gated page yet, so verify it in the 15b walkthrough.
-5. Login page — full build, `?next=`, already-authed short-circuit.
+5. ~~Login page — full build, `?next=`, already-authed short-circuit.~~ **DONE 2026-07-26.**
+
+   **Built as a Server Function, not a client fetch to the auth BFF.** The deciding reason
+   is navigation, not progressive enhancement: `redirect()` in a Server Action serves a 303
+   and streams the destination's payload in the *same* response (`redirect.md:11`,
+   `server-actions.md:48`), so the landing page renders *after* the cookies are staged. The
+   client-fetch alternative has no correct sequence — `router.refresh()` returns void with
+   no completion signal, so a `push` cannot be ordered after it. Two things came free:
+   Next's `Origin`/`Host` CSRF check on every action (`server-actions.md:82`), which the
+   JSON BFF route does **not** have; and a form that works with JS off.
+   `api/auth/[action]` keeps its contract unchanged — checkout's `SignInStep` still uses it.
+
+   **`lib/auth-session.ts` is new and shared** (`setTokens`/`clearTokens`/`mergeGuestCart`/
+   `establishSession`). A Server Action cannot reuse the BFF route by fetching it —
+   `Set-Cookie` on a fetch response never reaches the outer response, so the user would
+   authenticate and stay logged out. Sharing the module is what keeps the guest-cart merge
+   to one implementation. Its country-cookie forwarding is now pinned by a test; it was
+   unpinned, which is exactly how an extraction loses it.
+
+   **`decideLoginEntry` is a SEPARATE function from `decideAuth`, deliberately.** Fable's
+   ruling suggested reusing `decideAuth` here; that would have shipped an infinite redirect,
+   and its own table contradicted it. `decideAuth` returns `authenticated` whenever an
+   access token is present, but `proxy.ts:40` gates `/account*` on the **refresh** cookie —
+   so honouring an access-only cookie sends the visitor to `/account`, the proxy sends them
+   back to `/login`, and round it goes, with no API call anywhere to break it. The rule is
+   **both cookies, or a form**; refresh-only renews via the bounce.
+
+   **Two defects fixed here because item 5 depends on them:**
+   - `ACCESS_MAX_AGE` was **30 min against a 15-min `ACCESS_TOKEN_LIFETIME`** — for half of
+     every session the browser held a token Django rejects, which would have made the
+     login short-circuit's happy path a guaranteed 401. Now 14 min, with a test asserting
+     the cookie always expires before the token it carries.
+   - `refresh-redirect`'s `catch` was bare, so a 502/timeout was treated as "token dead" and
+     destroyed a valid 14-day session for every user whose access token happened to be
+     stale during the blip. Now only SimpleJWT's own 400/401 clears cookies. Termination is
+     unaffected: a transient error retries, a real verdict clears.
+
+   **Verified live, not only in tests:** a genuine no-JS submit (parse the server-rendered
+   HTML, POST React's `$ACTION_*` fields as multipart, zero client JS) returned **303 +
+   `Set-Cookie: access, refresh`** and honoured `next` — so progressive enhancement is real,
+   which Fable had flagged as unverified. `https://evil.example/pwn` came back as `/account`.
+   With JS, submit soft-navigated to `/account/orders`; `document.cookie` showed no tokens
+   (httpOnly intact). All three entry states confirmed by cookie: access-only renders the
+   form, refresh-only emits the renewal bounce, neither renders the form.
+
+   **Also:** `(auth)` had no layout, so auth pages rendered with no header/footer and no way
+   back to the store. Added a minimal `(auth)/layout.tsx` — logo linked home, nothing else.
+   No "Forgot password?" link until item 7 builds that page; a visible 404 is worse.
+
+   **Deliberately NOT done: forwarding `X-Forwarded-For` from the auth BFF or the action.**
+   It looks like a rate-limit fix and is not one. See the security section below.
 6. Register page — full build, `?next=`; the existing BFF register action auto-logs-in.
 7. `forgot-password`, `reset-password`, `verify-email` pages.
 
@@ -189,6 +239,66 @@ it with PATCH/DELETE and the two set-default routes. Wishlist grid with add-to-c
 existing wishlist BFF.
 
 ---
+
+## LAUNCH-BLOCKING SECURITY GAP — its own slice, do before 15b (found 2026-07-26)
+
+Not caused by item 5 and not worsened by it; the exposure is live right now through
+checkout's `SignInStep` and through plain `curl`. It is separated out because the fix is
+Django throttle classes plus a Cloudflare rule, and bundling it into a storefront page
+would make that page's review about DRF internals.
+
+**`/auth/token/` has no effective rate limit at all.** Verified against the local API:
+
+| probe (80–70 attempts, junk credentials) | result |
+| --- | --- |
+| no `X-Forwarded-For` | first `429` at attempt **61** |
+| fixed spoofed `X-Forwarded-For` | first `429` at attempt **61** |
+| **rotating spoofed `X-Forwarded-For` prefix** | **0 × 429 in 80 — every guess allowed** |
+
+Why: `NUM_PROXIES` is unset, so DRF's `BaseThrottle.get_ident`
+(`rest_framework/throttling.py:29-40`) falls through to `''.join(xff.split())` — it keys on
+the **entire XFF chain as one string**. Rotate a junk prefix and every request gets a fresh
+bucket. `/auth/token/` is stock `TokenObtainPairView` (`accounts/urls.py:17`) with only the
+global `anon: 60/min`, and no scoped throttle.
+
+Three consequences, all confirmed:
+1. **Brute force / credential stuffing is unmetered** for anyone who posts straight to
+   `api.tokecosmetics.com` instead of going through the storefront.
+2. **Customers share one bucket.** Because the BFF proxies every login, Django sees the
+   Vercel egress IP, so legitimate shoppers contend for a single 60/min allowance — a
+   capacity risk independent of security.
+3. **The `password_reset: 5/min` throttle added in the previous slice is globalised**: five
+   forgotten passwords a minute for the whole store, *and* still bypassable by skipping the
+   storefront. Worse than it looked when it was added.
+
+**Forwarding XFF from the BFF is NOT the fix and must not be attempted.** `NUM_PROXIES` is
+one global number, but the two paths need different ones — direct-to-API puts the real
+client at `addrs[-2]`, via-BFF at `addrs[-3]`. At 2, BFF-forwarded XFF is ignored; at 3, a
+direct attacker forges any client IP, which is worse than today. Corollary worth knowing:
+the existing forwarding in `api/newsletter/route.ts:13-19` and `api/search/suggest/route.ts:15-20`
+only works by accident of whole-chain keying and breaks the moment anyone sets `NUM_PROXIES`.
+Its "prod must trust X-Forwarded-For" comment describes a fix that does not exist.
+
+**The fix, three pieces:**
+1. **Scoped throttle keyed on the submitted email, not the IP** — `SimpleRateThrottle`
+   subclass, `scope="login"`, `get_cache_key` → `throttle_login_<lower(email)>`, ~5/min plus
+   a slow window (20/hour). Immune to IP spoofing *and* to the BFF hop, because the key comes
+   from the request body. Same treatment for `password_reset`, where keying on the target
+   email is also the only key that actually protects the victim's inbox.
+2. **Custom `get_ident` preferring `CF-Connecting-IP`** for the residual IP-keyed throttles —
+   trustworthy *here specifically* because `infra/proxy/zz-api.conf:61-95` locks the origin to
+   Cloudflare. Verify empirically; `mod_remoteip` is not loaded, so Django must read it.
+3. **A Cloudflare rate-limiting rule on `/api/v1/auth/*`** — blocks the direct path before it
+   reaches Django. **Needs Hammed** (dashboard access), and while there, confirm whether any
+   rule exists today: `docs/runbooks/vps-stack.md:169-171` leans on Cloudflare rate limiting
+   as part of the security story and it is unverified.
+
+**Bundle with it:** the auth BFF route has **no `Origin` check**, so a cross-site form POST to
+`/api/auth/login` with attacker credentials is session fixation — the victim is logged into
+the attacker's account and `mergeGuestCart` then folds the victim's bag into it. `SameSite=Lax`
+does not help: the attack needs no existing cookie, and it is the *response's* `Set-Cookie`
+that does the damage. The new `/login` Server Action is already protected (Next checks
+`Origin` against `Host`); this is only the older JSON route, still used by checkout.
 
 ## Verification
 

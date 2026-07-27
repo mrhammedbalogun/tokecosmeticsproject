@@ -45,3 +45,39 @@ export function decideAuth(
   if (refresh) return { kind: "refresh", to: withNext(REFRESH_REDIRECT_PATH, currentPath) };
   return { kind: "login", to: withNext(LOGIN_PATH, currentPath) };
 }
+
+export type LoginEntry =
+  | { kind: "go"; to: string }
+  | { kind: "renew"; to: string }
+  | { kind: "form" };
+
+/**
+ * What the LOGIN PAGE should do for a visitor who already carries session cookies.
+ *
+ * A DIFFERENT QUESTION FROM `decideAuth`, which is why it is a different function.
+ * `decideAuth` answers "may this request proceed?" for a gated page — there an access
+ * token alone is enough, because the page is about to try a fetch that will tell the
+ * truth. The login page answers "should I skip the form?", and there an access cookie
+ * alone is NOT enough:
+ *
+ * `src/proxy.ts:40` redirects `/account*` to `/login` whenever the REFRESH cookie is
+ * absent. So skipping the form for an access-only visitor sends them to `/account`, the
+ * proxy sends them back to `/login`, and the page skips the form again — an infinite
+ * redirect with no API call anywhere in it to break the cycle. Both cookies, or a form.
+ *
+ * `renew` exists to heal the rotation race: the loser of a concurrent refresh
+ * (ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION) arrives holding a live refresh and
+ * no access. Asking that visitor for a password is precisely the bug being fixed. If the
+ * renewal itself fails, `api/auth/refresh-redirect/route.ts` clears BOTH cookies before
+ * returning here — which is what guarantees this terminates in a form rather than a loop.
+ */
+export function decideLoginEntry(
+  access: string | undefined,
+  refresh: string | undefined,
+  next: string,
+): LoginEntry {
+  const to = safeNext(next, DEFAULT_NEXT);
+  if (access && refresh) return { kind: "go", to };
+  if (refresh) return { kind: "renew", to: withNext(REFRESH_REDIRECT_PATH, next) };
+  return { kind: "form" };
+}

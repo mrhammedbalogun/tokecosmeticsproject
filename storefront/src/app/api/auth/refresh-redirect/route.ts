@@ -18,7 +18,7 @@
  */
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 import {
   ACCESS_COOKIE, ACCESS_MAX_AGE, REFRESH_COOKIE, REFRESH_MAX_AGE, cookieOptions,
 } from "@/lib/auth";
@@ -48,12 +48,23 @@ export async function GET(req: Request) {
       jar.set(REFRESH_COOKIE, out.refresh, cookieOptions({ maxAge: REFRESH_MAX_AGE }));
     }
     return NextResponse.redirect(new URL(next, url.origin), 303);
-  } catch {
-    // The refresh token is dead — expired, or blacklisted because a concurrent request
-    // rotated it first. Clear BOTH cookies: leaving the dead one in place would send the
-    // account gate straight back here, looping the user indefinitely.
-    jar.delete(ACCESS_COOKIE);
-    jar.delete(REFRESH_COOKIE);
+  } catch (e) {
+    // Distinguish "the token is dead" from "the API did not answer". This catch used to
+    // be bare, so a 502, a timeout or a deploy blip was treated as a dead token and threw
+    // away a VALID 14-day session for every user whose access token happened to be stale
+    // during the outage — a self-inflicted mass logout from a transient error.
+    //
+    // Only SimpleJWT's own verdicts destroy cookies: it answers 401 for a rejected token
+    // and 400 for one that is invalid or already spent (the rotation-race loser).
+    //
+    // Clearing on those is what makes the gate terminate: with both cookies gone, the
+    // login page's entry check falls through to the form instead of bouncing back here.
+    // Leaving them alone on a transient error does NOT reintroduce the loop — the next
+    // attempt either succeeds or returns a real 400/401, which clears them then.
+    if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
+      jar.delete(ACCESS_COOKIE);
+      jar.delete(REFRESH_COOKIE);
+    }
     return NextResponse.redirect(toLogin, 303);
   }
 }
