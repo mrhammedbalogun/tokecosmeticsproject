@@ -54,9 +54,14 @@ Two layers. The proxy is a cheap hint; **the real gate is each page's own data f
 
 1. **Proxy (presence theatre, ~5 lines).** Inside the existing `proxy()`: if the pathname starts
    with `/account` and there is no `refresh` cookie, redirect to `/login?next=<pathname>`.
-   **Gate on `refresh`, never on `access`** — `access` expires after 30 minutes while `refresh`
-   lasts 14 days, so gating on `access` would bounce a perfectly logged-in user to /login every
-   half hour. Buys: a logged-out visitor or crawler never renders eight dynamic pages, and a
+   **Gate on `refresh`, never on `access`** — the access cookie expires in **14 minutes**
+   (under its 15-minute token; it was wrongly 30 minutes until item 5 fixed it) while the
+   refresh **cookie** lasts 14 days, so gating on `access` would bounce a perfectly logged-in
+   user to /login every quarter hour. Note the distinction, because it matters in the other
+   direction too: the refresh **token** is valid 30 days (`base.py:176`) and the cookie is
+   deliberately shorter at 14 (`lib/auth.ts:18`, pinned by `auth.test.ts`). Cookies must
+   always expire *before* the tokens they carry — do not "tidy" the cookie up to 30 days, or
+   you recreate the access-cookie bug in reverse. Buys: a logged-out visitor or crawler never renders eight dynamic pages, and a
    direct URL hit gets a correct `?next=`. Nothing more; document it as such.
    The proxy must import only cookie-name constants — **never `lib/session.ts`.**
 
@@ -279,12 +284,29 @@ the existing forwarding in `api/newsletter/route.ts:13-19` and `api/search/sugge
 only works by accident of whole-chain keying and breaks the moment anyone sets `NUM_PROXIES`.
 Its "prod must trust X-Forwarded-For" comment describes a fix that does not exist.
 
+**`RegisterView` is in scope too** (`accounts/views.py:32-47`) — verified: no `throttle_classes`,
+so global anon only and the same XFF bypass. Worse than login, because `perform_create` fires
+`send_email_task.delay` to the **submitted** address: rotating XFF gives an attacker unlimited
+registrations, each mailing an arbitrary stranger from our domain. That is a spam cannon whose
+cost is `mg.tokecosmetics.com` getting blacklisted — which would silently break every order
+confirmation the store sends.
+
+**When this must be done — named triggers, not a vibe.** As of 2026-07-26 the production DB has
+**0 users, 0 orders** (69 products), so there is nothing to brute-force into *yet*. That is a
+snapshot, not an invariant: registration is already publicly reachable in production through
+checkout's `SignInStep`, so the count can change without any deploy. (A) must be complete
+before the FIRST of these:
+1. **Plan-22's legacy customer import** — the moment a known list of real addresses exists in
+   that DB, credential stuffing goes from theoretical to routine;
+2. **the first staff/superuser account** (Plan-17 admin work);
+3. **swapping `sk_test` for live Paystack keys** — real money behind the accounts.
+
 **The fix, three pieces:**
 1. **Scoped throttle keyed on the submitted email, not the IP** — `SimpleRateThrottle`
    subclass, `scope="login"`, `get_cache_key` → `throttle_login_<lower(email)>`, ~5/min plus
    a slow window (20/hour). Immune to IP spoofing *and* to the BFF hop, because the key comes
    from the request body. Same treatment for `password_reset`, where keying on the target
-   email is also the only key that actually protects the victim's inbox.
+   email is also the only key that actually protects the victim's inbox, and for `register`.
 2. **Custom `get_ident` preferring `CF-Connecting-IP`** for the residual IP-keyed throttles —
    trustworthy *here specifically* because `infra/proxy/zz-api.conf:61-95` locks the origin to
    Cloudflare. Verify empirically; `mod_remoteip` is not loaded, so Django must read it.

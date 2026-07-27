@@ -967,7 +967,12 @@ Expected: a list containing `https://next.tokecosmetics.com`.
 
 - [x] **Step 3: Redeploy the storefront** — Vercel → Deployments → Redeploy (env changes need a rebuild).
 
-- [ ] **Step 4: Verify products actually render — the real acceptance test**
+- [x] **Step 4: Verify products actually render — the real acceptance test**
+
+> **PASSES as of 2026-07-26** (recorded late; Plan-21's production migration unblocked it).
+> `curl https://next.tokecosmetics.com/products` yields **24 unique `/product/` links** (one
+> page at `PAGE_SIZE=24`), and the production API reports `"count": 68`. The blocker note
+> below is historical — leave it for the reasoning, but the number it was waiting for arrived.
 
 ```bash
 curl -s https://next.tokecosmetics.com/products | grep -c "product/"
