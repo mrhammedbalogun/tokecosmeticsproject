@@ -116,7 +116,24 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # Static -> whitenoise compressed manifest (only Django admin uses static files).
 AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="")
 AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="")
-AWS_QUERYSTRING_AUTH = False  # public product images under media/catalog/
+AWS_QUERYSTRING_AUTH = False  # stable unsigned URLs for product images under catalog/
+
+# Serve catalog media through a CDN hostname instead of the S3 endpoint.
+#
+# WHY THIS EXISTS. The bucket is private and must stay private: the nightly Postgres
+# backups live in it under `backups/` alongside `catalog/` (infra/deploy/backup.sh), so
+# making objects publicly readable would require switching Block Public Access off on the
+# bucket holding the database dumps — and versioning is currently disabled. CloudFront with
+# Origin Access Control reaches a private bucket without any of that, and its policy is
+# scoped to `catalog/*` so `backups/` stays unreachable even through the CDN.
+#
+# Set to the distribution hostname in prod (e.g. dxxxx.cloudfront.net). django-storages
+# then emits https://<domain>/<key>, which also fixes Open Graph and Product JSON-LD
+# images — those embed the raw URL and never touch Next's image optimizer, so a
+# storefront-only allowlist change would have left social previews broken.
+#
+# Empty by default, so dev and tests keep the plain S3/filesystem behaviour.
+AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default="")
 
 if AWS_STORAGE_BUCKET_NAME:
     AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
