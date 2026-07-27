@@ -6,6 +6,14 @@ function run(headers: Record<string, string> = {}) {
   return proxy(new NextRequest("http://localhost:3000/", { headers }));
 }
 
+function runAt(path: string, headers: Record<string, string> = {}) {
+  return proxy(new NextRequest(`http://localhost:3000${path}`, { headers }));
+}
+
+function location(res: ReturnType<typeof proxy>) {
+  return res.headers.get("location");
+}
+
 describe("proxy country + geo", () => {
   it("seeds the NG default cookie when none is present", () => {
     const res = run();
@@ -25,5 +33,49 @@ describe("proxy country + geo", () => {
     // The `x-middleware-request-*` prefix is a Next.js internal encoding for forwarded request
     // headers — if this breaks on a Next upgrade, the test is what changed, not the proxy.
     expect(res.headers.get("x-middleware-request-x-geo-country")).toBe("GB");
+  });
+});
+
+/**
+ * The proxy's account check is a cheap PRESENCE hint, not authorization — it cannot
+ * verify a token (Node runtime, no shared modules, may run at the CDN edge). Its only
+ * jobs are to stop rendering eight dynamic pages for an obviously logged-out visitor
+ * and to attach a correct `?next=` on a direct URL hit. The real gate is each page's
+ * own data fetch.
+ */
+describe("proxy account gate", () => {
+  it("redirects a visitor with no session to login, preserving where they were going", () => {
+    const res = runAt("/account/orders");
+    expect(location(res)).toBe("http://localhost:3000/login?next=%2Faccount%2Forders");
+  });
+
+  it("lets a visitor holding only a REFRESH cookie through", () => {
+    // THE 30-MINUTE TRAP. `access` lives 30 minutes, `refresh` 14 days. Gating on
+    // `access` would bounce a perfectly logged-in user to /login every half hour, even
+    // though their next request would have silently refreshed. Gate on `refresh`.
+    const res = runAt("/account/orders", { cookie: "refresh=r-token" });
+    expect(location(res)).toBeNull();
+  });
+
+  it("lets a fully authenticated visitor through", () => {
+    const res = runAt("/account", { cookie: "access=a-token; refresh=r-token" });
+    expect(location(res)).toBeNull();
+  });
+
+  it("does not gate non-account routes", () => {
+    expect(location(runAt("/products"))).toBeNull();
+    expect(location(runAt("/"))).toBeNull();
+  });
+
+  it("does not gate a route that merely starts with the same letters", () => {
+    // /accountants-special would otherwise be swept in by a naive startsWith("/account").
+    expect(location(runAt("/accountants-special"))).toBeNull();
+  });
+
+  it("still seeds the country cookie on a gated redirect", () => {
+    // The redirect must not cost a first-time visitor their market, or they come back
+    // from login with no country and the wrong prices.
+    const res = runAt("/account");
+    expect(res.cookies.get("country")?.value).toBe("NG");
   });
 });
