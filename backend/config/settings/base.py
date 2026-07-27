@@ -163,8 +163,12 @@ REST_FRAMEWORK = {
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     # Our own subclasses, NOT rest_framework.throttling.*: DRF's get_ident keys on the
     # whole X-Forwarded-For chain when NUM_PROXIES is unset, so a rotating junk prefix
-    # mints a fresh bucket per request. Swapping the DEFAULTS (not just the auth views)
-    # is what closes that bypass project-wide. See apps/accounts/throttling.py.
+    # mints a fresh bucket per request. See apps/accounts/throttling.py.
+    #
+    # This covers views that do NOT set throttle_classes. Any view that pins its own
+    # classes opts OUT of these defaults entirely -- DRF replaces, it does not merge --
+    # so such views must use apps.accounts.throttling.ScopedRateThrottle rather than the
+    # stock one, or they keep the bypass.
     "DEFAULT_THROTTLE_CLASSES": [
         "apps.accounts.throttling.AnonRateThrottle",
         "apps.accounts.throttling.UserRateThrottle",
@@ -176,16 +180,28 @@ REST_FRAMEWORK = {
         "suggest": "60/min",
         "cart": "120/min",
         "newsletter": "5/min",
-        # Auth. Email-keyed unless the name says _ip. Two windows on login so that
-        # pacing just under the burst rate does not buy an attacker unlimited time.
+        # Auth. Email-keyed unless the name says _ip.
+        #
+        # login_ip is the VOLUME cap and must stay listed first on LoginView: without it
+        # the email-keyed windows leave password spraying (one guess each against many
+        # addresses) completely unmetered, since no per-email counter is ever touched.
+        "login_ip": "30/min",
+        # Two windows per email. NOTE they are not independent: DRF's check_throttles
+        # does not short-circuit, so a request rejected by login_burst still records
+        # against login_sustained. 20 rapid attempts therefore spend the whole hour.
         "login_burst": "5/min",
         "login_sustained": "20/hour",
-        # Registration mails the submitted address. register_ip is the volume cap and
-        # the one that actually protects the sending domain's reputation.
-        "register_ip": "10/hour",
+        # The _ip rates below are DELIBERATELY loose. All storefront traffic egresses
+        # from Vercel, so these are shared by every customer at once -- at 10/hour they
+        # were a store-wide cap of ten signups and ten password resets per hour, which
+        # Plan-22's "imported customers, reset your password" wave would have hit within
+        # minutes. They are volume caps against the direct-to-API path, where the address
+        # is real, and the per-email rates below carry the anti-abuse weight for the
+        # shared path. See the caveat on _IPKeyedThrottle.
+        "register_ip": "60/hour",
         "register_email": "3/hour",
         "password_reset_email": "5/hour",
-        "password_reset_ip": "10/hour",
+        "password_reset_ip": "60/hour",
     },
 }
 

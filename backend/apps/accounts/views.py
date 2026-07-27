@@ -16,6 +16,7 @@ from apps.notifications.tasks import send_email_task
 
 from .throttling import (
     LoginBurstThrottle,
+    LoginIPThrottle,
     LoginSustainedThrottle,
     PasswordResetEmailThrottle,
     PasswordResetIPThrottle,
@@ -43,10 +44,12 @@ class LoginView(TokenObtainPairView):
 
     Stock `TokenObtainPairView` carried only the global anon rate, which was bypassable
     by rotating X-Forwarded-For. Listing throttle_classes here REPLACES the global
-    default for this view, which is intended: both classes below are spoof-resistant.
+    defaults -- DRF does not merge them -- so every cap this endpoint has must appear in
+    this list. `LoginIPThrottle` is first and is not optional: without it, password
+    spraying across many addresses touches no per-email counter and is unmetered.
     """
 
-    throttle_classes = [LoginBurstThrottle, LoginSustainedThrottle]
+    throttle_classes = [LoginIPThrottle, LoginBurstThrottle, LoginSustainedThrottle]
 
 
 class RegisterView(generics.CreateAPIView):

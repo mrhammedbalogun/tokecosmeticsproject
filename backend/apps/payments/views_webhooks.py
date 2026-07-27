@@ -21,6 +21,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 from apps.payments.gateways.base import InvalidSignature
+from apps.accounts.throttling import CloudflareIdentMixin, client_ip
 from apps.payments.gateways.registry import UnknownGateway, get_gateway
 from apps.payments.models import WebhookEvent
 from apps.payments.tasks import process_webhook_event
@@ -28,12 +29,18 @@ from apps.payments.tasks import process_webhook_event
 logger = logging.getLogger(__name__)
 
 
-class WebhookThrottle(SimpleRateThrottle):
+class WebhookThrottle(CloudflareIdentMixin, SimpleRateThrottle):
     scope = "payment_webhooks"
     rate = "600/min"  # generous on purpose — signature is the real gate, not the throttle
 
     def get_cache_key(self, request, view):
-        return f"webhook:{request.META.get('REMOTE_ADDR', '')}"
+        # REMOTE_ADDR is useless here: Apache reverse-proxies to 127.0.0.1 and mod_remoteip
+        # is deliberately not loaded (infra/proxy/zz-api.conf), so every request on the box
+        # shared ONE bucket. Since this throttle runs before parse_webhook checks the
+        # signature, anyone could have sent 600 unsigned POSTs a minute and 429'd every
+        # genuine gateway callback in that window — on the payment-confirmation path.
+        # Per-gateway as well as per-IP, so one noisy gateway cannot starve another.
+        return f"webhook:{view.kwargs.get('gateway', '?')}:{client_ip(request)}"
 
 
 class GatewayWebhookView(APIView):

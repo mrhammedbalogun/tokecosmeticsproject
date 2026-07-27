@@ -42,7 +42,9 @@ KNOWN RESIDUAL RISKS, recorded deliberately rather than papered over:
 """
 
 import hashlib
+import hmac
 
+from django.conf import settings
 from rest_framework import throttling
 
 
@@ -101,17 +103,54 @@ class _EmailKeyedThrottle(CloudflareIdentMixin, throttling.SimpleRateThrottle):
             if isinstance(raw, str):
                 email = raw.strip().lower()
         if email:
-            ident = "e:" + hashlib.md5(email.encode("utf-8")).hexdigest()  # noqa: S324
+            # KEYED hash, not a bare digest. An unkeyed hash of a low-entropy value is
+            # not privacy: anyone with Redis read access confirms a guessed address by
+            # hashing it. Keying on SECRET_KEY costs the same and actually delivers it.
+            # blake2b over md5 also avoids hashlib.md5() raising on FIPS-enabled builds,
+            # which would 500 every auth endpoint.
+            digest = hmac.new(
+                settings.SECRET_KEY.encode("utf-8"), email.encode("utf-8"), hashlib.blake2b
+            ).hexdigest()[:32]
+            ident = "e:" + digest
         else:
             ident = "i:" + self.get_ident(request)
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
 class _IPKeyedThrottle(CloudflareIdentMixin, throttling.SimpleRateThrottle):
-    """Scoped IP throttle that survives XFF rotation."""
+    """Scoped IP throttle that survives XFF rotation.
+
+    CAVEAT that governs every rate below. Storefront auth traffic reaches Django from
+    Vercel's egress addresses (the BFF calls the API server-side), so for those requests
+    `CF-Connecting-IP` is Vercel's NAT address, not the customer's — one bucket shared by
+    the whole shop. Only the direct-to-API path carries a real per-attacker address.
+
+    One number therefore has to serve two populations at once, and it cannot serve both
+    well. Rates here are set so they do NOT deny real customers, which means they are
+    looser than a pure anti-abuse number would be. The real fix is to have the BFF forward
+    the true client IP under a shared secret; until that exists, the Cloudflare edge rule
+    on the storefront's own /api/auth/* is the control that sees real client addresses.
+    """
 
     def get_cache_key(self, request, view):
         return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
+class LoginIPThrottle(_IPKeyedThrottle):
+    """Volume cap on login. MUST be listed first in LoginView.throttle_classes.
+
+    Why this exists: listing throttle_classes on a view REPLACES the global defaults
+    rather than merging, so the email-keyed classes alone left /auth/token/ with no
+    volume cap of any kind. Password spraying -- one attempt each against thousands of
+    addresses -- never touches a per-email counter, so it was entirely unmetered.
+    Verified against production before this class existed: 14 logins with 14 different
+    emails returned 14 x 401 and never a 429.
+
+    Listing it first also means it records before the email throttle reads request.data,
+    which can raise ParseError on a malformed body.
+    """
+
+    scope = "login_ip"
 
 
 # --- login -------------------------------------------------------------------
@@ -154,3 +193,13 @@ class PasswordResetEmailThrottle(_EmailKeyedThrottle):
 
 class PasswordResetIPThrottle(_IPKeyedThrottle):
     scope = "password_reset_ip"
+
+
+class ScopedRateThrottle(CloudflareIdentMixin, throttling.ScopedRateThrottle):
+    """Drop-in for DRF's ScopedRateThrottle with the XFF bypass closed.
+
+    Swapping DEFAULT_THROTTLE_CLASSES does NOT cover views that set throttle_classes
+    themselves -- search, carts and newsletter each pin stock ScopedRateThrottle, so they
+    kept the unfixed get_ident. Newsletter is the sharpest: nominally 5/min, unbounded
+    with a rotating XFF, and every request writes a NewsletterSubscriber row.
+    """

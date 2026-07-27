@@ -61,6 +61,37 @@ def test_rotating_xff_no_longer_buys_fresh_buckets(client, login_url):
 
 
 @pytest.mark.django_db
+def test_password_spraying_across_many_emails_is_capped(client, login_url):
+    """The hole that listing throttle_classes on LoginView originally opened.
+
+    DRF REPLACES the global defaults when a view sets throttle_classes, so the two
+    email-keyed windows left /auth/token/ with no volume cap: one guess each against
+    thousands of addresses touches no per-email counter. Verified unmetered against
+    production before LoginIPThrottle existed -- 14 emails, 14 x 401, never a 429.
+    """
+    codes = []
+    for i in range(36):
+        response = client.post(
+            login_url,
+            {"email": f"spray-{i}@example.com", "password": "Password123!"},
+            content_type="application/json",
+        )
+        codes.append(response.status_code)
+
+    assert 429 in codes, "password spraying across rotating emails was not capped"
+
+
+@pytest.mark.django_db
+def test_login_ip_throttle_is_listed_first(client, login_url):
+    """Order matters: the IP throttle must record before the email throttle reads
+    request.data, which can raise ParseError on a malformed body."""
+    from apps.accounts.throttling import LoginIPThrottle
+    from apps.accounts.views import LoginView
+
+    assert LoginView.throttle_classes[0] is LoginIPThrottle
+
+
+@pytest.mark.django_db
 def test_login_throttle_is_keyed_per_email_not_globally(client, login_url):
     """One account being hammered must not lock every other customer out."""
     for i in range(8):
@@ -91,15 +122,37 @@ def test_omitting_the_email_field_does_not_disable_the_throttle(client, login_ur
 # --- registration: the spam cannon -------------------------------------------
 
 
+@pytest.fixture
+def tight_register_ip_rate(monkeypatch):
+    """Pin register_ip low so the test asserts the CAP EXISTS without depending on the
+    configured number, which is deliberately loose (all storefront traffic shares one
+    Vercel egress IP, so a tight value would cap the whole shop).
+
+    Patching the class attribute, NOT django settings: DRF binds
+    `SimpleRateThrottle.THROTTLE_RATES = api_settings.DEFAULT_THROTTLE_RATES` at import
+    time, so a settings override never reaches an already-imported throttle class.
+    """
+    from apps.accounts.throttling import RegisterIPThrottle
+
+    monkeypatch.setattr(
+        RegisterIPThrottle,
+        "THROTTLE_RATES",
+        {**RegisterIPThrottle.THROTTLE_RATES, "register_ip": "5/hour"},
+    )
+    yield
+
+
 @pytest.mark.django_db
-def test_register_is_volume_capped_per_ip_even_with_rotating_emails(client, register_url):
+def test_register_is_volume_capped_per_ip_even_with_rotating_emails(
+    client, register_url, tight_register_ip_rate
+):
     """The email key cannot cap volume; the IP key must.
 
     RegisterView mails the SUBMITTED address, so unlimited registrations with rotating
     recipients is a spam cannon aimed at strangers from our own sending domain.
     """
     codes = []
-    for i in range(16):
+    for i in range(10):
         response = client.post(
             register_url,
             {
@@ -113,7 +166,7 @@ def test_register_is_volume_capped_per_ip_even_with_rotating_emails(client, regi
         codes.append(response.status_code)
 
     assert 429 in codes, "register accepted unlimited rotating-recipient signups from one IP"
-    assert codes.index(429) <= 11, "register_ip is 10/hour; expected the cap to bite by 11"
+    assert codes.index(429) <= 6, "register_ip pinned to 5/hour; expected the cap to bite by 6"
 
 
 @pytest.mark.django_db
