@@ -1,8 +1,64 @@
 # Runbook — turn on product images in production (CloudFront + OAC)
 
-**Who:** Hammed, in the AWS console. ~15 minutes of clicking, then a few minutes for
-CloudFront to deploy. This cannot be automated from the VPS: the `claude-access` IAM user
-has S3 permissions but **no CloudFront permissions**.
+**Who:** Hammed, in the AWS console — but see **Option B**, which reduces your part to one
+policy attachment and moves the error-prone step to Claude.
+
+Why it can't be fully automated today (verified 2026-07-27, not assumed):
+
+| Identity | CloudFront | IAM |
+| --- | --- | --- |
+| `claude-access` (on the VPS, account `899805259502`) | **AccessDenied** | **AccessDenied** — so it cannot grant itself more |
+| `cowva-dev-cli` (on Hammed's laptop) | **AccessDenied** | account **`120569621402`** — a different AWS account entirely, not TokeCosmetics |
+
+---
+
+## Option B (recommended) — one IAM attachment, then Claude does the rest
+
+Attach a CloudFront-only policy to `claude-access` and tell Claude. Claude then creates the
+OAC and the distribution, and hands you the **complete, final bucket policy JSON to paste
+verbatim — no editing**, which removes the one step in Option A you could get wrong.
+
+IAM console → Users → `claude-access` → Add permissions → Create inline policy → JSON:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "MediaCdnSetup",
+      "Effect": "Allow",
+      "Action": [
+        "cloudfront:CreateOriginAccessControl",
+        "cloudfront:GetOriginAccessControl",
+        "cloudfront:ListOriginAccessControls",
+        "cloudfront:CreateDistribution",
+        "cloudfront:GetDistribution",
+        "cloudfront:GetDistributionConfig",
+        "cloudfront:ListDistributions",
+        "cloudfront:TagResource"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Two things stated plainly rather than buried:
+
+- **`"Resource": "*"` is required** — CloudFront's create actions do not support
+  resource-level restriction. So this grants distribution-creation across the account, not
+  just for this bucket. It grants **no S3 write and no IAM**.
+- **`s3:PutBucketPolicy` is deliberately NOT included.** The one action that could expose
+  the backups stays with you: Claude generates the exact policy text, you paste it. Detach
+  the inline policy afterwards if you like — it is only needed once.
+
+Then skip to Step 4 and send Claude a message saying the policy is attached.
+
+---
+
+## Option A — do it all yourself
+
+~15 minutes of clicking, then a few minutes for CloudFront to deploy.
 
 **Why it's needed:** every product image on `next.tokecosmetics.com` is currently broken.
 The images live in a private S3 bucket and nothing can read them. Full reasoning in
