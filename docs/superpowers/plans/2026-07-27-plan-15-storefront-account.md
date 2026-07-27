@@ -32,7 +32,21 @@ or use a Route Handler."* In an RSC the set throws.
 > **This is a latent bug TODAY**, not only a constraint on new work: `lib/checkout.ts:51`
 > `getOrder` → `fetchWithAuth`, called from `checkout/confirmation/[number]/page.tsx`, a Server
 > Component. It has never bitten because confirmation is visited seconds after checkout, while
-> the access token is still valid. Fix it in 15c.
+> the access token is still valid. ~~Fix it in 15c.~~
+>
+> **FIXED IN ITEM 4 (2026-07-26), pulled forward from 15c.** The fix is a change of fetch
+> mechanism, not of presentation, so it belongs with the mechanism and its tests rather than with
+> 15c's extraction refactor. Shipping item 4 while a known-broken caller of the very thing item 4
+> exists to fix stayed broken would have been process for its own sake.
+>
+> **And the hazard is worse than "the cookie write throws".** The refresh POST *succeeds* first,
+> and SimpleJWT (ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION) blacklists the old refresh
+> token server-side the instant it is spent. An RSC that refreshes therefore destroys a live
+> 14-day session and only *then* fails to persist the replacement. `product/[slug]/page.tsx`
+> — which this plan did not even list — was the worse of the two call sites for exactly this
+> reason: its `catch` returned a generic delivery label, so the page rendered perfectly while
+> the customer's session died. Both call sites are fixed; the product page now uses `apiFetch`
+> with a hand-read token, because a **public** page must neither bounce to login nor refresh.
 
 ### Gating architecture
 
@@ -94,8 +108,15 @@ Two layers. The proxy is a cheap hint; **the real gate is each page's own data f
   chrome. Deviation from the spec's literal paths; note at checkpoint.
 - **Reuse by extraction, not import.** Pull shared presentation out of the confirmation page into
   `components/orders/` and have both consume it. Do NOT let account order-detail import the
-  confirmation page or share its fetch path — confirmation serves guests via `AllowAny`, account
-  detail must go through the authed guard.
+  confirmation page or share its *fetch* path — keep each page owning its own fetch.
+  **CORRECTION (2026-07-26): the reason given here was wrong. The confirmation page does NOT
+  serve guests.** `permission_classes = [AllowAny]` on `OrderDetailView` is the DRF idiom for
+  "this view does its own auth in the body", not "guests welcome": `orders/views.py:69-71` returns
+  **403 `authentication_required`** to an anonymous caller, and anonymous access works *only* with
+  a signed `?token=` tracking link (which yields the redacted serializer, and which the
+  confirmation page never passes). Verified live against the running API: garbage bearer → 401,
+  no auth → 403. So confirmation is an authed page like any other and uses
+  `fetchWithAuthOrBounce`. The tracking-token guest view is 15c's separate `/track` surface.
 - **No caching under /account.** `cookies()` makes these routes dynamic automatically; no
   `revalidate`, no `use cache`.
 
@@ -109,7 +130,44 @@ NEXT_REDIRECT swallowing, open redirect.
 1. `lib/next-param.ts` — `safeNext()` open-redirect guard (+ tests).
 2. Extend `src/proxy.ts` with the `/account` refresh-presence check (+ tests).
 3. `api/auth/refresh-redirect/route.ts` (+ tests).
-4. `requireAuth` / 401-wrapper / `fetchWithAuthRaw` in `lib/session.ts` (+ tests).
+4. ~~`requireAuth` / 401-wrapper / `fetchWithAuthRaw` in `lib/session.ts` (+ tests).~~ **DONE
+   2026-07-26.** Shipped surface, and the reasoning that is easy to undo by "simplifying":
+
+   - **`lib/api.ts`: `apiFetchRaw()`** returns the Response untouched; `apiFetch` is rebuilt on
+     top of it so URL/header assembly exists once.
+   - **RSC-safe (read cookies, never write, never touch the refresh endpoint):** `getAccessToken`,
+     `requireAuth(currentPath)`, `fetchWithAuthOrBounce(path, currentPath, opts)`.
+   - **Route-Handler-only (write cookies):** `fetchWithAuth`, `fetchWithAuthRaw`. Both share one
+     private `refreshAndPersist(jar, refresh)`.
+   - **`currentPath` is an explicit required parameter.** Next 16 gives an RSC no pathname API
+     (`headers()` exposes incoming request headers only — checked the bundled doc). The rejected
+     alternative was a proxy-injected header: it fails *silently* when the matcher misses a route
+     or the header name drifts, quietly sending users to `DEFAULT_NEXT`. A wrong literal is caught
+     in one walkthrough; a silent infrastructure fallback is not.
+   - **`fetchWithAuth` was NOT renamed.** Nine Route Handlers use it correctly; churn buys nothing.
+   - **Enforcement is a dev-time probe, not a lint rule.** The bug arrived *indirectly* through
+     `lib/checkout.ts`, which Route Handlers may legitimately import, so an import rule on pages
+     would have missed it. `assertCookiesWritable` attempts `jar.delete()` and converts the
+     failure into a named error. **Verified live, not just against the mock:** a scratch RSC
+     calling `fetchWithAuth` produced *"fetchWithAuth() was called during Server Component
+     render… Use requireAuth() or fetchWithAuthOrBounce()"*. A second, cheap structural test
+     (`session-boundary.test.ts`) asserts the writing fetchers are imported only under
+     `app/api/` — when first written it failed and named exactly the two known offenders.
+   - **Deleted `getDeliveryOptions`** from `lib/checkout.ts`: zero callers: the BFF route
+     `api/checkout/delivery-options/route.ts` re-implements it. Deleting it removed a third RSC
+     hazard for free.
+
+   **A Next 16 behaviour to know before writing the login page (found by testing, not documented):**
+   the renewal bounce does **not** arrive as an HTTP 307. `redirect()` fires after the RSC shell
+   has begun streaming, so Next cannot send a `Location` header and instead embeds the redirect in
+   the streamed RSC payload for the client router to act on. Verified end to end in a real browser
+   on a *hard* navigation with a stale access cookie: the browser landed on
+   `/login?next=%2Fcheckout%2Fconfirmation%2FTC-100038`, **both** dead token cookies were cleared
+   (so no gate↔handler loop), and `country=NG` survived the chain. Consequences: `curl` and other
+   no-JS clients see the fallback UI and a **200**, not a redirect — do not assert on 307 in any
+   test or smoke check; and a stale-session user briefly sees the page shell before bouncing.
+   **Still unverified (Fable's open question):** the same bounce during a *soft* client-side
+   navigation. Nothing links to a gated page yet, so verify it in the 15b walkthrough.
 5. Login page — full build, `?next=`, already-authed short-circuit.
 6. Register page — full build, `?next=`; the existing BFF register action auto-logs-in.
 7. `forgot-password`, `reset-password`, `verify-email` pages.

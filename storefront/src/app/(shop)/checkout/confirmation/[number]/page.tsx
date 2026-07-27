@@ -13,9 +13,14 @@ export const metadata: Metadata = { title: "Order confirmed", robots: { index: f
 
 async function loadOrder(number: string, country: string): Promise<OrderDetail> {
   try {
-    return await getOrder(number, country);
+    return await getOrder(number, country, `/checkout/confirmation/${number}`);
   } catch (e) {
-    if (e instanceof ApiError && e.status === 404) notFound();
+    // 403 as well as 404: the backend deliberately refuses to distinguish "no such order"
+    // from "not yours" (orders/views.py filters by owner so a stranger's order 404s — a
+    // 403 would confirm it exists). Mirror that here rather than surfacing an error page.
+    if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
+    // Anything else — including the NEXT_REDIRECT that getOrder throws to renew a stale
+    // session — must propagate untouched.
     throw e;
   }
 }

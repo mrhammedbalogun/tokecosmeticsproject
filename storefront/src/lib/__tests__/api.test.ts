@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, apiFetchRaw } from "@/lib/api";
 
 const originalFetch = global.fetch;
 
@@ -68,5 +68,43 @@ describe("apiFetch", () => {
     await apiFetch("/meta/countries/");
     const init = f.mock.calls[0][1] as RequestInit;
     expect(new Headers(init.headers).get("Authorization")).toBeNull();
+  });
+});
+
+describe("apiFetchRaw", () => {
+  it("assembles the same URL and headers as apiFetch", async () => {
+    const f = mockFetch(200, {});
+    await apiFetchRaw("/orders/TC-1/invoice.pdf", {
+      country: "GB", token: "abc", method: "POST", body: { a: 1 },
+    });
+    expect(f.mock.calls[0][0]).toBe("http://backend:8000/api/v1/orders/TC-1/invoice.pdf");
+    const init = f.mock.calls[0][1] as RequestInit;
+    const headers = new Headers(init.headers);
+    expect(headers.get("X-Country")).toBe("GB");
+    expect(headers.get("Authorization")).toBe("Bearer abc");
+    expect(headers.get("Content-Type")).toBe("application/json");
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(JSON.stringify({ a: 1 }));
+  });
+
+  it("returns the Response untouched on a non-ok status instead of throwing", async () => {
+    // The invoice BFF owns the status mapping (403 -> 404), so the transport must not
+    // pre-empt it with an ApiError, and must not have consumed the body either.
+    mockFetch(403, { detail: "nope" });
+    const res = await apiFetchRaw("/orders/TC-1/invoice.pdf");
+    expect(res.status).toBe(403);
+    expect(res.bodyUsed).toBe(false);
+    await expect(res.text()).resolves.toContain("nope");
+  });
+
+  it("leaves a successful body unread so it can be streamed on", async () => {
+    const f = vi.fn().mockResolvedValue(
+      new Response("%PDF-1.7", { status: 200, headers: { "content-type": "application/pdf" } }),
+    );
+    global.fetch = f as unknown as typeof fetch;
+    const res = await apiFetchRaw("/orders/TC-1/invoice.pdf");
+    expect(res.bodyUsed).toBe(false);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    await expect(res.text()).resolves.toBe("%PDF-1.7");
   });
 });

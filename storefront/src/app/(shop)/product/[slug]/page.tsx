@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { ApiError } from "@/lib/api";
+import { apiFetch, ApiError } from "@/lib/api";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { getProduct, type ProductDetail } from "@/lib/catalog";
 import { mediaUrl } from "@/lib/media";
 import { deliveryEstimateFor } from "@/lib/delivery-estimates";
-import { fetchWithAuth, getAccessToken } from "@/lib/session";
+import { getAccessToken } from "@/lib/session";
 import { breadcrumbJsonLd, faqJsonLd, pageMetadata, productJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumbs } from "@/components/plp/Breadcrumbs";
@@ -45,14 +45,26 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
 }
 
 /** Personalised delivery label: "Delivery to <Ikeja>: …" for logged-in users with a
- * default address; the generic country line otherwise (D5). Never throws. */
+ * default address; the generic country line otherwise (D5). Never throws.
+ *
+ * Deliberately `apiFetch` with the token read by hand, NOT a refreshing fetcher. Two
+ * reasons, and both matter:
+ *
+ * 1. This is a Server Component, so a token rotation could not be persisted — and
+ *    SimpleJWT blacklists the old refresh token on use, so "refresh, fail to save"
+ *    silently ends a 14-day session. The `catch` below would have hidden it completely.
+ *    The session renews instead at the next Route Handler call or gated navigation.
+ * 2. A PUBLIC product page must never bounce a shopper to login over a cosmetic delivery
+ *    label. An expired token here just means the generic line.
+ */
 async function deliveryLineFor(country: string): Promise<string> {
   const generic = deliveryEstimateFor(country);
-  if (!(await getAccessToken())) return generic;
+  const token = await getAccessToken();
+  if (!token) return generic;
   try {
-    const addresses = await fetchWithAuth<
+    const addresses = await apiFetch<
       { label: string; city_text: string; is_default_shipping: boolean }[]
-    >("/me/addresses/", { cache: "no-store" });
+    >("/me/addresses/", { token, country, cache: "no-store" });
     const def = addresses.find((a) => a.is_default_shipping) ?? addresses[0];
     const place = def?.city_text || def?.label;
     return place ? `${generic.replace(/^Delivery[^:]*:/, `Delivery to ${place}:`)}` : generic;

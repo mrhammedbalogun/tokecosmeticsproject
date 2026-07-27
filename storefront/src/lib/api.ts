@@ -37,10 +37,17 @@ function baseUrl(): string {
   return process.env.API_URL ?? "http://localhost:8000";
 }
 
-export async function apiFetch<T = unknown>(
+/**
+ * Everything apiFetch does up to and including the fetch, returning the Response
+ * UNTOUCHED — not parsed, not cloned, not thrown on. For binary/streaming responses
+ * (the invoice PDF) where a caller wants to pipe the body straight through and own
+ * the status mapping itself. `apiFetch` is built on this so header assembly and the
+ * URL shape exist in exactly one place.
+ */
+export async function apiFetchRaw(
   path: string,
   opts: ApiFetchOptions = {},
-): Promise<T> {
+): Promise<Response> {
   const headers = new Headers(opts.headers);
   headers.set("Accept", "application/json");
   headers.set("X-Country", opts.country ?? DEFAULT_COUNTRY);
@@ -56,7 +63,14 @@ export async function apiFetch<T = unknown>(
   if (opts.cache) init.cache = opts.cache;
   if (opts.signal) init.signal = opts.signal;
 
-  const res = await fetch(`${baseUrl()}/api/v1${path}`, init);
+  return fetch(`${baseUrl()}/api/v1${path}`, init);
+}
+
+export async function apiFetch<T = unknown>(
+  path: string,
+  opts: ApiFetchOptions = {},
+): Promise<T> {
+  const res = await apiFetchRaw(path, opts);
 
   // Read from a clone so the original body stream is left undisturbed. Harmless
   // in production (a fresh Response is read once), and it lets tests that reuse a

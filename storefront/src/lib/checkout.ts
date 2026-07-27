@@ -1,8 +1,8 @@
-/** Typed checkout fetchers + types. Server-side only (uses apiFetch/fetchWithAuth) —
+/** Typed checkout fetchers + types. Server-side only (uses apiFetch/session helpers) —
  * mirrors lib/catalog.ts. The single typed surface for every checkout read; pages/BFF
  * import from here. No React, no client code. */
 import { apiFetch } from "@/lib/api";
-import { fetchWithAuth } from "@/lib/session";
+import { fetchWithAuthOrBounce } from "@/lib/session";
 
 export interface Totals {
   subtotal: string; discount: string; delivery: string;
@@ -41,12 +41,20 @@ export async function getPaymentMethods(country: string) {
     country, cache: "no-store",
   });
 }
-/** Authed. */
-export async function getDeliveryOptions(addressId: number, cartId: string, country: string) {
-  return fetchWithAuth<DeliveryOption[]>(
-    `/checkout/delivery-options/?address_id=${addressId}&cart_id=${cartId}`,
-    { country, cache: "no-store" });
-}
-export async function getOrder(number: string, country: string) {
-  return fetchWithAuth<OrderDetail>(`/orders/${number}/`, { country, cache: "no-store" });
+/**
+ * Authed order detail, called from the confirmation page — a SERVER COMPONENT, hence
+ * `fetchWithAuthOrBounce` rather than `fetchWithAuth`: a Server Component cannot persist
+ * a rotated token, so refreshing here would blacklist the customer's refresh token and
+ * end their session behind a page that still rendered correctly.
+ *
+ * `currentPath` is where the bounce sends the user back to, so it must be the page's own
+ * path, not this endpoint's.
+ *
+ * There is no anonymous path to guard: `orders/views.py` 403s a caller with no auth and
+ * no signed tracking token, and this page never carries one.
+ */
+export async function getOrder(number: string, country: string, currentPath: string) {
+  return fetchWithAuthOrBounce<OrderDetail>(`/orders/${number}/`, currentPath, {
+    country, cache: "no-store",
+  });
 }
