@@ -23,6 +23,8 @@ dependencies = [
     # Production WSGI server (Plan-02). Not used by runserver in dev, but the
     # container CMD is gunicorn, so it must be a real locked dependency.
     "gunicorn>=23.0.0",
+    "pymysql>=1.1.0",
+    "phpserialize>=1.3",
 ]
 
 [dependency-groups]

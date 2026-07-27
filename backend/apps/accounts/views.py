@@ -7,12 +7,22 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.notifications.tasks import send_email_task
+
+from .throttling import (
+    LoginBurstThrottle,
+    LoginIPThrottle,
+    LoginSustainedThrottle,
+    PasswordResetEmailThrottle,
+    PasswordResetIPThrottle,
+    RegisterEmailThrottle,
+    RegisterIPThrottle,
+)
 
 from .serializers import (
     AccountDeletionSerializer,
@@ -29,9 +39,25 @@ from .serializers import (
 User = get_user_model()
 
 
+class LoginView(TokenObtainPairView):
+    """`/auth/token/` with throttles attached.
+
+    Stock `TokenObtainPairView` carried only the global anon rate, which was bypassable
+    by rotating X-Forwarded-For. Listing throttle_classes here REPLACES the global
+    defaults -- DRF does not merge them -- so every cap this endpoint has must appear in
+    this list. `LoginIPThrottle` is first and is not optional: without it, password
+    spraying across many addresses touches no per-email counter and is unmetered.
+    """
+
+    throttle_classes = [LoginIPThrottle, LoginBurstThrottle, LoginSustainedThrottle]
+
+
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
+    # IP first: it is the cap that protects the sending domain. The email throttle only
+    # stops one address being spammed repeatedly; it cannot stop volume.
+    throttle_classes = [RegisterIPThrottle, RegisterEmailThrottle]
 
     def perform_create(self, serializer):
         from django.conf import settings
@@ -144,9 +170,8 @@ class PasswordResetView(APIView):
     # email-bomb primitive aimed at someone else's inbox, and it is the victim's mail
     # provider that decides we are the spammer. The deliberate always-200 (below) means
     # throttling is also the only signal an abuser ever gets back.
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "password_reset"       # 5/min/IP (DEFAULT_THROTTLE_RATES)
     serializer_class = PasswordResetSerializer
+    throttle_classes = [PasswordResetIPThrottle, PasswordResetEmailThrottle]
 
     @extend_schema(request=PasswordResetSerializer, responses={200: None})
     def post(self, request):
@@ -169,11 +194,6 @@ class PasswordResetView(APIView):
 
 class PasswordResetConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
-    # Shares the reset scope. The token is signed and not realistically brute-forceable,
-    # so this is not the load-bearing defence — but rate-limiting it is free and removes
-    # the question entirely.
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "password_reset"
     serializer_class = PasswordResetConfirmSerializer
 
     @extend_schema(request=PasswordResetConfirmSerializer, responses={200: None})

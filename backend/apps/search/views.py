@@ -1,6 +1,6 @@
 from rest_framework import generics, permissions
 from rest_framework.response import Response
-from rest_framework.throttling import ScopedRateThrottle
+from apps.accounts.throttling import ScopedRateThrottle  # XFF-safe; NOT rest_framework.throttling
 from rest_framework.views import APIView
 
 from apps.catalog.api_serializers import ProductListSerializer

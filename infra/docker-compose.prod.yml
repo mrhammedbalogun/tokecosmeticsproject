@@ -64,6 +64,14 @@ services:
     volumes:
       - /opt/tokecosmetics/data/static:/app/staticfiles
       - /opt/tokecosmetics/data/media:/app/media
+      # Migration-only (Plan-21), remove at the Plan-27 cutover once WordPress is
+      # decommissioned. The uploads mount is :ro because import_catalog only ever
+      # reads product images out of it on their way to S3 — the live store's media
+      # library must not be writable by this container. The MariaDB socket is NOT
+      # mounted here: it is passed per-invocation on the one-off `run --rm`, so the
+      # long-lived containers hold no open path to the WordPress database.
+      - /home/tokecosm/public_html/wp-content/uploads:/mnt/wp-uploads-ng:ro
+      - /opt/tokecosmetics/exports:/mnt/exports
     mem_limit: 768m
     # Both headers are required, for different reasons:
     #   Host: ALLOWED_HOSTS is api.tokecosmetics.com, so a request arriving as "localhost"

@@ -46,8 +46,14 @@ def test_no_key_warning_for_a_gateway_that_is_switched_off_everywhere():
 
 @NO_KEYS
 def test_warns_for_a_live_gateway_missing_its_keys_and_names_the_markets():
-    # 0009 activates paystack + flutterwave on NG and paypal internationally; with the keys
-    # blanked, each live gateway is unusable where it is offered.
+    # 0010 switched flutterwave and paypal back off (uncertified), so this test now builds
+    # the scenario it is about rather than inheriting it from whatever the current seed
+    # menu happens to be — which is what made it break when the menu changed.
+    from apps.payments.models import CountryPaymentGateway
+
+    CountryPaymentGateway.objects.filter(gateway__in=["flutterwave", "paypal"]).update(
+        is_active=True
+    )
     warnings = {w.msg.split("'")[1]: w.msg for w in _w001()}
     assert {"paystack", "flutterwave", "paypal"} <= set(warnings)
     # Naming the affected markets is the difference between "go look" and "go fix NG".

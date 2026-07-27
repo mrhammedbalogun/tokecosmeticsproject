@@ -149,6 +149,28 @@ GROUP BY pm.meta_key ORDER BY 2 DESC;
 - **Portable structured content:** `Benefits`, `product_main_usp`, `product_usp_1..4`, `Medium_Image_1/2`, `Small_Image_1..4`, `details_image`, and embedded testimonials `Testimonial_{1..3}_{Customer_Name,Review_Text,Skin_Concern,Number_of_Item_Bought}`. → map USPs/benefits into Product fields; the ACF testimonials could seed the `reviews` app as pre-approved reviews (Hammed's call).
 - **Ingredients / directions / warnings:** *not* present as dedicated ACF keys. They live in the **Elementor-built** product body (`elementor` + `elementor-pro` are active). ⚠️ **Migration risk:** `post_content` for products is likely Elementor JSON/shortcodes, not clean HTML — descriptions won't port verbatim. Plan-21 must render/extract these, and ingredients/directions/warnings may need manual entry into the new structured fields.
 
+> **CORRECTION 2026-07-25 (Plan-21).** Three claims above were inferences that
+> direct SQL disproves:
+> - **0** published products have non-empty `_elementor_data`. Elementor is active
+>   for site pages, not products. Descriptions are clean HTML (67/69 non-empty)
+>   and port nearly verbatim — only `data-start`/`data-end` editor artifacts and
+>   `&nbsp;` need stripping.
+> - Ingredients/directions/warnings are **not** in the product body. They exist in
+>   no field at all and must be written fresh.
+> - Products carry ACF marketing fields this audit missed entirely:
+>   `Benefits` (65/69), `product_main_usp` + `product_usp_1..4` (48/69),
+>   `Testimonial_1..3_*` (47/69), `Small_Image_*`/`Medium_Image_*` (24/69, holding
+>   attachment IDs). Values live under the key WITHOUT the leading underscore;
+>   the `_`-prefixed twin holds only the ACF field key.
+>
+> **Also found, and not a migration bug:** only 90 source rows carry `_weight`
+> (in kg — `woocommerce_weight_unit=kg`; the importer converts to grams). **52
+> published/draft items have no weight recorded at all**, and
+> `delivery/services.py:42` does `(v.weight_grams or 0)` — an unknown weight
+> silently becomes zero, so those items contribute nothing to calculated parcel
+> weight and delivery can be undercharged. `verify_catalog` reports the count.
+> Needs a decision before launch, separately from Plan-21.
+
 **Sample full products** (reproduce; not dumped here to keep this doc readable):
 ```sql
 -- pick 3 ids then:

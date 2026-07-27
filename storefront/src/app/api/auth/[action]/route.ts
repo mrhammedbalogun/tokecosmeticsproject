@@ -23,8 +23,36 @@ function json(data: unknown, status = 200) {
   });
 }
 
+/**
+ * Same-origin gate. Route Handlers get NO automatic CSRF protection — unlike Server
+ * Functions, which compare Origin against Host themselves. Without this, a cross-site
+ * form POST to /api/auth/login carrying the ATTACKER's credentials is session fixation:
+ * our response Set-Cookie logs the victim into the attacker's account, and
+ * mergeGuestCart then folds the victim's bag into it.
+ *
+ * SameSite=Lax does not help here. The attack needs no pre-existing cookie to be sent —
+ * it is the response's Set-Cookie that does the damage.
+ *
+ * Requiring Origin (rather than only checking it when present) is safe because every
+ * caller is a browser fetch from our own pages (SignInStep, the auth forms), and
+ * browsers always send Origin on POST. Server-side callers use apiFetch directly and
+ * never touch this route.
+ */
+function isSameOrigin(req: Request): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return false;
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+  if (!host) return false;
+  try {
+    return new URL(origin).host === host;
+  } catch {
+    return false; // unparseable Origin — treat as hostile
+  }
+}
+
 export async function POST(req: Request, ctx: { params: Promise<{ action: string }> }) {
   const { action } = await ctx.params;
+  if (!isSameOrigin(req)) return json({ detail: "Invalid origin." }, 403);
   const jar = await cookies();
   const body = await req.json().catch(() => ({}));
 

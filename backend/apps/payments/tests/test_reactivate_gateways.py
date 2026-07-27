@@ -13,22 +13,38 @@ import pytest
 pytestmark = pytest.mark.django_db
 
 
-def _offered(country):
-    from apps.payments.gateways.registry import active_gateways_for
-    return [(g["gateway"], g["sort_order"]) for g in active_gateways_for(country)]
+def _rows(code):
+    """0009's own contract: the rows and sort orders it wrote.
+
+    Deliberately NOT `active_gateways_for` any more. That function now also
+    filters on configuredness at request time, so it answers "what may a
+    customer be offered", which is governed by 0010 and the registry — not by
+    this migration. Asserting the offered menu here would make this file fail
+    every time the menu legitimately changes, which is exactly what happened.
+    See test_uncertified_gateways_are_never_offered.py for the menu itself.
+    """
+    from apps.core.models import Country
+    from apps.payments.models import CountryPaymentGateway
+    country = Country.objects.get(code=code)
+    return {
+        r.gateway: (r.sort_order, r.is_active)
+        for r in CountryPaymentGateway.objects.filter(country=country)
+    }
 
 
 def test_ng_menu_after_reactivation():
-    from apps.core.models import Country
-    ng = Country.objects.get(code="NG")
-    assert _offered(ng) == [("paystack", 1), ("flutterwave", 2), ("bank_transfer", 3)]
+    rows = _rows("NG")
+    assert rows["paystack"] == (1, True)
+    assert rows["bank_transfer"] == (3, True)
+    # 0009 gave flutterwave its sort order; 0010 switched it off as uncertified.
+    assert rows["flutterwave"] == (2, False)
 
 
 @pytest.mark.parametrize("code", ["GB", "US", "CA", "ZZ"])
 def test_international_menu_after_reactivation(code):
-    from apps.core.models import Country
-    country = Country.objects.get(code=code)
-    assert _offered(country) == [("paypal", 1), ("bank_transfer", 2)]
+    rows = _rows(code)
+    assert rows["bank_transfer"] == (2, True)
+    assert rows["paypal"] == (1, False)  # 0009 sort order, 0010 deactivation
 
 
 def test_stripe_stays_inactive():

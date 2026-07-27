@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.wishlist",
     "apps.reviews",
     "apps.newsletter",
+    "apps.migration_wp",
 ]
 
 AUTH_USER_MODEL = "accounts.User"
@@ -115,7 +116,24 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # Static -> whitenoise compressed manifest (only Django admin uses static files).
 AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="")
 AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="")
-AWS_QUERYSTRING_AUTH = False  # public product images under media/catalog/
+AWS_QUERYSTRING_AUTH = False  # stable unsigned URLs for product images under catalog/
+
+# Serve catalog media through a CDN hostname instead of the S3 endpoint.
+#
+# WHY THIS EXISTS. The bucket is private and must stay private: the nightly Postgres
+# backups live in it under `backups/` alongside `catalog/` (infra/deploy/backup.sh), so
+# making objects publicly readable would require switching Block Public Access off on the
+# bucket holding the database dumps — and versioning is currently disabled. CloudFront with
+# Origin Access Control reaches a private bucket without any of that, and its policy is
+# scoped to `catalog/*` so `backups/` stays unreachable even through the CDN.
+#
+# Set to the distribution hostname in prod (e.g. dxxxx.cloudfront.net). django-storages
+# then emits https://<domain>/<key>, which also fixes Open Graph and Product JSON-LD
+# images — those embed the raw URL and never touch Next's image optimizer, so a
+# storefront-only allowlist change would have left social previews broken.
+#
+# Empty by default, so dev and tests keep the plain S3/filesystem behaviour.
+AWS_S3_CUSTOM_DOMAIN = env("AWS_S3_CUSTOM_DOMAIN", default="")
 
 if AWS_STORAGE_BUCKET_NAME:
     AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
@@ -143,9 +161,17 @@ REST_FRAMEWORK = {
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 24,
     "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
+    # Our own subclasses, NOT rest_framework.throttling.*: DRF's get_ident keys on the
+    # whole X-Forwarded-For chain when NUM_PROXIES is unset, so a rotating junk prefix
+    # mints a fresh bucket per request. See apps/accounts/throttling.py.
+    #
+    # This covers views that do NOT set throttle_classes. Any view that pins its own
+    # classes opts OUT of these defaults entirely -- DRF replaces, it does not merge --
+    # so such views must use apps.accounts.throttling.ScopedRateThrottle rather than the
+    # stock one, or they keep the bypass.
     "DEFAULT_THROTTLE_CLASSES": [
-        "rest_framework.throttling.AnonRateThrottle",
-        "rest_framework.throttling.UserRateThrottle",
+        "apps.accounts.throttling.AnonRateThrottle",
+        "apps.accounts.throttling.UserRateThrottle",
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/min",
@@ -154,8 +180,28 @@ REST_FRAMEWORK = {
         "suggest": "60/min",
         "cart": "120/min",
         "newsletter": "5/min",
-        # Sends an email to a caller-chosen address; see PasswordResetView.
-        "password_reset": "5/min",
+        # Auth. Email-keyed unless the name says _ip.
+        #
+        # login_ip is the VOLUME cap and must stay listed first on LoginView: without it
+        # the email-keyed windows leave password spraying (one guess each against many
+        # addresses) completely unmetered, since no per-email counter is ever touched.
+        "login_ip": "30/min",
+        # Two windows per email. NOTE they are not independent: DRF's check_throttles
+        # does not short-circuit, so a request rejected by login_burst still records
+        # against login_sustained. 20 rapid attempts therefore spend the whole hour.
+        "login_burst": "5/min",
+        "login_sustained": "20/hour",
+        # The _ip rates below are DELIBERATELY loose. All storefront traffic egresses
+        # from Vercel, so these are shared by every customer at once -- at 10/hour they
+        # were a store-wide cap of ten signups and ten password resets per hour, which
+        # Plan-22's "imported customers, reset your password" wave would have hit within
+        # minutes. They are volume caps against the direct-to-API path, where the address
+        # is real, and the per-email rates below carry the anti-abuse weight for the
+        # shared path. See the caveat on _IPKeyedThrottle.
+        "register_ip": "60/hour",
+        "register_email": "3/hour",
+        "password_reset_email": "5/hour",
+        "password_reset_ip": "60/hour",
     },
 }
 
@@ -274,3 +320,14 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 86400.0,  # daily — the grace window is measured in days
     },
 }
+
+# --- WordPress migration source (Plan-21) ---
+# Deliberately unset in normal operation: credentials are passed per-invocation to
+# `extract_wp_catalog` only, against a MariaDB user granted SELECT on five wp_* tables
+# and nothing else. `import_catalog` never reads these.
+WP_DB_HOST = env("WP_DB_HOST", default="")
+WP_DB_PORT = env.int("WP_DB_PORT", default=3306)
+WP_DB_NAME = env("WP_DB_NAME", default="")
+WP_DB_USER = env("WP_DB_USER", default="")
+WP_DB_PASSWORD = env("WP_DB_PASSWORD", default="")
+WP_TABLE_PREFIX = env("WP_TABLE_PREFIX", default="wp_")

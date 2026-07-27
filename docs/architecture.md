@@ -1115,3 +1115,61 @@ to the absolute sitemap URL. Both serve at `/sitemap.xml` and `/robots.txt`.
 thin/duplicative; the crawler follows links out but doesn't index the query pages themselves.
 
 Full detail: `docs/superpowers/plans/2026-07-22-plan-13-storefront-catalog-seo.md`.
+
+## Production media serving (2026-07-27)
+
+**Product images are served through CloudFront with Origin Access Control; the S3 bucket
+stays private.**
+
+### The bug this fixes
+
+Every product image on `next.tokecosmetics.com` was broken. Two stacked causes:
+
+1. `storefront/next.config.ts` allowlisted only `localhost:8000` for `next/image`, so the
+   optimizer returned **400** for every S3 URL. The stale comment deferred this to
+   "Plan-22", but master's Plan-22 is customer/password migration — **no plan owned
+   production media serving**, so Plan-21 shipping S3-backed products did not jump a
+   queue; the queue had no entry.
+2. More seriously, the S3 objects are **not public** (307 to the regional endpoint, then
+   **403**), so allowlisting the host alone would not have helped. Django was minting
+   *unsigned* URLs (`AWS_QUERYSTRING_AUTH = False`) for objects nothing could read.
+
+It was invisible locally because dev serves media from `localhost:8000`.
+
+### Why CloudFront + OAC, and not the obvious alternative
+
+**The nightly Postgres backups share the bucket** — `backups/postgres/*.sql.gz` sits
+alongside `catalog/` (`infra/deploy/backup.sh:24`). Granting public read on `catalog/*`
+would require switching **Block Public Access off** on the bucket that holds the database
+dumps, permanently trading away the guardrail that makes "backups can never be public
+regardless of a future policy typo" true — on a bucket whose credential risk is already
+parked and which has **versioning disabled**. Not a trade worth making for image serving.
+
+CloudFront with OAC reaches a private bucket with all four Block Public Access flags
+**still on** (an OAC bucket policy is not classified "public"), and its policy is scoped to
+`catalog/*` so `backups/` is unreachable even through the CDN. It also removes the 307,
+because the CloudFront origin uses the regional endpoint.
+
+Rejected: a Django/VPS media proxy (couples image availability to the least reliable
+component); presigned URLs (expiring query strings churn the optimizer cache key and hand
+crawlers URLs that later 404 — and contradict `AWS_QUERYSTRING_AUTH=False`).
+
+Invoices are **not** affected: they are rendered on demand and never stored
+(`backend/apps/orders/invoice.py`). The "signed prefix for invoices" in the master guide is
+aspirational, not implemented — the co-located secret in this bucket is the backups.
+
+### The two config points
+
+- `AWS_S3_CUSTOM_DOMAIN` (backend) — django-storages then emits
+  `https://<domain>/<key>`. **This is the half that fixes Open Graph and Product JSON-LD
+  images**, which embed `mediaUrl()` output directly (`lib/media.ts:6` passes absolute URLs
+  through verbatim; `lib/seo.ts:150`). Crawlers fetch those without touching the optimizer,
+  so a storefront-only fix would have left social previews and Rich Results dead.
+- `NEXT_PUBLIC_MEDIA_HOST` (storefront) — adds the CDN host to `remotePatterns` with
+  `pathname: "/catalog/**"`. Both are env-gated and inert when unset.
+
+`dangerouslyAllowLocalIP` stays development-only. The CDN host resolves publicly, so the
+optimizer's SSRF guard must remain on in production.
+
+**Ordering matters:** the distribution must exist and serve a test object *before*
+`AWS_S3_CUSTOM_DOMAIN` is set on the API, or image URLs break harder than they already are.

@@ -16,6 +16,17 @@ from apps.pricing.models import Price
 
 
 class ProductAdminSerializer(serializers.ModelSerializer):
+    # Declared explicitly with defaults so they land in `attrs` even when omitted from
+    # the request. Product.Meta has a 2-field partial UniqueConstraint
+    # (legacy_source, legacy_wp_id) for Plan-21 migration idempotency; DRF auto-generates
+    # a UniqueTogetherValidator from any multi-field UniqueConstraint, and that validator
+    # always treats its fields as required on create UNLESS they already appear in attrs
+    # via a serializer-level default (see DRF docs: "Note" under UniqueTogetherValidator).
+    # Without this, staff creating a product from the admin UI (which never sends these
+    # migration-only fields) would get "This field is required."
+    legacy_source = serializers.CharField(required=False, default="")
+    legacy_wp_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+
     class Meta:
         model = Product
         fields = [
