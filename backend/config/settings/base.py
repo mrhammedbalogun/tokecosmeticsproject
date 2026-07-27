@@ -154,6 +154,8 @@ REST_FRAMEWORK = {
         "suggest": "60/min",
         "cart": "120/min",
         "newsletter": "5/min",
+        # Sends an email to a caller-chosen address; see PasswordResetView.
+        "password_reset": "5/min",
     },
 }
 

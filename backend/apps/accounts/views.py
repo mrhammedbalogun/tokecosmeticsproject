@@ -7,6 +7,7 @@ from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_spectacular.utils import extend_schema
 from rest_framework import generics, permissions, status
 from rest_framework.response import Response
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -139,6 +140,12 @@ class LogoutView(APIView):
 
 class PasswordResetView(APIView):
     permission_classes = [permissions.AllowAny]
+    # This endpoint SENDS AN EMAIL to an address the caller picks. Unthrottled that is an
+    # email-bomb primitive aimed at someone else's inbox, and it is the victim's mail
+    # provider that decides we are the spammer. The deliberate always-200 (below) means
+    # throttling is also the only signal an abuser ever gets back.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"       # 5/min/IP (DEFAULT_THROTTLE_RATES)
     serializer_class = PasswordResetSerializer
 
     @extend_schema(request=PasswordResetSerializer, responses={200: None})
@@ -162,6 +169,11 @@ class PasswordResetView(APIView):
 
 class PasswordResetConfirmView(APIView):
     permission_classes = [permissions.AllowAny]
+    # Shares the reset scope. The token is signed and not realistically brute-forceable,
+    # so this is not the load-bearing defence — but rate-limiting it is free and removes
+    # the question entirely.
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "password_reset"
     serializer_class = PasswordResetConfirmSerializer
 
     @extend_schema(request=PasswordResetConfirmSerializer, responses={200: None})
