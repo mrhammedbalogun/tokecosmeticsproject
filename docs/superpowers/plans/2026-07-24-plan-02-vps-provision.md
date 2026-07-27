@@ -980,7 +980,34 @@ curl -s https://next.tokecosmetics.com/products | grep -c "product/"
 
 Expected: a count **greater than zero**. Right now it is zero, and that single number is what this whole stage exists to change. Then open the page and confirm product names, prices in ₦, and images load.
 
-- [ ] **Step 5: Walk one order end to end on the deployed site**
+- [x] **Step 5: Walk one order end to end on the deployed site**
+
+> **DONE 2026-07-27 — order `TC-100001`.** Driven through the real UI on
+> `next.tokecosmetics.com` (Playwright, because the in-app browser pane was hidden and a
+> hidden tab never hydrates, so React handlers never attach — worth knowing).
+>
+> Registered via checkout's `SignInStep` (production user #1) → Lagos/Ikeja address →
+> delivery options rendered with correct day ranges (`1–2 days`, so the Plan-14b
+> "undefined days" fix holds) → **payment step offered ONLY Card/Paystack**, no bank
+> transfer, confirming the gateway-configuredness filter works in production with no
+> `BankAccount` configured → ₦500 goods + ₦1,500 delivery = **₦2,000.00**; the ₦34.88 tax
+> line is the *inclusive* VAT component of the ₦500 (500 × 7.5/107.5), so the total is
+> right rather than additive → Paystack popup in **Test** mode charged **₦2,030.46**, the
+> fee-bearing gross-up (2000 ÷ 0.985), matching the Plan-14b decision.
+>
+> After payment: order `processing`, `Payment(paystack, succeeded, 2000.00)`, and the
+> confirmation page rendered — which also exercised, in production, the
+> `getOrder → fetchWithAuthOrBounce` rewire from Plan-15a item 4.
+>
+> **Emails all delivered** from `hello@mg.tokecosmetics.com` via Resend (order confirmation
+> + verify-email), so `FRONTEND_URL`, `EMAIL_BACKEND` and `RESEND_API_KEY` are all correct
+> in production. Paystack's own receipt states "This receipt is for a test transaction. No
+> real money was debited."
+>
+> **Found by doing this — every product image on production is broken (400/403).** Root
+> cause and fix in `docs/architecture.md` § "Production media serving"; branch
+> `fix/prod-media-cloudfront` + `docs/runbooks/media-cdn-setup.md`. Also confirmed
+> `/verify-email` 404s, which is Plan-15a item 7.
 
 Add to cart → checkout → inline signup → address → delivery option → **bank transfer** → place order → confirmation page shows the order number and bank details → confirmation email arrives. Use a `+test` address, not a customer's.
 
@@ -1021,7 +1048,13 @@ Expected: an order in the `TC-1000xx` series appears via `docker compose -p toke
 
 - [x] **Step 2: Get explicit sign-off** that the WordPress store feels unaffected. He is the only one who can judge that.
 
-- [ ] **Step 3: Now do the deferred Plan-14b work**, which this stage unblocks:
+- [x] **Step 3: Now do the deferred Plan-14b work**, which this stage unblocks:
+
+> **DONE 2026-07-27 by the `TC-100001` order above.** Exactly **one**
+> `WebhookEvent(gateway=paystack, event_type=charge.success)` with `processed_at` set and
+> `error=''` — the first production webhook ever, so the Test webhook URL Hammed pasted into
+> Paystack is verified working end to end. One `Payment` row, one webhook, order fulfilled
+> exactly once: no double-processing. Task 18's phone pass is the only piece still open.
   - Paste `https://api.tokecosmetics.com/api/v1/webhooks/paystack/` into Paystack → Settings → API Keys & Webhooks → **Test** Webhook URL (**trailing slash required** — Django's `APPEND_SLASH` will not redirect a POST)
   - Hammed's phone pass (Plan-14b Task 18)
   - Confirm a Paystack-originated webhook lands: a `WebhookEvent` row with `processed_at` set and `error=""`, order fulfilled exactly once
