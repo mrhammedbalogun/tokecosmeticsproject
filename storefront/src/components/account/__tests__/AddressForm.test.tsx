@@ -260,4 +260,71 @@ describe("AddressForm", () => {
     expect(body.area_region).toBe(11);
     expect(body.phone).toBe("0711");
   });
+
+  // Fix 2 (15d final review): under DRF partial update, an OMITTED field is left
+  // unchanged — only an explicit "" clears it. The payload builder was copied from
+  // checkout's create-only AddressStep, which omits empty optionals; on a PATCH that
+  // means clearing label/line2 (etc.) in the edit form silently reverts on save. Edit
+  // mode must send "" for a cleared optional field instead of dropping it.
+  it("sends \"\" for cleared optional fields (label, line2) on a PATCH, not an omission", async () => {
+    const updated: Address = { ...GB_ADDRESS, label: "", line2: "" };
+    const f = mockFetch({
+      "GET /api/regions?country=GB": { status: 200, body: [] },
+      "PATCH /api/addresses/5": { status: 200, body: updated },
+    });
+    const onSaved = vi.fn();
+
+    render(<AddressForm initial={GB_ADDRESS} onSaved={onSaved} onCancel={vi.fn()} />);
+
+    expect(screen.getByLabelText(/label/i)).toHaveValue("Office");
+    fireEvent.change(screen.getByLabelText(/label/i), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText(/apartment, suite/i), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated));
+
+    const { init: patchInit } = lastCall(f);
+    const body = JSON.parse(patchInit!.body as string);
+    expect(body.label).toBe("");
+    expect(body.line2).toBe("");
+  });
+
+  it("still omits empty optional fields on create (POST payload unchanged)", async () => {
+    const created: Address = {
+      id: 10, first_name: "Ada", phone: "07000000000", line1: "10 Downing St",
+      country_code: "GB", city_text: "London", postcode: "SW1A 2AA",
+      is_default_shipping: false, is_default_billing: false,
+    };
+    const f = mockFetch({
+      "GET /api/regions?country=NG": { status: 200, body: [] },
+      "POST /api/addresses": { status: 201, body: created },
+    });
+    const onSaved = vi.fn();
+
+    render(<AddressForm onSaved={onSaved} onCancel={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/no regions are set up/i)).toBeInTheDocument()
+    );
+    fireEvent.change(screen.getByLabelText(/^country$/i), { target: { value: "GB" } });
+    await waitFor(() => expect(screen.getByLabelText(/^city\/town$/i)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "07000000000" } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "10 Downing St" } });
+    fireEvent.change(screen.getByLabelText(/^city\/town$/i), { target: { value: "London" } });
+    fireEvent.change(screen.getByLabelText(/^postcode$/i), { target: { value: "SW1A 2AA" } });
+    // label/line2/last_name left blank — must be OMITTED (not sent as "") on create.
+
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(created));
+
+    const { url, init } = lastCall(f);
+    expect(url).toBe("/api/addresses");
+    const body = JSON.parse(init!.body as string);
+    expect(body).not.toHaveProperty("label");
+    expect(body).not.toHaveProperty("line2");
+    expect(body).not.toHaveProperty("last_name");
+  });
 });

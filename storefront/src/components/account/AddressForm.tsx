@@ -111,15 +111,30 @@ export function AddressForm({
     setFieldErrors({});
 
     const cfg = fieldConfigFor(form.country_code);
+    const isEdit = Boolean(initial?.id);
+
+    // Optional-field helper: create mode OMITS an empty optional field (unset field ->
+    // backend applies its own default on a full create). Edit mode is a DRF PARTIAL
+    // update (PATCH) — there, omitting a field means "leave it unchanged", so a
+    // cleared optional field must be sent explicitly as "" or the clear silently
+    // reverts on save. Required fields (e.g. GB/US/CA city_text, postcode) keep the
+    // omit-if-empty behaviour either way; an empty required field belongs in a 400,
+    // not a would-be no-op PATCH.
+    function setOptional(payload: Record<string, unknown>, key: string, value: string) {
+      const v = value.trim();
+      if (v) payload[key] = v;
+      else if (isEdit) payload[key] = "";
+    }
+
     const payload: Record<string, unknown> = {
       country_code: form.country_code,
       line1: form.line1.trim(),
       first_name: form.first_name.trim(),
       phone: form.phone.trim(),
     };
-    if (form.label.trim()) payload.label = form.label.trim();
-    if (form.last_name.trim()) payload.last_name = form.last_name.trim();
-    if (form.line2.trim()) payload.line2 = form.line2.trim();
+    setOptional(payload, "label", form.label);
+    setOptional(payload, "last_name", form.last_name);
+    setOptional(payload, "line2", form.line2);
     if (cfg.useRegions) {
       if (form.state_region) payload.state_region = form.state_region;
       if (form.area_region) payload.area_region = form.area_region;
@@ -127,10 +142,10 @@ export function AddressForm({
       for (const f of cfg.textFields) {
         const v = form[f.name].trim();
         if (v) payload[f.name] = v;
+        else if (isEdit && !f.required) payload[f.name] = "";
       }
     }
 
-    const isEdit = Boolean(initial?.id);
     const url = isEdit ? `/api/addresses/${initial!.id}` : "/api/addresses";
     const method = isEdit ? "PATCH" : "POST";
 

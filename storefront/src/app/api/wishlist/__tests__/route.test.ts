@@ -65,6 +65,15 @@ describe("wishlist BFF", () => {
     expect(f.mock.calls[0][0]).toBe("http://backend:8000/api/v1/me/wishlist/TOKE-X/");
   });
 
+  it("GET forwards X-Country from the country cookie (non-NG shoppers must not get NG-resolved cards)", async () => {
+    store.set("country", "GB");
+    const f = upstream(200, []);
+    const res = await GET(new Request("http://localhost:3000/api/wishlist"), ctx());
+    expect(res.status).toBe(200);
+    const [, init] = f.mock.calls[0];
+    expect(new Headers((init as RequestInit).headers).get("X-Country")).toBe("GB");
+  });
+
   it("returns 401 without a session (no upstream call)", async () => {
     store.delete("access");
     const f = upstream(200, {});

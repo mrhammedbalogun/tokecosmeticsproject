@@ -28,6 +28,15 @@ async function fetchCart(): Promise<Cart> {
   return res.ok ? res.json() : EMPTY_CART;
 }
 
+/** A BFF error body ({ detail, ... }) is not a Cart — surfacing it as one poisons the
+ * ["cart"] cache and the render tree that reads it. Thrown so onError/catch paths run
+ * instead of onSuccess/onSettled; the status rides along for anyone who wants it. */
+class CartRequestError extends Error {
+  constructor(public status: number) {
+    super(`Cart request failed: ${status}`);
+  }
+}
+
 export function useCart() {
   const qc = useQueryClient();
   const query = useQuery({ queryKey: KEY, queryFn: fetchCart, staleTime: 30_000 });
@@ -38,6 +47,7 @@ export function useCart() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ quantity: v.quantity }),
       });
+      if (!res.ok) throw new CartRequestError(res.status);
       return res.json() as Promise<Cart>;
     },
     onMutate: async (v) => {
@@ -56,6 +66,7 @@ export function useCart() {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ variant_id: v.variantId, quantity: v.quantity }),
       });
+      if (!res.ok) throw new CartRequestError(res.status);
       return res.json() as Promise<Cart>;
     },
     onSuccess: (data) => qc.setQueryData(KEY, data),

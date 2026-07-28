@@ -64,6 +64,16 @@ describe("wishlist page", () => {
     expect(screen.getByText("Shea Butter Cream")).toBeInTheDocument();
   });
 
+  it("forwards the country cookie to /me/wishlist/ (non-NG shoppers must not get NG-resolved cards)", async () => {
+    store.set("country", "GB");
+    renderPage(await WishlistPage());
+
+    const f = global.fetch as unknown as ReturnType<typeof vi.fn>;
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe("http://backend:8000/api/v1/me/wishlist/");
+    expect(new Headers((init as RequestInit).headers).get("X-Country")).toBe("GB");
+  });
+
   it("bounces to /account/wishlist (not /account) on a stale session with no refresh cookie", async () => {
     store.delete("access");
     store.delete("refresh");

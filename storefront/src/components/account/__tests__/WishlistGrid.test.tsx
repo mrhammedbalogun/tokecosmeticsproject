@@ -142,8 +142,10 @@ describe("WishlistGrid", () => {
   });
 
   it("add-to-bag failure shows the inline error and leaves the list unchanged", async () => {
-    // useCart's addItem mutation only rejects on a network failure (it does not check
-    // res.ok — see useCart.ts), so a rejected fetch is what exercises this branch.
+    // Exercises the reject path via a network failure. useCart's addItem mutation also
+    // rejects on a non-ok HTTP response (throws instead of resolving the error body as
+    // if it were a Cart — see useCart.ts / useCart.test.ts), which drives this same
+    // catch branch; not re-tested here to avoid duplicating that coverage.
     mockFetch({
       "POST /api/cart/items": { reject: true },
     });

@@ -24,10 +24,20 @@ const notFound = () => json({ detail: "Not found." }, 404);
 
 // Fixed allowlist: the upstream path segment is interpolated ONLY from one of these
 // two literals, never from the request body's `kind` value directly.
-const KIND_PATH: Record<string, string> = {
+//
+// Looked up with Object.hasOwn (not `KIND_PATH[kind]`) — a plain index lookup walks
+// the prototype chain, so a body of `{ kind: "toString" }` or `{ kind: "__proto__" }`
+// resolves to an inherited Object.prototype member (truthy, and NOT one of the two
+// literals below) instead of falling through to undefined. That bypasses the 400 and
+// interpolates garbage into the upstream URL.
+const KIND_PATH: Record<"shipping" | "billing", string> = {
   shipping: "set-default-shipping",
   billing: "set-default-billing",
 };
+
+function isKind(kind: unknown): kind is "shipping" | "billing" {
+  return typeof kind === "string" && Object.hasOwn(KIND_PATH, kind);
+}
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   if (!(await hasSession())) return json({ detail: "Not authenticated." }, 401);
@@ -36,8 +46,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
   const body = await req.json().catch(() => ({}));
   const kind = (body as { kind?: unknown }).kind;
-  const action = typeof kind === "string" ? KIND_PATH[kind] : undefined;
-  if (!action) return json({ detail: "Invalid kind." }, 400);
+  if (!isKind(kind)) return json({ detail: "Invalid kind." }, 400);
+  const action = KIND_PATH[kind];
 
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   try {

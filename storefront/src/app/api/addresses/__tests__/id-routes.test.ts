@@ -164,7 +164,18 @@ describe("addresses [id]/default BFF — POST", () => {
     expect(await res.json()).toEqual({ detail: "Not found." });
   });
 
-  it.each([["missing", {}], ["uppercase", { kind: "SHIPPING" }], ["garbage", { kind: "x" }]] as const)(
+  it.each([
+    ["missing", {}],
+    ["uppercase", { kind: "SHIPPING" }],
+    ["garbage", { kind: "x" }],
+    // Prototype-chain properties: KIND_PATH[kind] as a plain lookup resolves these to
+    // Object.prototype members (a function, or the poisoned value below) instead of
+    // falling through to undefined, bypassing the 400 and interpolating garbage into
+    // the upstream path.
+    ["toString", { kind: "toString" }],
+    ["__proto__", { kind: "__proto__" }],
+    ["constructor", { kind: "constructor" }],
+  ] as const)(
     "kind %s -> 400, upstream never called",
     async (_label, body) => {
       const f = upstream(200, {});
