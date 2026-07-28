@@ -115,15 +115,21 @@ describe("SignInStep", () => {
     );
   });
 
-  it("merges the guest cart into the account after registering (checkout-breaking bug fix)", async () => {
-    // Reproduces the live bug: a guest with a non-empty cart signs up inline at
-    // checkout. Without merging the pre-auth cart id into the new account, the
-    // shopper lands on a fresh empty user cart and can't place an order.
+  it("does NOT merge client-side after registering — the auth BFF owns that now", async () => {
+    // The merge moved server-side into api/auth/[action]. Two reasons it had to move:
+    // it belongs to authenticating rather than to checkout (the Plan-15 /login and
+    // /register pages would each have had to remember it, and a shopper signing in
+    // from the header would have lost their bag), and the client snapshot read
+    // `cart.id` from react-query — submitting before that query resolved merged
+    // nothing at all.
+    //
+    // This test asserts the ABSENCE deliberately: a duplicate client-side merge would
+    // be a harmless no-op today, which is exactly why it could drift back in unnoticed.
+    // Coverage that the merge still happens lives in api/auth/__tests__/route.test.ts.
     mockCart = { ...EMPTY_CART, id: "guest-cart-77" };
     const f = mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
       "/api/auth/register": { status: 201, body: { ok: true } },
-      "/api/cart/merge": { status: 200, body: { id: "user-cart-1" } },
     });
 
     renderHarness();
@@ -135,13 +141,7 @@ describe("SignInStep", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
-    expect(f).toHaveBeenCalledWith(
-      "/api/cart/merge",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ cart_id: "guest-cart-77" }),
-      })
-    );
+    expect(f).not.toHaveBeenCalledWith("/api/cart/merge", expect.anything());
   });
 
   it("does not attempt a merge when the guest cart is empty (no id yet)", async () => {
@@ -188,13 +188,15 @@ describe("SignInStep", () => {
     // (separately verified below with its own fetch mock)
   });
 
-  it("logs in after the existing-email flip, merges the guest cart, and completes the step", async () => {
+  it("logs in after the existing-email flip and completes the step", async () => {
+    // The cart merge is no longer asserted here — it happens inside the auth BFF's
+    // login action now (see api/auth/__tests__/route.test.ts). What matters on this
+    // path is that the duplicate-email flip still ends in a completed step.
     mockCart = { ...EMPTY_CART, id: "guest-cart-42" };
     const f = mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
       "/api/auth/register": { status: 400, body: { email: ["Account already exists"] } },
       "/api/auth/login": { status: 200, body: { ok: true } },
-      "/api/cart/merge": { status: 200, body: { id: "user-cart-1" } },
     });
 
     renderHarness();
@@ -211,13 +213,7 @@ describe("SignInStep", () => {
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
     expect(screen.getByTestId("userEmail")).toHaveTextContent("dup@example.com");
-    expect(f).toHaveBeenCalledWith(
-      "/api/cart/merge",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ cart_id: "guest-cart-42" }),
-      })
-    );
+    expect(f).not.toHaveBeenCalledWith("/api/cart/merge", expect.anything());
   });
 
   it("resumes a stashed Buy-Now intent after registering and clears it", async () => {
@@ -247,6 +243,30 @@ describe("SignInStep", () => {
     expect(sessionStorage.getItem(BUYNOW_INTENT_KEY)).toBeNull();
   });
 
+  it("resumes a stashed Buy-Now intent when arriving already signed in", async () => {
+    // Load-bearing for guest Buy Now: the guest is sent to the standalone /login
+    // page (intent stashed), so checkout mounts with them ALREADY authenticated and
+    // the me-check is the only place the intent can be resumed. Removing runPostAuth
+    // from the me-check branch silently drops the guest's purchase.
+    sessionStorage.setItem(BUYNOW_INTENT_KEY, JSON.stringify({ variant_id: 9, quantity: 1 }));
+    const f = mockFetch({
+      "/api/auth/me": { status: 200, body: { email: "back@example.com", first_name: "Bea" } },
+      "/api/checkout/buy-now": { status: 200, body: { id: "cart-1" } },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    expect(f).toHaveBeenCalledWith(
+      "/api/checkout/buy-now",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ variant_id: 9, quantity: 1 }),
+      })
+    );
+    expect(sessionStorage.getItem(BUYNOW_INTENT_KEY)).toBeNull();
+  });
+
   it("shows a field error and does not complete on a weak-password rejection", async () => {
     mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
@@ -265,5 +285,70 @@ describe("SignInStep", () => {
       expect(screen.getByText(/too common/i)).toBeInTheDocument()
     );
     expect(screen.getByTestId("completed")).toHaveTextContent("");
+  });
+});
+
+describe("SignInStep — turnstile", () => {
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = "0xTEST-SITE-KEY";
+  });
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    delete (window as { turnstile?: unknown }).turnstile;
+  });
+
+  async function fillAndSubmitRegister() {
+    await waitFor(() => screen.getByLabelText(/^email$/i));
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "n@example.com" } });
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Nia" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ng-pass-9" } });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  }
+
+  it("renders the widget container inside the checkout sign-in form", async () => {
+    mockFetch({ "/api/auth/me": { status: 401, body: {} } });
+    const { container } = renderHarness();
+    await waitFor(() => screen.getByLabelText(/^email$/i));
+    const div = container.querySelector(".cf-turnstile");
+    expect(div).not.toBeNull();
+    expect(div!.getAttribute("data-action")).toBe("turnstile-spin-v2");
+  });
+
+  it("includes the Turnstile token in the register submit body", async () => {
+    // Complete API surface — the widget's mount effect calls render/remove as
+    // soon as window.turnstile exists, so a partial stub crashes the component.
+    (window as { turnstile?: unknown }).turnstile = {
+      render: () => "widget-1",
+      remove: () => {},
+      reset: vi.fn(),
+      getResponse: () => "tok-checkout",
+    };
+    const f = mockFetch({
+      "/api/auth/me": { status: 401, body: {} },
+      "/api/auth/register": { status: 201, body: { ok: true } },
+    });
+
+    renderHarness();
+    await fillAndSubmitRegister();
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    const call = f.mock.calls.find(([u]) => u === "/api/auth/register") as unknown as
+      [string, RequestInit];
+    expect(JSON.parse(String(call[1].body))).toMatchObject({ turnstile_token: "tok-checkout" });
+  });
+
+  it("sends no turnstile_token when the widget never loaded (script blocked / gate off)", async () => {
+    const f = mockFetch({
+      "/api/auth/me": { status: 401, body: {} },
+      "/api/auth/register": { status: 201, body: { ok: true } },
+    });
+
+    renderHarness();
+    await fillAndSubmitRegister();
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    const call = f.mock.calls.find(([u]) => u === "/api/auth/register") as unknown as
+      [string, RequestInit];
+    expect(JSON.parse(String(call[1].body))).not.toHaveProperty("turnstile_token");
   });
 });

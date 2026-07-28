@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth";
+import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 
 /** Authed wishlist proxy (backend is sku-keyed under /me/wishlist/). The browser
  * never sees the token — fetchWithAuth reads httpOnly cookies server-side. */
@@ -24,8 +25,12 @@ function onError(e: unknown) {
 
 export async function GET(_req: Request, _ctx: { params: Promise<{ sku?: string[] }> }) {
   if (!(await hasSession())) return json({ detail: "Not authenticated." }, 401);
+  // Unlike POST/DELETE (sku-only mutations, no product cards in the response), GET
+  // returns country-resolved product cards — it must forward the shopper's market or
+  // a non-NG shopper gets NG prices/availability (mirrors ../cart/[[...path]]/route.ts).
+  const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   try {
-    return json(await fetchWithAuth("/me/wishlist/"));
+    return json(await fetchWithAuth("/me/wishlist/", { country }));
   } catch (e) {
     return onError(e);
   }

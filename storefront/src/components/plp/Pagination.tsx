@@ -1,25 +1,19 @@
-import Link from "next/link";
 import { plpHref, type PlpState } from "@/components/plp/plpParams";
+import { Pagination as PaginationView } from "@/components/ui/Pagination";
 
-/** Prev/Next are driven by the API's own `next`/`previous` links (from the
- * Paginated response), not a computed page count — so we never link to a page
- * beyond the last (which DRF 404s) and there is no hardcoded page-size coupling. */
+/** The PLP's href-building wrapper around the shared Prev/Next markup. Prev/Next are
+ * driven by the API's own `next`/`previous` links (from the Paginated response), not a
+ * computed page count — so we never link to a page beyond the last (which DRF 404s) and
+ * there is no hardcoded page-size coupling. `plpHref` keeps the PLP's own canonical URL
+ * rules (filters carried through, page 1 param-less); the shared view knows none of that. */
 export function Pagination({ base, state, hasPrev, hasNext }: {
   base: string; state: PlpState; hasPrev: boolean; hasNext: boolean;
 }) {
-  if (!hasPrev && !hasNext) return null;
-  const page = state.page;
   return (
-    <nav aria-label="Pagination" className="mt-10 flex items-center justify-center gap-2">
-      {hasPrev && (
-        <Link rel="prev" href={plpHref(base, state, { page: page - 1 })}
-          className="rounded-full border border-line px-4 py-2 text-sm hover:border-accent">← Prev</Link>
-      )}
-      <span className="px-3 text-sm text-muted">Page {page}</span>
-      {hasNext && (
-        <Link rel="next" href={plpHref(base, state, { page: page + 1 })}
-          className="rounded-full border border-line px-4 py-2 text-sm hover:border-accent">Next →</Link>
-      )}
-    </nav>
+    <PaginationView
+      page={state.page}
+      prevHref={hasPrev ? plpHref(base, state, { page: state.page - 1 }) : null}
+      nextHref={hasNext ? plpHref(base, state, { page: state.page + 1 }) : null}
+    />
   );
 }

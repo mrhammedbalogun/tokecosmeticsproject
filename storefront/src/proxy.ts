@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { REFRESH_COOKIE } from "@/lib/auth";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { GEO_COUNTRY_HEADER } from "@/lib/geo";
 
@@ -15,6 +16,16 @@ const COUNTRY_COOKIE_OPTIONS = {
 
 // Next.js 16 renamed the `middleware` file convention to `proxy` (Node.js runtime only).
 // See node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md.
+//
+// Only ONE proxy file may exist, so everything that must run before a route renders lives
+// here. Keep it dependency-free: the docs warn it may be deployed to the CDN edge, separate
+// from render code, so it must not import shared modules with real behaviour (cookie-name
+// constants only — never lib/session.ts).
+//
+// The /account check below is PRESENCE THEATRE, deliberately. It cannot verify a token, so
+// it is not authorization: it only avoids rendering eight dynamic pages for an obviously
+// logged-out visitor and attaches a correct ?next= on a direct URL hit. The real gate is
+// each account page's own data fetch (see lib/session.ts requireAuth).
 export function proxy(req: NextRequest) {
   const existing = req.cookies.get(COUNTRY_COOKIE)?.value;
 
@@ -26,15 +37,32 @@ export function proxy(req: NextRequest) {
   const requestHeaders = new Headers(req.headers);
   requestHeaders.set(GEO_COUNTRY_HEADER, geo);
 
-  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  const res = isGatedAccountPath(req.nextUrl.pathname) && !req.cookies.get(REFRESH_COOKIE)
+    ? NextResponse.redirect(loginUrl(req))
+    : NextResponse.next({ request: { headers: requestHeaders } });
 
   // Seed a country cookie on the very first request (default NG) so Server Components always
   // have a market. Only when absent — an existing choice is never overwritten.
+  // Set on the redirect too: a first-time visitor deep-linking into /account must not come
+  // back from login without a market, or they'd be shown the wrong currency.
   if (!existing) {
     res.cookies.set(COUNTRY_COOKIE, DEFAULT_COUNTRY, COUNTRY_COOKIE_OPTIONS);
   }
 
   return res;
+}
+
+/** Exact segment match — `/accountants-special` is not an account route. */
+function isGatedAccountPath(pathname: string): boolean {
+  return pathname === "/account" || pathname.startsWith("/account/");
+}
+
+function loginUrl(req: NextRequest): URL {
+  const url = new URL("/login", req.nextUrl);
+  // Only the path — never the full URL. Round-tripping an absolute URL through `next`
+  // is how open-redirects start; `safeNext` on the reading side rejects those anyway.
+  url.searchParams.set("next", req.nextUrl.pathname + req.nextUrl.search);
+  return url;
 }
 
 export const config = {

@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
@@ -13,6 +15,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.notifications.tasks import send_email_task
+
+from .turnstile import require_turnstile
 
 from .throttling import (
     LoginBurstThrottle,
@@ -38,6 +42,8 @@ from .serializers import (
 
 User = get_user_model()
 
+security_logger = logging.getLogger("apps.security")
+
 
 class LoginView(TokenObtainPairView):
     """`/auth/token/` with throttles attached.
@@ -51,6 +57,19 @@ class LoginView(TokenObtainPairView):
 
     throttle_classes = [LoginIPThrottle, LoginBurstThrottle, LoginSustainedThrottle]
 
+    def post(self, request, *args, **kwargs):
+        # After throttling (dispatch runs that first), before credentials: a bot
+        # failing Turnstile must not get its guess checked against the password.
+        require_turnstile(request)
+        response = super().post(request, *args, **kwargs)
+        # The failure line comes from the user_login_failed signal (signals.py);
+        # JWT flows never fire user_logged_in, so the success line lives here.
+        if response.status_code == 200:
+            data = request.data
+            email = data.get("email", "<no email>") if hasattr(data, "get") else "<no email>"
+            security_logger.info("login succeeded for %s", email)
+        return response
+
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -58,6 +77,24 @@ class RegisterView(generics.CreateAPIView):
     # IP first: it is the cap that protects the sending domain. The email throttle only
     # stops one address being spammed repeatedly; it cannot stop volume.
     throttle_classes = [RegisterIPThrottle, RegisterEmailThrottle]
+
+    def create(self, request, *args, **kwargs):
+        require_turnstile(request)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        # A token pair ships WITH the 201. The BFF used to log in via /auth/token/
+        # right after registering, but Turnstile tokens are single-use, so one form
+        # submit cannot clear two gated endpoints. Issuing tokens here keeps signup
+        # a single gated request.
+        refresh = RefreshToken.for_user(serializer.instance)
+        data = {
+            **serializer.data,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
+        headers = self.get_success_headers(serializer.data)
+        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         from django.conf import settings
@@ -166,11 +203,16 @@ class LogoutView(APIView):
 
 class PasswordResetView(APIView):
     permission_classes = [permissions.AllowAny]
+    # This endpoint SENDS AN EMAIL to an address the caller picks. Unthrottled that is an
+    # email-bomb primitive aimed at someone else's inbox, and it is the victim's mail
+    # provider that decides we are the spammer. The deliberate always-200 (below) means
+    # throttling is also the only signal an abuser ever gets back.
     serializer_class = PasswordResetSerializer
     throttle_classes = [PasswordResetIPThrottle, PasswordResetEmailThrottle]
 
     @extend_schema(request=PasswordResetSerializer, responses={200: None})
     def post(self, request):
+        require_turnstile(request)
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"].lower()

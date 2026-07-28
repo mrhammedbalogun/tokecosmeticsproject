@@ -1,21 +1,22 @@
 import { cookies } from "next/headers";
 import { apiFetch, ApiError } from "@/lib/api";
+import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth";
 import {
-  ACCESS_COOKIE, REFRESH_COOKIE, ACCESS_MAX_AGE, REFRESH_MAX_AGE, cookieOptions,
-} from "@/lib/auth";
+  clearTokens, establishSession, registerSession, setTokens,
+} from "@/lib/auth-session";
 
 type Action = "login" | "register" | "logout" | "refresh" | "me";
 
-async function setTokens(access?: string, refresh?: string) {
-  const jar = await cookies();
-  if (access) jar.set(ACCESS_COOKIE, access, cookieOptions({ maxAge: ACCESS_MAX_AGE }));
-  if (refresh) jar.set(REFRESH_COOKIE, refresh, cookieOptions({ maxAge: REFRESH_MAX_AGE }));
-}
-async function clearTokens() {
-  const jar = await cookies();
-  jar.delete(ACCESS_COOKIE);
-  jar.delete(REFRESH_COOKIE);
-}
+/**
+ * The session mechanics (token cookies + the guest-cart merge) live in
+ * `lib/auth-session.ts`, shared with the `/login` Server Action. They were moved out of
+ * this file rather than copied: a Server Action cannot reuse this route by fetching it,
+ * because `Set-Cookie` on a fetch response never reaches the outer response — so without
+ * a shared module the merge would exist twice and drift.
+ *
+ * This route keeps its contract exactly as it was: checkout's `SignInStep` still posts
+ * here, and Plan-15 must not touch checkout.
+ */
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
     status, headers: { "content-type": "application/json" },
@@ -58,19 +59,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
   try {
     switch (action as Action) {
       case "login": {
-        const tokens = await apiFetch<{ access: string; refresh: string }>("/auth/token/", {
-          method: "POST", body,
-        });
-        await setTokens(tokens.access, tokens.refresh);
+        await establishSession(
+          jar,
+          { email: body.email, password: body.password },
+          { turnstileToken: body.turnstile_token },
+        );
         return json({ ok: true });
       }
       case "register": {
-        // Django register does NOT return tokens; create the account, then log in.
-        await apiFetch("/auth/register/", { method: "POST", body });
-        const tokens = await apiFetch<{ access: string; refresh: string }>("/auth/token/", {
-          method: "POST", body: { email: body.email, password: body.password },
-        });
-        await setTokens(tokens.access, tokens.refresh);
+        // Shared with the /register Server Action so the two cannot drift. The
+        // upstream 201 carries the token pair (single-use Turnstile token, one
+        // gated request); registerSession consumes it without a second login.
+        const { turnstile_token, ...payload } = body;
+        await registerSession(jar, payload, { turnstileToken: turnstile_token });
         return json({ ok: true }, 201);
       }
       case "logout": {
@@ -80,7 +81,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
           await apiFetch("/auth/logout/", { method: "POST", body: { refresh }, token: access })
             .catch(() => undefined); // best-effort blacklist; clear cookies regardless
         }
-        await clearTokens();
+        clearTokens(jar);
         return json({ ok: true });
       }
       case "refresh": {
@@ -89,7 +90,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
         const out = await apiFetch<{ access: string; refresh?: string }>("/auth/token/refresh/", {
           method: "POST", body: { refresh },
         });
-        await setTokens(out.access, out.refresh);
+        setTokens(jar, out.access, out.refresh);
+        // Deliberately NOT merging here: no identity transition, and refresh runs constantly.
         return json({ ok: true });
       }
       case "me": {

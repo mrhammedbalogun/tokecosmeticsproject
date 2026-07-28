@@ -1,0 +1,579 @@
+# Plan-15 — Storefront customer account
+
+**Status:** in progress (started 2026-07-27)
+**Branch:** `plan-15-storefront-account` (off `main`)
+**Depends on:** Plan-12 (storefront foundation), Plan-11 (accounts backend) — both shipped.
+
+Customer dashboard: orders, order detail + tracking, addresses, profile, wishlist, password —
+plus the auth pages that make registration and password reset real for the first time.
+
+---
+
+## Design rulings (Fable 5, 2026-07-27)
+
+Fable corrected three claims I had asserted from a first read. All three were verified against
+the repo before this plan was written; **correction 3 invalidated my original gating design.**
+
+**C1 — `src/proxy.ts` already exists** (Plan-12/13: seeds the country cookie, sanitizes the geo
+header, matcher covers everything except `_next/static`, `_next/image`, favicon, `/logos/`,
+`/api/`). Next allows only ONE proxy file. **Extend the existing `proxy()` function; do not
+create a file, and do not rewrite the matcher** — it already covers `/account`, and breaking it
+breaks country seeding site-wide.
+
+**C2 — `(auth)/login` and `(auth)/register` are 3-line placeholders**, not working pages. This
+is not a redirect-back retrofit; both forms are built from scratch here.
+
+**C3 — `fetchWithAuth` CANNOT do its silent refresh from a Server Component.** `session.ts:32`
+calls `jar.set(...)`, and the bundled Next 16 doc
+(`01-app/03-api-reference/04-functions/cookies.md:80`) states: *"Setting cookies is not supported
+during Server Component rendering. To modify cookies, invoke a Server Function from the client
+or use a Route Handler."* In an RSC the set throws.
+
+> **This is a latent bug TODAY**, not only a constraint on new work: `lib/checkout.ts:51`
+> `getOrder` → `fetchWithAuth`, called from `checkout/confirmation/[number]/page.tsx`, a Server
+> Component. It has never bitten because confirmation is visited seconds after checkout, while
+> the access token is still valid. ~~Fix it in 15c.~~
+>
+> **FIXED IN ITEM 4 (2026-07-26), pulled forward from 15c.** The fix is a change of fetch
+> mechanism, not of presentation, so it belongs with the mechanism and its tests rather than with
+> 15c's extraction refactor. Shipping item 4 while a known-broken caller of the very thing item 4
+> exists to fix stayed broken would have been process for its own sake.
+>
+> **And the hazard is worse than "the cookie write throws".** The refresh POST *succeeds* first,
+> and SimpleJWT (ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION) blacklists the old refresh
+> token server-side the instant it is spent. An RSC that refreshes therefore destroys a live
+> 14-day session and only *then* fails to persist the replacement. `product/[slug]/page.tsx`
+> — which this plan did not even list — was the worse of the two call sites for exactly this
+> reason: its `catch` returned a generic delivery label, so the page rendered perfectly while
+> the customer's session died. Both call sites are fixed; the product page now uses `apiFetch`
+> with a hand-read token, because a **public** page must neither bounce to login nor refresh.
+
+### Gating architecture
+
+Two layers. The proxy is a cheap hint; **the real gate is each page's own data fetch.**
+
+1. **Proxy (presence theatre, ~5 lines).** Inside the existing `proxy()`: if the pathname starts
+   with `/account` and there is no `refresh` cookie, redirect to `/login?next=<pathname>`.
+   **Gate on `refresh`, never on `access`** — the access cookie expires in **14 minutes**
+   (under its 15-minute token; it was wrongly 30 minutes until item 5 fixed it) while the
+   refresh **cookie** lasts 14 days, so gating on `access` would bounce a perfectly logged-in
+   user to /login every quarter hour. Note the distinction, because it matters in the other
+   direction too: the refresh **token** is valid 30 days (`base.py:176`) and the cookie is
+   deliberately shorter at 14 (`lib/auth.ts:18`, pinned by `auth.test.ts`). Cookies must
+   always expire *before* the tokens they carry — do not "tidy" the cookie up to 30 days, or
+   you recreate the access-cookie bug in reverse. Buys: a logged-out visitor or crawler never renders eight dynamic pages, and a
+   direct URL hit gets a correct `?next=`. Nothing more; document it as such.
+   The proxy must import only cookie-name constants — **never `lib/session.ts`.**
+
+2. **Real gate: the refresh-redirect dance.** Because only a Route Handler may write cookies:
+   - `api/auth/refresh-redirect/route.ts` (GET): validate `next`, refresh the token pair,
+     **persist BOTH rotated tokens**, 303 to `next`. On refresh failure: clear both cookies and
+     redirect to `/login?next=<next>`. A dedicated file, not a new `[action]` case — that
+     handler is POST-and-JSON.
+   - `requireAuth(currentPath)` in `lib/session.ts`: no access + no refresh → `/login?next=`;
+     no access + refresh → `/api/auth/refresh-redirect?next=`; access present → plain
+     `apiFetch` **without** the refresh fallback, and 401 → refresh-redirect.
+
+**Three traps inside this:**
+
+- **`redirect()` throws `NEXT_REDIRECT`.** Any `try/catch` on this path MUST rethrow it
+  (`unstable_rethrow`). A generic catch silently turns the entire gate into a no-op. This is
+  the subtlest line in Plan-15.
+- **Layouts do not re-run on soft navigation.** /account/orders → /account/addresses does not
+  re-execute `account/layout.tsx`, so a layout-only gate protects nothing after minute 30.
+  Hence: every page's own fetch is the gate. The layout fetches `/auth/me/` once per hard load
+  for the nav only. **No page adds a separate gate call on top of its data fetch** — zero extra
+  round trips except one redirect per genuine expiry.
+- **Rotation race.** Two concurrent RSC requests can both hit refresh-redirect; with
+  ROTATE + BLACKLIST the loser 401s to `/login?next=`. Heal it by having the login page check
+  server-side whether the user is already authenticated and, if so, redirect straight to `next`.
+  Build that in from day one — it turns the race into an invisible extra redirect.
+
+**Open-redirect guard:** accept `next` only when it starts with a single `/` and not `//` or
+`/\`; otherwise fall back to `/account`. Applied in login, register, and refresh-redirect.
+
+### Other rulings
+
+- **Invoice = BFF streaming proxy.** `fetchWithAuth` parses JSON so it cannot stream; add
+  `fetchWithAuthRaw(): Promise<Response>` sharing the same refresh block (factored, not
+  duplicated). **No IDOR to design against** — verified `orders/views.py` is `IsAuthenticated`
+  and filters `user=request.user`, so a stranger's order 404s. The invariant to state in the
+  route: forward the CUSTOMER's token and never any privileged credential; authorization lives
+  in exactly one place, the backend queryset. Validate `number` against `^[A-Za-z0-9-]{1,32}$`.
+  `Content-Disposition: attachment`, and **`Cache-Control: private, no-store`**. API 404 → 404;
+  **403 → also 404** (never confirm the order exists).
+- **Reviews: OUT of scope.** Product-scoped reviews already exist; there is no "my reviews"
+  endpoint, and the spec's own file list omits the page. Adding a backend endpoint inside a
+  storefront plan is cross-boundary scope creep. Mention it at the checkpoint.
+- **`/verify-email` IS in scope** (I had missed it). `accounts/views.py:42` mails
+  `${FRONTEND_URL}/verify-email?token=...` on registration, and Plan-15 is what makes
+  registration real — without the page every new registrant clicks a 404. Route slugs are pinned
+  by the backend: exactly `/reset-password` (`uid` + `token`) and `/verify-email`.
+- **Account pages stay under `(shop)`**, not a literal `src/app/account`, so they keep the site
+  chrome. Deviation from the spec's literal paths; note at checkpoint.
+- **Reuse by extraction, not import.** Pull shared presentation out of the confirmation page into
+  `components/orders/` and have both consume it. Do NOT let account order-detail import the
+  confirmation page or share its *fetch* path — keep each page owning its own fetch.
+  **CORRECTION (2026-07-26): the reason given here was wrong. The confirmation page does NOT
+  serve guests.** `permission_classes = [AllowAny]` on `OrderDetailView` is the DRF idiom for
+  "this view does its own auth in the body", not "guests welcome": `orders/views.py:69-71` returns
+  **403 `authentication_required`** to an anonymous caller, and anonymous access works *only* with
+  a signed `?token=` tracking link (which yields the redacted serializer, and which the
+  confirmation page never passes). Verified live against the running API: garbage bearer → 401,
+  no auth → 403. So confirmation is an authed page like any other and uses
+  `fetchWithAuthOrBounce`. The tracking-token guest view is 15c's separate `/track` surface.
+- **No caching under /account.** `cookies()` makes these routes dynamic automatically; no
+  `revalidate`, no `use cache`.
+
+---
+
+## Tasks
+
+**15a — Auth core. HIGHEST RISK; review hardest.**
+Every failure mode here is an auth failure mode: cookie-write rules, the rotation race,
+NEXT_REDIRECT swallowing, open redirect.
+1. `lib/next-param.ts` — `safeNext()` open-redirect guard (+ tests).
+2. Extend `src/proxy.ts` with the `/account` refresh-presence check (+ tests).
+3. `api/auth/refresh-redirect/route.ts` (+ tests).
+4. ~~`requireAuth` / 401-wrapper / `fetchWithAuthRaw` in `lib/session.ts` (+ tests).~~ **DONE
+   2026-07-26.** Shipped surface, and the reasoning that is easy to undo by "simplifying":
+
+   - **`lib/api.ts`: `apiFetchRaw()`** returns the Response untouched; `apiFetch` is rebuilt on
+     top of it so URL/header assembly exists once.
+   - **RSC-safe (read cookies, never write, never touch the refresh endpoint):** `getAccessToken`,
+     `requireAuth(currentPath)`, `fetchWithAuthOrBounce(path, currentPath, opts)`.
+   - **Route-Handler-only (write cookies):** `fetchWithAuth`, `fetchWithAuthRaw`. Both share one
+     private `refreshAndPersist(jar, refresh)`.
+   - **`currentPath` is an explicit required parameter.** Next 16 gives an RSC no pathname API
+     (`headers()` exposes incoming request headers only — checked the bundled doc). The rejected
+     alternative was a proxy-injected header: it fails *silently* when the matcher misses a route
+     or the header name drifts, quietly sending users to `DEFAULT_NEXT`. A wrong literal is caught
+     in one walkthrough; a silent infrastructure fallback is not.
+   - **`fetchWithAuth` was NOT renamed.** Nine Route Handlers use it correctly; churn buys nothing.
+   - **Enforcement is a dev-time probe, not a lint rule.** The bug arrived *indirectly* through
+     `lib/checkout.ts`, which Route Handlers may legitimately import, so an import rule on pages
+     would have missed it. `assertCookiesWritable` attempts `jar.delete()` and converts the
+     failure into a named error. **Verified live, not just against the mock:** a scratch RSC
+     calling `fetchWithAuth` produced *"fetchWithAuth() was called during Server Component
+     render… Use requireAuth() or fetchWithAuthOrBounce()"*. A second, cheap structural test
+     (`session-boundary.test.ts`) asserts the writing fetchers are imported only under
+     `app/api/` — when first written it failed and named exactly the two known offenders.
+   - **Deleted `getDeliveryOptions`** from `lib/checkout.ts`: zero callers: the BFF route
+     `api/checkout/delivery-options/route.ts` re-implements it. Deleting it removed a third RSC
+     hazard for free.
+
+   **A Next 16 behaviour to know before writing the login page (found by testing, not documented):**
+   the renewal bounce does **not** arrive as an HTTP 307. `redirect()` fires after the RSC shell
+   has begun streaming, so Next cannot send a `Location` header and instead embeds the redirect in
+   the streamed RSC payload for the client router to act on. Verified end to end in a real browser
+   on a *hard* navigation with a stale access cookie: the browser landed on
+   `/login?next=%2Fcheckout%2Fconfirmation%2FTC-100038`, **both** dead token cookies were cleared
+   (so no gate↔handler loop), and `country=NG` survived the chain. Consequences: `curl` and other
+   no-JS clients see the fallback UI and a **200**, not a redirect — do not assert on 307 in any
+   test or smoke check; and a stale-session user briefly sees the page shell before bouncing.
+   **Still unverified (Fable's open question):** the same bounce during a *soft* client-side
+   navigation. Nothing links to a gated page yet, so verify it in the 15b walkthrough.
+5. ~~Login page — full build, `?next=`, already-authed short-circuit.~~ **DONE 2026-07-26.**
+
+   **Built as a Server Function, not a client fetch to the auth BFF.** The deciding reason
+   is navigation, not progressive enhancement: `redirect()` in a Server Action serves a 303
+   and streams the destination's payload in the *same* response (`redirect.md:11`,
+   `server-actions.md:48`), so the landing page renders *after* the cookies are staged. The
+   client-fetch alternative has no correct sequence — `router.refresh()` returns void with
+   no completion signal, so a `push` cannot be ordered after it. Two things came free:
+   Next's `Origin`/`Host` CSRF check on every action (`server-actions.md:82`), which the
+   JSON BFF route does **not** have; and a form that works with JS off.
+   `api/auth/[action]` keeps its contract unchanged — checkout's `SignInStep` still uses it.
+
+   **`lib/auth-session.ts` is new and shared** (`setTokens`/`clearTokens`/`mergeGuestCart`/
+   `establishSession`). A Server Action cannot reuse the BFF route by fetching it —
+   `Set-Cookie` on a fetch response never reaches the outer response, so the user would
+   authenticate and stay logged out. Sharing the module is what keeps the guest-cart merge
+   to one implementation. Its country-cookie forwarding is now pinned by a test; it was
+   unpinned, which is exactly how an extraction loses it.
+
+   **`decideLoginEntry` is a SEPARATE function from `decideAuth`, deliberately.** Fable's
+   ruling suggested reusing `decideAuth` here; that would have shipped an infinite redirect,
+   and its own table contradicted it. `decideAuth` returns `authenticated` whenever an
+   access token is present, but `proxy.ts:40` gates `/account*` on the **refresh** cookie —
+   so honouring an access-only cookie sends the visitor to `/account`, the proxy sends them
+   back to `/login`, and round it goes, with no API call anywhere to break it. The rule is
+   **both cookies, or a form**; refresh-only renews via the bounce.
+
+   **Two defects fixed here because item 5 depends on them:**
+   - `ACCESS_MAX_AGE` was **30 min against a 15-min `ACCESS_TOKEN_LIFETIME`** — for half of
+     every session the browser held a token Django rejects, which would have made the
+     login short-circuit's happy path a guaranteed 401. Now 14 min, with a test asserting
+     the cookie always expires before the token it carries.
+   - `refresh-redirect`'s `catch` was bare, so a 502/timeout was treated as "token dead" and
+     destroyed a valid 14-day session for every user whose access token happened to be
+     stale during the blip. Now only SimpleJWT's own 400/401 clears cookies. Termination is
+     unaffected: a transient error retries, a real verdict clears.
+
+   **Verified live, not only in tests:** a genuine no-JS submit (parse the server-rendered
+   HTML, POST React's `$ACTION_*` fields as multipart, zero client JS) returned **303 +
+   `Set-Cookie: access, refresh`** and honoured `next` — so progressive enhancement is real,
+   which Fable had flagged as unverified. `https://evil.example/pwn` came back as `/account`.
+   With JS, submit soft-navigated to `/account/orders`; `document.cookie` showed no tokens
+   (httpOnly intact). All three entry states confirmed by cookie: access-only renders the
+   form, refresh-only emits the renewal bounce, neither renders the form.
+
+   **Also:** `(auth)` had no layout, so auth pages rendered with no header/footer and no way
+   back to the store. Added a minimal `(auth)/layout.tsx` — logo linked home, nothing else.
+   No "Forgot password?" link until item 7 builds that page; a visible 404 is worse.
+
+   **Deliberately NOT done: forwarding `X-Forwarded-For` from the auth BFF or the action.**
+   It looks like a rate-limit fix and is not one. See the security section below.
+6. Register page — full build, `?next=`; the existing BFF register action auto-logs-in.
+7. `forgot-password`, `reset-password`, `verify-email` pages.
+
+**15b — Account shell + identity pages. DONE 2026-07-28.**
+`account/layout.tsx` (side nav desktop / tabs mobile), dashboard index, profile + marketing
+consent (PATCH `/auth/me/` — field is `marketing_consent`), security page (password change per
+`PasswordChangeSerializer`; deletion behind a two-step reveal + typed DELETE confirmation).
+
+Deviations from the sketch above, on purpose:
+- **Server Functions, not the JSON BFF**, for all three mutations — same precedent as item 5
+  (`Origin`/`Host` CSRF for free, works without JS). The deletion action itself clears the
+  cookies and redirects home; the phrase check is enforced server-side too, because a Server
+  Function is a public POST endpoint.
+- The **session-boundary structural test** now allows `"use server"` modules to import
+  `fetchWithAuth` — the directive is exactly what makes cookie writes legal, so it is the
+  honest marker (the test file documents this).
+- Nav links ONLY Dashboard/Profile/Security; orders/addresses/wishlist join in 15c/15d.
+
+Live-verified (production build, Playwright): profile edit persisted to the DB; password
+change + re-login with the new password; sign-out (and the /account bounce with correct
+`?next=`); deletion on a throwaway account → deactivated + `deletion_requested_at` stamped +
+sessions blacklisted + cookies cleared + landed home. **Still open from 15a: the renewal
+bounce during a SOFT navigation — verify in the checkpoint walkthrough.**
+
+**15c — Orders.** Second-riskiest, because of the extraction refactor.
+(The C3 `getOrder` fix originally slated here shipped early in 15a item 4.)
+
+Grounding facts, verified 2026-07-28 (do not re-derive; do not "correct"):
+- Backend surface is COMPLETE — build nothing there. `GET /orders/` (owner-only,
+  `OrderListSerializer`, DRF PageNumberPagination `{count,next,previous,results}`,
+  PAGE_SIZE 24); `GET /orders/{number}/` (owner → `OrderSerializer`; anonymous +
+  valid `?token=` → redacted `OrderTrackingSerializer`; anonymous without token →
+  **403**, bad token or stranger's order → **404**); `GET /orders/{number}/invoice.pdf`
+  (owner-only, `IsAuthenticated`, no token path).
+- **The guest tracking slug is pinned by the backend:** order emails link to
+  `${FRONTEND_URL}/orders/{number}?token=…` (`orders/emails.py:27-30`). So the guest
+  surface is `(shop)/orders/[number]/page.tsx` — there is no `/track` route.
+- Status vocabulary (`orders/models.py`): pending_payment, processing, shipped,
+  delivered, completed, cancelled, expired, refunded, on_hold. `needs_review` is NOT
+  a status and never shown to customers.
+- `getOrder` callers: confirmation page + `lib/__tests__/checkout.test.ts` only.
+
+Tasks (sequential, one implementer subagent each, two-stage review after each):
+
+1. **`lib/orders.ts` + extraction refactor.** Move `OrderItem`, `OrderDetail`,
+   `getOrder` out of `lib/checkout.ts` into new `lib/orders.ts` (checkout keeps its
+   checkout-only fetchers; update the two importers; move the `getOrder` tests to
+   `lib/__tests__/orders.test.ts` — no re-export shim). Extract pure-presentation
+   server components from the confirmation page into `components/orders/`:
+   `OrderItems`, `OrderTotals`, `AddressBlock` (the `AddressSummary` + `str` reader
+   move as-is, defensive-read comment included). Confirmation page consumes them with
+   ZERO rendered-output change — its existing tests must pass unmodified except for
+   import paths. Do NOT extract the banner/copy/bank-details (checkout-specific) and
+   do NOT share fetch paths — each page owns its own fetch (plan ruling).
+2. **Orders list.** `getOrders(page, currentPath)` in `lib/orders.ts` via
+   `fetchWithAuthOrBounce<Paginated<OrderListItem>>("/orders/?page=N", …)`; new types
+   for the list serializer shape (`item_count`, `items` thumbnails). `StatusChip` in
+   `components/orders/` (label + tone per status above; unknown status renders the
+   raw string, muted). Page `(shop)/account/orders/page.tsx`: rows = number, date,
+   status chip, item count, `grand_total_display`, linking to
+   `/account/orders/{number}`; empty state with a “Browse products” link; Prev/Next
+   pagination via `?page=` (PAGE_SIZE 24; hide ends; `searchParams` is a Promise —
+   await it); `currentPath` passed to the fetcher must include `?page=N` when N>1 so
+   the renewal bounce returns to the same page. Add Orders to `AccountNav` after
+   Dashboard.
+3. **Order detail.** `(shop)/account/orders/[number]/page.tsx`: fetch via `getOrder`
+   with `currentPath=/account/orders/{number}`; 404/403 → `notFound()` (mirror the
+   confirmation page's `loadOrder`, including the rethrow discipline). Renders: status
+   chip + placed date, shared `OrderItems`/`OrderTotals`/`AddressBlock`, delivery
+   method, customer note, tracking block (carrier + number when either is set; else a
+   status-appropriate line, e.g. pre-shipped → “You'll get tracking details when your
+   order ships.”), bank details via the same `confirmationCopy(...).showBankDetails`
+   predicate the confirmation page uses (a pending bank-transfer order must not hide
+   its payment instructions), and an invoice link:
+   `<a href={/api/orders/${number}/invoice} download>` — plain `<a>`, not `Link`.
+4. **Invoice BFF proxy.** `api/orders/[number]/invoice/route.ts` (GET): validate
+   `number` against `^[A-Za-z0-9-]{1,32}$` → else 404 with no upstream call;
+   `fetchWithAuthRaw("/orders/{number}/invoice.pdf")`; on 200 stream the upstream
+   body through (no buffering), `Content-Type: application/pdf`,
+   `Content-Disposition: attachment; filename="{number}.pdf"`,
+   `Cache-Control: private, no-store`; upstream 404 AND 403 → 404 (never confirm an
+   order exists); post-refresh 401 (dead session) → 303 to
+   `/login?next=/account/orders/{number}` (the link is a top-level navigation, so a
+   redirect lands the user on login, not a broken download); anything else → 502
+   with an empty body. Forward ONLY the customer's token (fetchWithAuthRaw does) —
+   authorization lives in the backend queryset alone.
+5. **Guest tracking page.** `(shop)/orders/[number]/page.tsx` — PUBLIC page: plain
+   `apiFetch` with `?token=` from awaited `searchParams`; it must never import an
+   auth fetcher (a public page must neither bounce to login nor refresh — the
+   product-page rule). Add `OrderTracking` type + `getTrackedOrder(number, token)`
+   to `lib/orders.ts`. Valid token → redacted view: status chip, items, total,
+   delivery option, tracking carrier/number, reusing `OrderItems`/`StatusChip`
+   (NOT `OrderTotals`/`AddressBlock` — the redacted serializer has no breakdown and
+   no address, by design). Missing/invalid/expired token (backend 404) → a friendly
+   “this tracking link is invalid or has expired” state offering
+   `/account/orders/{number}` (which gates itself) — not a bare `notFound()`, this
+   is an email deep link that outlives tokens. `robots: noindex`. Note: the proxy
+   matcher already covers `/orders/…` but gates only `/account*` — no proxy change.
+6. **Verification (controller, not a subagent).** Both suites green; production
+   build; live browser walkthrough: list (with the dev DB's real orders), detail,
+   invoice PDF actually downloads and opens, guest tracking link with a token minted
+   via `make_tracking_token` in `manage.py shell`, bad-token state, and re-verify the
+   confirmation flow end-to-end after the extraction.
+
+**Task 6 run 2026-07-28 (session resumed after a system crash — Docker dev containers
+had died with it; `docker compose -f docker-compose.dev.yml up -d` first).** 700 backend
++ 653 storefront tests green, typecheck + lint + production build clean. Live against
+`next start` (prod build): list with the 4 real dev orders (chips, counts, totals,
+pagination correctly hidden under PAGE_SIZE), detail for a processing order with real
+carrier/number tracking, detail for a fresh pending_payment order (pre-ship tracking
+line + bank details via `showBankDetails`), guest tracking with a minted token
+(redacted view, `noindex`), bad AND missing token → the friendly explainer, and a full
+Add-to-Cart → checkout → bank-transfer placement (TC-100043) re-verifying the
+confirmation page on the extracted components. Login as the dev walkthrough user
+required a dev-DB password reset (`set_password` in shell — local DB only).
+
+Two findings, one fixed here and one deferred with a decision needed:
+
+- **FIXED — the invoice route stalled ~300s on every upstream error.**
+  `await upstream.body?.cancel()` never settles under Next's patched fetch: Next TEES
+  the response body for its cache layer, and per the streams spec one tee branch's
+  cancel() resolves only after BOTH branches cancel — Next holds the other, so the
+  await blocks until undici's connection timeout. Measured live (WeasyPrint 500 → 5-min
+  hang), reproduced in a failing test (tee'd body, 1s deadline), fixed by draining via
+  read (`drainBody` in `lib/api.ts`), same latent hang fixed in `fetchWithAuthRaw`'s
+  401 path. Re-measured live: instant 303 → `?invoice=unavailable`, notice renders.
+- **PDF bytes cannot render on this Windows dev box** — WeasyPrint's native Pango libs
+  are Linux-only by design (`test_api.py` skips them locally; they run in CI). The
+  proxy's 200-path streaming is unit-tested; "downloads and opens" must be smoke-checked
+  once on the Linux deploy target instead. NOT a code defect.
+- **FIXED 2026-07-28 (Hammed chose option a) — Buy Now was end-to-end broken.**
+  Original finding: PDP → Buy Now → `/checkout` showed "Your bag is empty." The
+  backend `BuyNowView` filled a `kind="express"` cart (Plan-08 D14), but nothing on
+  the storefront ever read an express cart: checkout's `useCart` → `/api/cart` →
+  `GET /cart/` always resolves `kind="standard"`, and the buy-now BFF neither set the
+  cart cookie nor had its response consumed. Pre-existing since Plan-13 wiring; not a
+  15c regression. **The fix retires the express-cart concept** (D14 overridden with
+  Hammed's sign-off): `BuyNowView` now `add_item`s into the STANDARD cart — never
+  clearing it, that would destroy the shopper's bag — and `BuyButtons` seeds the
+  `["cart"]` react-query cache with the response before navigating (the cache is
+  fresh-for-30s, so without seeding checkout would still trust a stale empty cart).
+  `Cart.kind` stays in the schema for the inert historical rows. TDD both sides:
+  3 backend tests (standard cart, keeps existing lines, merges/caps repeat buys),
+  3 BuyButtons tests (cache seeding RED→GREEN, 401-stash pin, failure pin), plus a
+  pin that SignInStep's mount me-check resumes a stashed intent — that branch is now
+  load-bearing for guest Buy Now and its old comment claimed the opposite. Verified
+  live: signed-in Buy Now lands on checkout with the item; guest Buy Now stashes and
+  bounces to `/login?next=/checkout`. The final guest link (me-check resume in a real
+  browser) could not be re-verified live — Cloudflare Turnstile (correctly) stopped
+  issuing tokens to the automated browser — cover it in the checkpoint walkthrough.
+
+**15d — Addresses + wishlist.**
+
+Grounding facts, verified 2026-07-28 (do not re-derive; do not "correct"):
+- Backend surface is COMPLETE — build nothing there. `/me/addresses/` GET
+  (unpaginated, default-shipping first) / POST; `/me/addresses/{pk}/` GET/PATCH/DELETE
+  (owner-scoped queryset — a stranger's pk 404s); `/me/addresses/{pk}/set-default-shipping/`
+  and `…/set-default-billing/` POST (atomic; exactly one default per kind).
+  `is_default_shipping/billing` are READ-ONLY on `AddressSerializer` — only the
+  set-default routes change them; a PATCH carrying them is silently ignored.
+  `/me/wishlist/` GET → list of `{sku, product: <ProductListSerializer card>, created_at}`
+  resolved in the request's country (product can be null if delisted); POST `{sku}`
+  idempotent (201 created / 200 existing); `/me/wishlist/{sku}/` DELETE → 204.
+- `api/wishlist/[[...sku]]` BFF is COMPLETE (GET/POST/DELETE) — build nothing there.
+  `api/addresses` BFF has GET/POST only. `api/regions` BFF exists (NG state/LGA options).
+- `address-fields.ts` holds the shared `Address` type, `AddressFieldErrors`, and the
+  per-country field config. Checkout's `AddressStep.tsx` renders its form INLINE and is
+  certified — do NOT extract from or refactor it; the account form is a NEW component
+  consuming the same `address-fields.ts` config (the config is the shared truth, the
+  JSX is not).
+- `ProductCard` takes `product: ProductCardData` — exactly the shape inside each
+  wishlist item, including `default_variant_id` (for add-to-cart via `useCart.addItem`)
+  and `default_sku`. `AccountNav` links live in `components/account/AccountNav.tsx`.
+- Account page gate pattern (copy profile/orders): RSC page calls
+  `fetchWithAuthOrBounce(path, currentPath)`; `currentPath` is the literal page path.
+
+Tasks (sequential, one implementer subagent each, two-stage review after each):
+
+1. **Addresses BFF extension.** `api/addresses/[id]/route.ts`: PATCH (JSON body
+   passthrough → upstream PATCH `/me/addresses/{id}/`, country header forwarded) and
+   DELETE (→ upstream DELETE; 204 no body). `api/addresses/[id]/default/route.ts`:
+   POST with body `{kind: "shipping" | "billing"}` → upstream
+   `/me/addresses/{id}/set-default-{kind}/`; any other kind → 400 with no upstream
+   call. Validate `id` against `^\d{1,10}$` in both routes → else 404 with no
+   upstream call (invoice-route discipline). Session guard + ApiError passthrough
+   copied from the existing `api/addresses/route.ts` pattern. Tests mirror the
+   existing addresses BFF tests (same cookie/fetch mocks): happy paths, guard 401s,
+   bad id, bad kind, upstream 404 passthrough.
+2. **Account addresses page.** New `AddressForm` client component in
+   `components/account/` driven by `address-fields.ts` config + `api/regions` for NG
+   selects (mirror AddressStep's rendering RULES, not its code; checkout untouched).
+   `AddressBook` client component: cards (label, name, line1, country, "Default
+   shipping"/"Default billing" badges) with Edit (prefilled form), Delete (typed-out?
+   no — simple confirm button state, then DELETE), Set default shipping / billing
+   buttons (hidden on cards already default for that kind), Add address. Django field
+   errors render per-field via `AddressFieldErrors`. After every mutation re-GET the
+   list (no optimistic address state — an address book is small and correctness
+   beats latency here). Page `(shop)/account/addresses/page.tsx`: RSC, initial list
+   via `fetchWithAuthOrBounce("/me/addresses/", "/account/addresses")`, hands it to
+   `AddressBook`. Add "Addresses" to `AccountNav` after Orders. Empty state with an
+   "Add your first address" affordance.
+3. **Wishlist page.** `(shop)/account/wishlist/page.tsx`: RSC gate via
+   `fetchWithAuthOrBounce("/me/wishlist/", "/account/wishlist")`, hands items to a
+   client `WishlistGrid` in `components/account/`: reuse `ProductCard` for each
+   non-null `item.product`, plus per-card "Add to bag" (via `useCart().addItem` with
+   `default_variant_id`, then `openCartDrawer()` — PDP Add-to-Cart behaviour) and
+   "Remove" (DELETE `api/wishlist/{sku}`, then re-GET/refresh). `default_variant_id`
+   null (unpriced in this country) → disable "Add to bag", keep the card. Null
+   `product` (delisted) → muted row "No longer available" + Remove. Empty state links
+   to `/products`. Add "Wishlist" to `AccountNav` after Addresses. NOTE:
+   `WishlistHeart` inside `ProductCard` already toggles wishlist membership — on this
+   page a heart-toggle and the Remove button are the same action; that redundancy is
+   accepted, do not fork ProductCard over it.
+4. **Verification (controller, not a subagent).** Both suites, typecheck/lint,
+   production build; live walkthrough: create NG address (state/LGA selects), edit
+   it, add a second, flip defaults (badges move atomically), delete; checkout
+   AddressStep still lists saved addresses (regression check — its code is
+   untouched); wishlist: heart a PDP product, grid shows it, Add to bag opens the
+   drawer with the item, Remove clears it, empty state renders.
+
+**15d COMPLETE 2026-07-28.** Tasks 1–3 subagent-built with per-task reviews (task 2
+took one fix round: LGA prefill-on-edit could silently drop a saved LGA —
+`AccountRegionSelect` prefetches on mount; checkout's RegionSelect untouched). Final
+whole-slice review (Fable) found 2 Importants, fixed in one wave (`a396719`) and
+re-review-verified: (1) wishlist page/BFF dropped the shopper's country — every
+non-NG shopper got an NG-resolved wishlist, cascading into a silently poisoned cart
+cache; live-verified fixed (GB cookie → £15.00 GBP card). (2) AddressForm PATCH was
+omit-if-empty, so CLEARING an optional field silently reverted — edit mode now sends
+`""`. Folded in: kind-allowlist own-property check (`"toString"` bypass), and the
+pre-existing `useCart` res.ok gap (HTTP errors used to poison the `["cart"]` cache;
+now `CartRequestError` throws). Gates: 718 storefront + 702 backend tests,
+typecheck/lint/prod build clean. Live walkthrough covered the full task-4 list;
+Turnstile blocks automated login, so the session was minted via backend shell +
+Playwright `addCookies` (files deleted after).
+
+Post-merge follow-ups carried out of the SDD ledger (none block merge — final-review
+triage): set-default failure-path test; `COUNTRY_OPTIONS` hardcodes the 5 markets
+(second source of truth vs seed migration — export a canonical list later);
+"International" label mismatch; delete-confirm lacks `aria-live`; NG cards show no
+state/LGA locality line (address-fields limitation); RegionSelect/AccountRegionSelect
+duplication (blocked on checkout freeze); wishlist "No longer available" cell
+proportions; refresh()-after-mutation swallows non-ok (shared AddressBook/WishlistGrid
+fix); wishlist hearts render unsaved on the wishlist page itself (heart uses
+`default_sku`, row uses stored `sku`); addresses RSC page omits `country`
+(harmless — addresses aren't country-resolved); `EMPTY_FORM` hardcodes NG rather than
+the country cookie.
+
+---
+
+## LAUNCH-BLOCKING SECURITY GAP — its own slice, do before 15b (found 2026-07-26)
+
+Not caused by item 5 and not worsened by it; the exposure is live right now through
+checkout's `SignInStep` and through plain `curl`. It is separated out because the fix is
+Django throttle classes plus a Cloudflare rule, and bundling it into a storefront page
+would make that page's review about DRF internals.
+
+**`/auth/token/` has no effective rate limit at all.** Verified against the local API:
+
+| probe (80–70 attempts, junk credentials) | result |
+| --- | --- |
+| no `X-Forwarded-For` | first `429` at attempt **61** |
+| fixed spoofed `X-Forwarded-For` | first `429` at attempt **61** |
+| **rotating spoofed `X-Forwarded-For` prefix** | **0 × 429 in 80 — every guess allowed** |
+
+Why: `NUM_PROXIES` is unset, so DRF's `BaseThrottle.get_ident`
+(`rest_framework/throttling.py:29-40`) falls through to `''.join(xff.split())` — it keys on
+the **entire XFF chain as one string**. Rotate a junk prefix and every request gets a fresh
+bucket. `/auth/token/` is stock `TokenObtainPairView` (`accounts/urls.py:17`) with only the
+global `anon: 60/min`, and no scoped throttle.
+
+Three consequences, all confirmed:
+1. **Brute force / credential stuffing is unmetered** for anyone who posts straight to
+   `api.tokecosmetics.com` instead of going through the storefront.
+2. **Customers share one bucket.** Because the BFF proxies every login, Django sees the
+   Vercel egress IP, so legitimate shoppers contend for a single 60/min allowance — a
+   capacity risk independent of security.
+3. **The `password_reset: 5/min` throttle added in the previous slice is globalised**: five
+   forgotten passwords a minute for the whole store, *and* still bypassable by skipping the
+   storefront. Worse than it looked when it was added.
+
+**Forwarding XFF from the BFF is NOT the fix and must not be attempted.** `NUM_PROXIES` is
+one global number, but the two paths need different ones — direct-to-API puts the real
+client at `addrs[-2]`, via-BFF at `addrs[-3]`. At 2, BFF-forwarded XFF is ignored; at 3, a
+direct attacker forges any client IP, which is worse than today. Corollary worth knowing:
+the existing forwarding in `api/newsletter/route.ts:13-19` and `api/search/suggest/route.ts:15-20`
+only works by accident of whole-chain keying and breaks the moment anyone sets `NUM_PROXIES`.
+Its "prod must trust X-Forwarded-For" comment describes a fix that does not exist.
+
+**`RegisterView` is in scope too** (`accounts/views.py:32-47`) — verified: no `throttle_classes`,
+so global anon only and the same XFF bypass. Worse than login, because `perform_create` fires
+`send_email_task.delay` to the **submitted** address: rotating XFF gives an attacker unlimited
+registrations, each mailing an arbitrary stranger from our domain. That is a spam cannon whose
+cost is `mg.tokecosmetics.com` getting blacklisted — which would silently break every order
+confirmation the store sends.
+
+**When this must be done — named triggers, not a vibe.** As of 2026-07-26 the production DB has
+**0 users, 0 orders** (69 products), so there is nothing to brute-force into *yet*. That is a
+snapshot, not an invariant: registration is already publicly reachable in production through
+checkout's `SignInStep`, so the count can change without any deploy. (A) must be complete
+before the FIRST of these:
+1. **Plan-22's legacy customer import** — the moment a known list of real addresses exists in
+   that DB, credential stuffing goes from theoretical to routine;
+2. **the first staff/superuser account** (Plan-17 admin work);
+3. **swapping `sk_test` for live Paystack keys** — real money behind the accounts.
+
+**The fix, three pieces:**
+1. **Scoped throttle keyed on the submitted email, not the IP** — `SimpleRateThrottle`
+   subclass, `scope="login"`, `get_cache_key` → `throttle_login_<lower(email)>`, ~5/min plus
+   a slow window (20/hour). Immune to IP spoofing *and* to the BFF hop, because the key comes
+   from the request body. Same treatment for `password_reset`, where keying on the target
+   email is also the only key that actually protects the victim's inbox, and for `register`.
+2. **Custom `get_ident` preferring `CF-Connecting-IP`** for the residual IP-keyed throttles —
+   trustworthy *here specifically* because `infra/proxy/zz-api.conf:61-95` locks the origin to
+   Cloudflare. Verify empirically; `mod_remoteip` is not loaded, so Django must read it.
+3. **A Cloudflare rate-limiting rule on `/api/v1/auth/*`** — blocks the direct path before it
+   reaches Django. **Needs Hammed** (dashboard access), and while there, confirm whether any
+   rule exists today: `docs/runbooks/vps-stack.md:169-171` leans on Cloudflare rate limiting
+   as part of the security story and it is unverified.
+
+**Bundle with it:** the auth BFF route has **no `Origin` check**, so a cross-site form POST to
+`/api/auth/login` with attacker credentials is session fixation — the victim is logged into
+the attacker's account and `mergeGuestCart` then folds the victim's bag into it. `SameSite=Lax`
+does not help: the attack needs no existing cookie, and it is the *response's* `Set-Cookie`
+that does the damage. The new `/login` Server Action is already protected (Next checks
+`Origin` against `Host`); this is only the older JSON route, still used by checkout.
+
+## Verification
+
+Full click-through of every page as a real user; password-reset email round trip on preview.
+
+**Verify on the deployed API before the reset round trip — do not assume:**
+1. **`FRONTEND_URL`** defaults to `http://localhost:3000` (`config/settings/base.py:191`). If the
+   VPS env doesn't set the real storefront origin, every reset email carries a localhost link.
+2. **`EMAIL_BACKEND`** defaults to the console backend; Resend engages only if `EMAIL_BACKEND` +
+   `RESEND_API_KEY` are set. "Email round trip on preview" is testing infra config, not code.
+   Confirm the Resend sender domain is verified or delivery fails silently / lands in spam.
+3. Reset tokens are single-use and time-limited (`PASSWORD_RESET_TIMEOUT`, default 3 days) —
+   click a used link and confirm the UI shows the 400 message rather than crashing.
+4. Forgot-password must show the **same generic success unconditionally** — `PasswordResetView`
+   always returns 200 specifically to prevent email enumeration; the UI must not leak it back.
+5. A completed reset also auto-verifies email and claims legacy orders — expect that side effect.
+
+**CHECKPOINT:** screen walkthrough for Hammed.
+
+## Next 16 gotchas (bundled docs are authoritative — `storefront/AGENTS.md`)
+
+- Cookie writes are Route-Handler/Server-Function only (C3).
+- `redirect()` inside `try/catch` needs `unstable_rethrow`.
+- Layouts don't re-run on soft navigation.
+- `searchParams` is a Promise — `await` it, as the codebase already does for `params`.
+- After logout, call `router.refresh()` before navigating: the client router cache can otherwise
+  serve stale /account HTML on Back.
+- Proxy is Node-runtime only and must stay dependency-free.

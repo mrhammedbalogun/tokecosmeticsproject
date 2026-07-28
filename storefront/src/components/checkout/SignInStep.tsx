@@ -2,8 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
-import { useCart } from "@/hooks/useCart";
 import { readBuyNowIntent, clearBuyNowIntent } from "@/lib/buynow-intent";
+import { TurnstileWidget, turnstileToken } from "@/components/auth/TurnstileWidget";
 
 /** Django field errors come back as `{ field: ["message", ...] }`; a top-level
  * problem (e.g. login's "No active account found...") comes back as `{ detail }`. */
@@ -25,17 +25,16 @@ type Phase = "checking" | "register" | "login";
  * - If that email already has an account, the backend reports it via a 400 with
  *   an `email` field error ("Account already exists") — flip to a password-only
  *   login form instead of erroring out.
- * - Either path ends with two best-effort resume steps: (1) merging the guest's
- *   cart (the one they were shopping with, pre-auth) into their new/matched
- *   account via POST /api/cart/merge — without this, register/login hands back
- *   a fresh empty user cart and the shopper's bag is lost; (2) the Buy-Now
- *   guest-resume: if they arrived via a guest "Buy Now" click (intent stashed in
- *   sessionStorage by BuyButtons.tsx), add that item to the now-authenticated cart.
+ * - The guest cart is merged into the new/matched account by the auth BFF itself
+ *   (api/auth/[action]), not here — it belongs to authenticating, not to checkout.
+ * - Either path then runs the Buy-Now guest-resume: if the shopper arrived via a
+ *   guest "Buy Now" click (intent stashed in sessionStorage by BuyButtons.tsx),
+ *   add that item to the now-authenticated cart. That one stays client-side
+ *   because sessionStorage is invisible to the server.
  */
 export function SignInStep() {
   const { complete } = useCheckout();
   const queryClient = useQueryClient();
-  const { cart } = useCart();
 
   const [phase, setPhase] = useState<Phase>("checking");
   const [email, setEmail] = useState("");
@@ -44,6 +43,17 @@ export function SignInStep() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ApiErrorBody>({});
+  // Counts completed submits — the Turnstile reset signal. Tokens are single-use,
+  // so a failed attempt must hand the shopper a fresh one. (On success the step
+  // unmounts, so the extra reset there is moot.)
+  const [attempts, setAttempts] = useState(0);
+
+  /** Body helper: attach the widget token when one exists; with the widget off or
+   * blocked, keep the exact old body shape and let Django decide. */
+  function withTurnstile(body: Record<string, unknown>): Record<string, unknown> {
+    const token = turnstileToken();
+    return token ? { ...body, turnstile_token: token } : body;
+  }
 
   // One-shot mount check: is there already a signed-in session (cookie)? Guarded by
   // a ref so a dev-mode double-effect (or a StrictMode remount) never double-fires
@@ -73,28 +83,24 @@ export function SignInStep() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount check only
   }, []);
 
-  /** Runs after a successful register/login (never after the me-check — an
-   * already-signed-in shopper has no guest cart to merge). `guestCartId` is the
-   * cart the shopper was shopping with as a guest, snapshotted BEFORE the
-   * register/login call (once authed, /api/cart starts resolving the user's own
-   * — initially empty — cart, so it must be captured earlier, not read here).
+  /** Runs after a successful register/login AND after the mount me-check. The
+   * me-check path is load-bearing for guest Buy Now: the guest is sent to the
+   * standalone /login page (intent stashed), so by the time checkout mounts they
+   * are already signed in and THIS is the only place the intent gets resumed.
    *
-   * Both the cart-merge and the Buy-Now resume are best-effort: a failure here
-   * must never block checkout — the merge may legitimately no-op (empty guest
-   * cart) and the Buy-Now item may already be in the cart. One invalidate at the
-   * end covers both, so the refetched cart reflects whichever of them landed. */
-  async function runPostAuth(userEmail: string, guestCartId?: string) {
-    if (guestCartId) {
-      try {
-        await fetch("/api/cart/merge", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cart_id: guestCartId }),
-        });
-      } catch {
-        // swallow — see doc comment above
-      }
-    }
+   * The guest-cart merge USED to live here, snapshotting `cart.id` before the auth
+   * call. It now happens server-side inside the auth BFF's login/register actions,
+   * for two reasons: it belongs to authenticating rather than to checkout (the
+   * Plan-15 /login and /register pages would each have had to remember it), and the
+   * client snapshot had a race — `cart.id` comes from react-query, so a shopper who
+   * submitted before that query resolved merged nothing at all. The cookie the BFF
+   * reads has no such race. Do NOT reintroduce a merge call here.
+   *
+   * The Buy-Now resume stays client-side: the intent lives in sessionStorage, which
+   * the server cannot see. Best-effort — a failure must never block checkout, and the
+   * item may already be in the cart. The invalidate below covers the server-side
+   * merge as well, so the refetched cart reflects both. */
+  async function runPostAuth(userEmail: string) {
     const intent = readBuyNowIntent();
     if (intent) {
       try {
@@ -119,10 +125,6 @@ export function SignInStep() {
 
   async function submitRegister(e: React.FormEvent) {
     e.preventDefault();
-    // Snapshot the guest cart BEFORE authenticating — once register succeeds the
-    // session cookie flips to the new user and /api/cart starts resolving THEIR
-    // (empty) cart, so this id would be unrecoverable if read any later.
-    const guestCartId = cart.id || undefined;
     setSubmitting(true);
     setFormError(null);
     setFieldErrors({});
@@ -130,10 +132,10 @@ export function SignInStep() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, first_name: firstName }),
+        body: JSON.stringify(withTurnstile({ email, password, first_name: firstName })),
       });
       if (res.ok) {
-        await runPostAuth(email, guestCartId);
+        await runPostAuth(email);
         return;
       }
       const body: ApiErrorBody = await res.json().catch(() => ({}));
@@ -151,13 +153,12 @@ export function SignInStep() {
       setFormError("Something went wrong creating your account — please try again.");
     } finally {
       setSubmitting(false);
+      setAttempts((a) => a + 1);
     }
   }
 
   async function submitLogin(e: React.FormEvent) {
     e.preventDefault();
-    // Same snapshot-before-auth reasoning as submitRegister — see its comment.
-    const guestCartId = cart.id || undefined;
     setSubmitting(true);
     setFormError(null);
     setFieldErrors({});
@@ -165,10 +166,10 @@ export function SignInStep() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(withTurnstile({ email, password })),
       });
       if (res.ok) {
-        await runPostAuth(email, guestCartId);
+        await runPostAuth(email);
         return;
       }
       const body: ApiErrorBody = await res.json().catch(() => ({}));
@@ -177,6 +178,7 @@ export function SignInStep() {
       setFormError("Something went wrong signing you in — please try again.");
     } finally {
       setSubmitting(false);
+      setAttempts((a) => a + 1);
     }
   }
 
@@ -223,6 +225,7 @@ export function SignInStep() {
             className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
           />
         </div>
+        <TurnstileWidget resetSignal={attempts} />
         <button
           type="submit"
           disabled={submitting || !password}
@@ -311,6 +314,7 @@ export function SignInStep() {
           </p>
         )}
       </div>
+      <TurnstileWidget resetSignal={attempts} />
       <button
         type="submit"
         disabled={submitting || !email || !firstName || !password}

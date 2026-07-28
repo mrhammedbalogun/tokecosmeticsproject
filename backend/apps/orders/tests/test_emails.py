@@ -119,6 +119,44 @@ def test_confirmation_carries_a_tracking_link_that_actually_works(
     assert read_tracking_token(match.group(1)) == "TC-500009"
 
 
+def test_shipped_email_carries_a_tracking_link_that_actually_works(
+    django_capture_on_commit_callbacks,
+):
+    """The shipped mail is the one a customer reopens to ask "where is my parcel?", so it
+    is the moment the login-free link is worth most. `_context` has carried `tracking_url`
+    all along — only the template omitted it. Same resolve-the-token assertion as the
+    confirmation test: a dead link here is a support ticket."""
+    import re
+
+    from apps.orders.tokens import read_tracking_token
+
+    order = _order(number="TC-500010", status="processing",
+                   tracking_carrier="GIG Logistics", tracking_number="GIG123456")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "shipped")
+
+    msg = mail.outbox[0]
+    match = re.search(r"token=([A-Za-z0-9_\-:]+)", msg.body)
+    assert match, "shipped email must contain a tracking link"
+    assert read_tracking_token(match.group(1)) == "TC-500010"
+    assert order.number in msg.alternatives[0][0]  # and the HTML part carries the button
+
+
+def test_shipped_email_still_links_tracking_when_no_carrier_is_recorded(
+    django_capture_on_commit_callbacks,
+):
+    """The carrier/consignment block is conditional; the link is NOT. An order shipped
+    without a consignment number is exactly the one whose owner has nothing else to check,
+    and the page still shows status, delivery option and items."""
+    order = _order(number="TC-500011", status="processing")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "shipped")
+
+    assert "/orders/TC-500011?token=" in mail.outbox[0].body
+
+
 def test_html_emails_declare_utf8_so_the_naira_sign_survives(django_capture_on_commit_callbacks):
     """Django sets a utf-8 MIME header, but not every client honours it over the
     document's own declaration — and an HTML email with no charset gets read as latin-1,
