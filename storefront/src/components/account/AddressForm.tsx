@@ -9,7 +9,7 @@
  * have to match today's shopping country.
  */
 import { useState } from "react";
-import { RegionSelect } from "@/components/checkout/RegionSelect";
+import { AccountRegionSelect } from "@/components/account/AccountRegionSelect";
 import {
   fieldConfigFor,
   type Address,
@@ -303,7 +303,7 @@ export function AddressForm({
 
       {cfg.useRegions ? (
         <div>
-          <RegionSelect
+          <AccountRegionSelect
             country={form.country_code}
             stateValue={form.state_region}
             areaValue={form.area_region}

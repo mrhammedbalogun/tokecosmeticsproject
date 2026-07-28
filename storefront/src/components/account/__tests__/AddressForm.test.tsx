@@ -189,4 +189,75 @@ describe("AddressForm", () => {
     expect(body.line2).toBe("Suite 4");
     expect(body.line1).toBe("2 Fleet St");
   });
+
+  // Fix-loop round 1: RegionSelect only fetches a state's LGAs from a user's state-select
+  // click, never on mount — so editing a saved NG address rendered the LGA select blank
+  // (no matching <option> for the saved area_region), and re-picking the same state to
+  // "fix" it reset area_region to undefined, silently dropping the stored LGA on an
+  // otherwise-unrelated save. AddressForm now prefetches the saved state's LGAs itself
+  // (AccountRegionSelect) so the saved value renders selected from first paint.
+  it("prefills the saved NG state and LGA on mount (edit mode) instead of rendering blank", async () => {
+    const ngAddress: Address = {
+      id: 7, first_name: "Ada", phone: "0700", line1: "12 Allen Ave",
+      country_code: "NG", state_region: 1, area_region: 11,
+      is_default_shipping: false, is_default_billing: false,
+    };
+    mockFetch({
+      "GET /api/regions?country=NG": {
+        status: 200,
+        body: [{ id: 1, name: "Lagos", level: "state", has_children: true }],
+      },
+      "GET /api/regions?parent=1": {
+        status: 200,
+        body: [
+          { id: 11, name: "Ikeja", level: "area", has_children: false },
+          { id: 12, name: "Epe", level: "area", has_children: false },
+        ],
+      },
+    });
+
+    render(<AddressForm initial={ngAddress} onSaved={vi.fn()} onCancel={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByLabelText(/^state$/i)).toHaveValue("1"));
+    await waitFor(() => expect(screen.getByLabelText(/^lga$/i)).toHaveValue("11"));
+  });
+
+  it("keeps the saved LGA in the PATCH payload when only an unrelated field changes", async () => {
+    const ngAddress: Address = {
+      id: 7, first_name: "Ada", last_name: "L", phone: "0700", line1: "12 Allen Ave",
+      country_code: "NG", state_region: 1, area_region: 11,
+      is_default_shipping: false, is_default_billing: false,
+    };
+    const updated: Address = { ...ngAddress, phone: "0711" };
+    const f = mockFetch({
+      "GET /api/regions?country=NG": {
+        status: 200,
+        body: [{ id: 1, name: "Lagos", level: "state", has_children: true }],
+      },
+      "GET /api/regions?parent=1": {
+        status: 200,
+        body: [{ id: 11, name: "Ikeja", level: "area", has_children: false }],
+      },
+      "PATCH /api/addresses/7": { status: 200, body: updated },
+    });
+    const onSaved = vi.fn();
+
+    render(<AddressForm initial={ngAddress} onSaved={onSaved} onCancel={vi.fn()} />);
+
+    // Wait for the prefill to land before touching an unrelated field, otherwise the
+    // assertion below would pass by accident (submitting before the fetch resolves).
+    await waitFor(() => expect(screen.getByLabelText(/^lga$/i)).toHaveValue("11"));
+
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "0711" } });
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated));
+
+    const { url, init } = lastCall(f);
+    expect(url).toBe("/api/addresses/7");
+    const body = JSON.parse(init!.body as string);
+    expect(body.state_region).toBe(1);
+    expect(body.area_region).toBe(11);
+    expect(body.phone).toBe("0711");
+  });
 });
