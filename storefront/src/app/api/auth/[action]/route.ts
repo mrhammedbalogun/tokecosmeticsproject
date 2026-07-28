@@ -59,13 +59,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ action: string
   try {
     switch (action as Action) {
       case "login": {
-        await establishSession(jar, { email: body.email, password: body.password });
+        await establishSession(
+          jar,
+          { email: body.email, password: body.password },
+          { turnstileToken: body.turnstile_token },
+        );
         return json({ ok: true });
       }
       case "register": {
-        // Django register does NOT return tokens; registerSession creates the account and
-        // then logs in. Shared with the /register Server Action so the two cannot drift.
-        await registerSession(jar, body);
+        // Shared with the /register Server Action so the two cannot drift. The
+        // upstream 201 carries the token pair (single-use Turnstile token, one
+        // gated request); registerSession consumes it without a second login.
+        const { turnstile_token, ...payload } = body;
+        await registerSession(jar, payload, { turnstileToken: turnstile_token });
         return json({ ok: true }, 201);
       }
       case "logout": {

@@ -53,6 +53,31 @@ describe("loginAction", () => {
     expect(setSpy).toHaveBeenCalledWith("refresh", "RRR");
   });
 
+  it("forwards the Turnstile token to the backend as turnstile_token", async () => {
+    upstream(200, { access: "AAA", refresh: "RRR" });
+
+    await expect(
+      loginAction({}, form({
+        email: "a@b.com", password: "pw", "cf-turnstile-response": "tok-123",
+      })),
+    ).rejects.toThrow("NEXT_REDIRECT /account");
+
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(init.body)).toMatchObject({ turnstile_token: "tok-123" });
+  });
+
+  it("omits turnstile_token entirely when the widget did not run", async () => {
+    // Gate-off deployments must keep sending exactly the old body shape.
+    upstream(200, { access: "AAA", refresh: "RRR" });
+
+    await expect(
+      loginAction({}, form({ email: "a@b.com", password: "pw" })),
+    ).rejects.toThrow("NEXT_REDIRECT /account");
+
+    const [, init] = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(JSON.parse(init.body)).not.toHaveProperty("turnstile_token");
+  });
+
   it("re-validates `next` server-side — the hidden field is client-supplied", async () => {
     // The action is a public POST endpoint; the hidden input is not a trust boundary.
     upstream(200, { access: "AAA", refresh: "RRR" });

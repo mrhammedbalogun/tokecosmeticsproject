@@ -80,6 +80,18 @@ export async function mergeGuestCart(jar: Jar, accessToken: string): Promise<voi
   }
 }
 
+export interface AuthOpts {
+  /** The Turnstile widget token (`cf-turnstile-response`). Forwarded to Django as
+   * `turnstile_token`; omitted entirely when absent so gate-off deployments keep
+   * the exact old request shape. Verification lives in Django, not here — the API
+   * is reachable directly, so a BFF-side check would be decorative. */
+  turnstileToken?: string;
+}
+
+function withTurnstile(body: Record<string, unknown>, opts: AuthOpts): Record<string, unknown> {
+  return opts.turnstileToken ? { ...body, turnstile_token: opts.turnstileToken } : body;
+}
+
 /**
  * Exchange credentials for a token pair, persist both cookies, and fold in the guest cart.
  * Throws `ApiError` if the credentials are rejected, so the caller owns the error copy.
@@ -89,9 +101,10 @@ export async function mergeGuestCart(jar: Jar, accessToken: string): Promise<voi
 export async function establishSession(
   jar: Jar,
   credentials: { email: string; password: string },
+  opts: AuthOpts = {},
 ): Promise<TokenPair> {
   const tokens = await apiFetch<TokenPair>("/auth/token/", {
-    method: "POST", body: credentials,
+    method: "POST", body: withTurnstile(credentials, opts),
   });
   setTokens(jar, tokens.access, tokens.refresh);
   await mergeGuestCart(jar, tokens.access);
@@ -110,18 +123,32 @@ export interface RegisterPayload {
 /**
  * Create an account and sign the new user straight in.
  *
- * Two calls, because Django's register endpoint does not return tokens. Shared so the
- * `/register` Server Action and the JSON BFF cannot drift apart on the order of
- * operations or on the guest-cart merge.
+ * Django's register endpoint returns a token pair with the 201 — REQUIRED with the
+ * Turnstile gate, because tokens are single-use and one form submit cannot clear two
+ * gated endpoints (register, then /auth/token/). Shared so the `/register` Server
+ * Action and the JSON BFF cannot drift apart on the order of operations or on the
+ * guest-cart merge.
  *
- * A rejected registration throws before any login is attempted — following a 400 with a
- * token request would mean submitting the supplied password against an account that may
- * belong to somebody else (the usual 400 here is "Account already exists").
+ * The two-call fallback below covers a backend that predates the change (deploy-order
+ * safety only — with the gate on, that path cannot succeed, and it will vanish once
+ * the gated backend is everywhere).
+ *
+ * A rejected registration throws before any session is established — the usual 400
+ * here is "Account already exists", and continuing would mean submitting the supplied
+ * password against an account that may belong to somebody else.
  */
 export async function registerSession(
   jar: Jar,
   payload: RegisterPayload,
+  opts: AuthOpts = {},
 ): Promise<TokenPair> {
-  await apiFetch("/auth/register/", { method: "POST", body: payload });
-  return establishSession(jar, { email: payload.email, password: payload.password });
+  const created = await apiFetch<Partial<TokenPair>>("/auth/register/", {
+    method: "POST", body: withTurnstile({ ...payload }, opts),
+  });
+  if (created.access && created.refresh) {
+    setTokens(jar, created.access, created.refresh);
+    await mergeGuestCart(jar, created.access);
+    return { access: created.access, refresh: created.refresh };
+  }
+  return establishSession(jar, { email: payload.email, password: payload.password }, opts);
 }

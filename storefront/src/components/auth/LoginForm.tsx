@@ -17,6 +17,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import type { LoginState } from "@/app/(auth)/login/actions";
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 
 const ERROR_ID = "login-error";
 
@@ -87,6 +88,10 @@ export function LoginForm({
           className={inputClass}
         />
       </div>
+
+      {/* Injects the hidden cf-turnstile-response input into this form. `state` changes
+          identity on every failed submit, which resets the single-use token. */}
+      <TurnstileWidget resetSignal={state} />
 
       <button
         type="submit"

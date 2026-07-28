@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
 import { readBuyNowIntent, clearBuyNowIntent } from "@/lib/buynow-intent";
+import { TurnstileWidget, turnstileToken } from "@/components/auth/TurnstileWidget";
 
 /** Django field errors come back as `{ field: ["message", ...] }`; a top-level
  * problem (e.g. login's "No active account found...") comes back as `{ detail }`. */
@@ -42,6 +43,17 @@ export function SignInStep() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ApiErrorBody>({});
+  // Counts completed submits — the Turnstile reset signal. Tokens are single-use,
+  // so a failed attempt must hand the shopper a fresh one. (On success the step
+  // unmounts, so the extra reset there is moot.)
+  const [attempts, setAttempts] = useState(0);
+
+  /** Body helper: attach the widget token when one exists; with the widget off or
+   * blocked, keep the exact old body shape and let Django decide. */
+  function withTurnstile(body: Record<string, unknown>): Record<string, unknown> {
+    const token = turnstileToken();
+    return token ? { ...body, turnstile_token: token } : body;
+  }
 
   // One-shot mount check: is there already a signed-in session (cookie)? Guarded by
   // a ref so a dev-mode double-effect (or a StrictMode remount) never double-fires
@@ -118,7 +130,7 @@ export function SignInStep() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, first_name: firstName }),
+        body: JSON.stringify(withTurnstile({ email, password, first_name: firstName })),
       });
       if (res.ok) {
         await runPostAuth(email);
@@ -139,6 +151,7 @@ export function SignInStep() {
       setFormError("Something went wrong creating your account — please try again.");
     } finally {
       setSubmitting(false);
+      setAttempts((a) => a + 1);
     }
   }
 
@@ -151,7 +164,7 @@ export function SignInStep() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(withTurnstile({ email, password })),
       });
       if (res.ok) {
         await runPostAuth(email);
@@ -163,6 +176,7 @@ export function SignInStep() {
       setFormError("Something went wrong signing you in — please try again.");
     } finally {
       setSubmitting(false);
+      setAttempts((a) => a + 1);
     }
   }
 
@@ -209,6 +223,7 @@ export function SignInStep() {
             className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
           />
         </div>
+        <TurnstileWidget resetSignal={attempts} />
         <button
           type="submit"
           disabled={submitting || !password}
@@ -297,6 +312,7 @@ export function SignInStep() {
           </p>
         )}
       </div>
+      <TurnstileWidget resetSignal={attempts} />
       <button
         type="submit"
         disabled={submitting || !email || !firstName || !password}

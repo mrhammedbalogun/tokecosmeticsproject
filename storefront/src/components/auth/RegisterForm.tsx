@@ -13,6 +13,7 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import type { RegisterState } from "@/app/(auth)/register/actions";
+import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
 
 const ERROR_ID = "register-error";
 
@@ -132,6 +133,10 @@ export function RegisterForm({
           Email me offers, launches and beauty tips. You can unsubscribe any time.
         </span>
       </label>
+
+      {/* Injects the hidden cf-turnstile-response input into this form. `state` changes
+          identity on every failed submit, which resets the single-use token. */}
+      <TurnstileWidget resetSignal={state} />
 
       <button
         type="submit"

@@ -54,6 +54,10 @@ export async function registerAction(
     return { ...echo, error: "Enter your name, email and a password." };
   }
 
+  // Injected by the Turnstile widget as a hidden input; absent when the widget is
+  // off or blocked. One token covers the whole signup — register returns the pair.
+  const turnstileToken = field(formData, "cf-turnstile-response") || undefined;
+
   try {
     await registerSession(await cookies(), {
       email,
@@ -63,7 +67,7 @@ export async function registerAction(
       // An unticked checkbox is absent from FormData entirely. Send an explicit false
       // rather than omitting the key, so the stored value always reflects a real choice.
       marketing_consent: formData.get("marketing_consent") !== null,
-    });
+    }, { turnstileToken });
   } catch (e) {
     const { message, emailTaken } = e instanceof ApiError
       ? registerErrorMessage(e.status, e.data)

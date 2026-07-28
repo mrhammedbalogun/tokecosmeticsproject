@@ -94,6 +94,36 @@ describe("auth BFF — same-origin gate", () => {
   });
 });
 
+describe("auth BFF — turnstile pass-through", () => {
+  it("login forwards turnstile_token to the upstream body", async () => {
+    upstream(200, { access: "AAA", refresh: "RRR" });
+    const res = await POST(
+      req({ email: "a@b.com", password: "pw", turnstile_token: "tok-9" }),
+      { params: Promise.resolve({ action: "login" }) },
+    );
+    expect(res.status).toBe(200);
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const [, init] = calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ turnstile_token: "tok-9" });
+  });
+
+  it("register forwards the token and uses the 201's pair without a second login call", async () => {
+    upstream(201, { access: "AAA", refresh: "RRR" });
+    const res = await POST(
+      req({ email: "a@b.com", password: "pw", first_name: "A", turnstile_token: "tok-9" }),
+      { params: Promise.resolve({ action: "register" }) },
+    );
+    expect(res.status).toBe(201);
+    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    expect(calls).toHaveLength(1); // register only — a second /auth/token/ call would need a second single-use token
+    const [url, init] = calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toContain("/auth/register/");
+    expect(JSON.parse(String(init.body))).toMatchObject({ turnstile_token: "tok-9" });
+    expect(store.get("access")).toBe("AAA");
+    expect(store.get("refresh")).toBe("RRR");
+  });
+});
+
 describe("auth BFF", () => {
   it("login stores access+refresh cookies and does NOT leak tokens in the body", async () => {
     upstream(200, { access: "AAA", refresh: "RRR" });

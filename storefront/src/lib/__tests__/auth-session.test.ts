@@ -128,10 +128,11 @@ describe("establishSession", () => {
 });
 
 describe("registerSession", () => {
-  it("creates the account and then signs the user straight in", async () => {
-    // Django's register endpoint does NOT return tokens, so registration is two calls.
-    // Both surfaces (the /register Server Action and the JSON BFF) must do the same two,
-    // in the same order, with the same merge afterwards — hence one shared function.
+  it("uses the 201's token pair and signs in without a second call", async () => {
+    // Django's register endpoint returns tokens with the 201 — required with the
+    // Turnstile gate, because a single-use widget token cannot clear register AND
+    // /auth/token/ from one form submit. Both surfaces (the /register Server Action
+    // and the JSON BFF) share this function so they cannot drift.
     const f = upstreamOk();
 
     await registerSession(asJar, {
@@ -140,7 +141,27 @@ describe("registerSession", () => {
 
     const urls = f.mock.calls.map((c) => String(c[0]));
     expect(urls.some((u) => u.endsWith("/auth/register/"))).toBe(true);
-    expect(urls.some((u) => u.endsWith("/auth/token/"))).toBe(true);
+    expect(urls.some((u) => u.endsWith("/auth/token/"))).toBe(false);
+    expect(setSpy).toHaveBeenCalledWith("access", "AAA");
+    expect(setSpy).toHaveBeenCalledWith("refresh", "RRR");
+  });
+
+  it("falls back to a login call when the 201 carries no tokens (older backend)", async () => {
+    // Deploy-order safety: a backend that predates the register-returns-tokens change
+    // still gets a working signup while the gate is off.
+    const f = vi.fn((url: string) => {
+      const body = String(url).endsWith("/auth/register/")
+        ? {}
+        : { access: "AAA", refresh: "RRR" };
+      return Promise.resolve(new Response(JSON.stringify(body), {
+        status: 200, headers: { "content-type": "application/json" },
+      }));
+    });
+    global.fetch = f as unknown as typeof fetch;
+
+    await registerSession(asJar, { email: "a@b.com", password: "pw", first_name: "A" });
+
+    const urls = f.mock.calls.map((c) => String(c[0]));
     expect(urls.indexOf(urls.find((u) => u.endsWith("/auth/register/"))!))
       .toBeLessThan(urls.indexOf(urls.find((u) => u.endsWith("/auth/token/"))!));
     expect(setSpy).toHaveBeenCalledWith("access", "AAA");

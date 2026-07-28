@@ -61,6 +61,46 @@ function upstreamFail(status: number, body: unknown) {
   }) as unknown as typeof fetch;
 }
 
+function upstreamRegisterWithTokens() {
+  // The gated backend returns a token pair WITH the 201 (Turnstile tokens are
+  // single-use, so signup must be a single gated request).
+  const f = vi.fn(() =>
+    Promise.resolve(new Response(JSON.stringify({ access: "AAA", refresh: "RRR" }), {
+      status: 201, headers: { "content-type": "application/json" },
+    })),
+  );
+  global.fetch = f as unknown as typeof fetch;
+  return f;
+}
+
+describe("registerAction — turnstile", () => {
+  it("forwards the Turnstile token and uses the 201's token pair without a second login call", async () => {
+    const f = upstreamRegisterWithTokens();
+
+    await expect(
+      registerAction({}, form({ ...VALID, "cf-turnstile-response": "tok-123" })),
+    ).rejects.toThrow("NEXT_REDIRECT /account");
+
+    expect(f).toHaveBeenCalledTimes(1); // register only — no /auth/token/ round-trip
+    const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(String(url)).toContain("/auth/register/");
+    expect(JSON.parse(String(init.body))).toMatchObject({ turnstile_token: "tok-123" });
+    expect(setSpy).toHaveBeenCalledWith("access", "AAA");
+    expect(setSpy).toHaveBeenCalledWith("refresh", "RRR");
+  });
+
+  it("omits turnstile_token when the widget did not run", async () => {
+    const f = upstreamRegisterWithTokens();
+
+    await expect(
+      registerAction({}, form({ ...VALID })),
+    ).rejects.toThrow("NEXT_REDIRECT /account");
+
+    const [, init] = f.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("turnstile_token");
+  });
+});
+
 describe("registerAction", () => {
   it("creates the account, signs the user in, and lands them on `next`", async () => {
     upstreamOk();

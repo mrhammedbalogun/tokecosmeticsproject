@@ -57,8 +57,13 @@ export async function loginAction(
     return { error: "Enter your email and password.", email, next };
   }
 
+  // Injected by the Turnstile widget as a hidden input; absent when the widget is
+  // off or blocked. Forwarded as-is — Django owns verification and rejects with a
+  // 403 that loginErrorMessage turns into user-facing copy.
+  const turnstileToken = field(formData, "cf-turnstile-response") || undefined;
+
   try {
-    await establishSession(await cookies(), { email, password });
+    await establishSession(await cookies(), { email, password }, { turnstileToken });
   } catch (e) {
     if (e instanceof ApiError) {
       return { error: loginErrorMessage(e.status, e.data), email, next };

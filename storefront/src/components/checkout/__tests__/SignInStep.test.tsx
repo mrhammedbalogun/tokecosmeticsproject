@@ -263,3 +263,63 @@ describe("SignInStep", () => {
     expect(screen.getByTestId("completed")).toHaveTextContent("");
   });
 });
+
+describe("SignInStep — turnstile", () => {
+  beforeEach(() => {
+    process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY = "0xTEST-SITE-KEY";
+  });
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+    delete (window as { turnstile?: unknown }).turnstile;
+  });
+
+  async function fillAndSubmitRegister() {
+    await waitFor(() => screen.getByLabelText(/^email$/i));
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "n@example.com" } });
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Nia" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ng-pass-9" } });
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  }
+
+  it("renders the widget container inside the checkout sign-in form", async () => {
+    mockFetch({ "/api/auth/me": { status: 401, body: {} } });
+    const { container } = renderHarness();
+    await waitFor(() => screen.getByLabelText(/^email$/i));
+    const div = container.querySelector(".cf-turnstile");
+    expect(div).not.toBeNull();
+    expect(div!.getAttribute("data-action")).toBe("turnstile-spin-v2");
+  });
+
+  it("includes the Turnstile token in the register submit body", async () => {
+    (window as { turnstile?: unknown }).turnstile = {
+      reset: vi.fn(), getResponse: () => "tok-checkout",
+    };
+    const f = mockFetch({
+      "/api/auth/me": { status: 401, body: {} },
+      "/api/auth/register": { status: 201, body: { ok: true } },
+    });
+
+    renderHarness();
+    await fillAndSubmitRegister();
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    const call = f.mock.calls.find(([u]) => u === "/api/auth/register") as unknown as
+      [string, RequestInit];
+    expect(JSON.parse(String(call[1].body))).toMatchObject({ turnstile_token: "tok-checkout" });
+  });
+
+  it("sends no turnstile_token when the widget never loaded (script blocked / gate off)", async () => {
+    const f = mockFetch({
+      "/api/auth/me": { status: 401, body: {} },
+      "/api/auth/register": { status: 201, body: { ok: true } },
+    });
+
+    renderHarness();
+    await fillAndSubmitRegister();
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    const call = f.mock.calls.find(([u]) => u === "/api/auth/register") as unknown as
+      [string, RequestInit];
+    expect(JSON.parse(String(call[1].body))).not.toHaveProperty("turnstile_token");
+  });
+});
