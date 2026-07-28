@@ -59,9 +59,9 @@ describe("account layout", () => {
     expect(screen.getByRole("link", { name: /addresses/i })).toHaveAttribute(
       "href", "/account/addresses",
     );
-    // Wishlist is the next 15d task — a visible link to a 404 is worse than no link
-    // (the LoginForm learned this rule first).
-    expect(screen.queryByRole("link", { name: /wishlist/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /wishlist/i })).toHaveAttribute(
+      "href", "/account/wishlist",
+    );
     expect(screen.getByText("child-content")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });

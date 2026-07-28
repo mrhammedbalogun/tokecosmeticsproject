@@ -61,4 +61,19 @@ describe("AccountNav active state", () => {
 
     expect(current()).toEqual(["Addresses"]);
   });
+
+  it("links Wishlist immediately after Addresses", () => {
+    pathname = "/account";
+    render(<AccountNav />);
+
+    const labels = screen.getAllByRole("link").map((a) => a.textContent);
+    expect(labels.indexOf("Wishlist")).toBe(labels.indexOf("Addresses") + 1);
+  });
+
+  it("marks Wishlist current on /account/wishlist", () => {
+    pathname = "/account/wishlist";
+    render(<AccountNav />);
+
+    expect(current()).toEqual(["Wishlist"]);
+  });
 });

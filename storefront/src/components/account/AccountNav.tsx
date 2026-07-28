@@ -2,8 +2,8 @@
 
 /**
  * Side nav (desktop) / scrollable tabs (mobile) for the account area. Lists ONLY
- * pages that exist — orders arrived with 15c, addresses with this task; wishlist is
- * the next 15d task, and a visible link to a 404 is worse than no link.
+ * pages that exist — orders arrived with 15c, addresses and wishlist with 15d; a
+ * visible link to a 404 is worse than no link.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/account", label: "Dashboard" },
   { href: "/account/orders", label: "Orders" },
   { href: "/account/addresses", label: "Addresses" },
+  { href: "/account/wishlist", label: "Wishlist" },
   { href: "/account/profile", label: "Profile" },
   { href: "/account/security", label: "Security" },
 ] as const;
