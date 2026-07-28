@@ -46,4 +46,19 @@ describe("AccountNav active state", () => {
 
     expect(current()).toEqual(["Dashboard"]);
   });
+
+  it("links Addresses immediately after Orders", () => {
+    pathname = "/account";
+    render(<AccountNav />);
+
+    const labels = screen.getAllByRole("link").map((a) => a.textContent);
+    expect(labels.indexOf("Addresses")).toBe(labels.indexOf("Orders") + 1);
+  });
+
+  it("marks Addresses current on /account/addresses", () => {
+    pathname = "/account/addresses";
+    render(<AccountNav />);
+
+    expect(current()).toEqual(["Addresses"]);
+  });
 });

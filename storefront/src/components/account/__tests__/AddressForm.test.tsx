@@ -1,0 +1,192 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { AddressForm } from "@/components/account/AddressForm";
+import type { Address } from "@/components/checkout/address-fields";
+
+type Route = { status: number; body: unknown };
+
+/** Routes fetch calls by "METHOD url", same convention as AddressStep.test.tsx (GET and
+ * POST both hit /api/addresses, so a URL-only map isn't enough). */
+function mockFetch(routes: Record<string, Route>) {
+  const f = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const method = (init?.method ?? "GET").toUpperCase();
+    const key = `${method} ${url}`;
+    const route = routes[key];
+    if (!route) return Promise.reject(new Error(`unexpected fetch: ${key}`));
+    return Promise.resolve(
+      new Response(JSON.stringify(route.body), {
+        status: route.status,
+        headers: { "content-type": "application/json" },
+      })
+    );
+  });
+  global.fetch = f as unknown as typeof fetch;
+  return f;
+}
+
+function lastCall(f: ReturnType<typeof mockFetch>) {
+  const [input, init] = f.mock.calls[f.mock.calls.length - 1];
+  return { url: String(input), init: init as RequestInit | undefined };
+}
+
+const GB_ADDRESS: Address = {
+  id: 5, label: "Office", first_name: "Ada", last_name: "L", phone: "0700",
+  line1: "2 Fleet St", line2: "", country_code: "GB", city_text: "London",
+  state_text: "", postcode: "EC4", is_default_shipping: false, is_default_billing: false,
+};
+
+const originalFetch = global.fetch;
+afterEach(() => {
+  global.fetch = originalFetch;
+  vi.restoreAllMocks();
+});
+
+describe("AddressForm", () => {
+  it("defaults to NG, shows a State select, and loads LGAs after a state is picked", async () => {
+    mockFetch({
+      "GET /api/regions?country=NG": {
+        status: 200,
+        body: [{ id: 1, name: "Lagos", level: "state", has_children: true }],
+      },
+      "GET /api/regions?parent=1": {
+        status: 200,
+        body: [{ id: 11, name: "Ikeja", level: "area", has_children: false }],
+      },
+    });
+
+    render(<AddressForm onSaved={vi.fn()} onCancel={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByLabelText(/^state$/i)).toBeInTheDocument());
+    expect(screen.queryByLabelText(/^city\/town$/i)).toBeNull();
+    await waitFor(() => expect(screen.getByRole("option", { name: "Lagos" })).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/^state$/i), { target: { value: "1" } });
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "Ikeja" })).toBeInTheDocument());
+  });
+
+  it("swaps country-specific fields on country change and clears stale values", async () => {
+    mockFetch({
+      "GET /api/regions?country=NG": { status: 200, body: [] },
+      "GET /api/regions?country=GB": { status: 200, body: [] },
+    });
+
+    render(<AddressForm onSaved={vi.fn()} onCancel={vi.fn()} />);
+
+    // NG by default -> regions branch (no seeded regions here -> the "no regions" message).
+    await waitFor(() =>
+      expect(screen.getByText(/no regions are set up/i)).toBeInTheDocument()
+    );
+
+    fireEvent.change(screen.getByLabelText(/^country$/i), { target: { value: "GB" } });
+
+    // City/postcode text fields now render instead of the region message.
+    await waitFor(() => expect(screen.getByLabelText(/^city\/town$/i)).toBeInTheDocument());
+    expect(screen.getByLabelText(/^city\/town$/i)).toHaveValue("");
+    expect(screen.getByLabelText(/^postcode$/i)).toHaveValue("");
+
+    fireEvent.change(screen.getByLabelText(/^city\/town$/i), { target: { value: "London" } });
+    expect(screen.getByLabelText(/^city\/town$/i)).toHaveValue("London");
+
+    // Switching country again clears the value just typed for the old country.
+    fireEvent.change(screen.getByLabelText(/^country$/i), { target: { value: "US" } });
+    await waitFor(() => expect(screen.getByLabelText(/^city$/i)).toHaveValue(""));
+  });
+
+  it("renders a 400 field error beside its field on create", async () => {
+    const f = mockFetch({
+      "GET /api/regions?country=NG": { status: 200, body: [] },
+      "POST /api/addresses": {
+        status: 400,
+        body: { line1: ["This field is required."] },
+      },
+    });
+
+    render(<AddressForm onSaved={vi.fn()} onCancel={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/no regions are set up/i)).toBeInTheDocument()
+    );
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "0700" } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "x" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+
+    await waitFor(() =>
+      expect(screen.getByText("This field is required.")).toBeInTheDocument()
+    );
+    expect(screen.getByText("This field is required.")).toHaveAttribute("role", "alert");
+    expect(f).toHaveBeenCalled();
+  });
+
+  it("POSTs the built payload on create and fires onSaved with the response", async () => {
+    const created: Address = {
+      id: 9, first_name: "Ada", phone: "07000000000", line1: "10 Downing St",
+      line2: "", country_code: "GB", city_text: "London", state_text: "", postcode: "SW1A 2AA",
+      is_default_shipping: false, is_default_billing: false,
+    };
+    const f = mockFetch({
+      "GET /api/regions?country=NG": { status: 200, body: [] },
+      "POST /api/addresses": { status: 201, body: created },
+    });
+    const onSaved = vi.fn();
+
+    render(<AddressForm onSaved={onSaved} onCancel={vi.fn()} />);
+
+    await waitFor(() =>
+      expect(screen.getByText(/no regions are set up/i)).toBeInTheDocument()
+    );
+    fireEvent.change(screen.getByLabelText(/^country$/i), { target: { value: "GB" } });
+    await waitFor(() => expect(screen.getByLabelText(/^city\/town$/i)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "07000000000" } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "10 Downing St" } });
+    fireEvent.change(screen.getByLabelText(/^city\/town$/i), { target: { value: "London" } });
+    fireEvent.change(screen.getByLabelText(/^postcode$/i), { target: { value: "SW1A 2AA" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(created));
+
+    const { url, init } = lastCall(f);
+    expect(url).toBe("/api/addresses");
+    expect(init?.method).toBe("POST");
+    expect(JSON.parse(init!.body as string)).toEqual({
+      country_code: "GB",
+      line1: "10 Downing St",
+      first_name: "Ada",
+      phone: "07000000000",
+      city_text: "London",
+      postcode: "SW1A 2AA",
+    });
+  });
+
+  it("PATCHes the built payload on edit (prefilled from initial) and fires onSaved", async () => {
+    const updated: Address = { ...GB_ADDRESS, line2: "Suite 4" };
+    const f = mockFetch({
+      "GET /api/regions?country=GB": { status: 200, body: [] },
+      "PATCH /api/addresses/5": { status: 200, body: updated },
+    });
+    const onSaved = vi.fn();
+
+    render(<AddressForm initial={GB_ADDRESS} onSaved={onSaved} onCancel={vi.fn()} />);
+
+    expect(screen.getByLabelText(/street address/i)).toHaveValue("2 Fleet St");
+    expect(screen.getByLabelText(/^city\/town$/i)).toHaveValue("London");
+
+    fireEvent.change(screen.getByLabelText(/apartment, suite/i), { target: { value: "Suite 4" } });
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated));
+
+    const { url, init } = lastCall(f);
+    expect(url).toBe("/api/addresses/5");
+    expect(init?.method).toBe("PATCH");
+    const body = JSON.parse(init!.body as string);
+    expect(body.line2).toBe("Suite 4");
+    expect(body.line1).toBe("2 Fleet St");
+  });
+});
