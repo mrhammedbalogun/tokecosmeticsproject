@@ -205,6 +205,13 @@ REST_FRAMEWORK = {
     },
 }
 
+# --- Cloudflare Turnstile ---
+# The auth gate (login/register/password-reset) is active iff this is non-empty.
+# Deliberate rollout order: the backend deploys with it UNSET until the storefront
+# ships the widget, then setting the secret in the prod env turns the gate on.
+# See apps/accounts/turnstile.py.
+TURNSTILE_SECRET = env("TURNSTILE_SECRET", default="")
+
 # --- Checkout ---
 RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 

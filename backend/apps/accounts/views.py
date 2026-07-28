@@ -14,6 +14,8 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.notifications.tasks import send_email_task
 
+from .turnstile import require_turnstile
+
 from .throttling import (
     LoginBurstThrottle,
     LoginIPThrottle,
@@ -51,6 +53,12 @@ class LoginView(TokenObtainPairView):
 
     throttle_classes = [LoginIPThrottle, LoginBurstThrottle, LoginSustainedThrottle]
 
+    def post(self, request, *args, **kwargs):
+        # After throttling (dispatch runs that first), before credentials: a bot
+        # failing Turnstile must not get its guess checked against the password.
+        require_turnstile(request)
+        return super().post(request, *args, **kwargs)
+
 
 class RegisterView(generics.CreateAPIView):
     serializer_class = RegisterSerializer
@@ -58,6 +66,10 @@ class RegisterView(generics.CreateAPIView):
     # IP first: it is the cap that protects the sending domain. The email throttle only
     # stops one address being spammed repeatedly; it cannot stop volume.
     throttle_classes = [RegisterIPThrottle, RegisterEmailThrottle]
+
+    def create(self, request, *args, **kwargs):
+        require_turnstile(request)
+        return super().create(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         from django.conf import settings
@@ -175,6 +187,7 @@ class PasswordResetView(APIView):
 
     @extend_schema(request=PasswordResetSerializer, responses={200: None})
     def post(self, request):
+        require_turnstile(request)
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         email = serializer.validated_data["email"].lower()
