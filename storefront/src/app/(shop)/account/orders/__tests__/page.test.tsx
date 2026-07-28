@@ -26,8 +26,7 @@ import OrdersPage from "../page";
 
 function order(overrides: Partial<OrderListItem> = {}): OrderListItem {
   return {
-    // Late-evening UTC on purpose: this row renders as 25 Jul in any zone east of UTC,
-    // so it fails loudly if the TZ pin in vitest.config.mts is ever dropped.
+    // Late-evening UTC on purpose — see the TZ-pin test below.
     number: "TC-100038", status: "pending_payment", placed_at: "2026-07-24T23:30:00Z",
     currency: "NGN", grand_total: "42000.00", grand_total_display: "₦42,000.00",
     item_count: 3, items: [], ...overrides,
@@ -77,6 +76,34 @@ describe("orders list page", () => {
     expect(screen.getByText("₦42,000.00")).toBeInTheDocument();
   });
 
+  it("formats placed_at in UTC, not the machine's zone", async () => {
+    // Bidirectional tripwire for the TZ pin in vitest.config.mts. These two instants are
+    // 60 minutes apart across midnight UTC: east of UTC the first row slips to 25 Jul,
+    // west of it the second slips back to 24 Jul. Either way this test fails.
+    respond(page({
+      count: 2,
+      results: [
+        order({ number: "TC-1", placed_at: "2026-07-24T23:30:00Z" }),
+        order({ number: "TC-2", placed_at: "2026-07-25T00:30:00Z" }),
+      ],
+    }));
+    await render_();
+
+    expect(screen.getByText(/24 Jul 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/25 Jul 2026/)).toBeInTheDocument();
+  });
+
+  it("URL-encodes the order number in the row href", async () => {
+    // Migrated legacy numbers are not guaranteed URL-safe; an unencoded "#" truncates the
+    // path at the fragment and "/" invents a route segment.
+    respond(page({ results: [order({ number: "TC#1/2" })] }));
+    await render_();
+
+    expect(screen.getByRole("link", { name: /TC#1/ })).toHaveAttribute(
+      "href", "/account/orders/TC%231%2F2",
+    );
+  });
+
   it("singularises a one-item order", async () => {
     respond(page({ results: [order({ item_count: 1 })] }));
     await render_();
@@ -116,7 +143,9 @@ describe("orders list page", () => {
     expect(screen.getByText("Page 2")).toBeInTheDocument();
   });
 
-  it.each([["abc"], ["0"], ["-3"], ["1.5"], [""]])(
+  // "1e21" is the isSafeInteger case: Number.isInteger accepts it, and it would reach DRF
+  // as page=1e+21.
+  it.each([["abc"], ["0"], ["-3"], ["1.5"], [""], ["1e21"]])(
     "falls back to page 1 for junk page param %j",
     async (raw) => {
       await render_({ page: raw });
