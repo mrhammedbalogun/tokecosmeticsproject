@@ -150,9 +150,10 @@ export async function getOrderOrNotFound(
  * to notFound() here (the page renders a friendly stale-link state instead).
  */
 export async function getTrackedOrder(number: string, token: string) {
-  // Both halves encoded: the number for the same reason as `getOrder`, and the token
-  // because it is signed base64 that can carry ":" and "&" — unencoded, the query string
-  // would split and the backend would read a truncated token as invalid.
+  // Both halves encoded. The number for the same reason as `getOrder`. The token needs
+  // nothing escaped TODAY — `django.core.signing` emits URL-safe base64 with ":"
+  // separators (backend/apps/orders/tokens.py) — so this is forward-proofing against a
+  // future token format, not a live fix. Cheap insurance; do not "simplify" it away.
   return apiFetch<OrderTracking>(
     `/orders/${encodeURIComponent(number)}/?token=${encodeURIComponent(token)}`,
     { cache: "no-store" },

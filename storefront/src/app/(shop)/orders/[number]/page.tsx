@@ -32,6 +32,10 @@ type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 export const metadata: Metadata = {
   title: "Track order",
   robots: { index: false, follow: false },
+  // This URL's query string IS a credential, and a referrer header would hand it to every
+  // host the page links out to. Modern browsers default to strict-origin-when-cross-origin
+  // (which already strips the query), but that is their choice, not ours — state it.
+  referrer: "no-referrer",
 };
 
 /**
@@ -97,7 +101,9 @@ export default async function OrderTrackingPage({
   searchParams: Search;
 }) {
   const { number } = await params;
-  const token = first((await searchParams).token);
+  // Trimmed, so `?token=` and `?token=%20` short-circuit like a missing one rather than
+  // spending a round trip to be told what we already know.
+  const token = first((await searchParams).token)?.trim();
   // No token → the invalid-link state directly, with NO upstream call: the backend 403s
   // an anonymous caller that carries none, so there is nothing to ask it.
   const order = token ? await loadTrackedOrder(number, token) : null;

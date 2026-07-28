@@ -9,8 +9,9 @@
  * beats an empty section. */
 
 /** Only the three fields the block reads, so both `OrderDetail` and `OrderTracking`
- * satisfy it structurally without this component importing either page's shape. */
-type Trackable = { status: string; tracking_carrier: string; tracking_number: string };
+ * satisfy it structurally without this component importing either page's shape.
+ * Exported so tests build fixtures against the real contract rather than restating it. */
+export type Trackable = { status: string; tracking_carrier: string; tracking_number: string };
 
 /** Statuses where "no tracking yet" is a fact about TIME — the order is on its way to
  * being shipped and simply has not got there. Everything else gets no tracking section

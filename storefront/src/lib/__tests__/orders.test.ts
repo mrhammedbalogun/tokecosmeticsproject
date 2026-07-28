@@ -115,10 +115,10 @@ describe("getTrackedOrder", () => {
   });
 
   it("builds the exact upstream URL, encoding the number AND the token", async () => {
-    // The token is signed base64-ish and can carry "+" and "/": unencoded, "+" decodes
-    // back as a space server-side and the backend reads a mangled token as invalid. The
-    // number is encoded for the same reason as getOrder's (legacy numbers are not
-    // guaranteed URL-safe).
+    // Real tokens need nothing escaped — django.core.signing emits URL-safe base64 with
+    // ":" separators — so the hostile token here is forward-proofing against a future
+    // token format, not a reproduction of a live bug. The number is encoded for the same
+    // reason as getOrder's (legacy numbers are not guaranteed URL-safe).
     const f = respond({ number: "TC#1/2" });
 
     await getTrackedOrder("TC#1/2", "a+b/c");

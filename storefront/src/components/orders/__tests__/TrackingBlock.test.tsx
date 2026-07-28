@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { TrackingBlock } from "@/components/orders/TrackingBlock";
+import { TrackingBlock, type Trackable } from "@/components/orders/TrackingBlock";
 
-const order = (o: Partial<Parameters<typeof TrackingBlock>[0]["order"]> = {}) => ({
+const order = (o: Partial<Trackable> = {}): Trackable => ({
   status: "pending_payment", tracking_carrier: "", tracking_number: "", ...o,
 });
 

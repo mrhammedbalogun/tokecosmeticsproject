@@ -103,9 +103,16 @@ describe("guest order tracking page", () => {
     expect(screen.queryByRole("heading", { name: "Delivery method" })).not.toBeInTheDocument();
   });
 
-  it("shows the invalid-link state and calls NOTHING upstream when there is no token", async () => {
-    // The backend 403s an anonymous caller without a token, so there is nothing to ask it.
-    await render_("TC-100038", {});
+  it.each([
+    ["absent", {}],
+    ["empty", { token: "" }],
+    ["whitespace-only", { token: "   " }],
+  ])("shows the invalid-link state and calls NOTHING upstream when the token is %s", async (
+    _label, search,
+  ) => {
+    // The backend 403s an anonymous caller without a usable token, so there is nothing to
+    // ask it — a round trip to be told what we already know.
+    await render_("TC-100038", search);
 
     expect(screen.getByRole("heading", { name: invalidHeading })).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -160,11 +167,27 @@ describe("guest order tracking page", () => {
   });
 
   it("encodes both the order number and the token into the upstream URL", async () => {
-    // A signed token is base64-ish and can carry "+" and "/"; unencoded, "+" decodes back
-    // as a space server-side and the backend reads a mangled token as invalid.
+    // Real tokens need nothing escaped — django.core.signing emits URL-safe base64 with
+    // ":" separators — so this hostile token is forward-proofing against a future token
+    // format, not a reproduction of a live bug.
     await render_("TC#1/2", { token: "a+b/c" });
 
     expect(lastUrl).toBe("http://backend:8000/api/v1/orders/TC%231%2F2/?token=a%2Bb%2Fc");
+  });
+
+  const domCases: Array<[string, number, unknown]> = [
+    ["the tracked order renders", 200, tracked()],
+    ["the invalid-link state renders", 404, { error: "invalid_token" }],
+  ];
+  it.each(domCases)("keeps the token out of the DOM when %s", async (_label, status, body) => {
+    // The query string is a bearer credential. Echoed into an href, a hidden input or a
+    // data- attribute it becomes copy-pasteable out of the rendered page and rides along
+    // in any onward navigation — which is the whole reason for referrer: no-referrer too.
+    const secret = "tok3n-should-never-be-rendered";
+    respond(body, status);
+    const { container } = await render_("TC-100038", { token: secret });
+
+    expect(container.innerHTML).not.toContain(secret);
   });
 
   it("never sends the visitor's session upstream", async () => {
@@ -240,5 +263,8 @@ describe("guest order tracking page", () => {
     expect(metadata.title).toBe("Track order");
     expect(String(metadata.title)).not.toMatch(/TC-/);
     expect(metadata.robots).toEqual({ index: false, follow: false });
+    // Not left to the browser default: the query string is a credential, so no referrer
+    // leaves this page at all.
+    expect(metadata.referrer).toBe("no-referrer");
   });
 });

@@ -114,8 +114,9 @@ describe("account order detail page", () => {
     expect(screen.getByText("GX9911")).toBeInTheDocument();
   });
 
-  // PRE_SHIP membership IS the decision here, so both directions are pinned per status
-  // rather than by one representative each — dropping a member has to fail a test.
+  // The canonical per-status list now lives in TrackingBlock's own tests, which own the
+  // PRE_SHIP ruling. What these cases prove is narrower and still worth keeping: that THIS
+  // page wires the block up and renders it in the right place.
   it.each([["pending_payment"], ["processing"]])(
     "shows the pre-ship hint for a %s order",
     async (status) => {
