@@ -1,5 +1,62 @@
 import { describe, it, expect } from "vitest";
-import { loginErrorMessage, registerErrorMessage } from "@/lib/auth-errors";
+import {
+  loginErrorMessage,
+  registerErrorMessage,
+  resetRequestErrorMessage,
+  resetConfirmErrorMessage,
+} from "@/lib/auth-errors";
+
+const TURNSTILE_BODY = { detail: "Human verification failed. Refresh the page and try again." };
+
+describe("turnstile 403s are verification failures, not credential failures", () => {
+  it("login surfaces the verification message instead of 'Email or password is incorrect'", () => {
+    // Telling a real customer their password is wrong when the WIDGET failed
+    // sends them to reset a password that was never the problem.
+    const out = loginErrorMessage(403, TURNSTILE_BODY);
+    expect(out).toMatch(/verification/i);
+    expect(out).not.toMatch(/password is incorrect/i);
+  });
+
+  it("a bare 403 without the marker still reads as a credential rejection", () => {
+    expect(loginErrorMessage(403, { detail: "Forbidden" })).toMatch(/password is incorrect/i);
+  });
+
+  it("register surfaces the verification message on a turnstile 403", () => {
+    const out = registerErrorMessage(403, TURNSTILE_BODY);
+    expect(out.message).toMatch(/verification/i);
+    expect(out.emailTaken).toBe(false);
+  });
+});
+
+describe("resetRequestErrorMessage", () => {
+  it("maps a turnstile 403 to the verification message", () => {
+    expect(resetRequestErrorMessage(403, TURNSTILE_BODY)).toMatch(/verification/i);
+  });
+  it("maps a 429 to wait-and-retry copy", () => {
+    expect(resetRequestErrorMessage(429, {})).toMatch(/too many|wait/i);
+  });
+  it("falls back without echoing internals", () => {
+    const out = resetRequestErrorMessage(500, { detail: "psycopg.OperationalError" });
+    expect(out).not.toMatch(/psycopg/);
+  });
+});
+
+describe("resetConfirmErrorMessage", () => {
+  it("echoes Django's password validators verbatim — they are the instruction", () => {
+    const out = resetConfirmErrorMessage(400, {
+      password: ["This password is too short.", "This password is too common."],
+    });
+    expect(out).toMatch(/too short/);
+    expect(out).toMatch(/too common/);
+  });
+  it("surfaces the invalid-link detail", () => {
+    expect(resetConfirmErrorMessage(400, { detail: "Invalid or expired reset link." }))
+      .toMatch(/invalid or expired/i);
+  });
+  it("falls back without echoing internals on a 5xx", () => {
+    expect(resetConfirmErrorMessage(500, { detail: "Traceback" })).not.toMatch(/Traceback/);
+  });
+});
 
 describe("loginErrorMessage", () => {
   it("gives ONE message for a rejected credential, whatever the backend said", () => {

@@ -85,8 +85,10 @@ describe("LoginForm", () => {
     );
   });
 
-  it("does not link to password reset yet — that page does not exist until item 7", () => {
+  it("links to password reset (Plan-15a item 7 shipped the page)", () => {
     renderForm();
-    expect(screen.queryByRole("link", { name: /forgot/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /forgot/i })).toHaveAttribute(
+      "href", "/forgot-password",
+    );
   });
 });

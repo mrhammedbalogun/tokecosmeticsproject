@@ -22,6 +22,19 @@ const REJECTED = "Email or password is incorrect.";
 const THROTTLED = "Too many sign-in attempts. Please wait a minute and try again.";
 const UNEXPECTED = "Something went wrong signing you in — please try again.";
 
+/**
+ * A 403 stopped meaning "bad credentials" the day the Turnstile gate shipped: the
+ * backend rejects unverified requests with 403 + "Human verification failed…".
+ * Telling that customer their password is wrong sends them off to reset a password
+ * that was never the problem — so the verification detail is detected and surfaced
+ * verbatim (it is written for end users).
+ */
+function turnstileMessage(status: number, body: unknown): string | null {
+  if (status !== 403) return null;
+  const detail = body && typeof body === "object" ? (body as ErrorBody).detail : null;
+  return typeof detail === "string" && /verification/i.test(detail) ? detail : null;
+}
+
 function fieldMessages(body: ErrorBody): string[] {
   return Object.entries(body)
     .filter(([key]) => key !== "detail")
@@ -49,6 +62,8 @@ export interface RegisterError {
  * is exactly the instruction the user needs.
  */
 export function registerErrorMessage(status: number, body: unknown): RegisterError {
+  const turnstile = turnstileMessage(status, body);
+  if (turnstile) return { message: turnstile, emailTaken: false };
   if (status === 429) return { message: THROTTLED, emailTaken: false };
 
   const shape: ErrorBody = body && typeof body === "object" ? (body as ErrorBody) : {};
@@ -72,6 +87,8 @@ export function registerErrorMessage(status: number, body: unknown): RegisterErr
 }
 
 export function loginErrorMessage(status: number, body: unknown): string {
+  const turnstile = turnstileMessage(status, body);
+  if (turnstile) return turnstile;
   // Identical copy for every credential rejection — see the file comment.
   if (status === 401 || status === 403) return REJECTED;
   if (status === 429) return THROTTLED;
@@ -85,4 +102,35 @@ export function loginErrorMessage(status: number, body: unknown): string {
   }
 
   return UNEXPECTED;
+}
+
+/**
+ * Errors for the reset-request form. The endpoint always 200s on success (it never
+ * says whether the address exists), so the only errors a user can see are the gate,
+ * the throttle, and our own failures — none of which mention the account.
+ */
+export function resetRequestErrorMessage(status: number, body: unknown): string {
+  const turnstile = turnstileMessage(status, body);
+  if (turnstile) return turnstile;
+  if (status === 429) {
+    return "Too many reset requests. Please wait a while and try again.";
+  }
+  return "We couldn't send the reset email just now — please try again in a moment.";
+}
+
+/**
+ * Errors for the new-password form. Django's password validators are echoed
+ * verbatim ("This password is too short." IS the instruction); the invalid/expired
+ * link detail is routine, not exceptional — tokens are single-use and time-limited.
+ */
+export function resetConfirmErrorMessage(status: number, body: unknown): string {
+  if (status === 429) return "Too many attempts. Please wait a minute and try again.";
+
+  const shape: ErrorBody = body && typeof body === "object" ? (body as ErrorBody) : {};
+  if (status === 400) {
+    const messages = fieldMessages(shape);
+    if (messages.length) return messages.join(" ");
+    if (typeof shape.detail === "string") return shape.detail;
+  }
+  return "Something went wrong resetting your password — please try again.";
 }

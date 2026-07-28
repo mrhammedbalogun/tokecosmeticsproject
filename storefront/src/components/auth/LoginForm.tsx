@@ -109,9 +109,11 @@ export function LoginForm({
         >
           Create an account
         </Link>
+        {" · "}
+        <Link href="/forgot-password" className="underline hover:text-foreground">
+          Forgot password?
+        </Link>
       </p>
-      {/* No "Forgot password?" link until /forgot-password exists (Plan-15a item 7) — a
-          visible link to a 404 is worse than no link. */}
     </form>
   );
 }
