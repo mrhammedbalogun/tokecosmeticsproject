@@ -354,17 +354,26 @@ Two findings, one fixed here and one deferred with a decision needed:
   are Linux-only by design (`test_api.py` skips them locally; they run in CI). The
   proxy's 200-path streaming is unit-tested; "downloads and opens" must be smoke-checked
   once on the Linux deploy target instead. NOT a code defect.
-- **DEFERRED, NEEDS A DECISION — Buy Now is end-to-end broken for a signed-in user.**
-  Live repro: PDP → Buy Now → `/checkout` shows "Your bag is empty." The backend
-  `BuyNowView` fills a `kind="express"` cart (Plan-08 design), but nothing on the
-  storefront ever reads an express cart: checkout's `useCart` → `/api/cart` →
-  `GET /cart/` always resolves `kind="standard"`, and the buy-now BFF neither sets the
-  cart cookie nor is its response consumed. Pre-existing since Plan-13 wiring (route
-  untouched since `065ad29`); NOT a 15c regression; the guest resume path in
-  `SignInStep` has the same gap. Options: (a) boring — `BuyNowView` adds to the
-  standard cart and Buy Now becomes add+navigate, retiring the express-cart concept;
-  (b) wire express carts through cookie + checkout. Decision affects a recorded plan
-  ruling, so it goes to Hammed rather than being changed inside 15c.
+- **FIXED 2026-07-28 (Hammed chose option a) — Buy Now was end-to-end broken.**
+  Original finding: PDP → Buy Now → `/checkout` showed "Your bag is empty." The
+  backend `BuyNowView` filled a `kind="express"` cart (Plan-08 D14), but nothing on
+  the storefront ever read an express cart: checkout's `useCart` → `/api/cart` →
+  `GET /cart/` always resolves `kind="standard"`, and the buy-now BFF neither set the
+  cart cookie nor had its response consumed. Pre-existing since Plan-13 wiring; not a
+  15c regression. **The fix retires the express-cart concept** (D14 overridden with
+  Hammed's sign-off): `BuyNowView` now `add_item`s into the STANDARD cart — never
+  clearing it, that would destroy the shopper's bag — and `BuyButtons` seeds the
+  `["cart"]` react-query cache with the response before navigating (the cache is
+  fresh-for-30s, so without seeding checkout would still trust a stale empty cart).
+  `Cart.kind` stays in the schema for the inert historical rows. TDD both sides:
+  3 backend tests (standard cart, keeps existing lines, merges/caps repeat buys),
+  3 BuyButtons tests (cache seeding RED→GREEN, 401-stash pin, failure pin), plus a
+  pin that SignInStep's mount me-check resumes a stashed intent — that branch is now
+  load-bearing for guest Buy Now and its old comment claimed the opposite. Verified
+  live: signed-in Buy Now lands on checkout with the item; guest Buy Now stashes and
+  bounces to `/login?next=/checkout`. The final guest link (me-check resume in a real
+  browser) could not be re-verified live — Cloudflare Turnstile (correctly) stopped
+  issuing tokens to the automated browser — cover it in the checkpoint walkthrough.
 
 **15d — Addresses + wishlist.**
 Address CRUD with default badges — the existing `api/addresses` BFF has only GET/POST, so extend

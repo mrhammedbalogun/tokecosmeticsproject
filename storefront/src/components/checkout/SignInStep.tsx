@@ -83,8 +83,10 @@ export function SignInStep() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount check only
   }, []);
 
-  /** Runs after a successful register/login (never after the me-check — an
-   * already-signed-in shopper has nothing to resume).
+  /** Runs after a successful register/login AND after the mount me-check. The
+   * me-check path is load-bearing for guest Buy Now: the guest is sent to the
+   * standalone /login page (intent stashed), so by the time checkout mounts they
+   * are already signed in and THIS is the only place the intent gets resumed.
    *
    * The guest-cart merge USED to live here, snapshotting `cart.id` before the auth
    * call. It now happens server-side inside the auth BFF's login/register actions,

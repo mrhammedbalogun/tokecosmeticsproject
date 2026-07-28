@@ -30,8 +30,10 @@ const req = (body: unknown) => new Request("http://localhost:3000/api/checkout/b
 });
 
 describe("buy-now BFF", () => {
-  it("forwards variant+qty with Bearer and country; returns the express cart", async () => {
-    const f = upstream(200, { id: "c1", kind: "express", items: [{ variant_id: 5 }] });
+  it("forwards variant+qty with Bearer and country; returns the shopper's cart", async () => {
+    // Since 2026-07-28 the upstream adds to the STANDARD cart (express retired) —
+    // the proxy is transparent either way; this pins the passthrough.
+    const f = upstream(200, { id: "c1", kind: "standard", items: [{ variant_id: 5 }] });
     const res = await POST(req({ variant_id: 5, quantity: 2 }));
     expect(res.status).toBe(200);
     const [url, init] = f.mock.calls[0];
@@ -39,7 +41,7 @@ describe("buy-now BFF", () => {
     const h = new Headers((init as RequestInit).headers);
     expect(h.get("Authorization")).toBe("Bearer TOK");
     expect(h.get("X-Country")).toBe("NG");
-    expect((await res.json()).kind).toBe("express");
+    expect((await res.json()).kind).toBe("standard");
   });
 
   it("401 without a session, no upstream call (guest flow is client-side, D6)", async () => {

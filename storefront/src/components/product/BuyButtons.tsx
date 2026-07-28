@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useCart } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
 import { usePdp } from "@/components/product/PdpContext";
@@ -12,6 +13,7 @@ import { BUYNOW_INTENT_KEY } from "@/lib/buynow-intent";
 export function BuyButtons() {
   const { variant, qty } = usePdp();
   const { addItem } = useCart();
+  const queryClient = useQueryClient();
   const router = useRouter();
   const [busy, setBusy] = useState<"buy" | "add" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +45,11 @@ export function BuyButtons() {
         return;
       }
       if (!res.ok) throw new Error();
+      // Buy-now returns the STANDARD cart with the item added (it is the same cart
+      // checkout reads). Seed the query cache before navigating: ["cart"] is fresh
+      // for 30s, so without this checkout would trust a stale empty cart and render
+      // "Your bag is empty" — the shipped bug that retired the express cart.
+      queryClient.setQueryData(["cart"], await res.json());
       router.push("/checkout");
     } catch {
       setError("Buy Now is unavailable right now — try Add to Cart.");

@@ -7,9 +7,9 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Address
-from apps.carts.models import Cart, CartItem
+from apps.carts.models import Cart
 from apps.carts.serializers import serialize_cart
-from apps.carts.services import get_or_create_cart, set_quantity
+from apps.carts.services import add_item, get_or_create_cart
 from apps.catalog.models import ProductVariant
 from apps.checkout.serializers import QuoteRequestSerializer
 from apps.checkout.services.checkout import CheckoutError, place_order, retry_payment
@@ -198,13 +198,18 @@ class OrderPayView(APIView):
 
 
 class BuyNowView(APIView):
+    """Buy Now = add to the shopper's ordinary cart; the client then navigates to
+    checkout, which reads that same cart. Never clears existing lines — this cart is
+    the shopper's bag, and clearing it here would silently destroy it. (Originally a
+    separate `kind="express"` cart per Plan-08 D14, retired 2026-07-28: nothing ever
+    read an express cart, so Buy Now produced an empty checkout. The Cart.kind field
+    stays for the inert historical rows.)"""
+
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         variant = get_object_or_404(ProductVariant, pk=request.data.get("variant_id"), is_active=True)
         qty = int(request.data.get("quantity", 1))
-        cart = get_or_create_cart(request, kind="express")
-        # Express cart holds exactly the Buy-Now item — clear then set.
-        CartItem.objects.filter(cart=cart).delete()
-        set_quantity(cart, variant, qty, request.country)
+        cart = get_or_create_cart(request)
+        add_item(cart, variant, qty, request.country)
         return Response(serialize_cart(cart, request.country))

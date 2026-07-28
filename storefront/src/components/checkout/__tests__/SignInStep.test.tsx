@@ -243,6 +243,30 @@ describe("SignInStep", () => {
     expect(sessionStorage.getItem(BUYNOW_INTENT_KEY)).toBeNull();
   });
 
+  it("resumes a stashed Buy-Now intent when arriving already signed in", async () => {
+    // Load-bearing for guest Buy Now: the guest is sent to the standalone /login
+    // page (intent stashed), so checkout mounts with them ALREADY authenticated and
+    // the me-check is the only place the intent can be resumed. Removing runPostAuth
+    // from the me-check branch silently drops the guest's purchase.
+    sessionStorage.setItem(BUYNOW_INTENT_KEY, JSON.stringify({ variant_id: 9, quantity: 1 }));
+    const f = mockFetch({
+      "/api/auth/me": { status: 200, body: { email: "back@example.com", first_name: "Bea" } },
+      "/api/checkout/buy-now": { status: 200, body: { id: "cart-1" } },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    expect(f).toHaveBeenCalledWith(
+      "/api/checkout/buy-now",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ variant_id: 9, quantity: 1 }),
+      })
+    );
+    expect(sessionStorage.getItem(BUYNOW_INTENT_KEY)).toBeNull();
+  });
+
   it("shows a field error and does not complete on a weak-password rejection", async () => {
     mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
