@@ -32,6 +32,14 @@ describe("AccountNav active state", () => {
     expect(current()).toEqual(["Orders"]);
   });
 
+  it("respects the path boundary — /account/orders-archive is not inside /account/orders", () => {
+    // A bare startsWith(href) would highlight Orders here. The separator is the point.
+    pathname = "/account/orders-archive";
+    render(<AccountNav />);
+
+    expect(current()).toEqual([]);
+  });
+
   it("still marks Dashboard on /account itself", () => {
     pathname = "/account";
     render(<AccountNav />);

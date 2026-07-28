@@ -12,6 +12,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     globals: true,
+    // Dates are formatted server-side in the server's zone, so an unpinned TZ makes any
+    // date assertion pass or fail depending on where the machine is. UTC everywhere.
+    env: { TZ: "UTC" },
   },
   resolve: {
     alias: {

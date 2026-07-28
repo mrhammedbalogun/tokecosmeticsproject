@@ -26,7 +26,9 @@ import OrdersPage from "../page";
 
 function order(overrides: Partial<OrderListItem> = {}): OrderListItem {
   return {
-    number: "TC-100038", status: "pending_payment", placed_at: "2026-07-24T10:30:00Z",
+    // Late-evening UTC on purpose: this row renders as 25 Jul in any zone east of UTC,
+    // so it fails loudly if the TZ pin in vitest.config.mts is ever dropped.
+    number: "TC-100038", status: "pending_payment", placed_at: "2026-07-24T23:30:00Z",
     currency: "NGN", grand_total: "42000.00", grand_total_display: "₦42,000.00",
     item_count: 3, items: [], ...overrides,
   };

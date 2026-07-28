@@ -28,16 +28,31 @@ describe("StatusChip", () => {
     expect(screen.getByText("awaiting_pickup")).toBeInTheDocument();
   });
 
+  // Pinned so a tone regrouping is a deliberate edit, not a silent one. The nine keys are
+  // backend/apps/orders/state.py ALLOWED_TRANSITIONS.
+  const GOOD = ["bg-accent/10", "text-accent-strong"];
+  const WAITING = ["bg-gold/20", "text-foreground"];
+  const NEUTRAL = ["bg-beige", "text-muted"];
+
+  it.each([
+    ["pending_payment", WAITING],
+    ["processing", WAITING],
+    ["on_hold", WAITING],
+    ["shipped", GOOD],
+    ["delivered", GOOD],
+    ["completed", GOOD],
+    ["cancelled", NEUTRAL],
+    ["expired", NEUTRAL],
+    ["refunded", NEUTRAL],
+  ])("tones %s as %j", (status, tone) => {
+    const { container } = render(<StatusChip status={status} />);
+
+    expect(container.firstElementChild).toHaveClass(...tone);
+  });
+
   it("gives an unknown status the neutral tone", () => {
     const { container } = render(<StatusChip status="awaiting_pickup" />);
 
-    expect(container.firstElementChild).toHaveClass("bg-beige", "text-muted");
-  });
-
-  it("tones delivered and cancelled differently", () => {
-    const { container: good } = render(<StatusChip status="delivered" />);
-    const { container: dead } = render(<StatusChip status="cancelled" />);
-
-    expect(good.firstElementChild?.className).not.toEqual(dead.firstElementChild?.className);
+    expect(container.firstElementChild).toHaveClass(...NEUTRAL);
   });
 });

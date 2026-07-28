@@ -3,6 +3,9 @@
  * exceptional: render it verbatim in the neutral tone rather than crash or — worse —
  * hide the row, which would make an order vanish from a customer's history.
  *
+ * `backend/apps/orders/state.py` ALLOWED_TRANSITIONS is the authoritative status
+ * vocabulary — diff STATUSES below against its keys when the backend adds a state.
+ *
  * Only palette tokens from globals.css are used; there is no green/amber scale beyond
  * accent (forest green) and gold, so the three tones map onto those plus beige/muted. */
 

@@ -3,8 +3,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import { first } from "@/lib/search-params";
-import { getOrders, type OrderListItem, type Paginated } from "@/lib/orders";
+import { formatOrderDate, getOrders, type OrderListItem, type Paginated } from "@/lib/orders";
 import { StatusChip } from "@/components/orders/StatusChip";
+import { Pagination } from "@/components/ui/Pagination";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -12,11 +13,15 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 export const metadata: Metadata = { title: "My orders" };
 
 /** Untrusted URL input → a page number DRF will accept. Anything that is not a positive
- * integer (0, -1, 1.5, "abc", a repeated param) falls back to the first page rather than
- * being forwarded verbatim — same discipline as parsePlpParams. */
+ * integer (0, -1, 1.5, "abc") falls back to the first page rather than being forwarded
+ * verbatim — same discipline as parsePlpParams. `first()` collapses a repeated param
+ * before the check, so `?page=2&page=9` is page 2 rather than the array "2,9".
+ *
+ * isSafeInteger, not isInteger: 1e21 IS an integer to isInteger, and would reach the
+ * query string in exponent form. */
 function parsePage(raw: string | string[] | undefined): number {
   const page = Number(first(raw));
-  return Number.isInteger(page) && page > 0 ? page : 1;
+  return Number.isSafeInteger(page) && page > 0 ? page : 1;
 }
 
 async function loadOrders(page: number, currentPath: string): Promise<Paginated<OrderListItem>> {
@@ -31,14 +36,15 @@ async function loadOrders(page: number, currentPath: string): Promise<Paginated<
   }
 }
 
-const DATE = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric", month: "short", year: "numeric",
-});
-
 export default async function OrdersPage({ searchParams }: { searchParams: SearchParams }) {
   const page = parsePage((await searchParams).page);
   // The bounce target must be this exact URL, page included, or a renewal mid-history
   // dumps the customer back on page 1.
+  //
+  // It only pays off on SOFT navigation. On a hard load the account layout renders first
+  // and its own /auth/me/ fetch bounces with a hardcoded "/account", so a stale token
+  // lands the customer on the dashboard whatever we put here. Precision still belongs
+  // here: soft navigation does not re-run the layout, so this value is the only one.
   const currentPath = page === 1 ? "/account/orders" : `/account/orders?page=${page}`;
   const orders = await loadOrders(page, currentPath);
 
@@ -58,13 +64,15 @@ export default async function OrdersPage({ searchParams }: { searchParams: Searc
           {orders.results.map((order) => (
             <li key={order.number}>
               <Link
-                href={`/account/orders/${order.number}`}
+                // Encoded: migrated legacy numbers are not guaranteed to be URL-safe, and
+                // an unencoded "#" or "?" would silently truncate the path.
+                href={`/account/orders/${encodeURIComponent(order.number)}`}
                 className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[var(--radius-card)] border border-line p-4 transition-colors hover:bg-beige"
               >
                 <div className="min-w-0">
                   <p className="font-medium">{order.number}</p>
                   <p className="mt-1 text-sm text-muted">
-                    {DATE.format(new Date(order.placed_at))} ·{" "}
+                    {formatOrderDate(order.placed_at)} ·{" "}
                     {order.item_count} {order.item_count === 1 ? "item" : "items"}
                   </p>
                 </div>
@@ -78,31 +86,13 @@ export default async function OrdersPage({ searchParams }: { searchParams: Searc
         </ul>
       )}
 
-      {/* Driven by the API's own next/previous links, never a computed page count, so we
-          never link past the last page (which DRF 404s). */}
-      {(orders.previous !== null || orders.next !== null) && (
-        <nav aria-label="Pagination" className="mt-8 flex items-center justify-center gap-2">
-          {orders.previous !== null && (
-            <Link
-              rel="prev"
-              href={`/account/orders?page=${page - 1}`}
-              className="rounded-full border border-line px-4 py-2 text-sm hover:border-accent"
-            >
-              ← Prev
-            </Link>
-          )}
-          <span className="px-3 text-sm text-muted">Page {page}</span>
-          {orders.next !== null && (
-            <Link
-              rel="next"
-              href={`/account/orders?page=${page + 1}`}
-              className="rounded-full border border-line px-4 py-2 text-sm hover:border-accent"
-            >
-              Next →
-            </Link>
-          )}
-        </nav>
-      )}
+      {/* Hrefs built here, not in the view: unlike the PLP there is no canonical-URL
+          concern (the account area is noindex), so `?page=1` is emitted plainly. */}
+      <Pagination
+        page={page}
+        prevHref={orders.previous === null ? null : `/account/orders?page=${page - 1}`}
+        nextHref={orders.next === null ? null : `/account/orders?page=${page + 1}`}
+      />
     </div>
   );
 }

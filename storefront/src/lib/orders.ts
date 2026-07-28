@@ -40,6 +40,20 @@ export interface Paginated<T> {
   count: number; next: string | null; previous: string | null; results: T[];
 }
 
+/** One date format across every order surface (list, detail, invoice) — "24 Jul 2026".
+ * Built once at module scope; constructing an Intl formatter per row is measurably slow.
+ *
+ * Formats in the SERVER's timezone, which vitest.config.mts pins to UTC so assertions are
+ * hermetic. SERVER COMPONENTS ONLY, like everything in this module: it is pure, but the
+ * module's import of lib/session pulls in next/headers, so a Client Component importing
+ * this helper would fail the build. Copy it to a client-safe module if that day comes. */
+const ORDER_DATE = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric", month: "short", year: "numeric",
+});
+export function formatOrderDate(iso: string): string {
+  return ORDER_DATE.format(new Date(iso));
+}
+
 /**
  * Authed order detail, called from the confirmation page — a SERVER COMPONENT, hence
  * `fetchWithAuthOrBounce` rather than `fetchWithAuth`: a Server Component cannot persist

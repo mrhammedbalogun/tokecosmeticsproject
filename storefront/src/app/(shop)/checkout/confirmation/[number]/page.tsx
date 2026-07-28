@@ -8,6 +8,7 @@ import { confirmationCopy } from "@/lib/confirmation-copy";
 import { ConfirmationBankDetails } from "@/components/checkout/ConfirmationBankDetails";
 import { AddressSummary } from "@/components/orders/AddressBlock";
 import { OrderItems } from "@/components/orders/OrderItems";
+import { StatusChip } from "@/components/orders/StatusChip";
 import { OrderTotals } from "@/components/orders/OrderTotals";
 
 type Params = Promise<{ number: string }>;
@@ -37,9 +38,13 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
       <h1 className="font-display text-2xl">Thank you — your order is confirmed</h1>
-      <p className="mt-2 text-sm text-muted">
-        Order <span className="font-medium text-foreground">{order.number}</span> · Status:{" "}
-        {order.status}
+      <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
+        <span>
+          Order <span className="font-medium text-foreground">{order.number}</span>
+        </span>
+        {/* Same chip as the account order list — a raw "pending_payment" here next to
+            "Awaiting payment" there is a visible inconsistency to the same customer. */}
+        <StatusChip status={order.status} />
       </p>
 
       <div className="mt-6 rounded-[var(--radius-card)] border border-line bg-beige p-4 text-sm">
