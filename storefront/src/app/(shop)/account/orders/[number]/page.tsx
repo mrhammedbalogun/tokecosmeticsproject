@@ -9,6 +9,7 @@ import { AddressSummary } from "@/components/orders/AddressBlock";
 import { OrderItems } from "@/components/orders/OrderItems";
 import { StatusChip } from "@/components/orders/StatusChip";
 import { OrderTotals } from "@/components/orders/OrderTotals";
+import { TrackingBlock } from "@/components/orders/TrackingBlock";
 
 type Params = Promise<{ number: string }>;
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -17,24 +18,6 @@ type Search = Promise<{ [key: string]: string | string[] | undefined }>;
  * be used as a path — both for the renewal bounce target and for the invoice href.
  * Migrated legacy numbers are not guaranteed URL-safe (see the list page's row href). */
 const pagePath = (number: string) => `/account/orders/${encodeURIComponent(number)}`;
-
-/** Statuses where "no tracking yet" is a fact about TIME — the order is on its way to
- * being shipped and simply has not got there. Everything else gets no tracking section
- * at all, because the hint would be a promise we have not made:
- *
- *  - cancelled/refunded are terminal; expired and on_hold can revive
- *    (`expired -> processing` is the late-payment path), but nothing is reserved or paid
- *    while they sit there, so no shipment is owed and none should be implied.
- *  - on_hold is a fact about the ORDER, not about time: it is the triage state for
- *    migrated legacy orders AND for the Plan-14a freight-declined cohort
- *    (backend/apps/orders/services.py:59), i.e. customers we OWE A REFUND. Telling one of
- *    them tracking is coming is a false promise about the wrong direction of money.
- *  - delivered/completed are already there; shipped-without-tracking has nothing to add.
- *
- * `backend/apps/orders/state.py` ALLOWED_TRANSITIONS is the authoritative status
- * vocabulary — diff this set against its keys when the backend adds a state (same
- * discipline as StatusChip). */
-const PRE_SHIP = new Set(["pending_payment", "processing"]);
 
 // The account layout already sets robots noindex for everything beneath it.
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
@@ -58,9 +41,6 @@ export default async function OrderDetailPage({
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   const order = await getOrderOrNotFound(number, country, pagePath(number));
 
-  const trackingLine = [order.tracking_carrier, order.tracking_number]
-    .filter((v) => v && v.trim())
-    .join(" · ");
   // Only the predicate is borrowed from the confirmation page: its banner copy is
   // just-placed-an-order language ("your order is reserved"), wrong on a page a customer
   // opens weeks later. The bank block itself is still what an unpaid transfer needs.
@@ -106,14 +86,9 @@ export default async function OrderDetailPage({
         </div>
       )}
 
-      {(trackingLine || PRE_SHIP.has(order.status)) && (
-        <div className="mt-6">
-          <h2 className="font-display text-lg">Tracking</h2>
-          <p className="mt-2 text-sm text-muted">
-            {trackingLine || "You'll get tracking details when your order ships."}
-          </p>
-        </div>
-      )}
+      {/* Shared with the guest tracking page — the PRE_SHIP ruling lives in the
+          component now, not here. */}
+      <TrackingBlock order={order} />
 
       {showBankDetails && (
         // KNOWN LIMITATION (15c, accepted — on the checkpoint list). This component reads

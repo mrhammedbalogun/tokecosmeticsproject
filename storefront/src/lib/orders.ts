@@ -6,7 +6,7 @@
  * AllowAny and also serves a signed `?token=` tracking link, so a public token fetcher
  * (plain apiFetch, no session) belongs in this module alongside the authed ones. */
 import { notFound } from "next/navigation";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 import { fetchWithAuthOrBounce } from "@/lib/session";
 
 export interface OrderItem {
@@ -28,6 +28,23 @@ export interface OrderDetail {
    * them in — "set" means non-empty, not "not undefined". Either one can be set without
    * the other (a carrier chosen before the consignment number exists). */
   tracking_carrier: string; tracking_number: string;
+}
+
+/**
+ * The redacted, bearer-token view (backend `OrderTrackingSerializer`) — NOT a subset of
+ * OrderDetail by accident: no address, no email, no phone, no payment gateway, no
+ * customer note and no money BREAKDOWN, only the grand total. The signed token travels in
+ * an order email, which is forwardable, so every field listed here is one the backend is
+ * content to have read by whoever ends up holding the link. Widening this type means
+ * widening `OrderTrackingSerializer` first, and that is a privacy decision, not a typing
+ * one.
+ */
+export interface OrderTracking {
+  number: string; status: string; placed_at: string; currency: string;
+  grand_total: string; grand_total_display: string; delivery_option_name: string | null;
+  /** Same semantics as OrderDetail's pair: EMPTY STRINGS until fulfilment fills them in,
+   * and either can be set without the other. */
+  tracking_carrier: string; tracking_number: string; items: OrderItem[];
 }
 
 /** The list endpoint's row (backend `OrderListSerializer`) — a strict subset of
@@ -110,6 +127,36 @@ export async function getOrderOrNotFound(
     if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
     throw e;
   }
+}
+
+/**
+ * The guest tracking view of an order, unlocked by the signed `?token=` the backend puts
+ * in order emails (`backend/apps/orders/emails.py`). Returns the REDACTED payload.
+ *
+ * PLAIN `apiFetch` — never `fetchWithAuth*`, per the module header and the rule restated
+ * on `getOrder`. The caller is a public page: an auth fetcher would bounce a guest to
+ * login (and, on a stale cookie, drag the tracking link into the refresh flow) for a page
+ * that needs no session at all. Nothing here reads cookies.
+ *
+ * No `country`: the order carries its own `currency` and pre-rendered
+ * `grand_total_display`, so X-Country has no effect on this response.
+ *
+ * `no-store` for the same reason as the authed fetchers — status and tracking numbers
+ * change out from under any cache — plus the response is keyed by a bearer token that
+ * must never be shared between visitors.
+ *
+ * Bad/expired/mismatched token → ApiError 404 `{"error":"invalid_token"}`, deliberately
+ * indistinguishable from a number that never existed. The caller maps it; do NOT map it
+ * to notFound() here (the page renders a friendly stale-link state instead).
+ */
+export async function getTrackedOrder(number: string, token: string) {
+  // Both halves encoded: the number for the same reason as `getOrder`, and the token
+  // because it is signed base64 that can carry ":" and "&" — unencoded, the query string
+  // would split and the backend would read a truncated token as invalid.
+  return apiFetch<OrderTracking>(
+    `/orders/${encodeURIComponent(number)}/?token=${encodeURIComponent(token)}`,
+    { cache: "no-store" },
+  );
 }
 
 /**

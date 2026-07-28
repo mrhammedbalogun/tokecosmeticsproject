@@ -21,7 +21,7 @@ vi.mock("next/navigation", () => ({
   notFound: () => { throw new NotFound(); },
 }));
 
-import { getOrder, getOrderOrNotFound } from "@/lib/orders";
+import { getOrder, getOrderOrNotFound, getTrackedOrder } from "@/lib/orders";
 
 const originalFetch = global.fetch;
 beforeEach(() => {
@@ -92,6 +92,69 @@ describe("getOrder", () => {
     await expect(getOrder("TC-100038", "NG", "/checkout/confirmation/TC-100038")).rejects.toMatchObject({
       status: 403,
     });
+  });
+});
+
+describe("getTrackedOrder", () => {
+  const respond = (body: unknown, status = 200) => {
+    const f = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(body), {
+        status, headers: { "content-type": "application/json" },
+      }),
+    );
+    global.fetch = f as unknown as typeof fetch;
+    return f;
+  };
+
+  it("returns the redacted body", async () => {
+    respond({ number: "TC-100038", status: "shipped", grand_total_display: "₦42,000.00" });
+
+    const order = await getTrackedOrder("TC-100038", "GOOD");
+    expect(order.number).toBe("TC-100038");
+    expect(order.grand_total_display).toBe("₦42,000.00");
+  });
+
+  it("builds the exact upstream URL, encoding the number AND the token", async () => {
+    // The token is signed base64-ish and can carry "+" and "/": unencoded, "+" decodes
+    // back as a space server-side and the backend reads a mangled token as invalid. The
+    // number is encoded for the same reason as getOrder's (legacy numbers are not
+    // guaranteed URL-safe).
+    const f = respond({ number: "TC#1/2" });
+
+    await getTrackedOrder("TC#1/2", "a+b/c");
+    expect(f.mock.calls[0][0]).toBe(
+      "http://backend:8000/api/v1/orders/TC%231%2F2/?token=a%2Bb%2Fc",
+    );
+    expect((f.mock.calls[0][1] as RequestInit).cache).toBe("no-store");
+  });
+
+  it("sends no Authorization header even with a live session in the cookie jar", async () => {
+    // Plain apiFetch, never an auth fetcher: a public page must not bounce a guest to
+    // login, and must not drag a signed tracking link into the refresh flow.
+    const f = respond({ number: "TC-100038" });
+
+    await getTrackedOrder("TC-100038", "GOOD");
+    expect(new Headers((f.mock.calls[0][1] as RequestInit).headers).get("Authorization"))
+      .toBeNull();
+    expect(setSpy).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the backend's invalid_token 404 as an ApiError for the caller to map", async () => {
+    // Deliberately NOT notFound() here — the page renders a friendly stale-link state.
+    respond({ error: "invalid_token" }, 404);
+
+    await expect(getTrackedOrder("TC-100038", "BAD")).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("does not refresh or bounce on a 401", async () => {
+    const urls: string[] = [];
+    global.fetch = vi.fn((url: string) => {
+      urls.push(url);
+      return Promise.resolve(new Response("{}", { status: 401 }));
+    }) as unknown as typeof fetch;
+
+    await expect(getTrackedOrder("TC-100038", "GOOD")).rejects.toMatchObject({ status: 401 });
+    expect(urls.some((u) => u.includes("/auth/token/refresh/"))).toBe(false);
   });
 });
 
