@@ -65,6 +65,38 @@ describe("account layout", () => {
     expect(screen.getByText("child-content")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
+
+  it("renders the shell WITHOUT redirecting when the access cookie is gone", async () => {
+    // The layout is "a hint, not the gate" (its own doc comment): each page's fetch
+    // owns the renewal bounce and carries the CORRECT return path. When the layout
+    // bounced too, its next=/account raced the page's redirect inside the same RSC
+    // render — measured live: a stale-session click on "Orders" landed on the
+    // Dashboard. With no token the layout renders anonymously; the page beneath it
+    // bounces, renews, and the re-render fills the header chip in.
+    store.delete("access");
+    const f = vi.fn();
+    global.fetch = f as unknown as typeof fetch;
+
+    render(await AccountLayout({ children: <p>child-content</p> }));
+
+    expect(screen.getByText("child-content")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /my account/i })).toBeInTheDocument();
+    expect(screen.queryByText(/TK-/)).toBeNull();
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("renders the shell anonymously when the API rejects the token, leaving the gate to the page", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: "expired" }), {
+        status: 401, headers: { "content-type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    render(await AccountLayout({ children: <p>child-content</p> }));
+
+    expect(screen.getByText("child-content")).toBeInTheDocument();
+    expect(screen.queryByText(/TK-/)).toBeNull();
+  });
 });
 
 describe("account dashboard", () => {

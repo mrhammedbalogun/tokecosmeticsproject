@@ -163,6 +163,34 @@ describe("fetchWithAuthOrBounce", () => {
     );
   });
 
+  it("with NO access cookie but a refresh cookie, bounces WITHOUT calling the API", async () => {
+    // The soft-nav 404: the access cookie expires (14-min max-age) while the refresh
+    // lives 14 days. An optimistic anonymous call here reaches the ALLOWANY order
+    // detail endpoint, which answers 403 — not the 401 the catch maps — so the page
+    // rendered notFound() for a customer with a perfectly valid session. With no
+    // token there is nothing to be optimistic about: decide the bounce up front.
+    store.delete("access");
+    const f = vi.fn();
+    global.fetch = f as unknown as typeof fetch;
+
+    await expect(fetchWithAuthOrBounce("/orders/TC-9/", "/account/orders/TC-9")).rejects.toThrow(
+      "NEXT_REDIRECT /api/auth/refresh-redirect?next=%2Faccount%2Forders%2FTC-9",
+    );
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("with no cookies at all, goes to login WITHOUT calling the API", async () => {
+    store.delete("access");
+    store.delete("refresh");
+    const f = vi.fn();
+    global.fetch = f as unknown as typeof fetch;
+
+    await expect(fetchWithAuthOrBounce("/orders/TC-9/", "/account/orders/TC-9")).rejects.toThrow(
+      "NEXT_REDIRECT /login?next=%2Faccount%2Forders%2FTC-9",
+    );
+    expect(f).not.toHaveBeenCalled();
+  });
+
   it("lets a non-401 error through untouched", async () => {
     global.fetch = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ detail: "gone" }), {

@@ -83,15 +83,17 @@ describe("getOrder", () => {
   it("sends a caller with no session at all to login", async () => {
     store.delete("access");
     store.delete("refresh");
-    global.fetch = vi.fn().mockResolvedValue(
-      new Response("{}", { status: 403 }),
-    ) as unknown as typeof fetch;
+    const f = vi.fn();
+    global.fetch = f as unknown as typeof fetch;
 
-    // The backend 403s an anonymous caller without a tracking token (orders/views.py),
-    // so there is no legitimate guest view of this page to protect.
-    await expect(getOrder("TC-100038", "NG", "/checkout/confirmation/TC-100038")).rejects.toMatchObject({
-      status: 403,
-    });
+    // Cookieless callers never reach the API at all (fetchWithAuthOrBounce decides
+    // up front): the backend would 403 an anonymous caller — NOT 401 — because the
+    // endpoint is AllowAny for tracking links, and that 403 used to leak through as
+    // notFound() instead of a login bounce.
+    await expect(getOrder("TC-100038", "NG", "/checkout/confirmation/TC-100038")).rejects.toThrow(
+      "NEXT_REDIRECT /login?next=%2Fcheckout%2Fconfirmation%2FTC-100038",
+    );
+    expect(f).not.toHaveBeenCalled();
   });
 });
 

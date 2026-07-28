@@ -181,6 +181,18 @@ export async function fetchWithAuthOrBounce<T = unknown>(
   const jar = await cookies();
   const token = jar.get(ACCESS_COOKIE)?.value;
 
+  // No token → decide the bounce BEFORE touching the API. The optimistic call below is
+  // only safe for endpoints that answer an anonymous request with 401; the order detail
+  // endpoint is AllowAny (it also serves signed tracking links) and answers 403, which
+  // the catch below rightly does NOT treat as "stale session" — so an expired access
+  // cookie (14-min max-age, vs the refresh's 14 days) rendered a customer's own order
+  // as a 404 instead of renewing. There is nothing to be optimistic about without a
+  // token; this also spares the API a guaranteed-useless anonymous request.
+  if (!token) {
+    const decision = decideAuth(undefined, jar.get(REFRESH_COOKIE)?.value, currentPath);
+    if (decision.kind !== "authenticated") redirect(decision.to);
+  }
+
   let bounceTo: string;
   try {
     return await apiFetch<T>(path, { ...opts, token });
