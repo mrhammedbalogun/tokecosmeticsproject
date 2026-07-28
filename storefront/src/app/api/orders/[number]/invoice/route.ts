@@ -70,7 +70,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ number: string
     // Dead refresh token — send them to login, and do NOT log. This fires on every
     // 14-day expiry, and a wolf-crying error line trains everyone to ignore the only
     // console.error in the codebase.
-    if (e instanceof ApiError && e.status === 401) {
+    //
+    // Both statuses, matching api/auth/refresh-redirect: SimpleJWT answers 401 for a
+    // rejected token and 400 for one that is invalid or ALREADY SPENT — the loser of a
+    // concurrent rotation (ROTATE_REFRESH_TOKENS + BLACKLIST_AFTER_ROTATION). Same dead
+    // session, same remedy; only the reason differs.
+    if (e instanceof ApiError && (e.status === 401 || e.status === 400)) {
       return seeOther(withNext(LOGIN_PATH, orderPath(number)));
     }
     // Nothing else reports this: the storefront has no Sentry, and catching here removes

@@ -193,10 +193,15 @@ describe("invoice BFF — upstream failure mapping", () => {
     expect(spy).toHaveBeenCalled();
   });
 
-  it("a rejected refresh goes to login, and does NOT cry wolf in the log", async () => {
-    // fetchWithAuthRaw's internal refresh throws this when the refresh token is expired
-    // or blacklisted. Routine 14-day expiry — a customer event, not an incident.
-    rawFetch.mockRejectedValue(new ApiError(401, { detail: "Token is invalid" }));
+  // fetchWithAuthRaw's internal refresh throws these when the refresh token is dead:
+  // SimpleJWT answers 401 for a rejected token and 400 for one already spent (the
+  // rotation-race loser). Routine customer events, not incidents — same as
+  // api/auth/refresh-redirect treats them.
+  it.each([
+    [401, "expired or blacklisted"],
+    [400, "already spent — the rotation-race loser"],
+  ])("a refresh rejected %i goes to login without crying wolf", async (status) => {
+    rawFetch.mockRejectedValue(new ApiError(status, { detail: "Token is invalid" }));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const res = await call("TC-100038");
