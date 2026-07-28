@@ -22,6 +22,10 @@ export interface OrderDetail {
   grand_total: string; grand_total_display: string; delivery_option_name: string | null;
   shipping_address: Record<string, unknown> | null; billing_address: Record<string, unknown> | null;
   customer_note: string; payment_gateway: string; items: OrderItem[];
+  /** Always present on the owner serializer, but EMPTY STRINGS until fulfilment fills
+   * them in — "set" means non-empty, not "not undefined". Either one can be set without
+   * the other (a carrier chosen before the consignment number exists). */
+  tracking_carrier: string; tracking_number: string;
 }
 
 /** The list endpoint's row (backend `OrderListSerializer`) — a strict subset of
@@ -55,13 +59,14 @@ export function formatOrderDate(iso: string): string {
 }
 
 /**
- * Authed order detail, called from the confirmation page — a SERVER COMPONENT, hence
- * `fetchWithAuthOrBounce` rather than `fetchWithAuth`: a Server Component cannot persist
- * a rotated token, so refreshing here would blacklist the customer's refresh token and
- * end their session behind a page that still rendered correctly.
+ * Authed order detail. Two callers — the checkout confirmation page and the account
+ * order-detail page — both SERVER COMPONENTS, hence `fetchWithAuthOrBounce` rather than
+ * `fetchWithAuth`: a Server Component cannot persist a rotated token, so refreshing here
+ * would blacklist the customer's refresh token and end their session behind a page that
+ * still rendered correctly.
  *
- * `currentPath` is where the bounce sends the user back to, so it must be the page's own
- * path, not this endpoint's.
+ * `currentPath` is where the bounce sends the user back to, so each caller passes its OWN
+ * page path (URL-encoded as the browser has it), not this endpoint's.
  *
  * There is no anonymous path to guard *here*: `orders/views.py` 403s a caller with no
  * auth and no signed tracking token, and neither the confirmation page nor the account
