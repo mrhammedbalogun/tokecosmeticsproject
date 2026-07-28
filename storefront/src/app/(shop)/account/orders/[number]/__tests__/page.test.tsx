@@ -106,28 +106,50 @@ describe("account order detail page", () => {
     expect(screen.getByText("GX9911")).toBeInTheDocument();
   });
 
-  it("shows the pre-ship hint for an order that has not shipped yet", async () => {
-    respond(order({ status: "processing" }));
+  // PRE_SHIP membership IS the decision here, so both directions are pinned per status
+  // rather than by one representative each — dropping a member has to fail a test.
+  it.each([["pending_payment"], ["processing"]])(
+    "shows the pre-ship hint for a %s order",
+    async (status) => {
+      respond(order({ status }));
+      await render_();
+
+      expect(screen.getByRole("heading", { name: "Tracking" })).toBeInTheDocument();
+      expect(screen.getByText(/tracking details when your order ships/i)).toBeInTheDocument();
+    },
+  );
+
+  it.each([["cancelled"], ["expired"], ["refunded"], ["delivered"], ["completed"], ["shipped"]])(
+    "omits the whole tracking section on a %s order with no tracking recorded",
+    async (status) => {
+      // The hint promises a shipment. Nothing is reserved or paid on cancelled/expired/
+      // refunded, delivered/completed are already there, and shipped-without-tracking has
+      // nothing to add — silence beats an empty section or a false promise.
+      respond(order({ status }));
+      await render_();
+
+      expect(screen.queryByRole("heading", { name: "Tracking" })).not.toBeInTheDocument();
+      expect(screen.queryByText(/tracking details when your order ships/i)).not.toBeInTheDocument();
+    },
+  );
+
+  it("omits the tracking hint on an on_hold order", async () => {
+    // on_hold is the triage state for migrated legacy orders and for the Plan-14a
+    // freight-declined cohort — customers who are owed a REFUND. "Tracking is coming" is
+    // a false promise about the wrong direction of money.
+    respond(order({ status: "on_hold" }));
     await render_();
 
-    expect(screen.getByRole("heading", { name: "Tracking" })).toBeInTheDocument();
-    expect(screen.getByText(/tracking details when your order ships/i)).toBeInTheDocument();
-  });
-
-  it("omits the whole tracking section on a cancelled order", async () => {
-    // The hint would be a lie and the section would be empty — silence is the answer.
-    respond(order({ status: "cancelled" }));
-    await render_();
-
-    expect(screen.queryByRole("heading", { name: "Tracking" })).not.toBeInTheDocument();
     expect(screen.queryByText(/tracking details when your order ships/i)).not.toBeInTheDocument();
   });
 
-  it("omits the tracking section on a shipped order with no tracking recorded", async () => {
-    respond(order({ status: "shipped" }));
+  it("still shows real tracking on an on_hold order that has some", async () => {
+    // Omitting the hint must not omit facts: an order held after shipping still has a
+    // consignment the customer can chase.
+    respond(order({ status: "on_hold", tracking_carrier: "GIG", tracking_number: "GX9911" }));
     await render_();
 
-    expect(screen.queryByRole("heading", { name: "Tracking" })).not.toBeInTheDocument();
+    expect(screen.getByText("GIG · GX9911")).toBeInTheDocument();
   });
 
   it("renders bank details for an unpaid bank transfer", async () => {
@@ -164,12 +186,13 @@ describe("account order detail page", () => {
     expect(screen.queryByText(/your order is reserved/i)).not.toBeInTheDocument();
   });
 
-  it("links the invoice at the BFF route", async () => {
+  it("links the invoice at the BFF route, as a download", async () => {
     await render_();
 
-    expect(screen.getByRole("link", { name: /download invoice/i })).toHaveAttribute(
-      "href", "/api/orders/TC-100038/invoice",
-    );
+    const link = screen.getByRole("link", { name: /download invoice/i });
+    expect(link).toHaveAttribute("href", "/api/orders/TC-100038/invoice");
+    // Without `download` the browser navigates away from the order to render the PDF.
+    expect(link).toHaveAttribute("download");
   });
 
   it("URL-encodes the order number in the invoice href", async () => {

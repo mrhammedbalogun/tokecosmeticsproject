@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { ApiError } from "@/lib/api";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
-import { getOrder, type OrderDetail } from "@/lib/orders";
+import { getOrderOrNotFound } from "@/lib/orders";
 import { confirmationCopy } from "@/lib/confirmation-copy";
 import { ConfirmationBankDetails } from "@/components/checkout/ConfirmationBankDetails";
 import { AddressSummary } from "@/components/orders/AddressBlock";
@@ -15,24 +13,15 @@ type Params = Promise<{ number: string }>;
 
 export const metadata: Metadata = { title: "Order confirmed", robots: { index: false } };
 
-async function loadOrder(number: string, country: string): Promise<OrderDetail> {
-  try {
-    return await getOrder(number, country, `/checkout/confirmation/${number}`);
-  } catch (e) {
-    // 403 as well as 404: the backend deliberately refuses to distinguish "no such order"
-    // from "not yours" (orders/views.py filters by owner so a stranger's order 404s — a
-    // 403 would confirm it exists). Mirror that here rather than surfacing an error page.
-    if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
-    // Anything else — including the NEXT_REDIRECT that getOrder throws to renew a stale
-    // session — must propagate untouched.
-    throw e;
-  }
-}
-
 export default async function ConfirmationPage({ params }: { params: Params }) {
   const { number } = await params;
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
-  const order = await loadOrder(number, country);
+  // `params` arrives DECODED, so the bounce target has to be re-encoded to match the URL
+  // the browser is actually on — otherwise a legacy "#" or "/" in the number sends the
+  // customer somewhere else after a session renewal.
+  const order = await getOrderOrNotFound(
+    number, country, `/checkout/confirmation/${encodeURIComponent(number)}`,
+  );
   const copy = confirmationCopy({ gateway: order.payment_gateway, status: order.status });
 
   return (

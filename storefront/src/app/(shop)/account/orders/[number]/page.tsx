@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { ApiError } from "@/lib/api";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
-import { formatOrderDate, getOrder, type OrderDetail } from "@/lib/orders";
+import { formatOrderDate, getOrderOrNotFound } from "@/lib/orders";
 import { confirmationCopy } from "@/lib/confirmation-copy";
 import { ConfirmationBankDetails } from "@/components/checkout/ConfirmationBankDetails";
 import { AddressSummary } from "@/components/orders/AddressBlock";
@@ -19,11 +17,23 @@ type Params = Promise<{ number: string }>;
  * Migrated legacy numbers are not guaranteed URL-safe (see the list page's row href). */
 const pagePath = (number: string) => `/account/orders/${encodeURIComponent(number)}`;
 
-/** Statuses where "no tracking yet" is a fact about time rather than about the order.
- * Anything else (cancelled/expired/refunded — never shipping; delivered/completed —
- * already there; shipped with the fields still blank) gets no tracking section at all:
- * "you'll get tracking when it ships" on a cancelled order is worse than silence. */
-const PRE_SHIP = new Set(["pending_payment", "processing", "on_hold"]);
+/** Statuses where "no tracking yet" is a fact about TIME — the order is on its way to
+ * being shipped and simply has not got there. Everything else gets no tracking section
+ * at all, because the hint would be a promise we have not made:
+ *
+ *  - cancelled/refunded are terminal; expired and on_hold can revive
+ *    (`expired -> processing` is the late-payment path), but nothing is reserved or paid
+ *    while they sit there, so no shipment is owed and none should be implied.
+ *  - on_hold is a fact about the ORDER, not about time: it is the triage state for
+ *    migrated legacy orders AND for the Plan-14a freight-declined cohort
+ *    (backend/apps/orders/services.py:59), i.e. customers we OWE A REFUND. Telling one of
+ *    them tracking is coming is a false promise about the wrong direction of money.
+ *  - delivered/completed are already there; shipped-without-tracking has nothing to add.
+ *
+ * `backend/apps/orders/state.py` ALLOWED_TRANSITIONS is the authoritative status
+ * vocabulary — diff this set against its keys when the backend adds a state (same
+ * discipline as StatusChip). */
+const PRE_SHIP = new Set(["pending_payment", "processing"]);
 
 // The account layout already sets robots noindex for everything beneath it.
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
@@ -31,26 +41,12 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: `Order ${number}` };
 }
 
-async function loadOrder(number: string, country: string): Promise<OrderDetail> {
-  try {
-    return await getOrder(number, country, pagePath(number));
-  } catch (e) {
-    // 403 as well as 404: the backend deliberately refuses to distinguish "no such order"
-    // from "not yours" (orders/views.py filters by owner so a stranger's order 404s — a
-    // 403 would confirm it exists). Mirror that here rather than surfacing an error page.
-    if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
-    // Anything else — including the NEXT_REDIRECT that getOrder throws to renew a stale
-    // session — must propagate untouched.
-    throw e;
-  }
-}
-
 export default async function OrderDetailPage({ params }: { params: Params }) {
   const { number } = await params;
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
-  const order = await loadOrder(number, country);
+  const order = await getOrderOrNotFound(number, country, pagePath(number));
 
-  const tracking = [order.tracking_carrier, order.tracking_number]
+  const trackingLine = [order.tracking_carrier, order.tracking_number]
     .filter((v) => v && v.trim())
     .join(" · ");
   // Only the predicate is borrowed from the confirmation page: its banner copy is
@@ -98,11 +94,11 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
         </div>
       )}
 
-      {(tracking || PRE_SHIP.has(order.status)) && (
+      {(trackingLine || PRE_SHIP.has(order.status)) && (
         <div className="mt-6">
           <h2 className="font-display text-lg">Tracking</h2>
           <p className="mt-2 text-sm text-muted">
-            {tracking || "You'll get tracking details when your order ships."}
+            {trackingLine || "You'll get tracking details when your order ships."}
           </p>
         </div>
       )}
@@ -129,7 +125,7 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
             (Task 4), and a client-side navigation to it would try to render a PDF as a
             React page. `download` keeps the customer on this page. */}
         <a
-          href={`/api/orders/${encodeURIComponent(number)}/invoice`}
+          href={`/api/orders/${encodeURIComponent(order.number)}/invoice`}
           download
           className="rounded-[var(--radius-card)] border border-line px-4 py-2 text-sm font-medium transition-colors hover:border-accent/60"
         >

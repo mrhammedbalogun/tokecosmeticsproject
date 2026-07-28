@@ -5,6 +5,8 @@
  * Not every fetcher here is session-based: the backend's order detail endpoint is
  * AllowAny and also serves a signed `?token=` tracking link, so a public token fetcher
  * (plain apiFetch, no session) belongs in this module alongside the authed ones. */
+import { notFound } from "next/navigation";
+import { ApiError } from "@/lib/api";
 import { fetchWithAuthOrBounce } from "@/lib/session";
 
 export interface OrderItem {
@@ -84,6 +86,30 @@ export async function getOrder(number: string, country: string, currentPath: str
   return fetchWithAuthOrBounce<OrderDetail>(`/orders/${encodeURIComponent(number)}/`, currentPath, {
     country, cache: "no-store",
   });
+}
+
+/**
+ * `getOrder` with the not-found mapping every page-level caller needs. Both order pages
+ * had an identical private copy of this; the error discipline below is subtle enough that
+ * two copies is one too many.
+ *
+ * 403 as well as 404: the backend deliberately refuses to distinguish "no such order"
+ * from "not yours" (orders/views.py filters by owner so a stranger's order 404s — a 403
+ * would confirm it exists). Mirror that here rather than surfacing an error page.
+ *
+ * Everything else rethrown UNTOUCHED — including the NEXT_REDIRECT that `getOrder` throws
+ * to renew a stale session. A catch-all here would swallow the bounce and log the
+ * customer out for good.
+ */
+export async function getOrderOrNotFound(
+  number: string, country: string, currentPath: string,
+): Promise<OrderDetail> {
+  try {
+    return await getOrder(number, country, currentPath);
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.status === 403)) notFound();
+    throw e;
+  }
 }
 
 /**

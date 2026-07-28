@@ -13,11 +13,15 @@ vi.mock("next/headers", () => ({
 class Redirected extends Error {
   constructor(public to: string) { super(`NEXT_REDIRECT ${to}`); }
 }
+class NotFound extends Error {
+  constructor() { super("NEXT_NOT_FOUND"); }
+}
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => { throw new Redirected(to); },
+  notFound: () => { throw new NotFound(); },
 }));
 
-import { getOrder } from "@/lib/orders";
+import { getOrder, getOrderOrNotFound } from "@/lib/orders";
 
 const originalFetch = global.fetch;
 beforeEach(() => {
@@ -88,5 +92,48 @@ describe("getOrder", () => {
     await expect(getOrder("TC-100038", "NG", "/checkout/confirmation/TC-100038")).rejects.toMatchObject({
       status: 403,
     });
+  });
+});
+
+describe("getOrderOrNotFound", () => {
+  const path = "/account/orders/TC-100038";
+  const status = (code: number) => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response("{}", { status: code, headers: { "content-type": "application/json" } }),
+    ) as unknown as typeof fetch;
+  };
+
+  it("returns the order on success", async () => {
+    global.fetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ number: "TC-100038" }), {
+        status: 200, headers: { "content-type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+
+    expect((await getOrderOrNotFound("TC-100038", "NG", path)).number).toBe("TC-100038");
+  });
+
+  // 403 as well as 404: orders/views.py owner-filters, so a 403 reaching the customer
+  // would confirm that a stranger's order exists.
+  it.each([[404], [403]])("maps %i to notFound()", async (code) => {
+    status(code);
+
+    await expect(getOrderOrNotFound("TC-100038", "NG", path)).rejects.toBeInstanceOf(NotFound);
+  });
+
+  it("lets the renewal bounce through instead of swallowing it", async () => {
+    // The whole reason this wrapper does not catch-all: NEXT_REDIRECT is how the stale
+    // session gets renewed, and eating it logs the customer out for good.
+    status(401);
+
+    await expect(getOrderOrNotFound("TC-100038", "NG", path)).rejects.toMatchObject({
+      to: expect.stringContaining(encodeURIComponent(path)),
+    });
+  });
+
+  it("rethrows a server error untouched rather than pretending the order is missing", async () => {
+    status(500);
+
+    await expect(getOrderOrNotFound("TC-100038", "NG", path)).rejects.toMatchObject({ status: 500 });
   });
 });
