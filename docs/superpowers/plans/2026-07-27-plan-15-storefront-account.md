@@ -444,6 +444,33 @@ Tasks (sequential, one implementer subagent each, two-stage review after each):
    untouched); wishlist: heart a PDP product, grid shows it, Add to bag opens the
    drawer with the item, Remove clears it, empty state renders.
 
+**15d COMPLETE 2026-07-28.** Tasks 1–3 subagent-built with per-task reviews (task 2
+took one fix round: LGA prefill-on-edit could silently drop a saved LGA —
+`AccountRegionSelect` prefetches on mount; checkout's RegionSelect untouched). Final
+whole-slice review (Fable) found 2 Importants, fixed in one wave (`a396719`) and
+re-review-verified: (1) wishlist page/BFF dropped the shopper's country — every
+non-NG shopper got an NG-resolved wishlist, cascading into a silently poisoned cart
+cache; live-verified fixed (GB cookie → £15.00 GBP card). (2) AddressForm PATCH was
+omit-if-empty, so CLEARING an optional field silently reverted — edit mode now sends
+`""`. Folded in: kind-allowlist own-property check (`"toString"` bypass), and the
+pre-existing `useCart` res.ok gap (HTTP errors used to poison the `["cart"]` cache;
+now `CartRequestError` throws). Gates: 718 storefront + 702 backend tests,
+typecheck/lint/prod build clean. Live walkthrough covered the full task-4 list;
+Turnstile blocks automated login, so the session was minted via backend shell +
+Playwright `addCookies` (files deleted after).
+
+Post-merge follow-ups carried out of the SDD ledger (none block merge — final-review
+triage): set-default failure-path test; `COUNTRY_OPTIONS` hardcodes the 5 markets
+(second source of truth vs seed migration — export a canonical list later);
+"International" label mismatch; delete-confirm lacks `aria-live`; NG cards show no
+state/LGA locality line (address-fields limitation); RegionSelect/AccountRegionSelect
+duplication (blocked on checkout freeze); wishlist "No longer available" cell
+proportions; refresh()-after-mutation swallows non-ok (shared AddressBook/WishlistGrid
+fix); wishlist hearts render unsaved on the wishlist page itself (heart uses
+`default_sku`, row uses stored `sku`); addresses RSC page omits `country`
+(harmless — addresses aren't country-resolved); `EMPTY_FORM` hardcodes NG rather than
+the country cookie.
+
 ---
 
 ## LAUNCH-BLOCKING SECURITY GAP — its own slice, do before 15b (found 2026-07-26)
