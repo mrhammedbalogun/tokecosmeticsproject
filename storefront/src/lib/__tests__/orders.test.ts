@@ -17,7 +17,7 @@ vi.mock("next/navigation", () => ({
   redirect: (to: string) => { throw new Redirected(to); },
 }));
 
-import { getOrder } from "@/lib/checkout";
+import { getOrder } from "@/lib/orders";
 
 const originalFetch = global.fetch;
 beforeEach(() => {

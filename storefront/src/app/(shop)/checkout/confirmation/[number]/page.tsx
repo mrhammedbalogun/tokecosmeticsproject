@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { ApiError } from "@/lib/api";
-import { COUNTRY_COOKIE, DEFAULT_COUNTRY, formatMoney, symbolFor } from "@/lib/country";
-import { getOrder, type OrderDetail } from "@/lib/checkout";
+import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
+import { getOrder, type OrderDetail } from "@/lib/orders";
 import { confirmationCopy } from "@/lib/confirmation-copy";
 import { ConfirmationBankDetails } from "@/components/checkout/ConfirmationBankDetails";
+import { AddressSummary } from "@/components/orders/AddressBlock";
+import { OrderItems } from "@/components/orders/OrderItems";
+import { OrderTotals } from "@/components/orders/OrderTotals";
 
 type Params = Promise<{ number: string }>;
 
@@ -25,45 +28,10 @@ async function loadOrder(number: string, country: string): Promise<OrderDetail> 
   }
 }
 
-/** The address snapshot on an order is an untyped JSON blob (see OrderDetail.shipping_
- * address in lib/checkout.ts) — it's a point-in-time copy of an Address row, not a
- * live reference, so it's read defensively here rather than assumed to match the
- * Address shape exactly. */
-function str(addr: Record<string, unknown> | null, key: string): string | undefined {
-  const v = addr?.[key];
-  return typeof v === "string" && v.trim() ? v : undefined;
-}
-
-function AddressSummary({ address }: { address: Record<string, unknown> | null }) {
-  if (!address) return <p className="text-sm text-muted">No address on file.</p>;
-  const name = [str(address, "first_name"), str(address, "last_name")].filter(Boolean).join(" ");
-  const lines = [
-    name,
-    str(address, "line1"),
-    str(address, "line2"),
-    [str(address, "city_text"), str(address, "state_text")].filter(Boolean).join(", "),
-    str(address, "postcode"),
-    str(address, "phone"),
-  ].filter((l): l is string => Boolean(l && l.trim()));
-
-  if (lines.length === 0) return <p className="text-sm text-muted">No address on file.</p>;
-
-  return (
-    <address className="text-sm not-italic text-muted">
-      {lines.map((line, i) => (
-        <span key={i} className="block">
-          {line}
-        </span>
-      ))}
-    </address>
-  );
-}
-
 export default async function ConfirmationPage({ params }: { params: Params }) {
   const { number } = await params;
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   const order = await loadOrder(number, country);
-  const sym = symbolFor(order.currency);
   const copy = confirmationCopy({ gateway: order.payment_gateway, status: order.status });
 
   return (
@@ -78,44 +46,9 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
         {copy.banner}
       </div>
 
-      <div className="mt-8 space-y-3">
-        <h2 className="font-display text-lg">Items</h2>
-        {order.items.map((item, i) => (
-          <div key={i} className="flex items-center justify-between gap-4 border-b border-line pb-3 text-sm">
-            <div>
-              <p className="font-medium">{item.product_name}</p>
-              {item.variant_name && <p className="text-muted">{item.variant_name}</p>}
-              <p className="text-muted">Qty {item.quantity}</p>
-            </div>
-            <span className="font-medium">{item.line_total_display}</span>
-          </div>
-        ))}
-      </div>
+      <OrderItems items={order.items} />
 
-      <dl className="mt-6 space-y-2 border-t border-line pt-4 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted">Subtotal</dt>
-          <dd>{formatMoney(order.subtotal, order.currency, sym)}</dd>
-        </div>
-        {order.discount_total !== "0.00" && (
-          <div className="flex justify-between gap-4">
-            <dt className="text-muted">Discount</dt>
-            <dd>−{formatMoney(order.discount_total, order.currency, sym)}</dd>
-          </div>
-        )}
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted">Delivery</dt>
-          <dd>{formatMoney(order.shipping_total, order.currency, sym)}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted">Tax</dt>
-          <dd>{formatMoney(order.tax_total, order.currency, sym)}</dd>
-        </div>
-        <div className="flex justify-between gap-4 border-t border-line pt-2 text-base font-medium">
-          <dt>Total</dt>
-          <dd>{order.grand_total_display}</dd>
-        </div>
-      </dl>
+      <OrderTotals order={order} />
 
       <div className="mt-8 grid gap-6 sm:grid-cols-2">
         <div>
