@@ -44,6 +44,21 @@ describe("getOrder", () => {
     expect(new Headers(init.headers).get("X-Country")).toBe("GB");
   });
 
+  it("URL-encodes the order number into the upstream path", async () => {
+    // Migrated legacy numbers are not guaranteed URL-safe. Unencoded, "#" truncates the
+    // path at the fragment and "/" invents a segment, so Django routes the request
+    // elsewhere and the customer gets a 404 for an order that exists.
+    const f = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ number: "TC#1/2" }), {
+        status: 200, headers: { "content-type": "application/json" },
+      }),
+    );
+    global.fetch = f as unknown as typeof fetch;
+
+    await getOrder("TC#1/2", "NG", "/account/orders/TC%231%2F2");
+    expect(f.mock.calls[0][0]).toBe("http://backend:8000/api/v1/orders/TC%231%2F2/");
+  });
+
   it("bounces a stale session through the renewal handler instead of refreshing in place", async () => {
     // The confirmation page is a Server Component, so getOrder must NEVER refresh here:
     // a rotation it cannot persist would blacklist the customer's refresh token and end

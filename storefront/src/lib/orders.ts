@@ -77,7 +77,11 @@ export function formatOrderDate(iso: string): string {
  * session), never this function, which would bounce a guest to login instead.
  */
 export async function getOrder(number: string, country: string, currentPath: string) {
-  return fetchWithAuthOrBounce<OrderDetail>(`/orders/${number}/`, currentPath, {
+  // Encoded: migrated legacy numbers are not guaranteed URL-safe, and an unencoded "#"
+  // truncates the upstream path at the fragment while "/" invents a URL segment — either
+  // way Django routes the request somewhere else and the customer sees a 404 for an
+  // order that exists. Both callers already encode it into their own page paths.
+  return fetchWithAuthOrBounce<OrderDetail>(`/orders/${encodeURIComponent(number)}/`, currentPath, {
     country, cache: "no-store",
   });
 }

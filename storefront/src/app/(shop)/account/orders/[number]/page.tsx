@@ -56,10 +56,15 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
   // Only the predicate is borrowed from the confirmation page: its banner copy is
   // just-placed-an-order language ("your order is reserved"), wrong on a page a customer
   // opens weeks later. The bank block itself is still what an unpaid transfer needs.
-  const showBankDetails = confirmationCopy({
-    gateway: order.payment_gateway,
-    status: order.status,
-  }).showBankDetails;
+  //
+  // The extra status gate exists HERE and not on confirmation: confirmationCopy's
+  // bank_transfer branch ignores status (fine there — the order was placed seconds ago
+  // and can only be pending_payment), but order history serves the same order for years,
+  // and "pay us by transfer" on a delivered, cancelled or refunded order is wrong enough
+  // to prompt a duplicate payment.
+  const showBankDetails =
+    order.status === "pending_payment" &&
+    confirmationCopy({ gateway: order.payment_gateway, status: order.status }).showBankDetails;
 
   return (
     <div>
@@ -103,6 +108,13 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
       )}
 
       {showBankDetails && (
+        // KNOWN LIMITATION (15c, accepted — on the checkpoint list). This component reads
+        // the sessionStorage handoff stashed at checkout, so reached from order history —
+        // a later visit, another tab, another device — it will usually fall back to its
+        // "shown at checkout, contact support" note rather than the account details. That
+        // fallback is still correct here: it names the amount and the order number and
+        // makes clear payment is outstanding. A re-fetchable bank-instructions endpoint is
+        // backend scope and is NOT being built in this plan.
         <div className="mt-8 border-t border-line pt-6">
           <ConfirmationBankDetails
             number={order.number}

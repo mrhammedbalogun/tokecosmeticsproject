@@ -137,6 +137,18 @@ describe("account order detail page", () => {
     expect(screen.getByRole("heading", { name: /payment details/i })).toBeInTheDocument();
   });
 
+  it.each([["delivered"], ["cancelled"], ["refunded"]])(
+    "does not render bank details for a %s bank-transfer order",
+    async (status) => {
+      // confirmationCopy's bank_transfer branch ignores status — correct on the
+      // confirmation page, a duplicate-payment trap in order history years later.
+      respond(order({ payment_gateway: "bank_transfer", status }));
+      await render_();
+
+      expect(screen.queryByRole("heading", { name: /payment details/i })).not.toBeInTheDocument();
+    },
+  );
+
   it("does not render bank details for a paid card order", async () => {
     respond(order({ payment_gateway: "paystack", status: "processing" }));
     await render_();
