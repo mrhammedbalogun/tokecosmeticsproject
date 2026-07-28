@@ -249,9 +249,122 @@ sessions blacklisted + cookies cleared + landed home. **Still open from 15a: the
 bounce during a SOFT navigation — verify in the checkpoint walkthrough.**
 
 **15c — Orders.** Second-riskiest, because of the extraction refactor.
-Orders list with status chips, order detail, tracking, invoice BFF proxy + `<a>` link; extract
-shared presentation from the confirmation page and re-verify the confirmation flow; fix the
-C3 latent bug in `getOrder`.
+(The C3 `getOrder` fix originally slated here shipped early in 15a item 4.)
+
+Grounding facts, verified 2026-07-28 (do not re-derive; do not "correct"):
+- Backend surface is COMPLETE — build nothing there. `GET /orders/` (owner-only,
+  `OrderListSerializer`, DRF PageNumberPagination `{count,next,previous,results}`,
+  PAGE_SIZE 24); `GET /orders/{number}/` (owner → `OrderSerializer`; anonymous +
+  valid `?token=` → redacted `OrderTrackingSerializer`; anonymous without token →
+  **403**, bad token or stranger's order → **404**); `GET /orders/{number}/invoice.pdf`
+  (owner-only, `IsAuthenticated`, no token path).
+- **The guest tracking slug is pinned by the backend:** order emails link to
+  `${FRONTEND_URL}/orders/{number}?token=…` (`orders/emails.py:27-30`). So the guest
+  surface is `(shop)/orders/[number]/page.tsx` — there is no `/track` route.
+- Status vocabulary (`orders/models.py`): pending_payment, processing, shipped,
+  delivered, completed, cancelled, expired, refunded, on_hold. `needs_review` is NOT
+  a status and never shown to customers.
+- `getOrder` callers: confirmation page + `lib/__tests__/checkout.test.ts` only.
+
+Tasks (sequential, one implementer subagent each, two-stage review after each):
+
+1. **`lib/orders.ts` + extraction refactor.** Move `OrderItem`, `OrderDetail`,
+   `getOrder` out of `lib/checkout.ts` into new `lib/orders.ts` (checkout keeps its
+   checkout-only fetchers; update the two importers; move the `getOrder` tests to
+   `lib/__tests__/orders.test.ts` — no re-export shim). Extract pure-presentation
+   server components from the confirmation page into `components/orders/`:
+   `OrderItems`, `OrderTotals`, `AddressBlock` (the `AddressSummary` + `str` reader
+   move as-is, defensive-read comment included). Confirmation page consumes them with
+   ZERO rendered-output change — its existing tests must pass unmodified except for
+   import paths. Do NOT extract the banner/copy/bank-details (checkout-specific) and
+   do NOT share fetch paths — each page owns its own fetch (plan ruling).
+2. **Orders list.** `getOrders(page, currentPath)` in `lib/orders.ts` via
+   `fetchWithAuthOrBounce<Paginated<OrderListItem>>("/orders/?page=N", …)`; new types
+   for the list serializer shape (`item_count`, `items` thumbnails). `StatusChip` in
+   `components/orders/` (label + tone per status above; unknown status renders the
+   raw string, muted). Page `(shop)/account/orders/page.tsx`: rows = number, date,
+   status chip, item count, `grand_total_display`, linking to
+   `/account/orders/{number}`; empty state with a “Browse products” link; Prev/Next
+   pagination via `?page=` (PAGE_SIZE 24; hide ends; `searchParams` is a Promise —
+   await it); `currentPath` passed to the fetcher must include `?page=N` when N>1 so
+   the renewal bounce returns to the same page. Add Orders to `AccountNav` after
+   Dashboard.
+3. **Order detail.** `(shop)/account/orders/[number]/page.tsx`: fetch via `getOrder`
+   with `currentPath=/account/orders/{number}`; 404/403 → `notFound()` (mirror the
+   confirmation page's `loadOrder`, including the rethrow discipline). Renders: status
+   chip + placed date, shared `OrderItems`/`OrderTotals`/`AddressBlock`, delivery
+   method, customer note, tracking block (carrier + number when either is set; else a
+   status-appropriate line, e.g. pre-shipped → “You'll get tracking details when your
+   order ships.”), bank details via the same `confirmationCopy(...).showBankDetails`
+   predicate the confirmation page uses (a pending bank-transfer order must not hide
+   its payment instructions), and an invoice link:
+   `<a href={/api/orders/${number}/invoice} download>` — plain `<a>`, not `Link`.
+4. **Invoice BFF proxy.** `api/orders/[number]/invoice/route.ts` (GET): validate
+   `number` against `^[A-Za-z0-9-]{1,32}$` → else 404 with no upstream call;
+   `fetchWithAuthRaw("/orders/{number}/invoice.pdf")`; on 200 stream the upstream
+   body through (no buffering), `Content-Type: application/pdf`,
+   `Content-Disposition: attachment; filename="{number}.pdf"`,
+   `Cache-Control: private, no-store`; upstream 404 AND 403 → 404 (never confirm an
+   order exists); post-refresh 401 (dead session) → 303 to
+   `/login?next=/account/orders/{number}` (the link is a top-level navigation, so a
+   redirect lands the user on login, not a broken download); anything else → 502
+   with an empty body. Forward ONLY the customer's token (fetchWithAuthRaw does) —
+   authorization lives in the backend queryset alone.
+5. **Guest tracking page.** `(shop)/orders/[number]/page.tsx` — PUBLIC page: plain
+   `apiFetch` with `?token=` from awaited `searchParams`; it must never import an
+   auth fetcher (a public page must neither bounce to login nor refresh — the
+   product-page rule). Add `OrderTracking` type + `getTrackedOrder(number, token)`
+   to `lib/orders.ts`. Valid token → redacted view: status chip, items, total,
+   delivery option, tracking carrier/number, reusing `OrderItems`/`StatusChip`
+   (NOT `OrderTotals`/`AddressBlock` — the redacted serializer has no breakdown and
+   no address, by design). Missing/invalid/expired token (backend 404) → a friendly
+   “this tracking link is invalid or has expired” state offering
+   `/account/orders/{number}` (which gates itself) — not a bare `notFound()`, this
+   is an email deep link that outlives tokens. `robots: noindex`. Note: the proxy
+   matcher already covers `/orders/…` but gates only `/account*` — no proxy change.
+6. **Verification (controller, not a subagent).** Both suites green; production
+   build; live browser walkthrough: list (with the dev DB's real orders), detail,
+   invoice PDF actually downloads and opens, guest tracking link with a token minted
+   via `make_tracking_token` in `manage.py shell`, bad-token state, and re-verify the
+   confirmation flow end-to-end after the extraction.
+
+**Task 6 run 2026-07-28 (session resumed after a system crash — Docker dev containers
+had died with it; `docker compose -f docker-compose.dev.yml up -d` first).** 700 backend
++ 653 storefront tests green, typecheck + lint + production build clean. Live against
+`next start` (prod build): list with the 4 real dev orders (chips, counts, totals,
+pagination correctly hidden under PAGE_SIZE), detail for a processing order with real
+carrier/number tracking, detail for a fresh pending_payment order (pre-ship tracking
+line + bank details via `showBankDetails`), guest tracking with a minted token
+(redacted view, `noindex`), bad AND missing token → the friendly explainer, and a full
+Add-to-Cart → checkout → bank-transfer placement (TC-100043) re-verifying the
+confirmation page on the extracted components. Login as the dev walkthrough user
+required a dev-DB password reset (`set_password` in shell — local DB only).
+
+Two findings, one fixed here and one deferred with a decision needed:
+
+- **FIXED — the invoice route stalled ~300s on every upstream error.**
+  `await upstream.body?.cancel()` never settles under Next's patched fetch: Next TEES
+  the response body for its cache layer, and per the streams spec one tee branch's
+  cancel() resolves only after BOTH branches cancel — Next holds the other, so the
+  await blocks until undici's connection timeout. Measured live (WeasyPrint 500 → 5-min
+  hang), reproduced in a failing test (tee'd body, 1s deadline), fixed by draining via
+  read (`drainBody` in `lib/api.ts`), same latent hang fixed in `fetchWithAuthRaw`'s
+  401 path. Re-measured live: instant 303 → `?invoice=unavailable`, notice renders.
+- **PDF bytes cannot render on this Windows dev box** — WeasyPrint's native Pango libs
+  are Linux-only by design (`test_api.py` skips them locally; they run in CI). The
+  proxy's 200-path streaming is unit-tested; "downloads and opens" must be smoke-checked
+  once on the Linux deploy target instead. NOT a code defect.
+- **DEFERRED, NEEDS A DECISION — Buy Now is end-to-end broken for a signed-in user.**
+  Live repro: PDP → Buy Now → `/checkout` shows "Your bag is empty." The backend
+  `BuyNowView` fills a `kind="express"` cart (Plan-08 design), but nothing on the
+  storefront ever reads an express cart: checkout's `useCart` → `/api/cart` →
+  `GET /cart/` always resolves `kind="standard"`, and the buy-now BFF neither sets the
+  cart cookie nor is its response consumed. Pre-existing since Plan-13 wiring (route
+  untouched since `065ad29`); NOT a 15c regression; the guest resume path in
+  `SignInStep` has the same gap. Options: (a) boring — `BuyNowView` adds to the
+  standard cart and Buy Now becomes add+navigate, retiring the express-cart concept;
+  (b) wire express carts through cookie + checkout. Decision affects a recorded plan
+  ruling, so it goes to Hammed rather than being changed inside 15c.
 
 **15d — Addresses + wishlist.**
 Address CRUD with default badges — the existing `api/addresses` BFF has only GET/POST, so extend
