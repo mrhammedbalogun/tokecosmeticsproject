@@ -1,3 +1,5 @@
+import logging
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
@@ -40,6 +42,8 @@ from .serializers import (
 
 User = get_user_model()
 
+security_logger = logging.getLogger("apps.security")
+
 
 class LoginView(TokenObtainPairView):
     """`/auth/token/` with throttles attached.
@@ -57,7 +61,14 @@ class LoginView(TokenObtainPairView):
         # After throttling (dispatch runs that first), before credentials: a bot
         # failing Turnstile must not get its guess checked against the password.
         require_turnstile(request)
-        return super().post(request, *args, **kwargs)
+        response = super().post(request, *args, **kwargs)
+        # The failure line comes from the user_login_failed signal (signals.py);
+        # JWT flows never fire user_logged_in, so the success line lives here.
+        if response.status_code == 200:
+            data = request.data
+            email = data.get("email", "<no email>") if hasattr(data, "get") else "<no email>"
+            security_logger.info("login succeeded for %s", email)
+        return response
 
 
 class RegisterView(generics.CreateAPIView):

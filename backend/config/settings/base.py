@@ -154,6 +154,9 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
+    # Logs 429s (the only signal several endpoints emit under attack), then
+    # delegates to DRF's default — responses are unchanged.
+    "EXCEPTION_HANDLER": "config.exception_handler.logging_exception_handler",
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
@@ -204,6 +207,45 @@ REST_FRAMEWORK = {
         "password_reset_ip": "60/hour",
     },
 }
+
+# --- Logging ---
+# Everything under the "apps" namespace logs at INFO and propagates to the root
+# console handler (docker captures stdout in prod). Security-shaped events all
+# use the "apps.security" logger, so one grep tells the whole auth story.
+# Propagation (rather than a per-logger handler) is deliberate: pytest's caplog
+# attaches at the root and would miss records from propagate=False loggers.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "standard": {"format": "%(asctime)s %(levelname)s [%(name)s] %(message)s"},
+    },
+    "handlers": {
+        "console": {"class": "logging.StreamHandler", "formatter": "standard"},
+    },
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "apps": {"level": "INFO"},
+        "django": {"level": "WARNING"},
+    },
+}
+
+# --- Sentry ---
+# Errors only (traces_sample_rate=0 keeps the free tier for what matters).
+# ERROR-level log records become events; INFO/WARNING become breadcrumbs on
+# those events — both via the SDK's default logging integration.
+# send_default_pii=False: customer emails appear in our own log lines by choice,
+# but are not shipped to Sentry as indexed user identities.
+SENTRY_DSN = env("SENTRY_DSN", default="")
+if SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=env("SENTRY_ENVIRONMENT", default="development"),
+        send_default_pii=False,
+        traces_sample_rate=0.0,
+    )
 
 # --- Cloudflare Turnstile ---
 # The auth gate (login/register/password-reset) is active iff this is non-empty.
