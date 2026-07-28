@@ -19,10 +19,7 @@ function upstream(status: number, headers: Record<string, string> = {}, body = P
       c.close();
     },
   });
-  const res = new Response(status === 204 || status === 304 ? null : stream, {
-    status,
-    headers,
-  });
+  const res = new Response(stream, { status, headers });
   const cancel = vi.spyOn(res.body!, "cancel");
   rawFetch.mockResolvedValue(res);
   return { res, cancel };
@@ -46,6 +43,11 @@ describe("invoice BFF — order-number validation", () => {
     ["33 characters", "A".repeat(33)],
     ["empty", ""],
     ["a dot", "TC-1.pdf"],
+    // The next two are the reason the allowlist is a whitelist and not a blacklist: a
+    // quote breaks out of the Content-Disposition filename, and CRLF injects a header.
+    // Widening the character class to admit them must fail loudly, here.
+    ['a double quote', 'TC-1"'],
+    ["CRLF", "TC-1\r\nX-Evil: 1"],
   ])("404s on %s with no upstream call", async (_label, number) => {
     const res = await call(number);
     expect(res.status).toBe(404);
@@ -53,7 +55,7 @@ describe("invoice BFF — order-number validation", () => {
     expect(rawFetch).not.toHaveBeenCalled();
   });
 
-  it("accepts the real order-number format", async () => {
+  it("accepts the real order-number format and encodes it into the upstream path", async () => {
     upstream(200);
     expect((await call("TC-100038")).status).toBe(200);
     expect(rawFetch).toHaveBeenCalledWith("/orders/TC-100038/invoice.pdf");
@@ -125,7 +127,7 @@ describe("invoice BFF — upstream failure mapping", () => {
     const { cancel } = upstream(401, {}, '{"detail":"token expired"}');
     const res = await call("TC-100038");
     expect(res.status).toBe(303);
-    // Percent-encoded `next`, same convention as api/auth/refresh-redirect.
+    // Built by withNext(), so the encoding matches every other login bounce.
     expect(res.headers.get("location")).toBe(
       "/login?next=%2Faccount%2Forders%2FTC-100038",
     );
@@ -149,18 +151,25 @@ describe("invoice BFF — upstream failure mapping", () => {
     expect(cancel).toHaveBeenCalled();
   });
 
-  it("500 becomes a 502 and leaks no upstream body", async () => {
+  it("500 sends the customer back to the order with an explainable flag", async () => {
     const { cancel } = upstream(500, {}, "Traceback (most recent call last): ...");
     const res = await call("TC-100038");
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/account/orders/TC-100038?invoice=unavailable",
+    );
+    // The upstream traceback goes nowhere.
     expect(await res.text()).toBe("");
     expect(cancel).toHaveBeenCalled();
   });
 
-  it.each([301, 400, 429, 502, 503])("%i becomes a 502", async (status) => {
+  it.each([301, 400, 429, 502, 503])("%i also bounces back to the order", async (status) => {
     const { cancel } = upstream(status, {}, "nope");
     const res = await call("TC-100038");
-    expect(res.status).toBe(502);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/account/orders/TC-100038?invoice=unavailable",
+    );
     expect(cancel).toHaveBeenCalled();
   });
 });

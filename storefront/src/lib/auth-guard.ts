@@ -28,7 +28,12 @@ export type AuthDecision =
   | { kind: "login"; to: string }
   | { kind: "refresh"; to: string };
 
-function withNext(base: string, currentPath: string): string {
+/**
+ * Build a "come back here afterwards" URL. Exported so Route Handlers that redirect to
+ * login (see api/orders/[number]/invoice) share ONE encoding of `?next=` with the
+ * decisions below, rather than each hand-rolling a string that only mostly matches.
+ */
+export function withNext(base: string, currentPath: string): string {
   // safeNext even though we normally build currentPath ourselves: this value is about to
   // become a redirect target, and "it's trusted at every call site today" is exactly the
   // assumption that turns into an open redirect two plans from now.

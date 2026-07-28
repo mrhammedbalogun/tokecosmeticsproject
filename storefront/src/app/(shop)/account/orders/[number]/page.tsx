@@ -11,6 +11,7 @@ import { StatusChip } from "@/components/orders/StatusChip";
 import { OrderTotals } from "@/components/orders/OrderTotals";
 
 type Params = Promise<{ number: string }>;
+type Search = Promise<{ [key: string]: string | string[] | undefined }>;
 
 /** Next hands `number` back DECODED, so the browser's actual URL has to be rebuilt to
  * be used as a path — both for the renewal bounce target and for the invoice href.
@@ -41,8 +42,19 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   return { title: `Order ${number}` };
 }
 
-export default async function OrderDetailPage({ params }: { params: Params }) {
+export default async function OrderDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Params;
+  searchParams: Search;
+}) {
   const { number } = await params;
+  // Set by the invoice BFF route when the upstream render fails: it 303s back here
+  // rather than leaving a navigating browser on a blank error body, and this is the
+  // only way it can say why. Purely cosmetic — an attacker setting it by hand gets
+  // nothing but a sentence.
+  const invoiceUnavailable = (await searchParams).invoice === "unavailable";
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   const order = await getOrderOrNotFound(number, country, pagePath(number));
 
@@ -145,6 +157,12 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
           Back to orders
         </Link>
       </div>
+
+      {invoiceUnavailable && (
+        <p role="status" className="mt-3 text-sm text-muted">
+          We couldn&apos;t generate your invoice just now — try again in a few minutes.
+        </p>
+      )}
     </div>
   );
 }

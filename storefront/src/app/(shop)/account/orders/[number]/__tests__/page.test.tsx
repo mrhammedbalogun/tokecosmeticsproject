@@ -66,8 +66,16 @@ beforeEach(() => {
 });
 afterEach(() => { global.fetch = originalFetch; vi.restoreAllMocks(); });
 
-const render_ = async (number = "TC-100038") =>
-  render(await OrderDetailPage({ params: Promise.resolve({ number }) }));
+const render_ = async (
+  number = "TC-100038",
+  search: Record<string, string> = {},
+) =>
+  render(
+    await OrderDetailPage({
+      params: Promise.resolve({ number }),
+      searchParams: Promise.resolve(search),
+    }),
+  );
 
 describe("account order detail page", () => {
   it("renders heading, date, status, items, totals, address, method and note", async () => {
@@ -191,12 +199,29 @@ describe("account order detail page", () => {
 
     const link = screen.getByRole("link", { name: /download invoice/i });
     expect(link).toHaveAttribute("href", "/api/orders/TC-100038/invoice");
-    // THE 303 TRAP — do not "helpfully" re-add `download`. The route's 200 already sends
-    // `Content-Disposition: attachment`, so the file downloads and the customer stays
-    // here either way; but a dead session gets a 303 to /login, and the attribute
-    // survives the redirect, so the browser would save the LOGIN PAGE as the invoice
-    // file instead of showing it. The attribute buys nothing and breaks that path.
+    // Absent on purpose — the ruling is on the <a> in page.tsx. Do not re-add it.
     expect(link).not.toHaveAttribute("download");
+  });
+
+  it("explains an invoice failure when the BFF route bounces back with the flag", async () => {
+    await render_("TC-100038", { invoice: "unavailable" });
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      /couldn't generate your invoice just now/i,
+    );
+  });
+
+  it("shows no invoice notice without the flag", async () => {
+    await render_();
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.queryByText(/couldn't generate your invoice/i)).not.toBeInTheDocument();
+  });
+
+  it("ignores an invoice param with any other value", async () => {
+    await render_("TC-100038", { invoice: "yes" });
+
+    expect(screen.queryByText(/couldn't generate your invoice/i)).not.toBeInTheDocument();
   });
 
   it("URL-encodes the order number in the invoice href", async () => {
