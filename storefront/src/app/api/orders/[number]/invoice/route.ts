@@ -14,6 +14,7 @@
  * server-side, which is what makes this route a proxy rather than a redirect.
  */
 import { fetchWithAuthRaw, RscCookieWriteError } from "@/lib/session";
+import { ApiError } from "@/lib/api";
 import { LOGIN_PATH, withNext } from "@/lib/auth-guard";
 
 /**
@@ -49,10 +50,14 @@ export async function GET(_req: Request, ctx: { params: Promise<{ number: string
   // path safety must not DEPEND on that regex, which Plan-22 is already slated to widen.
   // When it does, this line is still correct on its own.
   //
-  // The try wraps ONLY this call. A throw here is the network failing (backend down,
-  // DNS, timeout) — the single likeliest way this route breaks in production — and an
-  // unhandled one renders a blank 500 to a NAVIGATING browser, which is the exact UX the
-  // non-200 branch below exists to avoid. Same destination, same reason.
+  // The try wraps ONLY this call. Two very different throws arrive here:
+  //  - ApiError 401, when the internal refresh is REJECTED (expired or blacklisted
+  //    refresh token). Routine session expiry, not a fault — the same dead session the
+  //    401 branch below handles, just surfacing as a throw because it happened during
+  //    the refresh rather than on the invoice request.
+  //  - anything else: the network failing (backend down, DNS, timeout), the likeliest
+  //    way this route breaks in production. Unhandled it renders a blank 500 to a
+  //    NAVIGATING browser, the exact UX the non-200 branch below exists to avoid.
   let upstream: Response;
   try {
     upstream = await fetchWithAuthRaw(`/orders/${encodeURIComponent(number)}/invoice.pdf`);
@@ -62,6 +67,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ number: string
     // session gets papered over — see lib/session.ts. Scoping the try tightly does not
     // help, because the throw happens inside the callee; only rethrowing does.
     if (e instanceof RscCookieWriteError) throw e;
+    // Dead refresh token — send them to login, and do NOT log. This fires on every
+    // 14-day expiry, and a wolf-crying error line trains everyone to ignore the only
+    // console.error in the codebase.
+    if (e instanceof ApiError && e.status === 401) {
+      return seeOther(withNext(LOGIN_PATH, orderPath(number)));
+    }
     // Nothing else reports this: the storefront has no Sentry, and catching here removes
     // the error Next would otherwise have logged. Without this line a backend outage is
     // completely silent.

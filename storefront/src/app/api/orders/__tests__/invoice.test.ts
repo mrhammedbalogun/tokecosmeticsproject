@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { ApiError } from "@/lib/api";
 
 // `@/lib/session` is mocked rather than `global.fetch`: this route's whole contract is
 // the mapping from an upstream Response to ours, and only owning the Response object
@@ -39,6 +40,10 @@ const call = (number: string) =>
 
 beforeEach(() => {
   rawFetch.mockReset();
+});
+// The console.error spy below must not leak into sibling files' output.
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("invoice BFF — order-number validation", () => {
@@ -185,6 +190,38 @@ describe("invoice BFF — upstream failure mapping", () => {
       "/account/orders/TC-100038?invoice=unavailable",
     );
     // Swallowing it silently would make a backend outage invisible.
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("a rejected refresh goes to login, and does NOT cry wolf in the log", async () => {
+    // fetchWithAuthRaw's internal refresh throws this when the refresh token is expired
+    // or blacklisted. Routine 14-day expiry — a customer event, not an incident.
+    rawFetch.mockRejectedValue(new ApiError(401, { detail: "Token is invalid" }));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await call("TC-100038");
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/login?next=%2Faccount%2Forders%2FTC-100038",
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  // Only a 401 means "session expired"; everything else that throws is a fault.
+  it.each([
+    ["a non-401 ApiError", () => new ApiError(500, { detail: "boom" })],
+    ["a plain Error", () => new Error("something unexpected")],
+  ])("%s is still treated as a fault", async (_label, make) => {
+    rawFetch.mockRejectedValue(make());
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await call("TC-100038");
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/account/orders/TC-100038?invoice=unavailable",
+    );
     expect(spy).toHaveBeenCalled();
   });
 
