@@ -53,9 +53,13 @@ describe("account layout", () => {
     expect(screen.getByRole("link", { name: /security/i })).toHaveAttribute(
       "href", "/account/security",
     );
-    // Orders/addresses/wishlist arrive in 15c/15d — a visible link to a 404 is worse
-    // than no link (the LoginForm learned this rule first).
-    expect(screen.queryByRole("link", { name: /orders/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /orders/i })).toHaveAttribute(
+      "href", "/account/orders",
+    );
+    // Addresses/wishlist arrive in 15d — a visible link to a 404 is worse than no link
+    // (the LoginForm learned this rule first).
+    expect(screen.queryByRole("link", { name: /addresses/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /wishlist/i })).not.toBeInTheDocument();
     expect(screen.getByText("child-content")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /sign out/i })).toBeInTheDocument();
   });
