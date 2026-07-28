@@ -13,17 +13,17 @@
  * origin carries no Authorization header and no cookie. The download must be issued
  * server-side, which is what makes this route a proxy rather than a redirect.
  */
-import { fetchWithAuthRaw } from "@/lib/session";
+import { fetchWithAuthRaw, RscCookieWriteError } from "@/lib/session";
 import { LOGIN_PATH, withNext } from "@/lib/auth-guard";
 
 /**
  * Strict allowlist on purpose. The current order-number format is TC-\d+ and no legacy
  * importer exists yet — Plan-22 widens this if real legacy numbers ever demand it.
  *
- * Defence in depth rather than the load-bearing control: the upstream path is escaped
- * independently below, so widening this class cannot by itself let `number` address
- * something other than one order's invoice. The one thing that IS still regex-dependent
- * is the Content-Disposition filename — see the note there before widening.
+ * Defence in depth rather than the load-bearing control: both places `number` is
+ * interpolated — the upstream path and the Content-Disposition filename — escape it
+ * themselves, so widening this class cannot by itself produce a bad URL or a broken
+ * header.
  */
 const ORDER_NUMBER = /^[A-Za-z0-9-]{1,32}$/;
 
@@ -48,7 +48,26 @@ export async function GET(_req: Request, ctx: { params: Promise<{ number: string
   // Encoded even though the allowlist above already guarantees nothing needs escaping:
   // path safety must not DEPEND on that regex, which Plan-22 is already slated to widen.
   // When it does, this line is still correct on its own.
-  const upstream = await fetchWithAuthRaw(`/orders/${encodeURIComponent(number)}/invoice.pdf`);
+  //
+  // The try wraps ONLY this call. A throw here is the network failing (backend down,
+  // DNS, timeout) — the single likeliest way this route breaks in production — and an
+  // unhandled one renders a blank 500 to a NAVIGATING browser, which is the exact UX the
+  // non-200 branch below exists to avoid. Same destination, same reason.
+  let upstream: Response;
+  try {
+    upstream = await fetchWithAuthRaw(`/orders/${encodeURIComponent(number)}/invoice.pdf`);
+  } catch (e) {
+    // The one error that must NOT be softened. It is raised inside the fetcher (before
+    // the network) when a Server Component calls it, and swallowing it is how a dead
+    // session gets papered over — see lib/session.ts. Scoping the try tightly does not
+    // help, because the throw happens inside the callee; only rethrowing does.
+    if (e instanceof RscCookieWriteError) throw e;
+    // Nothing else reports this: the storefront has no Sentry, and catching here removes
+    // the error Next would otherwise have logged. Without this line a backend outage is
+    // completely silent.
+    console.error("[invoice] upstream fetch failed", e);
+    return seeOther(`${orderPath(number)}?invoice=unavailable`);
+  }
 
   if (upstream.status === 200) {
     const headers = new Headers({
@@ -56,10 +75,11 @@ export async function GET(_req: Request, ctx: { params: Promise<{ number: string
       // Overrides the upstream's `inline`: this is what makes the order page's plain
       // <a> download the file instead of navigating away to render it.
       //
-      // STILL REGEX-DEPENDENT, unlike the path above: `number` is interpolated inside a
-      // quoted filename, so admitting `"` or CRLF to ORDER_NUMBER would break out of
-      // this header. Escape here first if Plan-22 widens that class.
-      "Content-Disposition": `attachment; filename="${number}.pdf"`,
+      // Escaped for the same reason as the path, and byte-identical for every name the
+      // allowlist admits today (alphanumerics and `-` pass through untouched). It means
+      // a `"` or a CRLF could not break out of this quoted filename even if ORDER_NUMBER
+      // were widened to admit them — the header is safe independent of the regex.
+      "Content-Disposition": `attachment; filename="${encodeURIComponent(number)}.pdf"`,
       // An invoice carries the customer's name, address and billing details. It must
       // never land in a shared cache.
       "Cache-Control": "private, no-store",

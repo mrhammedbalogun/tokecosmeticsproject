@@ -5,7 +5,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // lets us assert its body was RELEASED. fetchWithAuthRaw's own refresh-and-retry
 // behaviour is covered in src/lib/__tests__/session.test.ts.
 const { rawFetch } = vi.hoisted(() => ({ rawFetch: vi.fn() }));
-vi.mock("@/lib/session", () => ({ fetchWithAuthRaw: rawFetch }));
+// RscCookieWriteError is the REAL class, not a stub: the route rethrows it by identity,
+// and a stub would let that check pass while failing against the actual export.
+vi.mock("@/lib/session", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/session")>();
+  return { RscCookieWriteError: actual.RscCookieWriteError, fetchWithAuthRaw: rawFetch };
+});
+
+import { RscCookieWriteError } from "@/lib/session";
 
 import { GET } from "@/app/api/orders/[number]/invoice/route";
 
@@ -161,6 +168,32 @@ describe("invoice BFF — upstream failure mapping", () => {
     // The upstream traceback goes nowhere.
     expect(await res.text()).toBe("");
     expect(cancel).toHaveBeenCalled();
+  });
+
+  it("a thrown network error lands on the same notice, not a blank 500", async () => {
+    // The likeliest real failure: backend down. Undici's shape for it.
+    const boom = Object.assign(new TypeError("fetch failed"), {
+      cause: { code: "ECONNREFUSED" },
+    });
+    rawFetch.mockRejectedValue(boom);
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await call("TC-100038");
+
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/account/orders/TC-100038?invoice=unavailable",
+    );
+    // Swallowing it silently would make a backend outage invisible.
+    expect(spy).toHaveBeenCalled();
+  });
+
+  it("rethrows the Server-Component tripwire instead of softening it", async () => {
+    // Raised INSIDE the fetcher, so the try/catch above sees it. Turning this into a
+    // friendly notice is exactly how a silently-killed session gets papered over.
+    rawFetch.mockRejectedValue(new RscCookieWriteError("called during RSC render"));
+
+    await expect(call("TC-100038")).rejects.toBeInstanceOf(RscCookieWriteError);
   });
 
   it.each([301, 400, 429, 502, 503])("%i also bounces back to the order", async (status) => {

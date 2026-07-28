@@ -34,12 +34,20 @@ export async function getAccessToken(): Promise<string | undefined> {
  * Cost: a stray `Set-Cookie: __rsc_write_probe__=; Max-Age=0` on dev Route Handler
  * responses. Deliberate, and cheaper than the bug. Off in production.
  */
+/**
+ * Its own class so callers can tell the tripwire apart from a failure of the request
+ * itself. It is thrown from INSIDE the fetchers (after the probe, before the network),
+ * so a caller that wraps a fetcher in try/catch to handle network errors would otherwise
+ * swallow the one error that must never be swallowed. Rethrow it on sight.
+ */
+export class RscCookieWriteError extends Error {}
+
 function assertCookiesWritable(jar: Jar, fn: string): void {
   if (process.env.NODE_ENV === "production") return;
   try {
     jar.delete(PROBE_COOKIE);
   } catch {
-    throw new Error(
+    throw new RscCookieWriteError(
       `${fn}() was called during Server Component render. It cannot persist a rotated ` +
       `token there, and attempting the refresh would blacklist the user's refresh token ` +
       `server-side — silently ending their session. Use requireAuth() or ` +
