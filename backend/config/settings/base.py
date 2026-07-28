@@ -194,6 +194,13 @@ REST_FRAMEWORK = {
         # against login_sustained. 20 rapid attempts therefore spend the whole hour.
         "login_burst": "5/min",
         "login_sustained": "20/hour",
+        # Staff login (/auth/admin-token/). Deliberately brutal compared with the
+        # customer rates above: legitimate staff volume is near zero, a staff lockout
+        # is recoverable with root access, and the account being guessed at can change
+        # the payout bank account. Separate scopes = separate buckets, so an attack on
+        # one gate cannot deny logins on the other.
+        "admin_login_ip": "5/min",
+        "admin_login_email": "10/hour",
         # The _ip rates below are DELIBERATELY loose. All storefront traffic egresses
         # from Vercel, so these are shared by every customer at once -- at 10/hour they
         # were a store-wide cap of ten signups and ten password resets per hour, which
@@ -253,6 +260,21 @@ if SENTRY_DSN:
 # ships the widget, then setting the secret in the prod env turns the gate on.
 # See apps/accounts/turnstile.py.
 TURNSTILE_SECRET = env("TURNSTILE_SECRET", default="")
+
+# The staff gate (/auth/admin-token/) reads this FIRST and falls back to
+# TURNSTILE_SECRET when it is empty. Two reasons it exists, both operational:
+#
+# 1. Turnstile widgets are DOMAIN-SCOPED. The existing widget's allowlist is
+#    next.tokecosmetics.com; the admin app is a new hostname, so unless that hostname
+#    is added to the existing widget it needs its own widget — and its own secret.
+#    Without this setting, "give admin its own widget" would mean editing code.
+# 2. Break-glass granularity. During a Cloudflare/siteverify outage the rehearsed
+#    recovery is to drop the secret from the prod env and restart. With one shared
+#    secret that opens the customer gate too; with this one, staff can get back in
+#    while the customer gate stays closed (or the reverse).
+#
+# Unset by default, so nothing changes until an admin widget actually exists.
+TURNSTILE_ADMIN_SECRET = env("TURNSTILE_ADMIN_SECRET", default="")
 
 # --- Checkout ---
 RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)

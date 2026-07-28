@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from drf_spectacular.utils import extend_schema
-from rest_framework import generics, permissions, status
+from rest_framework import exceptions, generics, permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
@@ -16,9 +16,15 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 
 from apps.notifications.tasks import send_email_task
 
-from .turnstile import require_turnstile
+from .authentication import AdminJWTAuthentication
+
+from .rbac import scopes_for_user
+
+from .turnstile import admin_turnstile_secret, require_turnstile
 
 from .throttling import (
+    AdminLoginEmailThrottle,
+    AdminLoginIPThrottle,
     LoginBurstThrottle,
     LoginIPThrottle,
     LoginSustainedThrottle,
@@ -31,6 +37,8 @@ from .throttling import (
 from .serializers import (
     AccountDeletionSerializer,
     AddressSerializer,
+    AdminMeSerializer,
+    AdminTokenObtainPairSerializer,
     EmailVerifySerializer,
     LogoutSerializer,
     MeSerializer,
@@ -69,6 +77,145 @@ class LoginView(TokenObtainPairView):
             email = data.get("email", "<no email>") if hasattr(data, "get") else "<no email>"
             security_logger.info("login succeeded for %s", email)
         return response
+
+
+def _submitted_email(request) -> str:
+    """The address a login attempt claimed, for the security log. Never trusted for
+    anything else, and safe on a malformed body (request.data may not be a dict)."""
+    data = getattr(request, "data", None)
+    if hasattr(data, "get"):
+        value = data.get("email")
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return "<no email>"
+
+
+class AdminLoginView(TokenObtainPairView):
+    """`/auth/admin-token/` — the staff gate.
+
+    Same machinery as LoginView, three deliberate differences:
+
+    **1. Staff-only, silently.** `AdminTokenObtainPairSerializer` rejects a non-staff
+    user with the same body as a wrong password, so the endpoint never confirms that
+    an address belongs to a real customer, let alone a real administrator.
+
+    **2. Turnstile'd** (Plan-16 Amendment 1, which overrides the plan's original
+    "Turnstile-exempt — staff URLs are not public forms"). That rationale was
+    rejected because the endpoint is publicly reachable and one grep of the deployed
+    admin bundle away from discovery; obscurity is not a control, and exempting it
+    would have left the HIGHER-value login with less protection than customer login
+    got on the same day. It verifies against `admin_turnstile_secret()`, which is the
+    admin widget's secret if one is configured and the customer one otherwise.
+
+    Be clear about sizing, so nobody mistakes this for the fence: Turnstile stops
+    dumb bots. A targeted attacker buys solver tokens for about $1/1k, and the admin
+    is the target worth paying for — compromise here means editing the payout bank
+    account and every bank-transfer order pays the attacker. The controls actually
+    sized to that threat are the strict throttles below and mandatory TOTP
+    (Amendment 2, Task 3b).
+
+    **3. Its own throttle scopes**, far tighter than the customer rates — see
+    throttling.py. `AdminLoginIPThrottle` is FIRST and is not optional: listing
+    throttle_classes REPLACES the global defaults, and without an IP key password
+    spraying across many addresses touches no per-email counter at all.
+
+    LOGGING, and why it is written out rather than left to the signal: a failed admin
+    login logs to `apps.security` at ERROR, because Sentry's logging integration turns
+    ERROR records into events while INFO/WARNING become mere breadcrumbs, and a
+    failed staff login is worth an alert. The `user_login_failed` signal (signals.py)
+    ALSO fires on the wrong-password path and logs its generic "login failed" line at
+    WARNING — that is a breadcrumb, not a duplicate event, and its different wording
+    keeps the two greppable apart. The signal cannot replace this line in either
+    direction: it does NOT fire when a customer submits CORRECT credentials here (the
+    authentication succeeded; it was the staff check that refused), which is the single
+    most interesting event this endpoint can produce.
+
+    THE ERROR LINE AND THE EMAIL COUNTER ARE THE SAME EVENT, so they are emitted from
+    the same place rather than from two independent detectors that could drift.
+    `AdminLoginEmailThrottle` counts failures, not requests (see throttling.py), which
+    is what stops ten anonymous junk POSTs from locking a staff member out for an
+    hour. Only `AuthenticationFailed` counts: a malformed or incomplete request is not
+    a credential guess, and letting it count would hand the lockout primitive straight
+    back. Volume from such requests is the IP throttle's job, and it still counts
+    every request.
+    """
+
+    serializer_class = AdminTokenObtainPairSerializer
+    throttle_classes = [AdminLoginIPThrottle, AdminLoginEmailThrottle]
+
+    def post(self, request, *args, **kwargs):
+        # Seeded before the try so a body so malformed that reading it raises still
+        # produces the ERROR line rather than an unlogged 400.
+        email = "<no email>"
+        try:
+            email = _submitted_email(request)
+            # After throttling (dispatch runs that first), before credentials.
+            require_turnstile(request, secret=admin_turnstile_secret())
+            response = super().post(request, *args, **kwargs)
+        except exceptions.APIException as exc:
+            # Every refused attempt on the staff gate is one line, one Sentry event:
+            # a bot blocked by Turnstile, a wrong password, and a customer trying the
+            # admin door all belong in the same alert. The exception class is included
+            # because the response body deliberately does not distinguish them.
+            security_logger.error(
+                "admin login failed for %s (%s)", email, exc.__class__.__name__
+            )
+            if isinstance(exc, exceptions.AuthenticationFailed):
+                # A real credential was submitted and rejected — the only thing that
+                # counts against the account. Turnstile rejections and malformed
+                # bodies deliberately do not, or the lockout vector comes straight
+                # back at zero cost.
+                AdminLoginEmailThrottle().record_failure(request)
+            raise
+        security_logger.info("admin login succeeded for %s", email)
+        # Proving who you are clears the failure count; otherwise a bad morning
+        # follows a staff member around for the rest of the hour.
+        AdminLoginEmailThrottle().reset(request)
+        return response
+
+
+class AdminMeView(APIView):
+    """`/auth/admin-me/` — who am I and what may I do.
+
+    The admin shell calls this once per session to decide which nav items exist. It
+    returns SCOPES, not groups-as-permissions: the client must never have to know
+    that "Support" implies `orders.view`, or the role table would live in two
+    codebases and drift.
+
+    TWO FENCES, deliberately. `AdminJWTAuthentication` rejects any token that was not
+    minted by `/auth/admin-token/` — including a perfectly valid one belonging to the
+    same staff member, obtained at the customer login. `IsAdminUser` then re-reads
+    `is_staff` from the database, which is what makes a revoked staff account lose
+    access immediately instead of whenever its token expires. The claim answers "was
+    this token issued for the admin app?"; the DB read answers "is this person still
+    staff?". Listing stock `JWTAuthentication` alongside the admin class would undo
+    the first of those entirely (DRF takes the first authenticator that returns a
+    user), which is why test_admin_surface_guard.py asserts list EQUALITY.
+
+    `IsAdminUser` rather than a scope: every staff member must be able to ask who
+    they are, including one whose role grants nothing yet. It is not an authorisation
+    decision — the endpoint returns only the caller's own identity, and each actual
+    admin endpoint re-checks its own scope.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = AdminMeSerializer
+
+    @extend_schema(responses={200: AdminMeSerializer})
+    def get(self, request):
+        user = request.user
+        return Response(
+            {
+                "email": user.email,
+                "name": user.get_full_name() or user.email,
+                "is_superuser": user.is_superuser,
+                "groups": sorted(user.groups.values_list("name", flat=True)),
+                # Sorted so the payload is stable — it is compared in tests and cached
+                # client-side, and set iteration order is not something to rely on.
+                "scopes": sorted(scopes_for_user(user)),
+            }
+        )
 
 
 class RegisterView(generics.CreateAPIView):

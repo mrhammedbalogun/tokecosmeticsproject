@@ -1,7 +1,10 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from apps.accounts.authentication import ADMIN_AUDIENCE, ADMIN_AUDIENCE_CLAIM
 from apps.accounts.models import Address
 from apps.core.address_rules import required_fields_for
 
@@ -123,3 +126,58 @@ class AddressSerializer(serializers.ModelSerializer):
 
 class EmailVerifySerializer(serializers.Serializer):
     token = serializers.CharField()
+
+
+class AdminTokenObtainPairSerializer(TokenObtainPairSerializer):
+    """Token pair for STAFF only (`/auth/admin-token/`).
+
+    The check hangs off `get_token` rather than `validate` for two reasons:
+
+    * `get_token` is called at exactly the right moment — after
+      `authenticate()` has confirmed the password, before a refresh token is
+      minted. Rejecting here means a non-staff attempt never creates an
+      `OutstandingToken` row for a token nobody will ever hold.
+    * It is one hook instead of re-deriving SimpleJWT's authentication flow,
+      which changes shape between releases.
+
+    THE ERROR IS DELIBERATELY IDENTICAL to the wrong-password path — same message,
+    same `no_active_account` code, same 401. Saying "not a staff account" would
+    turn this endpoint into an oracle: an attacker with a list of leaked customer
+    addresses could sort it into "real accounts" and, worse, "real staff accounts",
+    which is precisely the list worth phishing. The difference is recorded in the
+    `apps.security` log instead, where only we can read it.
+
+    This is also the ONLY place the admin audience claim is minted. It goes on the
+    REFRESH token, not the access token, because SimpleJWT copies a refresh token's
+    claims onto every access token it derives — so one write here covers the initial
+    pair and every subsequent renewal through the shared `/auth/token/refresh/`
+    endpoint, with no admin-specific refresh code to keep in sync. See
+    `apps/accounts/authentication.py` for what enforces it and why the claim is not
+    called `aud`.
+    """
+
+    @classmethod
+    def get_token(cls, user):
+        if not user.is_staff:
+            raise AuthenticationFailed(
+                cls.default_error_messages["no_active_account"],
+                "no_active_account",
+            )
+        token = super().get_token(user)
+        token[ADMIN_AUDIENCE_CLAIM] = ADMIN_AUDIENCE
+        return token
+
+
+class AdminMeSerializer(serializers.Serializer):
+    """Shape of `/auth/admin-me/`. Response-only — the admin shell reads it to decide
+    which nav items and actions to render, so `scopes` is the field that matters.
+
+    Client-side scope checks are a UI convenience and nothing more: every one of them
+    is re-checked server-side by `HasAdminScope`. Hiding a button is not a control.
+    """
+
+    email = serializers.EmailField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    is_superuser = serializers.BooleanField(read_only=True)
+    groups = serializers.ListField(child=serializers.CharField(), read_only=True)
+    scopes = serializers.ListField(child=serializers.CharField(), read_only=True)

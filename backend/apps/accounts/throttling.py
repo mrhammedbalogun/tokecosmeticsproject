@@ -128,8 +128,21 @@ class _IPKeyedThrottle(CloudflareIdentMixin, throttling.SimpleRateThrottle):
     One number therefore has to serve two populations at once, and it cannot serve both
     well. Rates here are set so they do NOT deny real customers, which means they are
     looser than a pure anti-abuse number would be. The real fix is to have the BFF forward
-    the true client IP under a shared secret; until that exists, the Cloudflare edge rule
-    on the storefront's own /api/auth/* is the control that sees real client addresses.
+    the true client IP under a shared secret.
+
+    CORRECTION (2026-07-28, Plan-16 Amendment 5). This docstring used to end by naming
+    "the Cloudflare edge rule on the storefront's own /api/auth/*" as the control that
+    sees real client addresses. That control does not exist and could not:
+    next.tokecosmetics.com is a bare CNAME to vercel-dns-017.com and is NOT proxied
+    through Cloudflare, so no Cloudflare rule on that hostname can ever fire. Nothing on
+    the storefront path currently sees a real per-customer IP. The candidates are a
+    Vercel Firewall rate-limit rule (plan-tier dependent) or the signed-BFF-header work;
+    until one lands, the per-email keys carry the whole weight on the shared path. See
+    memory project_tokecosmetics_real_client_ip_gap.
+
+    The ADMIN login throttles below are the one place this caveat does not bite: staff
+    log in from a browser to the admin origin, and there is no legitimate shared-egress
+    population to protect, so those rates can be set to what abuse deserves.
     """
 
     def get_cache_key(self, request, view):
@@ -164,6 +177,90 @@ class LoginBurstThrottle(_EmailKeyedThrottle):
 
 class LoginSustainedThrottle(_EmailKeyedThrottle):
     scope = "login_sustained"
+
+
+# --- admin login -------------------------------------------------------------
+# Separate scopes from the customer login on purpose, and far stricter (5/min per IP,
+# 10/hour per address vs 30/min and 20/hour). Three reasons this costs nothing:
+#
+# * Legitimate staff login volume is near zero -- a handful of people, a few times a
+#   day -- so a rate that would be absurd for the storefront is generous here.
+# * A staff lockout is recoverable: root SSH access to the box can clear the cache or
+#   the rate. A customer lockout is not recoverable and is a support call.
+# * Separate scopes also mean separate BUCKETS: an attack on the admin gate cannot
+#   throttle the storefront's login, and vice versa. Sharing login_ip would have made
+#   the admin endpoint a lever for denying customers their own logins.
+#
+# Turnstile sits in front of this too (Plan-16 Amendment 1), but Turnstile stops dumb
+# bots, not a targeted attacker buying solver tokens -- these rates are what makes the
+# targeted case slow, and mandatory TOTP (Amendment 2 / Task 3b) is what makes it
+# pointless.
+
+
+class AdminLoginIPThrottle(_IPKeyedThrottle):
+    """Volume cap on staff login. MUST be listed first in AdminLoginView.throttle_classes
+    -- same reasoning as LoginIPThrottle: it is the only cap that meters password
+    spraying (one guess each against many addresses), and listing it first means it
+    records before the email throttle touches request.data."""
+
+    scope = "admin_login_ip"
+
+
+class AdminLoginEmailThrottle(_EmailKeyedThrottle):
+    """Per-account cap on staff login, counting FAILURES rather than requests.
+
+    This is the one throttle in the project that does not count requests, and the
+    reason is residual risk 1 in this module's docstring, made acute by the admin's
+    tiny user population. `SimpleRateThrottle` counts every request before
+    authentication runs, so with request-counting at 10/hour, ten anonymous junk
+    POSTs carrying the owner's (publicly known) address locked him out of his own
+    store for an hour — zero cost to the attacker, recoverable only by SSHing into
+    the box to clear Redis. That is a denial-of-service primitive handed out for
+    free, and at a staff population of one it takes the whole admin down.
+
+    Counting failures instead means:
+
+    * a request that never reached a password check cannot consume the bucket, so
+      Turnstile-blocked junk is free to the victim as well as costly to the attacker;
+    * once the Turnstile gate is on, every countable failure costs a solved token;
+    * a proven login clears the count, so a staff member who fumbles their password
+      is not one typo away from an afternoon of lockout;
+    * an attacker already at the cap does not extend their own lockout by keeping
+      going — blocked requests never reach the recorder — which is fine, because the
+      IP throttle is the volume cap and it still counts every request.
+
+    The caller decides what counts, because only the caller knows how the attempt
+    failed: `AdminLoginView` records exactly where it emits its `apps.security` ERROR
+    line, so the alert and the counter can never disagree about what happened.
+    Deliberately NOT applied to the customer login throttles — that change has to be
+    weighed against Plan-22's imported-customer wave separately.
+    """
+
+    scope = "admin_login_email"
+
+    def throttle_success(self) -> bool:
+        """Checked, not counted. Overriding this is the whole mechanism: DRF's
+        `allow_request` still reads the bucket and still denies at the limit; it just
+        no longer writes on the way through. Writes happen in `record_failure`."""
+        return True
+
+    def record_failure(self, request) -> None:
+        """Count one failed credential attempt against the submitted address."""
+        if self.rate is None:
+            return
+        key = self.get_cache_key(request, view=None)
+        if key is None:
+            return
+        now = self.timer()
+        history = [t for t in self.cache.get(key, []) if t > now - self.duration]
+        history.insert(0, now)
+        self.cache.set(key, history, self.duration)
+
+    def reset(self, request) -> None:
+        """Clear the count for the submitted address — call on a proven login."""
+        key = self.get_cache_key(request, view=None)
+        if key is not None:
+            self.cache.delete(key)
 
 
 # --- registration ------------------------------------------------------------
