@@ -136,7 +136,7 @@ describe("invoice BFF — 200", () => {
 
 describe("invoice BFF — upstream failure mapping", () => {
   it("401 redirects to login with the order as ?next=", async () => {
-    const { cancel } = upstream(401, {}, '{"detail":"token expired"}');
+    const { res: up } = upstream(401, {}, '{"detail":"token expired"}');
     const res = await call("TC-100038");
     expect(res.status).toBe(303);
     // Built by withNext(), so the encoding matches every other login bounce.
@@ -144,27 +144,27 @@ describe("invoice BFF — upstream failure mapping", () => {
       "/login?next=%2Faccount%2Forders%2FTC-100038",
     );
     expect(await res.text()).toBe("");
-    expect(cancel).toHaveBeenCalled();
+    expect(up.bodyUsed).toBe(true);
   });
 
   it("403 collapses to a bare 404", async () => {
-    const { cancel } = upstream(403, {}, '{"detail":"Not authenticated."}');
+    const { res: up } = upstream(403, {}, '{"detail":"Not authenticated."}');
     const res = await call("TC-100038");
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("");
-    expect(cancel).toHaveBeenCalled();
+    expect(up.bodyUsed).toBe(true);
   });
 
   it("404 stays a bare 404", async () => {
-    const { cancel } = upstream(404, {}, '{"detail":"Not found."}');
+    const { res: up } = upstream(404, {}, '{"detail":"Not found."}');
     const res = await call("TC-100038");
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("");
-    expect(cancel).toHaveBeenCalled();
+    expect(up.bodyUsed).toBe(true);
   });
 
   it("500 sends the customer back to the order with an explainable flag", async () => {
-    const { cancel } = upstream(500, {}, "Traceback (most recent call last): ...");
+    const { res: up } = upstream(500, {}, "Traceback (most recent call last): ...");
     const res = await call("TC-100038");
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(
@@ -172,7 +172,7 @@ describe("invoice BFF — upstream failure mapping", () => {
     );
     // The upstream traceback goes nowhere.
     expect(await res.text()).toBe("");
-    expect(cancel).toHaveBeenCalled();
+    expect(up.bodyUsed).toBe(true);
   });
 
   it("a thrown network error lands on the same notice, not a blank 500", async () => {
@@ -239,12 +239,40 @@ describe("invoice BFF — upstream failure mapping", () => {
   });
 
   it.each([301, 400, 429, 502, 503])("%i also bounces back to the order", async (status) => {
-    const { cancel } = upstream(status, {}, "nope");
+    const { res: up } = upstream(status, {}, "nope");
     const res = await call("TC-100038");
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe(
       "/account/orders/TC-100038?invoice=unavailable",
     );
-    expect(cancel).toHaveBeenCalled();
+    expect(up.bodyUsed).toBe(true);
+  });
+
+  it("responds even when cancelling the body would never settle (Next tees fetch bodies)", async () => {
+    // In production this route reads Responses from Next's patched fetch, which TEES
+    // the body for its cache layer. Per the streams spec, one tee branch's cancel()
+    // only settles once BOTH branches are cancelled — and Next holds the other one.
+    // An awaited body.cancel() therefore blocks until undici's ~300s connection
+    // timeout: measured live as a 5-minute stall on every upstream error. The body
+    // must be released by READING it, never by awaiting cancel().
+    const src = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("Traceback (most recent call last): ..."));
+        c.close();
+      },
+    });
+    const [branch] = src.tee(); // the second branch is never read or cancelled
+    rawFetch.mockResolvedValue(new Response(branch, { status: 500 }));
+
+    const res = await Promise.race([
+      call("TC-100038"),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("route stalled releasing the body")), 1000),
+      ),
+    ]);
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(
+      "/account/orders/TC-100038?invoice=unavailable",
+    );
   });
 });

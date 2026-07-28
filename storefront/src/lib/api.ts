@@ -81,6 +81,23 @@ export async function apiFetch<T = unknown>(
   return data as T;
 }
 
+/**
+ * Release an unwanted Response body by READING it to completion — never by awaiting
+ * `body.cancel()`. Next's patched fetch tees response bodies for its cache layer, and a
+ * tee branch's cancel() only settles once BOTH branches are cancelled; Next holds the
+ * other, so an awaited cancel() blocks until undici's ~300s connection timeout
+ * (measured live as a 5-minute stall in the invoice route). Reading drains the shared
+ * source instead, which releases the connection immediately. Bodies discarded here are
+ * our own backend's error responses, so buffering them is bounded and harmless.
+ */
+export async function drainBody(res: Response): Promise<void> {
+  try {
+    await res.arrayBuffer();
+  } catch {
+    // Best-effort: a body that fails to read is already torn down.
+  }
+}
+
 function safeJson(text: string): unknown {
   try {
     return JSON.parse(text);

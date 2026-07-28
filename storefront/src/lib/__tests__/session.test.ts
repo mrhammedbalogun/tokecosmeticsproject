@@ -240,6 +240,30 @@ describe("fetchWithAuthRaw", () => {
     expect(first.bodyUsed).toBe(true);
   });
 
+  it("renews promptly even when cancelling the 401 body would never settle (Next tees fetch bodies)", async () => {
+    // Next's patched fetch tees response bodies for its cache layer, and a tee
+    // branch's cancel() only settles once BOTH branches are cancelled — Next holds
+    // the other. Awaiting cancel() here stalled the invoice route for ~300s live.
+    // The rejected body must be released by READING it, never by awaiting cancel().
+    const src = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode("unauthorised"));
+        c.close();
+      },
+    });
+    const [branch] = src.tee(); // the second branch is never read or cancelled
+    const first = new Response(branch, { status: 401 });
+    global.fetch = invoiceFetch(first, new Response(PDF, { status: 200 }));
+
+    const res = await Promise.race([
+      fetchWithAuthRaw("/orders/TC-1/invoice.pdf"),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("fetcher stalled releasing the 401 body")), 1000),
+      ),
+    ]);
+    expect(res.status).toBe(200);
+  });
+
   it("returns a non-ok retry response as-is, leaving the status mapping to the caller", async () => {
     // The invoice BFF turns 403 into 404 itself (no existence oracle), so the transport
     // must hand the 403 over intact rather than throwing.

@@ -14,7 +14,7 @@
  * server-side, which is what makes this route a proxy rather than a redirect.
  */
 import { fetchWithAuthRaw, RscCookieWriteError } from "@/lib/session";
-import { ApiError } from "@/lib/api";
+import { ApiError, drainBody } from "@/lib/api";
 import { LOGIN_PATH, withNext } from "@/lib/auth-guard";
 
 /**
@@ -108,8 +108,9 @@ export async function GET(_req: Request, ctx: { params: Promise<{ number: string
   }
 
   // Nothing below returns any of the upstream's bytes. An unread body pins the
-  // underlying connection, so release it on every one of these paths.
-  await upstream.body?.cancel();
+  // underlying connection, so release it on every one of these paths — by reading,
+  // not cancelling; see drainBody for why cancel() stalls under Next's fetch tee.
+  await drainBody(upstream);
 
   if (upstream.status === 401) {
     // Session genuinely dead. A 303 suits a top-level navigation: the customer lands on

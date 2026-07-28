@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { apiFetch, apiFetchRaw, ApiError, type ApiFetchOptions } from "@/lib/api";
+import { apiFetch, apiFetchRaw, ApiError, drainBody, type ApiFetchOptions } from "@/lib/api";
 import {
   ACCESS_COOKIE, REFRESH_COOKIE, ACCESS_MAX_AGE, REFRESH_MAX_AGE, cookieOptions,
 } from "@/lib/auth";
@@ -134,7 +134,7 @@ export async function fetchWithAuthRaw(
   const refresh = jar.get(REFRESH_COOKIE)?.value;
   if (!refresh) return res;
 
-  await res.body?.cancel();
+  await drainBody(res);
   const access = await refreshAndPersist(jar, refresh);
   return apiFetchRaw(path, { ...opts, token: access });
 }
