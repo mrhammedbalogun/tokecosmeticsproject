@@ -11,21 +11,20 @@ const nextConfig: NextConfig = {
     // infra/deploy/backup.sh), so granting public read would mean switching off Block
     // Public Access on the bucket that holds the database dumps. See docs/architecture.md.
     //
-    // Env-driven so this file is inert until the distribution exists — with
-    // NEXT_PUBLIC_MEDIA_HOST unset, behaviour is exactly as before.
+    // The CDN hostname is a PUBLIC value (it appears in every product page's HTML), so
+    // it is committed as the default rather than living only in a Vercel env var —
+    // the env var still overrides it (e.g. pointing previews at a different
+    // distribution), but a missing dashboard entry can no longer break every product
+    // image in production, which is exactly what happened before this default existed.
     remotePatterns: [
       { protocol: "http", hostname: "localhost", port: "8000", pathname: "/media/**" },
-      ...(process.env.NEXT_PUBLIC_MEDIA_HOST
-        ? [
-            {
-              protocol: "https" as const,
-              hostname: process.env.NEXT_PUBLIC_MEDIA_HOST,
-              // `/catalog/**`, never `/**`: the optimizer must refuse to proxy anything
-              // but catalog media even if another prefix ever becomes reachable.
-              pathname: "/catalog/**",
-            },
-          ]
-        : []),
+      {
+        protocol: "https" as const,
+        hostname: process.env.NEXT_PUBLIC_MEDIA_HOST ?? "dk4ivng9pnc2t.cloudfront.net",
+        // `/catalog/**`, never `/**`: the optimizer must refuse to proxy anything
+        // but catalog media even if another prefix ever becomes reachable.
+        pathname: "/catalog/**",
+      },
     ],
     // Next 16 breaking change (version-16.md § "Local IP Restriction"): the image
     // optimizer refuses to fetch upstreams that resolve to a private/loopback IP.
