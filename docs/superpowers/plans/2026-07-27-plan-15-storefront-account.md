@@ -227,11 +227,26 @@ NEXT_REDIRECT swallowing, open redirect.
 6. Register page — full build, `?next=`; the existing BFF register action auto-logs-in.
 7. `forgot-password`, `reset-password`, `verify-email` pages.
 
-**15b — Account shell + identity pages.**
+**15b — Account shell + identity pages. DONE 2026-07-28.**
 `account/layout.tsx` (side nav desktop / tabs mobile), dashboard index, profile + marketing
-consent (PATCH `/auth/me/` — read the serializer's consent field name, don't guess), security
-page (password change per `PasswordChangeSerializer`; deletion behind typed confirmation → BFF →
-`/auth/account/delete/` → clear cookies → redirect home).
+consent (PATCH `/auth/me/` — field is `marketing_consent`), security page (password change per
+`PasswordChangeSerializer`; deletion behind a two-step reveal + typed DELETE confirmation).
+
+Deviations from the sketch above, on purpose:
+- **Server Functions, not the JSON BFF**, for all three mutations — same precedent as item 5
+  (`Origin`/`Host` CSRF for free, works without JS). The deletion action itself clears the
+  cookies and redirects home; the phrase check is enforced server-side too, because a Server
+  Function is a public POST endpoint.
+- The **session-boundary structural test** now allows `"use server"` modules to import
+  `fetchWithAuth` — the directive is exactly what makes cookie writes legal, so it is the
+  honest marker (the test file documents this).
+- Nav links ONLY Dashboard/Profile/Security; orders/addresses/wishlist join in 15c/15d.
+
+Live-verified (production build, Playwright): profile edit persisted to the DB; password
+change + re-login with the new password; sign-out (and the /account bounce with correct
+`?next=`); deletion on a throwaway account → deactivated + `deletion_requested_at` stamped +
+sessions blacklisted + cookies cleared + landed home. **Still open from 15a: the renewal
+bounce during a SOFT navigation — verify in the checkpoint walkthrough.**
 
 **15c — Orders.** Second-riskiest, because of the extraction refactor.
 Orders list with status chips, order detail, tracking, invoice BFF proxy + `<a>` link; extract

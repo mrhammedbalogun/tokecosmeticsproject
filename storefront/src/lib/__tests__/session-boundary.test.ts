@@ -12,7 +12,10 @@
  * import boundary, cheaply and on every run: the writing fetchers belong to Route
  * Handlers. Server Components use `requireAuth` / `fetchWithAuthOrBounce`.
  *
- * If a Server Function ever legitimately needs one, add its path deliberately below.
+ * Server Function modules (files opening with the `"use server"` directive) are
+ * allowed too — the directive is exactly what makes cookie writes legal in a file,
+ * so it is the honest marker, unlike a path list that drifts. Plan-15b's account
+ * actions (profile, password change, deletion) are the first such users.
  */
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -50,7 +53,12 @@ describe("cookie-writing fetchers stay out of Server Components", () => {
   it("is only imported from Route Handlers", () => {
     const offenders = walk(SRC)
       .filter((file) => file !== join(SRC, "lib", "session.ts"))
-      .filter((file) => importsAWritingFetcher(readFileSync(file, "utf8")))
+      .filter((file) => {
+        const source = readFileSync(file, "utf8");
+        if (!importsAWritingFetcher(source)) return false;
+        // A Server Function module may write cookies, so the import is legal there.
+        return !source.trimStart().startsWith('"use server"');
+      })
       .map((file) => relative(SRC, file))
       .filter((rel) => !ALLOWED_PREFIXES.some((p) => rel.startsWith(p + sep)));
 

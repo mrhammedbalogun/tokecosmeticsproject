@@ -4,6 +4,7 @@ import {
   registerErrorMessage,
   resetRequestErrorMessage,
   resetConfirmErrorMessage,
+  accountErrorMessage,
 } from "@/lib/auth-errors";
 
 const TURNSTILE_BODY = { detail: "Human verification failed. Refresh the page and try again." };
@@ -38,6 +39,22 @@ describe("resetRequestErrorMessage", () => {
   it("falls back without echoing internals", () => {
     const out = resetRequestErrorMessage(500, { detail: "psycopg.OperationalError" });
     expect(out).not.toMatch(/psycopg/);
+  });
+});
+
+describe("accountErrorMessage", () => {
+  it("echoes DRF field messages verbatim — they are written for end users", () => {
+    const out = accountErrorMessage(400, {
+      old_password: ["Current password is incorrect."],
+    }, "fallback");
+    expect(out).toMatch(/current password is incorrect/i);
+  });
+  it("uses the caller's fallback for a 5xx without echoing internals", () => {
+    const out = accountErrorMessage(500, { detail: "Traceback" }, "Could not save.");
+    expect(out).toBe("Could not save.");
+  });
+  it("maps 429 to wait-and-retry copy", () => {
+    expect(accountErrorMessage(429, {}, "x")).toMatch(/too many|wait/i);
   });
 });
 

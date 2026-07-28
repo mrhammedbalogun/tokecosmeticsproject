@@ -105,6 +105,24 @@ export function loginErrorMessage(status: number, body: unknown): string {
 }
 
 /**
+ * Errors for signed-in account mutations (profile, password change, deletion).
+ * DRF field messages are echoed verbatim — "Current password is incorrect." IS
+ * the instruction — while anything unexpected gets the caller's fallback so a
+ * 5xx body never leaks internals.
+ */
+export function accountErrorMessage(status: number, body: unknown, fallback: string): string {
+  if (status === 429) return "Too many attempts. Please wait a minute and try again.";
+
+  const shape: ErrorBody = body && typeof body === "object" ? (body as ErrorBody) : {};
+  if (status === 400) {
+    const messages = fieldMessages(shape);
+    if (messages.length) return messages.join(" ");
+    if (typeof shape.detail === "string") return shape.detail;
+  }
+  return fallback;
+}
+
+/**
  * Errors for the reset-request form. The endpoint always 200s on success (it never
  * says whether the address exists), so the only errors a user can see are the gate,
  * the throttle, and our own failures — none of which mention the account.
