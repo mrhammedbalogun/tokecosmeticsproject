@@ -211,6 +211,77 @@ that sees real client addresses". **That control cannot exist**: verified 2026-0
 Cloudflare-proxied, so no CF rule there can ever fire. Correct the comment when this
 module is next touched. See memory `project_tokecosmetics_real_client_ip_gap`.
 
+### Amendment 6 — admin audience claim (found DURING Task 1, confirmed empirically)
+
+**The hole:** SimpleJWT tokens minted at `/auth/token/` and `/auth/admin-token/` were
+indistinguishable, and `AdminMeView` gated only on `IsAdminUser`. A staff member's
+*customer* login token therefore opened the admin. Everything Amendment 1 added — the
+5/min gate, the separate admin widget, ERROR-level Sentry alerting — was decoration
+while the cheaper door existed, and TOTP would have inherited the same bypass.
+
+**Ruled design (Fable):**
+- **Mint** `aud: "toke-admin"` on the **refresh** token in the admin serializer's
+  `get_token()`. `RefreshToken.access_token` copies all claims except `no_copy_claims`,
+  so refreshed access tokens inherit it and the shared `/auth/token/refresh/` endpoint
+  needs no change — while a customer refresh token can never grow the claim.
+- **Enforce primarily in an AUTHENTICATION class**, `AdminJWTAuthentication`, which
+  raises `AuthenticationFailed` when the claim is absent. Admin views set
+  `authentication_classes = [AdminJWTAuthentication]` and must NOT also list stock
+  `JWTAuthentication`. Rationale: forget a *permission* class and a customer token walks
+  in; forget it with a dedicated *authentication* class and the request is simply
+  unauthenticated — it fails closed at 401.
+- **Secondary:** keep the `is_staff` DB check in the permission layer. Claims outlive
+  staff revocation; the fresh DB read is what makes revocation immediate.
+- **The actual guarantee is the guard test**, which walks the URLconf and asserts
+  `authentication_classes == [AdminJWTAuthentication]` **exactly** for every admin view.
+  Equality, not membership — a list that *also* contains stock `JWTAuthentication` is
+  the bypass reborn and a "contains" assertion would pass it.
+
+**Residual until Task 3b lands, stated plainly:** the claim stops a customer-door token
+from *working* on admin endpoints, but an attacker can still brute-force the staff
+*password* through the cheap customer door (30/min, customer widget). The audience claim
+and TOTP are two halves of one fix. **Task 3b is load-bearing, not polish — sequence it
+immediately after Task 2 and before the checkpoint.**
+
+**This changes Task 3b's design, for the better:** the claim means "the full admin
+ceremony completed" — password + Turnstile + TOTP — and is minted only after all three
+verify. TOTP enforcement then lives in exactly one place, and no endpoint can forget it
+because no other code path can produce the claim. A two-step flow (password → TOTP
+challenge) must give the intermediate token a DIFFERENT claim (`toke-admin-preauth`),
+accepted only by the TOTP-verify endpoint, never by admin endpoints.
+
+### Amendment 7 — order scopes renamed: nothing named `view` may write
+
+Task 1 initially made `orders.view` mean "read + drive status transitions". The split is
+right; the name was a landmine — a scope called `view` that mutates state will eventually
+be granted by someone who believes the name. Three scopes, renamed while the table has no
+dependents: `orders.view` (genuinely read-only), `orders.operate` (status transitions),
+`orders.manage` (money: refunds, bank-transfer confirmation, line edits, cancel). Support
+gets `view` + `operate`.
+
+### Amendment 8 — `marketing.manage` added; Manager loses `cms.manage`
+
+Task 1 gave Manager `cms.manage` because coupons ship alongside pages in Plan-19 — a
+delivery-schedule fact standing in for an authorization decision. Coupons are a money
+lever (discount abuse is a classic insider vector); page content is content integrity.
+Conflating them means neither can ever be granted without the other. `marketing.manage`
+(coupons, promotions) goes to Manager; `cms.manage` (pages, homepage) stays Owner+Content.
+Plan-19 binds coupons to `marketing.manage`.
+
+### Amendment 9 — failure-counting on `admin_login_email`, in this plan
+
+`admin_login_email` at 10/hour is request-counting against a staff population of one
+whose address is public: ten anonymous junk POSTs lock the owner out of his own store for
+an hour, recoverable only by root SSH into Redis. Zero attacker cost, operational
+disaster. Fixed here rather than deferred, because the population-of-one property that
+makes it dangerous also makes it cheap: increment only on the failed-credential path
+(same event as the existing `user_login_failed` ERROR line — wire them together, do not
+invent a second detection path), reset on success. Tokenless junk then dies at Turnstile
+without touching the bucket, and each countable failure costs a solved token.
+`admin_login_ip` stays request-counting — correct for a volume cap. Document the
+break-glass `redis-cli DEL` one-liner in the runbook regardless. **Customer-side
+failure-counting stays in the pre-Plan-22 gate work, not here.**
+
 ### Open item, not a Task-1 blocker
 
 The Vercel plan tier is not exposed via CLI and needs confirming. It gates three
