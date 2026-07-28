@@ -291,8 +291,13 @@ describe("SignInStep — turnstile", () => {
   });
 
   it("includes the Turnstile token in the register submit body", async () => {
+    // Complete API surface — the widget's mount effect calls render/remove as
+    // soon as window.turnstile exists, so a partial stub crashes the component.
     (window as { turnstile?: unknown }).turnstile = {
-      reset: vi.fn(), getResponse: () => "tok-checkout",
+      render: () => "widget-1",
+      remove: () => {},
+      reset: vi.fn(),
+      getResponse: () => "tok-checkout",
     };
     const f = mockFetch({
       "/api/auth/me": { status: 401, body: {} },

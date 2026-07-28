@@ -69,7 +69,21 @@ class RegisterView(generics.CreateAPIView):
 
     def create(self, request, *args, **kwargs):
         require_turnstile(request)
-        return super().create(request, *args, **kwargs)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        # A token pair ships WITH the 201. The BFF used to log in via /auth/token/
+        # right after registering, but Turnstile tokens are single-use, so one form
+        # submit cannot clear two gated endpoints. Issuing tokens here keeps signup
+        # a single gated request.
+        refresh = RefreshToken.for_user(serializer.instance)
+        data = {
+            **serializer.data,
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
+        headers = self.get_success_headers(serializer.data)
+        return Response(data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_create(self, serializer):
         from django.conf import settings

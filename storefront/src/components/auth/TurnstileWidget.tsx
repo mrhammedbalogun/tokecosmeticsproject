@@ -6,8 +6,7 @@
  * EXPLICIT rendering, not the implicit `.cf-turnstile` scan: the scan runs once
  * at script load, so on a client-side navigation (/login → /register) a freshly
  * mounted container would never be rendered and the form could not obtain a
- * token. `onReady` fires on load AND on every re-mount (script.md:301), which
- * makes it the right hook for re-rendering per page.
+ * token. Each mount loads (or reuses) the script and renders its own widget.
  *
  * The rendered widget injects a hidden `cf-turnstile-response` input into the
  * enclosing form (Turnstile's `response-field`, on by default) — Server-Function
@@ -23,7 +22,6 @@
  * Renders nothing when NEXT_PUBLIC_TURNSTILE_SITE_KEY is unset — the gate-off
  * deployment mode, matching the backend's unset TURNSTILE_SECRET.
  */
-import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
 
 interface TurnstileApi {
@@ -45,6 +43,27 @@ declare global {
 const SCRIPT_SRC =
   "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
+/** Plain script loader rather than `next/script`: the load must be sequenced
+ * with the explicit `turnstile.render()` call below, and owning the tag keeps
+ * that ordering in one visible place instead of split across a Script strategy.
+ * One shared tag, deduped by src; the callback fires immediately when Turnstile
+ * is already live, which covers client-side navigations between auth pages. */
+function loadTurnstile(onReady: () => void): void {
+  if (window.turnstile) {
+    onReady();
+    return;
+  }
+  let tag = document.querySelector<HTMLScriptElement>(`script[src="${SCRIPT_SRC}"]`);
+  if (!tag) {
+    tag = document.createElement("script");
+    tag.src = SCRIPT_SRC;
+    tag.async = true;
+    tag.defer = true;
+    document.head.appendChild(tag);
+  }
+  tag.addEventListener("load", onReady, { once: true });
+}
+
 /** The current widget token, for fetch-based submits. Undefined when the widget
  * never rendered (script blocked, gate off) — send nothing and let the backend
  * decide, so gate-off deployments keep the exact old request shape. */
@@ -61,6 +80,17 @@ export function TurnstileWidget({ resetSignal }: { resetSignal?: unknown }) {
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
   const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    if (!siteKey) return;
+    let cancelled = false;
+    loadTurnstile(() => {
+      if (!cancelled) setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [siteKey]);
 
   useEffect(() => {
     if (!ready || !siteKey || !container.current || widgetId.current !== null) return;
@@ -100,14 +130,11 @@ export function TurnstileWidget({ resetSignal }: { resetSignal?: unknown }) {
   if (!siteKey) return null;
 
   return (
-    <>
-      <Script src={SCRIPT_SRC} strategy="afterInteractive" onReady={() => setReady(true)} />
-      <div
-        ref={container}
-        className="cf-turnstile"
-        data-sitekey={siteKey}
-        data-action="turnstile-spin-v2"
-      />
-    </>
+    <div
+      ref={container}
+      className="cf-turnstile"
+      data-sitekey={siteKey}
+      data-action="turnstile-spin-v2"
+    />
   );
 }

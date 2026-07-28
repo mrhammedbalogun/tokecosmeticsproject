@@ -4,10 +4,16 @@ import { TurnstileWidget } from "../TurnstileWidget";
 
 const SITE_KEY = "0xTEST-SITE-KEY";
 
-declare global {
-  interface Window {
-    turnstile?: { reset: (id?: string) => void; getResponse: (id?: string) => string };
-  }
+/** A complete stand-in for the Turnstile API — the component calls render/remove
+ * as soon as the object exists, so a partial stub crashes its mount effect. */
+function fakeTurnstile(overrides: Partial<NonNullable<Window["turnstile"]>> = {}) {
+  return {
+    render: () => "widget-1",
+    remove: () => {},
+    reset: () => {},
+    getResponse: () => "",
+    ...overrides,
+  };
 }
 
 beforeEach(() => {
@@ -40,7 +46,7 @@ describe("TurnstileWidget", () => {
     // Tokens are single-use: after a failed submit the DOM still holds the
     // redeemed token, and a naive retry gets rejected as timeout-or-duplicate.
     const reset = vi.fn();
-    window.turnstile = { reset, getResponse: () => "" };
+    window.turnstile = fakeTurnstile({ reset });
 
     const first = { error: "bad password" };
     const { rerender } = render(<TurnstileWidget resetSignal={first} />);

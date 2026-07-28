@@ -181,6 +181,22 @@ def test_register_is_gated(enabled, monkeypatch):
                   format="json").status_code == 201
 
 
+def test_register_returns_tokens_so_one_turnstile_token_covers_signup(enabled, monkeypatch):
+    """Turnstile tokens are single-use. The old BFF flow (register, then log in via
+    /auth/token/) would need TWO tokens from ONE form submit, which cannot exist —
+    so register must hand back a token pair directly and the BFF must not log in."""
+    recorder = _siteverify(monkeypatch, success=True)
+    r = APIClient().post(
+        REGISTER,
+        {"email": "n@example.com", "password": PW, "first_name": "N",
+         "turnstile_token": "tok"},
+        format="json",
+    )
+    assert r.status_code == 201
+    assert "access" in r.data and "refresh" in r.data
+    assert len(recorder.calls) == 1  # exactly one siteverify for the whole signup
+
+
 def test_password_reset_is_gated(enabled, monkeypatch):
     _siteverify(monkeypatch, success=True)
     c = APIClient()
