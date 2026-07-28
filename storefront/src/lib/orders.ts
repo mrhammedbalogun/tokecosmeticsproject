@@ -1,6 +1,10 @@
-/** Typed order fetchers + types. Server-side only (uses session helpers) — mirrors
- * lib/checkout.ts. Shared by the confirmation page and the account order pages; each
- * page owns its own fetch, so nothing here caches or memoises across callers. */
+/** Typed order fetchers + types. Server-side only — mirrors lib/checkout.ts. Shared by
+ * the confirmation page and the account order pages; each page owns its own fetch, so
+ * nothing here caches or memoises across callers.
+ *
+ * Not every fetcher here is session-based: the backend's order detail endpoint is
+ * AllowAny and also serves a signed `?token=` tracking link, so a public token fetcher
+ * (plain apiFetch, no session) belongs in this module alongside the authed ones. */
 import { fetchWithAuthOrBounce } from "@/lib/session";
 
 export interface OrderItem {
@@ -29,8 +33,13 @@ export interface OrderDetail {
  * `currentPath` is where the bounce sends the user back to, so it must be the page's own
  * path, not this endpoint's.
  *
- * There is no anonymous path to guard: `orders/views.py` 403s a caller with no auth and
- * no signed tracking token, and this page never carries one.
+ * There is no anonymous path to guard *here*: `orders/views.py` 403s a caller with no
+ * auth and no signed tracking token, and neither the confirmation page nor the account
+ * order-detail page ever carries a token.
+ *
+ * The endpoint itself is AllowAny and does serve a signed `?token=` tracking link — a
+ * public/token caller must use the dedicated tracking fetcher (plain apiFetch, no
+ * session), never this function, which would bounce a guest to login instead.
  */
 export async function getOrder(number: string, country: string, currentPath: string) {
   return fetchWithAuthOrBounce<OrderDetail>(`/orders/${number}/`, currentPath, {

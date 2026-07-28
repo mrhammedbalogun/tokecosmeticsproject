@@ -24,9 +24,9 @@ export async function getAccessToken(): Promise<string | undefined> {
  * a caller with a `catch` (the product page had one) renders a perfectly normal page over
  * the top of it. Failing before the network call is the whole point.
  *
- * WHY A PROBE RATHER THAN A LINT RULE. The bug arrived *indirectly*, through
- * `lib/checkout.ts`, which Route Handlers may legitimately import — so a
- * no-restricted-imports rule on pages would not have caught it. Cookie MUTATION throws
+ * WHY A PROBE RATHER THAN A LINT RULE. The bug arrived *indirectly*, through what is now
+ * `lib/orders.ts` (then `lib/checkout.ts`), which Route Handlers may legitimately import
+ * — so a no-restricted-imports rule on pages would not have caught it. Cookie MUTATION throws
  * during RSC render (`next/dist/docs/01-app/03-api-reference/04-functions/cookies.md`:
  * ".set, .delete must be performed in a Server Function or Route Handler"), so probing
  * writability detects the real context no matter how many modules deep the call is.
