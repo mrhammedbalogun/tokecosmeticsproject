@@ -376,9 +376,73 @@ Two findings, one fixed here and one deferred with a decision needed:
   issuing tokens to the automated browser — cover it in the checkpoint walkthrough.
 
 **15d — Addresses + wishlist.**
-Address CRUD with default badges — the existing `api/addresses` BFF has only GET/POST, so extend
-it with PATCH/DELETE and the two set-default routes. Wishlist grid with add-to-cart over the
-existing wishlist BFF.
+
+Grounding facts, verified 2026-07-28 (do not re-derive; do not "correct"):
+- Backend surface is COMPLETE — build nothing there. `/me/addresses/` GET
+  (unpaginated, default-shipping first) / POST; `/me/addresses/{pk}/` GET/PATCH/DELETE
+  (owner-scoped queryset — a stranger's pk 404s); `/me/addresses/{pk}/set-default-shipping/`
+  and `…/set-default-billing/` POST (atomic; exactly one default per kind).
+  `is_default_shipping/billing` are READ-ONLY on `AddressSerializer` — only the
+  set-default routes change them; a PATCH carrying them is silently ignored.
+  `/me/wishlist/` GET → list of `{sku, product: <ProductListSerializer card>, created_at}`
+  resolved in the request's country (product can be null if delisted); POST `{sku}`
+  idempotent (201 created / 200 existing); `/me/wishlist/{sku}/` DELETE → 204.
+- `api/wishlist/[[...sku]]` BFF is COMPLETE (GET/POST/DELETE) — build nothing there.
+  `api/addresses` BFF has GET/POST only. `api/regions` BFF exists (NG state/LGA options).
+- `address-fields.ts` holds the shared `Address` type, `AddressFieldErrors`, and the
+  per-country field config. Checkout's `AddressStep.tsx` renders its form INLINE and is
+  certified — do NOT extract from or refactor it; the account form is a NEW component
+  consuming the same `address-fields.ts` config (the config is the shared truth, the
+  JSX is not).
+- `ProductCard` takes `product: ProductCardData` — exactly the shape inside each
+  wishlist item, including `default_variant_id` (for add-to-cart via `useCart.addItem`)
+  and `default_sku`. `AccountNav` links live in `components/account/AccountNav.tsx`.
+- Account page gate pattern (copy profile/orders): RSC page calls
+  `fetchWithAuthOrBounce(path, currentPath)`; `currentPath` is the literal page path.
+
+Tasks (sequential, one implementer subagent each, two-stage review after each):
+
+1. **Addresses BFF extension.** `api/addresses/[id]/route.ts`: PATCH (JSON body
+   passthrough → upstream PATCH `/me/addresses/{id}/`, country header forwarded) and
+   DELETE (→ upstream DELETE; 204 no body). `api/addresses/[id]/default/route.ts`:
+   POST with body `{kind: "shipping" | "billing"}` → upstream
+   `/me/addresses/{id}/set-default-{kind}/`; any other kind → 400 with no upstream
+   call. Validate `id` against `^\d{1,10}$` in both routes → else 404 with no
+   upstream call (invoice-route discipline). Session guard + ApiError passthrough
+   copied from the existing `api/addresses/route.ts` pattern. Tests mirror the
+   existing addresses BFF tests (same cookie/fetch mocks): happy paths, guard 401s,
+   bad id, bad kind, upstream 404 passthrough.
+2. **Account addresses page.** New `AddressForm` client component in
+   `components/account/` driven by `address-fields.ts` config + `api/regions` for NG
+   selects (mirror AddressStep's rendering RULES, not its code; checkout untouched).
+   `AddressBook` client component: cards (label, name, line1, country, "Default
+   shipping"/"Default billing" badges) with Edit (prefilled form), Delete (typed-out?
+   no — simple confirm button state, then DELETE), Set default shipping / billing
+   buttons (hidden on cards already default for that kind), Add address. Django field
+   errors render per-field via `AddressFieldErrors`. After every mutation re-GET the
+   list (no optimistic address state — an address book is small and correctness
+   beats latency here). Page `(shop)/account/addresses/page.tsx`: RSC, initial list
+   via `fetchWithAuthOrBounce("/me/addresses/", "/account/addresses")`, hands it to
+   `AddressBook`. Add "Addresses" to `AccountNav` after Orders. Empty state with an
+   "Add your first address" affordance.
+3. **Wishlist page.** `(shop)/account/wishlist/page.tsx`: RSC gate via
+   `fetchWithAuthOrBounce("/me/wishlist/", "/account/wishlist")`, hands items to a
+   client `WishlistGrid` in `components/account/`: reuse `ProductCard` for each
+   non-null `item.product`, plus per-card "Add to bag" (via `useCart().addItem` with
+   `default_variant_id`, then `openCartDrawer()` — PDP Add-to-Cart behaviour) and
+   "Remove" (DELETE `api/wishlist/{sku}`, then re-GET/refresh). `default_variant_id`
+   null (unpriced in this country) → disable "Add to bag", keep the card. Null
+   `product` (delisted) → muted row "No longer available" + Remove. Empty state links
+   to `/products`. Add "Wishlist" to `AccountNav` after Addresses. NOTE:
+   `WishlistHeart` inside `ProductCard` already toggles wishlist membership — on this
+   page a heart-toggle and the Remove button are the same action; that redundancy is
+   accepted, do not fork ProductCard over it.
+4. **Verification (controller, not a subagent).** Both suites, typecheck/lint,
+   production build; live walkthrough: create NG address (state/LGA selects), edit
+   it, add a second, flip defaults (badges move atomically), delete; checkout
+   AddressStep still lists saved addresses (regression check — its code is
+   untouched); wishlist: heart a PDP product, grid shows it, Add to bag opens the
+   drawer with the item, Remove clears it, empty state renders.
 
 ---
 
