@@ -125,7 +125,10 @@ describe("invoice BFF — upstream failure mapping", () => {
     const { cancel } = upstream(401, {}, '{"detail":"token expired"}');
     const res = await call("TC-100038");
     expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("/login?next=/account/orders/TC-100038");
+    // Percent-encoded `next`, same convention as api/auth/refresh-redirect.
+    expect(res.headers.get("location")).toBe(
+      "/login?next=%2Faccount%2Forders%2FTC-100038",
+    );
     expect(await res.text()).toBe("");
     expect(cancel).toHaveBeenCalled();
   });

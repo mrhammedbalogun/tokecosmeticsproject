@@ -186,13 +186,17 @@ describe("account order detail page", () => {
     expect(screen.queryByText(/your order is reserved/i)).not.toBeInTheDocument();
   });
 
-  it("links the invoice at the BFF route, as a download", async () => {
+  it("links the invoice at the BFF route WITHOUT a download attribute", async () => {
     await render_();
 
     const link = screen.getByRole("link", { name: /download invoice/i });
     expect(link).toHaveAttribute("href", "/api/orders/TC-100038/invoice");
-    // Without `download` the browser navigates away from the order to render the PDF.
-    expect(link).toHaveAttribute("download");
+    // THE 303 TRAP — do not "helpfully" re-add `download`. The route's 200 already sends
+    // `Content-Disposition: attachment`, so the file downloads and the customer stays
+    // here either way; but a dead session gets a 303 to /login, and the attribute
+    // survives the redirect, so the browser would save the LOGIN PAGE as the invoice
+    // file instead of showing it. The attribute buys nothing and breaks that path.
+    expect(link).not.toHaveAttribute("download");
   });
 
   it("URL-encodes the order number in the invoice href", async () => {

@@ -62,17 +62,17 @@ export async function GET(_req: Request, ctx: { params: Promise<{ number: string
     // The session is genuinely dead. This URL is reached by a top-level navigation, so a
     // redirect lands the user on login instead of on a broken download.
     //
-    // CAVEAT for whoever meets this in the wild: the caller is an `<a download>`, and a
-    // browser keeps applying `download` across the redirect — so the login page may be
-    // SAVED rather than shown. Still better than handing the customer a 0-byte PDF, and
-    // the window is tiny (the page behind the link is itself auth-gated). If it turns
-    // out to bite, the fix belongs on the page — swap the plain <a> for a fetch that can
-    // read the status — not here.
+    // This is why the order page links here with a bare <a> and NO `download` attribute:
+    // that attribute survives a redirect, and would make the browser save the login page
+    // as a file rather than show it. See the comment on the link itself.
+    //
+    // `next` is percent-encoded to match api/auth/refresh-redirect and `withNext` in
+    // lib/auth-guard — one convention for building this URL, even though the validated
+    // number needs no escaping of its own.
+    const next = `/account/orders/${encodeURIComponent(number)}`;
     return new Response(null, {
       status: 303,
-      headers: {
-        Location: `${LOGIN_PATH}?next=/account/orders/${encodeURIComponent(number)}`,
-      },
+      headers: { Location: `${LOGIN_PATH}?next=${encodeURIComponent(next)}` },
     });
   }
 

@@ -121,12 +121,19 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
       )}
 
       <div className="mt-8 flex flex-wrap items-center gap-4">
-        {/* Plain <a>, never next/link: this is a file download served by a BFF route
-            (Task 4), and a client-side navigation to it would try to render a PDF as a
-            React page. `download` keeps the customer on this page. */}
+        {/* Plain <a>, never next/link: this is a file download served by a BFF route,
+            and a client-side navigation to it would try to render a PDF as a React page.
+
+            NO `download` ATTRIBUTE, deliberately. The route answers with two different
+            kinds of response and the attribute would only serve one of them:
+             - 200 carries `Content-Disposition: attachment`, which already downloads the
+               PDF and leaves the customer sitting on this page. The attribute adds
+               nothing.
+             - a dead session gets a 303 to /login, and `download` survives a redirect —
+               the browser would SAVE the login page as a file named after the order
+               instead of showing it. Re-adding the attribute reintroduces exactly that. */}
         <a
           href={`/api/orders/${encodeURIComponent(order.number)}/invoice`}
-          download
           className="rounded-[var(--radius-card)] border border-line px-4 py-2 text-sm font-medium transition-colors hover:border-accent/60"
         >
           Download invoice (PDF)
