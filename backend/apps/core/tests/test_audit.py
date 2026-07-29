@@ -433,6 +433,11 @@ READ_ONLY_VIEWS = frozenset(
         "StockCSVExportView",
         "AuditLogListView",
         "AdminMeView",
+        # GET-only, and its read row is driven end to end in
+        # `apps/core/tests/test_admin_search.py` — which owns the raw-term/per-type-count
+        # shape, the 90-day tombstone and the deleted-account tombstone, none of which any
+        # other endpoint has.
+        "AdminSearchView",
     }
 )
 

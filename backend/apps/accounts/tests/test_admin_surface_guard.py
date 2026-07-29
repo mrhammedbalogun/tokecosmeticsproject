@@ -193,6 +193,23 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # either way: being able to cancel one is as consequential as being able to send it.
     "StaffInviteListCreateView": "staff.manage",
     "StaffInviteRevokeView": "staff.manage",
+    # --- search ------------------------------------------------------------------
+    # `None`, and this is the one entry in the dict where that needs an argument rather
+    # than a sentence. Every OTHER `None` here means "gates on is_staff and that is the
+    # whole control" (admin-me). This one means the view carries NO single scope because
+    # it gates PER SECTION: orders behind `orders.view`, customers behind `customers.view`,
+    # products behind `products.manage` — each derived at request time from that section's
+    # own list endpoint, so the two can never drift apart. A single declared scope here
+    # would be a lie in whichever direction it was written: `orders.view` would hand the
+    # customer section to anyone holding it, and the strictest of the three would hide the
+    # box from Support entirely.
+    #
+    # That makes this the one admin view whose authorization this file CANNOT check, and
+    # the check therefore lives where it can be made behaviourally:
+    # `apps/core/tests/test_admin_search.py::test_the_scope_matrix` drives a real request
+    # per seeded role and asserts the exact set of sections returned. Read that before
+    # changing anything here.
+    "AdminSearchView": None,
     # --- audit -------------------------------------------------------------------
     # `settings.manage` rather than a scope of its own: an `audit.view` scope would be
     # held by exactly the roles that already hold this one, and the log records what

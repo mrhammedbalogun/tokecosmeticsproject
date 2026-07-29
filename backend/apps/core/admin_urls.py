@@ -7,8 +7,10 @@ route the guard cannot see.
 """
 from django.urls import path
 
+from apps.core.admin_search import AdminSearchView
 from apps.core.admin_views import AuditLogListView
 
 urlpatterns = [
     path("audit/", AuditLogListView.as_view(), name="admin-audit-list"),
+    path("search/", AdminSearchView.as_view(), name="admin-search"),
 ]

@@ -20,6 +20,15 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Required by `OpClass` in an expression index: `PostgresConfig.ready()` is what
+    # registers it as an index-expression WRAPPER, and without that registration Django
+    # emits `USING gin ((UPPER("email") gin_trgm_ops))` — the operator class inside the
+    # expression's parentheses, which Postgres rejects as a syntax error. Added in Plan-16
+    # Task 6 for the admin search box's trigram indexes (accounts/0006, orders/0006,
+    # catalog/0009). It also registers the `trigram_similar`/`unaccent` lookups and the
+    # array/range field lookups; nothing here uses those today, and none of it changes the
+    # behaviour of code that does not ask for it.
+    "django.contrib.postgres",
     # third-party
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
@@ -217,6 +226,10 @@ REST_FRAMEWORK = {
         # valid token never touches the bucket. 10/hour is a junk-volume cap, not a
         # guess cap: at 256 bits of token entropy, guessing is not the threat model.
         "invite_accept_ip": "10/hour",
+        # Global admin search. Keyed on the authenticated staff USER, request-counted —
+        # see `AdminSearchThrottle` for why that is safe here and is a lockout button
+        # everywhere else on this surface. Generous because it is a box a human types into.
+        "admin_search": "60/min",
         # The _ip rates below are DELIBERATELY loose. All storefront traffic egresses
         # from Vercel, so these are shared by every customer at once -- at 10/hour they
         # were a store-wide cap of ten signups and ten password resets per hour, which
@@ -443,6 +456,10 @@ CELERY_BEAT_SCHEDULE = {
     "anonymize-deleted-accounts": {
         "task": "apps.accounts.tasks.anonymize_deleted_accounts",
         "schedule": 86400.0,  # daily — the grace window is measured in days
+    },
+    "tombstone-search-terms": {
+        "task": "apps.core.tasks.tombstone_search_terms",
+        "schedule": 86400.0,  # daily — the retention window is 90 days
     },
 }
 

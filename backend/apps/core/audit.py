@@ -98,6 +98,23 @@ security_logger = logging.getLogger("apps.security")
 # request" and "this field was submitted blank" stay distinguishable forever.
 REDACTED = "[redacted: account deleted]"
 
+# Task 6. Global-search rows are the ONE kind here with a retention window; every other row
+# is kept indefinitely. See `tombstone_expired_search_terms` for the argument.
+#
+# THE LABEL LIVES HERE, and `apps/core/admin_search.py` imports it, rather than the other
+# way round: the retention sweep has to select the rows the view wrote, and two copies of
+# the string would mean a renamed label silently stops the sweep finding anything — the
+# rows would look correctly retained while nothing was ever tombstoned. This module cannot
+# import the view module (the view imports the mixin from here), so the dependency runs in
+# the only direction available.
+#
+# It is a SURFACE label, not `app_label.modelname`: a search spans three models and belongs
+# to none of them, and inventing a fake model would read as evidence later. It is still a
+# real filterable value — `/api/v1/admin/audit/?model=admin.search` is "every search
+# anybody ran".
+SEARCH_AUDIT_MODEL_LABEL = "admin.search"
+SEARCH_TERM_RETENTION_DAYS = 90
+
 # Per-row cap on the serialised `changes` JSON. An unbounded JSONField fed straight
 # from request bodies is a disk-DoS lever: an authorised-but-hostile staff member (or a
 # stolen session) can PATCH a product with a 50MB `description` as fast as the network
@@ -217,7 +234,64 @@ def record_audit(
     return row
 
 
-def redact_audit_values(*, model_labels_and_ids, email: str = "") -> int:
+def tombstone_expired_search_terms(*, now=None) -> int:
+    """Blank the TERM in global-search audit rows older than 90 days. Task 6.
+
+    WHY SEARCH ROWS GET A RETENTION WINDOW WHEN NOTHING ELSE HERE DOES. The rest of this
+    table is retained indefinitely and deliberately so (`AuditLog`'s docstring): a row
+    saying "X refunded order Y" is a record of the store's own actions and gets more
+    valuable with age. A search row is different in kind — its interesting field is a
+    string somebody TYPED, which is very often another person's email address, and a
+    two-year archive of typed email fragments is liability rather than audit. It is also
+    the one column here that holds PII nobody chose to store: the customer never submitted
+    it, a staff member did, on their behalf, by accident of using the box.
+
+    THE ROW SKELETON SURVIVES INDEFINITELY. Actor, actor email, jti, IP, timestamp and the
+    per-type COUNTS all stay. That is deliberate and it is what keeps the audit promise
+    intact: "this account ran forty searches that week, each returning ten customers"
+    remains provable forever, which is the harvest-detection signal the counts exist for.
+    Only the needle is forgotten, and only after ninety days.
+
+    Uses `QuerySet.update()`, which bypasses `AuditLog.save()`'s append-only refusal. That
+    is the SECOND of exactly two permitted mutations of this table (the first being
+    `redact_audit_values`), and like the first it is permitted at three levels that must
+    agree: the database trigger allows `changes` and no other column, this module is the
+    only one the AST guard exempts, and `test_audit_guard.py` pins the single call site to
+    the beat task. Adding a third permitted mutation should feel expensive.
+
+    Idempotent, because it runs daily against the same rows forever: a row whose term is
+    already the tombstone is skipped, so a second pass reports zero and writes nothing.
+
+    IT RE-READS EVERY EXPIRED ROW EVERY NIGHT, and that is a deliberate non-optimisation.
+    The obvious fix — excluding rows that already carry the tombstone with a text cast — is
+    an unindexed scan of the same table, so it saves the JSON deserialisation and nothing
+    else. This is a box a human types into: at a hundred searches a day the nightly read is
+    tens of thousands of small rows, which is fine for years. If it ever is not, the right
+    move is a partial index or a `terms_tombstoned_at` column, not a cleverer filter.
+    """
+    from django.utils import timezone
+
+    from apps.core.models import AuditLog
+
+    now = now or timezone.now()
+    cutoff = now - timezone.timedelta(days=SEARCH_TERM_RETENTION_DAYS)
+    rows = AuditLog.objects.filter(
+        model_label=SEARCH_AUDIT_MODEL_LABEL, created_at__lt=cutoff
+    )
+    tombstoned = 0
+    for row in rows:
+        query = row.changes.get("query")
+        if not isinstance(query, dict):
+            continue
+        blanked = {key: REDACTED for key in query}
+        if blanked == query:
+            continue  # already tombstoned
+        AuditLog.objects.filter(pk=row.pk).update(changes={**row.changes, "query": blanked})
+        tombstoned += 1
+    return tombstoned
+
+
+def redact_audit_values(*, model_labels_and_ids, text_needles=()) -> int:
     """Hollow out the VALUES in `changes` for rows about a deleted customer.
 
     Called by `apps.accounts.tasks.anonymize_deleted_accounts`, which is the second
@@ -230,16 +304,35 @@ def redact_audit_values(*, model_labels_and_ids, email: str = "") -> int:
     Rows are found two ways, because one is not enough:
 
     * by `(model_label, object_id)` — every row naming the user or one of their orders;
-    * by a text match on `changes` for the user's pre-deletion email — which catches
-      the read-audit rows recording an admin's SEARCH for that address, whose object id
-      is empty because a list has no object.
+    * by a text match on `changes` for each of `text_needles` — the user's pre-deletion
+      email and their toke_id — which catches the read-audit rows recording an admin's
+      SEARCH for that customer, whose object id is empty because a list has no object.
 
-    HONEST LIMIT: the second pass matches the email only. A row whose `changes` holds
-    the customer's phone number or street under some other order's id is not found. In
-    this schema that combination does not arise — order edits are recorded against the
-    order they touch — but it is a property of today's endpoints, not a guarantee of the
-    mechanism, and a future endpoint that writes one customer's details onto another
-    object would need a line here.
+    THE TOKE_ID NEEDLE WAS ADDED IN TASK 6, with the global search endpoint. Search is the
+    one place a staff member types a customer's PUBLIC id rather than their address, and
+    the email needle alone would have left `TK-7X4KQZ` sitting in the log after the person
+    it identifies had been deleted. A toke_id is six characters from a 31-character
+    alphabet with a `TK-` prefix, so a false positive against an unrelated row's text is
+    remote — and the consequence of one would be an extra redacted row, not a lost one.
+
+    TWO HONEST LIMITS, neither of which is closed here:
+
+    * The needles are EXACT SUBSTRINGS. A staff member who typed only `leav` searching for
+      `leaver@example.test` left a fragment no needle matches, and it lives out its ≤90
+      days under `tombstone_expired_search_terms` instead. Closing that would mean matching
+      arbitrary fragments against every deleted address on every deletion — an unbounded
+      scan for a bounded gain — and the retention window already gives the fragment an end
+      date. `test_admin_search.py::test_a_partial_prefix_of_a_deleted_email_is_not_matched`
+      pins this so it stays a stated imperfection rather than a believed control.
+    * A row whose `changes` holds the customer's phone number or street under some other
+      order's id is not found. In this schema that combination does not arise — order edits
+      are recorded against the order they touch — but it is a property of today's
+      endpoints, not a guarantee of the mechanism.
+
+    Search rows found this way are blanked WHOLE, counts included, rather than losing only
+    their `query`. That is a deliberate simplification: it keeps one redaction shape for
+    the deletion promise instead of two, and the handful of rows that name one departing
+    customer are not the harvest signal — the aggregate across all of an actor's rows is.
 
     Uses `QuerySet.update()`, which bypasses `AuditLog.save()`'s append-only refusal on
     purpose. That is the ONE permitted mutation of this table, and it is permitted at
@@ -255,8 +348,12 @@ def redact_audit_values(*, model_labels_and_ids, email: str = "") -> int:
         ids = [str(i) for i in object_ids]
         if ids:
             matches |= Q(model_label=model_label, object_id__in=ids)
-    if email:
-        matches |= Q(_changes_text__icontains=email)
+    for needle in text_needles:
+        # Falsy needles are skipped rather than passed through: `icontains=""` matches
+        # EVERY row, which would blank the entire audit table on the first deletion of an
+        # account with an empty toke_id.
+        if needle:
+            matches |= Q(_changes_text__icontains=needle)
 
     rows = (
         AuditLog.objects.annotate(_changes_text=Cast("changes", TextField()))
@@ -457,6 +554,21 @@ class AdminAuditMixin:
             return self._read_changes(response)
         return build_changes(self.request.data, self.resolve_allowlist())
 
+    def audit_read_extra(self, response) -> dict:
+        """Extra keys a read-audited view wants in its row. Empty by default.
+
+        THE ONE EXTENSION POINT ON THIS MIXIN, added by Task 6 and deliberately narrow.
+        Global search answers with several sections at once, so "how much came back" is a
+        count PER SECTION rather than one number, and the generic shapes below cannot see
+        that. The alternative was bespoke audit code in the search view, which is how a
+        surface ends up with two audit mechanisms that disagree about what a row means.
+
+        Keys returned here are merged UNDER the standard ones, so a view can add to the
+        record and can never displace `query` — the raw term is the field the log exists
+        for and no caller gets a vote on whether it is stored.
+        """
+        return {}
+
     def _read_changes(self, response) -> dict:
         """What a read recorded: the query, and how much came back.
 
@@ -473,4 +585,4 @@ class AdminAuditMixin:
             changes["result_count"] = len(data["results"])
         elif isinstance(data, list):
             changes["result_count"] = len(data)
-        return changes
+        return {**self.audit_read_extra(response), **changes}

@@ -64,6 +64,7 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     "ProductCSVExportView": "bulk egress — the whole catalogue and every price, in one file",
     "StockCSVExportView": "bulk egress — the whole stock position in one file",
     "AuditLogListView": "returns other people's data in `changes`, and reading it is what precedes editing it",
+    "AdminSearchView": "one parameter reaching customers, orders and products at once — the highest-yield PII read on the surface",
 }
 
 
@@ -243,6 +244,15 @@ REDACTION_FUNCTION = "redact_audit_values"
 REDACTION_MODULE = "apps/core/audit.py"
 REDACTION_CALLER = ("apps/accounts/tasks.py", None)
 
+# The SECOND permitted mutation, added by Task 6, pinned the same way and for the same
+# reason. `tombstone_expired_search_terms` blanks the typed term in search rows older than
+# 90 days; from any other call site it is a way to erase what somebody was looking for
+# before anybody noticed. One caller, named — the daily beat task — or it is a finding.
+#
+# Two entries in this list is the point at which somebody should feel the cost of a third.
+RETENTION_FUNCTION = "tombstone_expired_search_terms"
+RETENTION_CALLER = "apps/core/tasks.py"
+
 
 def _python_sources():
     """Every production Python module in the backend, tests and migrations excluded.
@@ -328,4 +338,51 @@ def test_the_redaction_has_exactly_one_call_site():
     assert call_sites[0][0] == REDACTION_CALLER[0], (
         f"the audit redaction moved to {call_sites[0][0]}; the only place allowed to "
         f"call it is {REDACTION_CALLER[0]}"
+    )
+
+
+def test_the_search_term_tombstone_has_exactly_one_call_site():
+    """The same pin for the second permitted mutation.
+
+    `tombstone_expired_search_terms` exists so that a typed search term — very often
+    somebody else's email address — stops being retained after ninety days, while the row
+    around it (actor, jti, IP, timestamp, per-type counts) survives indefinitely. Called
+    from anywhere else, with a `now=` far in the future, it is a way for the person being
+    investigated to blank exactly the field that says what they were hunting for.
+
+    One caller: the daily beat task.
+    """
+    call_sites = []
+    for relative_path, source in _python_sources():
+        if relative_path == REDACTION_MODULE:
+            continue  # its own definition
+        tree = ast.parse(source, filename=relative_path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+            if name == RETENTION_FUNCTION:
+                call_sites.append((relative_path, node.lineno))
+    assert len(call_sites) == 1, (
+        f"{RETENTION_FUNCTION} blanks the search term out of audit rows. It must be called "
+        f"from exactly one place — the daily beat task. Found: {call_sites}"
+    )
+    assert call_sites[0][0] == RETENTION_CALLER, (
+        f"the search-term tombstone moved to {call_sites[0][0]}; the only place allowed "
+        f"to call it is {RETENTION_CALLER}"
+    )
+
+
+def test_the_tombstone_sweep_is_scheduled():
+    """A retention control that is not on the beat schedule is a comment.
+
+    This is the cheapest possible check and it is here because the failure mode is
+    invisible: the function exists, its tests pass, the docstrings describe a ninety-day
+    window, and terms accumulate forever because nothing ever calls it in production.
+    """
+    from django.conf import settings
+
+    tasks = {entry["task"] for entry in settings.CELERY_BEAT_SCHEDULE.values()}
+    assert "apps.core.tasks.tombstone_search_terms" in tasks, (
+        f"no beat entry runs the search-term tombstone: {sorted(tasks)}"
     )

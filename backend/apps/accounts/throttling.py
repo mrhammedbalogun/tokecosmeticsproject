@@ -407,6 +407,39 @@ class StaffInviteAcceptThrottle(_FailureCountingMixin, _IPKeyedThrottle):
     scope = "invite_accept_ip"
 
 
+# --- admin global search -------------------------------------------------------
+
+
+class AdminSearchThrottle(CloudflareIdentMixin, throttling.UserRateThrottle):
+    """Volume cap on `/api/v1/admin/search/`. Keyed on the USER, and request-counted.
+
+    THAT COMBINATION LOOKS LIKE THE MISTAKE THIS MODULE SPENT TWO AMENDMENTS UNDOING, so
+    the difference is worth stating rather than leaving to be rediscovered. Every
+    request-counting cap that turned into a denial button on this branch —
+    `admin_login_ip`, `admin_login_email`, `invite_accept_ip` — was keyed on something
+    SHARED or FORGEABLE. The IP key is one bucket for the entire staff, because the admin
+    BFF calls this API server-side from a Vercel egress address, so an anonymous stranger
+    could fill it and lock every staff member out for free; the email key is read from an
+    unauthenticated request body naming a publicly-known address.
+
+    This key is `request.user.pk`, taken from a token that `AdminJWTAuthentication` has
+    already validated. It cannot be forged and it is not shared, so the only person a
+    caller can throttle is themselves, for a minute. Nobody else's search is affected by
+    anybody else's typing.
+
+    So it counts REQUESTS, deliberately, and must keep doing so. There is no failure to
+    count here — a search either matches or does not — and the cap's job is not to slow
+    down guessing but to stop a ten-results-per-type endpoint being driven in a loop until
+    it has produced the whole customer table. Converting this to a failure-counting
+    throttle would leave it with no volume cap at all, which is exactly the property the
+    per-type cap exists to prevent.
+
+    60/min is generous: it is a topbar box a human types into, and the admin app debounces.
+    """
+
+    scope = "admin_search"
+
+
 # --- registration ------------------------------------------------------------
 # The IP throttle is the one that matters. RegisterView mails the SUBMITTED address,
 # so an unmetered endpoint is a spam cannon pointed at strangers from our own domain,

@@ -17,10 +17,16 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
+from apps.accounts.models import ANONYMISED_EMAIL_DOMAIN
+
 logger = logging.getLogger(__name__)
 
 GRACE_DAYS = 30
-_SENTINEL_DOMAIN = "@deleted.invalid"
+# Aliased rather than restated: `UserManager.admin_visible()` excludes rows carrying this
+# suffix, which is how global search (and the Plan-18 customer list) learn not to show an
+# anonymised account. Two copies of the string would mean a deleted customer stayed
+# findable in one of the two places.
+_SENTINEL_DOMAIN = ANONYMISED_EMAIL_DOMAIN
 
 
 def _anonymize_one(pk: int) -> bool:
@@ -68,12 +74,18 @@ def _anonymize_one(pk: int) -> bool:
         # Inside the same transaction as the rest of the scrub, so a failure here leaves
         # the account un-anonymised and the sweep retries it, rather than reporting a
         # deletion that only half happened.
+        # Both needles, and the toke_id is the one Task 6 added. Global search is the one
+        # place a staff member types a customer's PUBLIC id rather than their address, so
+        # without it `TK-7X4KQZ` would sit in the log after the person it names had been
+        # deleted. See `redact_audit_values` for the two limits this does NOT close —
+        # notably that a partial typed prefix of the address is not matched and lives out
+        # its ≤90 days under `tombstone_expired_search_terms` instead.
         redact_audit_values(
             model_labels_and_ids=[
                 ("accounts.user", [user.pk]),
                 ("orders.order", order_numbers),
             ],
-            email=old_email,
+            text_needles=(old_email, user.toke_id),
         )
         return True
 

@@ -65,6 +65,7 @@ forwarded; the list is meant to stay countable on one hand.
 | `app/totp/actions.ts` | enrol / confirm / recovery — confirm is the only thing that stores a session |
 | `app/accept-invite/actions.ts` | invite token + password → stores the **preauth** cookie |
 | `app/(shell)/actions.ts` | sign out: blacklists the refresh token, clears every cookie |
+| `app/(shell)/search-actions.ts` | global search: forwards the access token, renews once if needed, and **never redirects** |
 | `app/api/[...path]/route.ts` | the generic authenticated proxy |
 | `app/api/auth/refresh-redirect/route.ts` | renewal bounce for Server Components (they cannot write cookies) |
 | `app/api/auth/purge/route.ts` | clears the three cookies and returns to `/login` — the destination a page's "anomaly" decision redirects to, for the same reason: a page cannot delete a cookie |
@@ -81,6 +82,25 @@ Three httpOnly, `SameSite=Strict` cookies, and the third one is the design:
 The two sets are **mutually exclusive at write time**, so holding both is an anomaly the
 gate purges rather than an ambiguity it has to guess about. The full matrix, with the
 reasoning, is at the top of `src/lib/auth-guard.ts`.
+
+## Global search (topbar)
+
+One box, up to ten results per section, **no links on any result**. Plans 17/18 build the
+order, customer and product pages; until they exist a linked result is a 404 with extra
+steps, so the useful fields are inline instead — order number + status + total, customer
+name + toke_id, product name + SKUs. That answers the two questions the owner asks all day
+("what is the status of TC-100123", "which customer is this email") with no navigation at
+all. When the detail pages land, add `href`s in `lib/search.ts` and `GlobalSearch.tsx`;
+nothing else has to change.
+
+**This app never filters sections.** The response contains only the sections the caller's
+scopes allow — derived on the backend from each section's own list endpoint — and a role
+holding none of them gets `{}` and the ordinary "no matches" message. Re-deciding that in
+the browser would put a second, weaker copy of the scope rule in a bundle anybody can read.
+The box is rendered for every staff member for the same reason.
+
+The 250 ms debounce is UX. The controls are server-side: a three-character minimum, ten
+results per section with no pagination, and 60/min per staff user.
 
 ## What is NOT here yet
 

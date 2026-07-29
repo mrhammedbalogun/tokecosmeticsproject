@@ -124,6 +124,14 @@ MATRIX: list[Row] = [
     # --- audit: Owner only. It records what every other role did, so a role that
     # could read it could also watch for whether anyone had noticed it yet ---------
     Row("AuditLogListView", "get", "/api/v1/admin/audit/", _OWNER),
+    # --- search: every staff member may USE the box; what comes back is gated per
+    # section, against the scope of that section's own list endpoint. This row only
+    # asserts admission — that a Content editor is not refused outright, because being
+    # refused and being shown nothing are different answers and the second is the right
+    # one. WHICH SECTIONS each role actually gets back is asserted behaviourally in
+    # `apps/core/tests/test_admin_search.py::test_the_scope_matrix`, which is where the
+    # real authorization check for this endpoint lives.
+    Row("AdminSearchView", "get", "/api/v1/admin/search/?q=zzz", ALL_ROLES),
     # --- identity: every staff member, whatever their role -----------------------
     Row("AdminMeView", "get", "/api/v1/auth/admin-me/", ALL_ROLES),
 ]

@@ -1,9 +1,11 @@
+import { GlobalSearch } from "@/components/GlobalSearch";
 import { Sidebar } from "@/components/Sidebar";
 import { SignOutButton } from "@/components/SignOutButton";
 import { StagingBadge } from "@/components/StagingBadge";
 import { getAdminMeOrNull } from "@/lib/admin-me";
 import { visibleNav } from "@/lib/nav";
 import { signOutAction } from "./actions";
+import { searchAction } from "./search-actions";
 
 /**
  * The admin shell: sidebar, topbar, sign-out.
@@ -37,6 +39,12 @@ export default async function ShellLayout({ children }: { children: React.ReactN
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-4 border-b border-line bg-surface px-6 py-3">
           <StagingBadge />
+          {/* The search box lives in the layout because it is chrome, and it is rendered
+              for EVERY staff member without a scope check here. That is not an oversight:
+              the endpoint returns only the sections the caller's scopes allow, so a
+              Content editor gets a working box that finds nothing, and hiding it would
+              mean keeping a second copy of the scope rule in the browser. */}
+          <GlobalSearch action={searchAction} />
           <div className="ml-auto flex items-center gap-3">
             <span className="text-xs text-muted">{me?.email ?? "—"}</span>
             <div className="rounded bg-shell p-0.5">

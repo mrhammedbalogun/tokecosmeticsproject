@@ -367,3 +367,62 @@ Turnstile widget, on the two unauthenticated forms.
 
 Also: no service worker, `Cache-Control: no-store` on every page and BFF response, and the
 storefront must never link to the admin hostname.
+
+## 9. Global search (`/api/v1/admin/search/`) — Plan-16 Task 6
+
+**Status: BUILT.** The topbar box in `admin/`. One term, up to ten results per section.
+
+### 9.1 Who sees what — and why nobody gets a 403
+
+Search gates **per section**, on the same scope as that section's own list endpoint:
+orders behind `orders.view`, customers behind `customers.view`, products behind
+`products.manage`. Sections a role does not hold are simply **absent from the response**,
+and a role holding none of them (a Content editor) gets an **empty 200** — not a 403.
+
+That is deliberate: using the search box is not an offence, and a 403 would confirm to a
+stolen session which surfaces exist and are worth attacking. So "the search box returns
+nothing for a Content editor" is correct behaviour, not a broken deployment.
+
+The scopes are DERIVED at request time from the list views' own `permission_classes`, so
+tightening a list endpoint tightens search with it. The one exception is `customers`,
+which has no list endpoint until Plan-18 and therefore declares `customers.view` itself;
+a guard test fails the day a customer endpoint appears with a different scope.
+
+### 9.2 Ten results per section, no pagination — do not "improve" this
+
+The cap is what stops search becoming an export tool. Bulk access belongs on the list
+endpoints, where it leaves a loud audit row ("listed every order matching @gmail.com,
+3,400 results") instead of a hundred quiet little searches. Adding pagination here would
+remove that distinction.
+
+The per-user throttle is `admin_search` = 60/min, keyed on the authenticated staff user
+and **counting requests**. Unlike `admin_login_ip`/`admin_login_email` (§3), this key is
+neither shared nor forgeable, so a caller can only throttle themselves, for a minute.
+Clearing it is the same `redis-cli` shape as §3 with scope `admin_search`.
+
+### 9.3 What the audit log keeps, and for how long
+
+Every search writes one `AuditLog` row with `model_label = "admin.search"`, carrying the
+**raw term** and the **per-type result counts**. Find them all with:
+
+```
+GET /api/v1/admin/audit/?model=admin.search          # (Owner only)
+```
+
+Two bounds on the term, both automatic:
+
+1. **90 days.** `apps.core.tasks.tombstone_search_terms` runs daily on the Celery beat
+   schedule and replaces the term with a tombstone. The rest of the row — actor, jti, IP,
+   timestamp, counts — is kept **indefinitely**, so "this account ran forty searches that
+   week, ten customers each" stays provable forever.
+2. **Account deletion.** `anonymize_deleted_accounts` also tombstones any search row whose
+   term contains the deleted customer's exact email or toke_id.
+
+**Stated limitation, not a bug:** a *partial* typed prefix (`leav` for
+`leaver@example.test`) is not matched by the deletion sweep and lives out its ≤90 days.
+Closing that would mean an unbounded fragment scan on every deletion; the 90-day window is
+what makes the residual acceptable.
+
+If the beat entry is ever dropped, terms accumulate silently and nothing looks wrong. The
+signal is the task returning a permanent 0 in the Celery log; a guard test asserts the beat
+entry exists.

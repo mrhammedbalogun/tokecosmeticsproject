@@ -1,7 +1,9 @@
 import secrets
 
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
+from django.db.models.functions import Upper
 from django.utils import timezone
 
 from apps.core.models import TimeStampedModel
@@ -10,6 +12,14 @@ from .managers import UserManager
 
 # Unambiguous alphabet — no 0/O/1/I/L, safe to read over the phone.
 TOKE_ID_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
+
+# The address an anonymised account is left holding: `deleted-TK-XXXXXX@deleted.invalid`.
+# `.invalid` is the RFC 2606 reserved TLD, so the sentinel can never route mail anywhere.
+# It lives here rather than in `apps/accounts/tasks.py`, where it was written, because it
+# is now read by two things that must agree: the sweep that WRITES it, and
+# `UserManager.admin_visible()`, which is how every staff-facing read learns to skip those
+# rows. Two copies of this string would mean a deleted customer stayed searchable.
+ANONYMISED_EMAIL_DOMAIN = "@deleted.invalid"
 
 
 def generate_toke_id() -> str:
@@ -50,6 +60,23 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = "accounts_user"
+        # TRIGRAM INDEXES FOR THE ADMIN SEARCH BOX, on `UPPER(col)` and not on the bare
+        # column. That distinction is the whole point and it was measured rather than
+        # assumed (Plan-16 Task 6): Django compiles `icontains` on PostgreSQL to
+        # `UPPER(col::text) LIKE UPPER(%s)`, so a plain `gin(col gin_trgm_ops)` index — the
+        # style used by `catalog.Product.product_name_trgm` — is NEVER consulted for it. At
+        # 200k users the same query measured 88.7ms with no index, 89.1ms with bare-column
+        # indexes, and 0.17ms with these. The bare index is not slower; it is simply never
+        # used, which is the worse failure because the plan looks unremarkable.
+        #
+        # GIN + `gin_trgm_ops` rather than a btree because the pattern is `%term%` —
+        # unanchored, so no btree can help at any price.
+        indexes = [
+            GinIndex(OpClass(Upper("email"), name="gin_trgm_ops"), name="user_email_trgm"),
+            GinIndex(OpClass(Upper("first_name"), name="gin_trgm_ops"), name="user_first_trgm"),
+            GinIndex(OpClass(Upper("last_name"), name="gin_trgm_ops"), name="user_last_trgm"),
+            GinIndex(OpClass(Upper("toke_id"), name="gin_trgm_ops"), name="user_toke_id_trgm"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.email} ({self.toke_id})"
