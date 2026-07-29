@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
+from apps.core.audit import AdminAuditMixin
 from apps.inventory.admin_serializers import (
     StockAdjustSerializer,
     StockItemSerializer,
@@ -32,11 +33,14 @@ from apps.inventory.services import adjust
 from apps.inventory.tasks import import_stock_csv_task
 
 
-class StockItemAdminViewSet(viewsets.ModelViewSet):
-    # `adjust` writes the number that decides whether an order can be placed at all.
+class StockItemAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    # `adjust` writes the number that decides whether an order can be placed at all —
+    # which is also why its audit row must not read as an ordinary "create". The mixin
+    # prefers the DRF action name over the HTTP verb for exactly this case.
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("products.manage")]
     serializer_class = StockItemSerializer
+    audit_serializers = (StockItemSerializer, StockAdjustSerializer)
     queryset = StockItem.objects.select_related("variant", "warehouse").order_by(
         "warehouse__name", "variant__sku"
     )
@@ -60,7 +64,10 @@ class StockItemAdminViewSet(viewsets.ModelViewSet):
         return Response(StockItemSerializer(item).data, status=200)
 
 
-class StockMovementListView(generics.ListAPIView):
+class StockMovementListView(AdminAuditMixin, generics.ListAPIView):
+    # NOT read-audited. This IS the ledger of every stock adjustment, and reading an
+    # audit trail is not the event an audit trail exists to record — it would put a row
+    # in one table every time somebody looked at the other.
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("products.manage")]
     serializer_class = StockMovementSerializer
@@ -75,9 +82,14 @@ class StockMovementListView(generics.ListAPIView):
         return qs
 
 
-class StockCSVExportView(APIView):
+class StockCSVExportView(AdminAuditMixin, APIView):
+    # Audited for the same reason as the catalogue export: a whole-table dump is a bulk
+    # egress. The full argument is in apps/catalog/admin_views.py.
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("products.manage")]
+    audit_reads = True
+    audit_action = "export_csv"
+    audit_model_label = "inventory.stockitem"
 
     def get(self, request):
         resp = StreamingHttpResponse(iter([export_stock_csv()]), content_type="text/csv")
@@ -85,10 +97,12 @@ class StockCSVExportView(APIView):
         return resp
 
 
-class StockCSVImportView(APIView):
+class StockCSVImportView(AdminAuditMixin, APIView):
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("products.manage")]
     parser_classes = [MultiPartParser, FormParser]
+    audit_action = "import_csv"
+    audit_model_label = "inventory.stockitem"
 
     def post(self, request):
         upload = request.data.get("file")

@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
+from apps.core.audit import AdminAuditMixin
 from apps.orders.models import Order
 from apps.shipping.models import ShippingQuote
 from apps.shipping.services import (
@@ -44,7 +45,7 @@ def _get_quote(number: str) -> ShippingQuote:
     return get_object_or_404(ShippingQuote, order=order)
 
 
-class _FreightView(APIView):
+class _FreightView(AdminAuditMixin, APIView):
     """Base for all four freight endpoints. ALL of them are `orders.manage`.
 
     Nothing in the freight lifecycle is operational in the sense `orders.operate` means,
@@ -67,6 +68,12 @@ class _FreightView(APIView):
 
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.manage")]
+    # The row is about the ORDER, not the quote: an order number is what a human has in
+    # front of them when they ask what happened, and the quote's pk is an internal id
+    # they would have to look up first. Each subclass names its own action, because
+    # "create" for all four would make quoting, waiving, cancelling and banking money
+    # indistinguishable in the table.
+    audit_model_label = "orders.order"
 
     def _run(self, request, number, serializer_class, action):
         quote = _get_quote(number)
@@ -90,15 +97,21 @@ class _FreightView(APIView):
 
 
 class QuoteSerializer(serializers.Serializer):
+    audit_allowlist = ("amount", "note")
+
     amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
     note = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class NoteSerializer(serializers.Serializer):
+    audit_allowlist = ("note",)
+
     note = serializers.CharField()
 
 
 class ReceiptSerializer(serializers.Serializer):
+    audit_allowlist = ("amount_received", "bank_reference", "note")
+
     amount_received = serializers.DecimalField(
         max_digits=12, decimal_places=2, min_value=Decimal("0.01")
     )
@@ -109,12 +122,18 @@ class ReceiptSerializer(serializers.Serializer):
 class QuoteFreightView(_FreightView):
     """POST /api/v1/admin/orders/{number}/freight/quote/ — record what the forwarder quoted."""
 
+    audit_action = "freight_quote"
+    audit_serializers = (QuoteSerializer,)
+
     def post(self, request, number):
         return self._run(request, number, QuoteSerializer, quote_freight)
 
 
 class WaiveFreightView(_FreightView):
     """POST .../freight/waive/ — merchant absorbs the freight. Requires a prior quote."""
+
+    audit_action = "freight_waive"
+    audit_serializers = (NoteSerializer,)
 
     def post(self, request, number):
         return self._run(request, number, NoteSerializer, waive_freight)
@@ -123,12 +142,18 @@ class WaiveFreightView(_FreightView):
 class CancelQuoteView(_FreightView):
     """POST .../freight/cancel/ — customer declined or never answered."""
 
+    audit_action = "freight_cancel"
+    audit_serializers = (NoteSerializer,)
+
     def post(self, request, number):
         return self._run(request, number, NoteSerializer, cancel_quote)
 
 
 class FreightReceiptView(_FreightView):
     """POST .../freight/receipt/ — the freight transfer landed."""
+
+    audit_action = "freight_receipt"
+    audit_serializers = (ReceiptSerializer,)
 
     def post(self, request, number):
         return self._run(request, number, ReceiptSerializer, record_freight_receipt)

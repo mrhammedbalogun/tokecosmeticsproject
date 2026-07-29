@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope, scopes_for_user
+from apps.core.audit import AdminAuditMixin
 from apps.orders.invoice import render_invoice_pdf
 from apps.orders.models import Order
 from apps.orders.services import cancel_order, orders_owed_a_refund
@@ -113,13 +114,19 @@ class OrderInvoiceView(APIView):
 # amendment, and both are argued at their view.
 
 
-class AdminOrderListView(generics.ListAPIView):
+class AdminOrderListView(AdminAuditMixin, generics.ListAPIView):
     """GET /api/v1/admin/orders/ — filters: status, country, source, needs_attention,
     placed_after/placed_before, gateway, search (number / email / name)."""
 
     serializer_class = AdminOrderListSerializer
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.view")]
+    # READ-AUDITED. Every row this returns carries a customer email and a shipping
+    # address, and the `search` parameter is the interesting half of the record: "listed
+    # every order matching @gmail.com, 3,400 results" is precisely the sentence an audit
+    # log exists to be able to write, and it is invisible in a log of writes only.
+    audit_reads = True
+    audit_action = "list"
 
     def get_queryset(self):
         qs = _ORDER_QS.all()
@@ -150,7 +157,7 @@ class AdminOrderListView(generics.ListAPIView):
         return qs.order_by("-placed_at", "-pk").distinct()
 
 
-class AdminRefundsOwedView(generics.ListAPIView):
+class AdminRefundsOwedView(AdminAuditMixin, generics.ListAPIView):
     """GET /api/v1/admin/refunds-owed/ — orders parked at on_hold by a cancelled freight
     quote, where the customer paid and is still owed a manual goods refund. The reminder
     that stops a solo operator forgetting the refund cancel_quote deliberately deferred.
@@ -169,6 +176,8 @@ class AdminRefundsOwedView(generics.ListAPIView):
     serializer_class = RefundOwedSerializer
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.manage")]
+    audit_reads = True  # a list of orders, with the customer on each one
+    audit_action = "list"
 
     def get_queryset(self):
         return orders_owed_a_refund().select_related("currency", "shipping_quote").prefetch_related(
@@ -176,15 +185,17 @@ class AdminRefundsOwedView(generics.ListAPIView):
         )
 
 
-class AdminOrderDetailView(generics.RetrieveAPIView):
+class AdminOrderDetailView(AdminAuditMixin, generics.RetrieveAPIView):
     serializer_class = AdminOrderSerializer
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.view")]
+    audit_reads = True  # name, email, phone, both addresses, payment history
+    audit_action = "read"
     lookup_field = "number"
     queryset = _ORDER_QS.prefetch_related("events", "events__actor")
 
 
-class AdminOrderTransitionView(APIView):
+class AdminOrderTransitionView(AdminAuditMixin, APIView):
     """POST /api/v1/admin/orders/{number}/transition/ — body: {to_status, message?}.
 
     THE ONE ROUTE THAT SPANS TWO SCOPES, and the reason is the dispatch below rather
@@ -212,6 +223,12 @@ class AdminOrderTransitionView(APIView):
 
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.operate")]
+    # `to_status` is the whole point of the row: the elevation to orders.manage for a
+    # cancel is invisible to the surface guard (see above), so the audit trail is where
+    # "who cancelled a paid order" is actually answerable after the fact.
+    audit_action = "transition"
+    audit_model_label = "orders.order"
+    audit_allowlist = ("to_status", "message")
 
     # Statuses that cost money to enter, and the scope each demands on top of the floor.
     ELEVATED_STATUSES = {"cancelled": "orders.manage"}
@@ -248,7 +265,7 @@ class AdminOrderTransitionView(APIView):
         return Response(AdminOrderSerializer(order).data)
 
 
-class AdminOrderTrackingView(APIView):
+class AdminOrderTrackingView(AdminAuditMixin, APIView):
     """PATCH /api/v1/admin/orders/{number}/tracking/ — set carrier + number.
 
     Only records the tracking details. The customer is told when the order is moved to
@@ -260,6 +277,9 @@ class AdminOrderTrackingView(APIView):
 
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.operate")]
+    audit_action = "tracking"
+    audit_model_label = "orders.order"
+    audit_allowlist = ("tracking_carrier", "tracking_number")
 
     def patch(self, request, number: str):
         order = get_object_or_404(Order, number=number)
@@ -271,7 +291,7 @@ class AdminOrderTrackingView(APIView):
         return Response(AdminOrderSerializer(order).data)
 
 
-class AdminOrderNoteView(APIView):
+class AdminOrderNoteView(AdminAuditMixin, APIView):
     """PATCH /api/v1/admin/orders/{number}/note/ — internal note, never shown to the
     customer and never a status change.
 
@@ -281,6 +301,12 @@ class AdminOrderNoteView(APIView):
 
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.operate")]
+    audit_action = "note"
+    audit_model_label = "orders.order"
+    # The note itself is stored: it is an internal record of a phone call, written by
+    # staff about the order, and it is already visible to everyone who can read the
+    # order. Nothing is revealed by keeping a copy of what somebody typed here.
+    audit_allowlist = ("admin_note",)
 
     def patch(self, request, number: str):
         order = get_object_or_404(Order, number=number)
@@ -290,7 +316,7 @@ class AdminOrderNoteView(APIView):
         return Response(AdminOrderSerializer(order).data)
 
 
-class AdminResolveReviewView(APIView):
+class AdminResolveReviewView(AdminAuditMixin, APIView):
     """POST /api/v1/admin/orders/{number}/resolve-review/ — clear the needs-attention flag.
 
     The ONLY thing that clears review_reason. Deliberately not a side-effect of any status
@@ -308,6 +334,11 @@ class AdminResolveReviewView(APIView):
 
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("orders.manage")]
+    # Clearing review_reason DESTROYS the record that money went wrong on this order
+    # (see the docstring). The audit row is the only thing left saying it was ever set.
+    audit_action = "resolve_review"
+    audit_model_label = "orders.order"
+    audit_allowlist = ("message",)
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)

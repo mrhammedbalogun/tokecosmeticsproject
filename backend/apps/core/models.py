@@ -1,5 +1,6 @@
 import json
 
+from django.conf import settings
 from django.db import models
 
 
@@ -109,3 +110,138 @@ class Country(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.code})"
+
+
+class AuditLogImmutable(Exception):
+    """Raised by `AuditLog.save()` when something tries to rewrite an existing row.
+
+    A plain `Exception` rather than a `ValidationError` on purpose: this is not a user
+    input problem the API should turn into a 400, it is a programming error that must
+    reach a 500 and a Sentry event.
+    """
+
+
+class AuditLog(TimeStampedModel):
+    """Who did what, on the admin surface. Plan-16 Task 4.
+
+    WHAT THIS IS FOR, because it changes every field choice below. Tasks 1-3b built a
+    fence: an audience claim, scopes, mandatory TOTP. Their tests prove an outsider
+    cannot get in. This table is worth nothing against that attacker — it is for the
+    person who is already inside WITH A KEY. An insider, or somebody holding a staff
+    session they stole. The only question it has to answer is "what did that key do,
+    and when".
+
+    ── THE FIELDS, AND WHY EACH ONE ────────────────────────────────────────────────
+
+    `actor` is SET_NULL rather than CASCADE or PROTECT. CASCADE would mean deleting a
+    staff account deletes the record of what it did, which is the single most obvious
+    way for an insider to clean up after themselves. PROTECT would mean a staff account
+    can never be deleted at all once it has touched anything, which turns an ordinary
+    offboarding into a support ticket.
+
+    `actor_email` is the reason SET_NULL is safe. It is a SNAPSHOT taken at write time
+    and never refreshed: when the FK goes NULL the row still says who. It is also
+    deliberately not a FK to anything, so nothing can cascade it away.
+
+    `token_jti` is the claim that turns "X did this" into "X's session from Tuesday
+    14:02 did this". Actor plus timestamp plus IP already identifies WHO; the jti
+    identifies WHICH LOGIN — which specific TOTP ceremony minted the credential that
+    acted. That is the field you need on the day a staff TOKEN is stolen rather than a
+    staff member being malicious, because it is what separates the rows that person
+    really made from the rows made with their stolen session.
+
+    Deliberately ABSENT: the audience claim. Every row here is written by a view behind
+    `AdminJWTAuthentication`, so the claim can only ever hold one value, and a column
+    that can only ever hold one value is decoration that later reads as evidence.
+
+    `client_ip` uses `apps.accounts.throttling.client_ip`, which ignores
+    X-Forwarded-For entirely and reads `CF-Connecting-IP` then `REMOTE_ADDR`. See that
+    function: XFF is caller-controlled on the direct-to-API path, so recording it would
+    put an attacker-chosen string in the evidence column.
+
+    `changes` holds ONLY keys a serializer or view explicitly allowlisted. See
+    `apps/core/audit.py` for why an allowlist rather than a denylist, and for the 8KB
+    cap.
+
+    ── IMMUTABILITY, HONESTLY SCOPED ───────────────────────────────────────────────
+
+    There is no hash chain here and that is a decision, not an omission. Chaining
+    without an external anchor is theatre: anybody who can write the table can re-chain
+    it in one UPDATE, so the chain would assert a guarantee that does not exist — and
+    this project has been bitten three times by controls that only existed in a
+    comment. What is here instead is three cheap, real things:
+
+    1. `save()` refuses to rewrite an existing row (below), so no application code path
+       can update one by accident.
+    2. A Postgres trigger (`0006_auditlog_append_only`) refuses UPDATE of every column
+       except `changes` and `actor_id`, and refuses DELETE outright. That one holds
+       even against code that bypasses the ORM, which is what makes it worth having.
+    3. Every row is mirrored to the `apps.security` log as KEYS AND IDS ONLY, so the
+       database is not the only copy.
+
+    The honest sentence, which is also in `docs/runbooks/admin-gate.md`: **audit rows
+    are tamper-RESISTANT against application-level compromise, not tamper-EVIDENT
+    against root or a database superuser.** True off-box WORM storage belongs with the
+    Plan-22 S3 work (bucket versioning plus a credential that cannot delete); it is
+    noted there and deliberately not built here.
+
+    ── RETENTION ───────────────────────────────────────────────────────────────────
+
+    Indefinite. No window is configured, and inventing a number ("90 days", "2 years")
+    would be picking a compliance posture nobody has decided on. Revisit at Plan-27.
+    What DOES happen is redaction: `apps/accounts/tasks.anonymize_deleted_accounts`
+    hollows out the VALUES in `changes` for rows about a deleted customer and keeps the
+    keys, the object id, the actor, the IP and the timestamp — so "staff member X
+    edited customer 123's address at 14:02" stays provable without the address.
+    """
+
+    # Deliberately not `Meta.ordering`: this table is append-only and read newest-first
+    # in exactly one place (the list endpoint), which says so itself.
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="audit_entries",
+    )
+    # 254 is the RFC 5321 cap on an address; `blank=True` covers the one case where a
+    # row can be written with no human behind it (a management command), which is not
+    # possible today but is cheaper to allow than to discover later.
+    actor_email = models.CharField(max_length=254, blank=True)
+    token_jti = models.CharField(max_length=64, blank=True)
+    client_ip = models.CharField(max_length=45, blank=True)  # 45 = longest IPv6 text form
+    model_label = models.CharField(max_length=100, blank=True)  # "orders.order"
+    object_id = models.CharField(max_length=64, blank=True)     # pk, order number or slug
+    action = models.CharField(max_length=64)                    # "create", "read", "refund"…
+    changes = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["-created_at"]),
+            models.Index(fields=["actor", "-created_at"]),
+            models.Index(fields=["model_label", "object_id"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.created_at:%Y-%m-%d %H:%M} {self.actor_email} {self.action} {self.model_label}"
+
+    def save(self, *args, **kwargs):
+        """INSERT only. Rewriting an existing row raises.
+
+        `_state.adding` rather than `pk is None`, because assigning a pk to a fresh
+        instance is a legitimate thing to do (fixtures, explicit ids) and would make a
+        pk check refuse a genuine insert. `adding` is False only once the row has been
+        loaded from, or written to, the database.
+
+        This is the FIRST of the three fences in the class docstring and the weakest of
+        them: it is bypassed by `QuerySet.update()`, by raw SQL, and by anything that
+        is not this method. It is here because it makes the accidental case — a future
+        view that fetches a row and calls `.save()` — impossible, and because a test
+        can assert it. The fence that holds against deliberate rewriting is the
+        database trigger.
+        """
+        if not self._state.adding:
+            raise AuditLogImmutable(
+                "AuditLog rows are append-only; an existing row cannot be re-saved."
+            )
+        return super().save(*args, **kwargs)

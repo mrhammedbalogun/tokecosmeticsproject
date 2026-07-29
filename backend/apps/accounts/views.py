@@ -15,6 +15,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from apps.core.audit import AdminAuditMixin, record_audit
 from apps.core.log_safety import scrub
 from apps.notifications.tasks import send_email_task
 
@@ -612,7 +613,7 @@ class AdminTOTPRecoveryView(_PreauthTOTPView):
         )
 
 
-class AdminMeView(APIView):
+class AdminMeView(AdminAuditMixin, APIView):
     """`/auth/admin-me/` — who am I and what may I do.
 
     The admin shell calls this once per session to decide which nav items exist. It
@@ -640,6 +641,13 @@ class AdminMeView(APIView):
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [permissions.IsAdminUser]
     serializer_class = AdminMeSerializer
+    # Carries the mixin and audits nothing, which is the point of carrying it: the
+    # guard test asserts that EVERY admin view mixes it in, so `audit_reads = False`
+    # here is a recorded decision rather than a view nobody wired up. Reading your own
+    # name and scope list is not an event — it happens once per admin page load, it
+    # reveals nothing the caller did not already have, and auditing it would put a row
+    # in the table for every navigation.
+    audit_reads = False
 
     @extend_schema(responses={200: AdminMeSerializer})
     def get(self, request):
@@ -657,7 +665,7 @@ class AdminMeView(APIView):
         )
 
 
-class StaffInviteListCreateView(generics.ListCreateAPIView):
+class StaffInviteListCreateView(AdminAuditMixin, generics.ListCreateAPIView):
     """`/admin/staff/invites/` — the Owner's staff-creation surface.
 
     NO THROTTLE, and that is a decision rather than an omission — which is why it is
@@ -686,6 +694,15 @@ class StaffInviteListCreateView(generics.ListCreateAPIView):
     permission_classes = [HasAdminScope("staff.manage")]
     serializer_class = StaffInviteSerializer
     pagination_class = None  # outstanding invites are a handful, not a feed
+    # `serializer_class` above is the READ shape; the body is parsed by a different
+    # class, and naming it here is what points the audit guard's write-only check at the
+    # serializer that actually receives a request body.
+    audit_serializers = (StaffInviteCreateSerializer,)
+    audit_action = "staff_invite"
+    audit_model_label = "accounts.staffinvite"
+    # The list is NOT read-audited: it returns staff addresses and roles, which every
+    # holder of `staff.manage` (one person) already knows, and it is polled by the staff
+    # page. The CREATE is the event — it mints an administrator.
 
     def get_queryset(self):
         from apps.accounts.models import StaffInvite
@@ -726,7 +743,7 @@ class StaffInviteListCreateView(generics.ListCreateAPIView):
         return Response(StaffInviteSerializer(invite).data, status=status.HTTP_201_CREATED)
 
 
-class StaffInviteRevokeView(APIView):
+class StaffInviteRevokeView(AdminAuditMixin, APIView):
     """`/admin/staff/invites/<pk>/revoke/` — the kill switch.
 
     BUILT NOW, not "later". An outstanding invite is a live staff-creation capability;
@@ -746,6 +763,12 @@ class StaffInviteRevokeView(APIView):
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("staff.manage")]
     serializer_class = StaffInviteSerializer
+    # No body at all, so no allowlist: the row records WHO revoked WHICH invite WHEN,
+    # which is the entire content of the event. `audit_serializers = ()` is not declared
+    # because the default — `(serializer_class,)` — is the read shape and carries no
+    # allowlist, so nothing is stored either way.
+    audit_action = "staff_invite_revoke"
+    audit_model_label = "accounts.staffinvite"
 
     @extend_schema(request=None, responses={200: StaffInviteSerializer})
     def post(self, request, pk):
@@ -867,10 +890,35 @@ class StaffInviteAcceptView(APIView):
         if find_invite(raw_token) is None:
             self._refuse(request, "unknown")
 
+        # AUDITED BY HAND, and this is the one place on the admin surface that has to
+        # be. `AdminAuditMixin` attributes a row to `request.user`, and the whole point
+        # of this endpoint is that there is no authenticated user: the caller proves an
+        # invite token, not a session. Left to the mixin it would write nothing — which
+        # would mean THE ACTION THAT CREATES AN ADMINISTRATOR is the one action on this
+        # surface with no row, and that is the exact hole the table exists to close.
+        #
+        # The actor recorded is the NEW staff member: they are the person who acted, and
+        # `invited_by` on the invite row (plus the `staff_invite` row from when it was
+        # sent) is what ties it back to the Owner who started it.
+        #
+        # `changes` is built from SERVER-SIDE FACTS, never from `request.data` — the
+        # body of this request contains a password. There is no allowlist here because
+        # there is no request body key that may be stored, and writing an empty
+        # allowlist would invite somebody to grow it.
         try:
-            invite, user, created = accept_invite(
-                raw_token, password=serializer.validated_data["password"]
-            )
+            with transaction.atomic():
+                invite, user, created = accept_invite(
+                    raw_token, password=serializer.validated_data["password"]
+                )
+                record_audit(
+                    actor=user,
+                    actor_email=user.email,
+                    client_ip=client_ip(request),
+                    model_label="accounts.staffinvite",
+                    object_id=str(invite.pk),
+                    action="staff_invite_accept",
+                    changes={"role": invite.role.name, "new_account": created},
+                )
         except InviteRejected as exc:
             self._refuse(request, exc.reason, invite=exc.invite)
 

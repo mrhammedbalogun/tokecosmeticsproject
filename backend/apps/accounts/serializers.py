@@ -289,6 +289,12 @@ class StaffInviteCreateSerializer(serializers.Serializer):
     at some other group that happens to exist and grants nothing.
     """
 
+    # The most consequential body on the whole admin surface: it names who is about to
+    # become an administrator and with which role. Both keys are recorded; the raw
+    # invite TOKEN is minted server-side and never appears in a request body, so there
+    # is nothing credential-shaped here to keep out.
+    audit_allowlist = ("email", "role")
+
     email = serializers.EmailField()
     role = serializers.CharField()
 

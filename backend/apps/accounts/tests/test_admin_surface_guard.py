@@ -193,6 +193,12 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # either way: being able to cancel one is as consequential as being able to send it.
     "StaffInviteListCreateView": "staff.manage",
     "StaffInviteRevokeView": "staff.manage",
+    # --- audit -------------------------------------------------------------------
+    # `settings.manage` rather than a scope of its own: an `audit.view` scope would be
+    # held by exactly the roles that already hold this one, and the log records what
+    # every other role did — so the reader should be the person who decides who those
+    # roles are. See apps/core/admin_views.py.
+    "AuditLogListView": "settings.manage",
 }
 
 

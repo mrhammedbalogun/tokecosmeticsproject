@@ -4,6 +4,11 @@ from apps.inventory.models import StockItem, StockMovement
 
 
 class StockItemSerializer(serializers.ModelSerializer):
+    # `quantity` and `reserved` are read-only here (they move only through adjust/
+    # reserve), so an audit row for a stock CREATE records what was pointed at and
+    # the threshold -- never a number this endpoint could not have written.
+    audit_allowlist = ("variant", "warehouse", "low_stock_threshold")
+
     available = serializers.IntegerField(read_only=True)
     sku = serializers.CharField(source="variant.sku", read_only=True)
     warehouse_name = serializers.CharField(source="warehouse.name", read_only=True)
@@ -18,6 +23,12 @@ class StockItemSerializer(serializers.ModelSerializer):
 
 
 class StockAdjustSerializer(serializers.Serializer):
+    # THE consequential inventory write: it sets the number that decides whether an
+    # order can be placed at all. All three keys are recorded, `note` included --
+    # a stock write-off with no stated reason is exactly the row somebody will want
+    # to read back.
+    audit_allowlist = ("quantity", "reason", "note")
+
     quantity = serializers.IntegerField(min_value=0)
     # "migration" is excluded: it's a machine-only sentinel the Plan-21
     # import_catalog importer relies on to detect stock nobody has touched
