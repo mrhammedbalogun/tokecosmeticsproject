@@ -1,10 +1,34 @@
+"""Catalogue administration.
+
+EVERY endpoint here is `products.manage` — Owner and Manager — including the three
+that only read (`export.csv`, and the list/retrieve halves of the viewsets). That is
+a deliberate choice rather than an oversight, and the reasoning is worth writing down
+because the obvious alternative looks better than it is.
+
+A `products.view` scope would let Support answer "is this in stock, what does it
+cost?" without also being able to rewrite prices. But `permission_classes` is a class
+attribute, and every catalogue endpoint except the two CSV views is a `ModelViewSet`
+whose reads and writes share one class. Splitting them means overriding
+`get_permissions()` per action, which makes the declared `permission_classes` — the
+thing `test_admin_surface_guard.py` reads, and the thing the next reader trusts —
+decorative. The guard test is the only real guarantee on this surface (Plan-16
+Amendment 6); trading it for a convenience scope is a bad trade. Half-splitting is
+worse still: a `products.view` reaching `products/export.csv` but not
+`GET /admin/products/` would let Support export the entire catalogue while being
+unable to look up one product.
+
+So the whole app is `.manage` until there is a read-only catalogue surface to design
+the split around (Plan-17/19). Over-restriction is the safe direction to be wrong in.
+"""
 from django.http import StreamingHttpResponse
-from rest_framework import permissions, viewsets
+from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.authentication import AdminJWTAuthentication
+from apps.accounts.rbac import HasAdminScope
 from apps.catalog.csv_io import export_products_csv
 from apps.catalog.tasks import import_products_csv_task
 
@@ -32,7 +56,16 @@ from apps.pricing.models import Price
 
 
 class AdminBaseViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    """Base for every catalogue viewset. Both class attributes are load-bearing.
+
+    `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+    added here inherits the admin-only authenticator, so even if someone forgets the
+    permission class the request arrives unauthenticated and answers 401 rather than
+    letting a customer-door token through.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
 
 
 class ProductAdminViewSet(AdminBaseViewSet):
@@ -94,7 +127,11 @@ class PriceAdminViewSet(AdminBaseViewSet):
 
 
 class ProductCSVExportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    # Read-only, and still `.manage`: see the module docstring. A bulk dump of the
+    # catalogue is also the natural export half of the import below — whoever can
+    # round-trip the file is the audience.
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
 
     def get(self, request):
         resp = StreamingHttpResponse(iter([export_products_csv()]), content_type="text/csv")
@@ -103,7 +140,10 @@ class ProductCSVExportView(APIView):
 
 
 class ProductCSVImportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    # Bulk write over the whole catalogue, prices included — the single most
+    # destructive thing on this surface.
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):

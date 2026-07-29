@@ -4,6 +4,7 @@ import pytest
 from django.core import mail
 from rest_framework.test import APIClient
 
+from apps.accounts.tests.factories import staff_user
 from apps.core.models import Country
 from apps.orders.factories import OrderFactory
 from apps.orders.models import OrderItem
@@ -34,9 +35,9 @@ def buyer(django_user_model):
 
 @pytest.fixture
 def staff(django_user_model):
-    return django_user_model.objects.create_user(
-        email="ops@x.com", password="pw12345!", is_staff=True
-    )
+    # Owner: these tests predate Plan-16's scopes and assert what a fully-privileged
+    # staff member can do. Which ROLE may do each of them is test_admin_role_matrix.py.
+    return staff_user(django_user_model, email="ops@x.com")
 
 
 def _order(number="TC-900001", user=None, status="processing", **kw):

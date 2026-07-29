@@ -12,11 +12,13 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, serializers
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.authentication import AdminJWTAuthentication
+from apps.accounts.rbac import HasAdminScope
 from apps.orders.models import Order
 from apps.payments.gateways.base import GatewayError
 from apps.payments.gateways.registry import get_gateway
@@ -75,9 +77,13 @@ class OrderRefundView(APIView):
     Body: {amount, reason?, restock?, payment_id?}. `payment_id` disambiguates an order
     with more than one payment (e.g. a double charge being unwound); by default the
     collected payment is used.
+
+    `orders.manage`: money leaving the merchant account through the gateway. This is the
+    endpoint Amendment 7 named first, and the one Support must not hold.
     """
 
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)
@@ -137,9 +143,14 @@ class ManualRefundView(APIView):
     """POST /api/v1/admin/orders/{number}/manual-refund/ — staff record a refund they have
     already wired from the bank. The only refund path for a manual gateway, and the one
     the review flags that say "refund it" are telling staff to use.
+
+    `orders.manage`, and if anything more strongly than the gateway refund above: this
+    one is an unverified ASSERTION that money was wired, with no gateway to contradict
+    it. The only check on it is the person allowed to make it.
     """
 
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)
@@ -193,9 +204,17 @@ class ConfirmManualReceiptSerializer(serializers.Serializer):
 
 class ConfirmManualReceiptView(APIView):
     """POST /api/v1/admin/orders/{number}/confirm-payment/ — staff confirm a bank transfer
-    landed. This is the ONLY way a bank-transfer order can ever be fulfilled."""
+    landed. This is the ONLY way a bank-transfer order can ever be fulfilled.
 
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    `orders.manage`, named explicitly by Amendment 7. Bank transfer is the live gateway
+    for this store, so this endpoint is the point at which goods are released against
+    money nobody has verified but the person clicking. It can also override an amount
+    discrepancy and a duplicate bank reference — the two guards that stop goods shipping
+    twice against one transfer.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)

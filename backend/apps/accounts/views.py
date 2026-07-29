@@ -188,9 +188,10 @@ class AdminMeView(APIView):
     `is_staff` from the database, which is what makes a revoked staff account lose
     access immediately instead of whenever its token expires. The claim answers "was
     this token issued for the admin app?"; the DB read answers "is this person still
-    staff?". Listing stock `JWTAuthentication` alongside the admin class would undo
-    the first of those entirely (DRF takes the first authenticator that returns a
-    user), which is why test_admin_surface_guard.py asserts list EQUALITY.
+    staff?". Listing stock `JWTAuthentication` alongside the admin class undoes the
+    first of those if it is listed FIRST — see the mechanism, and the ordering subtlety
+    behind it, in apps/accounts/authentication.py. test_admin_surface_guard.py asserts
+    list EQUALITY so that neither ordering can arise.
 
     `IsAdminUser` rather than a scope: every staff member must be able to ask who
     they are, including one whose role grants nothing yet. It is not an authorisation

@@ -13,6 +13,7 @@ from decimal import Decimal
 import pytest
 from rest_framework.test import APIClient
 
+from apps.accounts.tests.factories import staff_user
 from apps.catalog.factories import ProductVariantFactory
 from apps.core.models import Country
 from apps.inventory.factories import StockItemFactory, WarehouseFactory
@@ -51,8 +52,7 @@ def _bank_transfer_order(number="TC-800001", total="10000.00", qty=2, status="pr
 
 @pytest.fixture
 def staff(django_user_model):
-    return django_user_model.objects.create_user(email="staff@x.com", password="pw",
-                                                 is_staff=True)
+    return staff_user(django_user_model)
 
 
 def test_full_manual_refund_settles_the_payment_and_the_order(staff):

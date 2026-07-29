@@ -1,11 +1,26 @@
+"""Inventory administration.
+
+All four endpoints are `products.manage` — stock is part of the product record, and
+the same reasoning as `apps/catalog/admin_views.py` applies to the two that only read
+(`export.csv` and the movements ledger): there is no `products.view` scope yet, and
+inventing one that reaches the read-only halves while `GET /admin/stock/` stays behind
+`.manage` would be incoherent. See that module's docstring for the full argument.
+
+`stock/movements/` deserves a note of its own. It is a pure read, but it is the audit
+trail for every adjustment — the record that shows who wrote off what. Read access to
+it is not more sensitive than the numbers themselves, so it is not elevated above the
+rest; it is simply not lowered either.
+"""
 from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import generics, permissions, viewsets
+from rest_framework import generics, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.authentication import AdminJWTAuthentication
+from apps.accounts.rbac import HasAdminScope
 from apps.inventory.admin_serializers import (
     StockAdjustSerializer,
     StockItemSerializer,
@@ -18,7 +33,9 @@ from apps.inventory.tasks import import_stock_csv_task
 
 
 class StockItemAdminViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAdminUser]
+    # `adjust` writes the number that decides whether an order can be placed at all.
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
     serializer_class = StockItemSerializer
     queryset = StockItem.objects.select_related("variant", "warehouse").order_by(
         "warehouse__name", "variant__sku"
@@ -44,7 +61,8 @@ class StockItemAdminViewSet(viewsets.ModelViewSet):
 
 
 class StockMovementListView(generics.ListAPIView):
-    permission_classes = [permissions.IsAdminUser]
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
     serializer_class = StockMovementSerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["reason", "reference"]
@@ -58,7 +76,8 @@ class StockMovementListView(generics.ListAPIView):
 
 
 class StockCSVExportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
 
     def get(self, request):
         resp = StreamingHttpResponse(iter([export_stock_csv()]), content_type="text/csv")
@@ -67,7 +86,8 @@ class StockCSVExportView(APIView):
 
 
 class StockCSVImportView(APIView):
-    permission_classes = [permissions.IsAdminUser]
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request):

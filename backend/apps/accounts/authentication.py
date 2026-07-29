@@ -23,9 +23,24 @@ fail in opposite directions when someone forgets to wire one up:
 Since the whole class of bug this guards against is "a future admin endpoint was
 added and something was left off", the check belongs on the side whose omission is
 harmless. `apps/accounts/tests/test_admin_surface_guard.py` enforces that admin
-views list this class and ONLY this class: stock `JWTAuthentication` appearing
-alongside it would restore the bypass in full, because DRF takes the first
-authenticator that returns a user.
+views list this class and ONLY this class.
+
+WHY *ONLY*, PRECISELY. Task 1 justified the equality assertion with "DRF takes the
+first authenticator that returns a user", which is true but incomplete, and the
+incomplete half matters. Measured by mutation during Task 2:
+
+* `[JWTAuthentication, AdminJWTAuthentication]` — the stock class runs first, accepts
+  a customer token, returns a user, and DRF stops. **The bypass, in full.**
+* `[AdminJWTAuthentication, JWTAuthentication]` — this class runs first and RAISES.
+  `Request._authenticate` catches `APIException`, marks the request unauthenticated
+  and RE-RAISES rather than trying the next authenticator, so the stock class never
+  runs and the customer token is still refused. Not a bypass.
+
+The equality assertion is right either way and stays as it is: the safe ordering is
+safe by accident of which class raises first, the list is a place a reviewer's eye
+slides over, and "correct only in one of its two orderings" is not a property worth
+depending on. But do not repeat the shorter claim — someone will check it, find the
+second case, and conclude the guard is cargo cult.
 
 WHY THE PERMISSION LAYER STILL CHECKS `is_staff`. A claim is a snapshot taken at
 login and it outlives revocation — a staff account demoted at 10:00 still holds a

@@ -3,6 +3,7 @@ from decimal import Decimal
 import pytest
 from rest_framework.test import APIClient
 
+from apps.accounts.tests.factories import staff_user
 from apps.catalog.factories import ProductVariantFactory
 from apps.core.models import Country
 from apps.inventory.factories import StockItemFactory, WarehouseFactory
@@ -53,8 +54,7 @@ def test_confirm_view_never_picks_a_freight_payment(django_user_model):
     )
     assert freight.pk > goods.pk        # the shadowing precondition
 
-    staff = django_user_model.objects.create_user(email="staff@x.com", password="pw",
-                                                  is_staff=True)
+    staff = staff_user(django_user_model)
     client = APIClient()
     client.force_authenticate(staff)
     r = client.post(f"/api/v1/admin/orders/{order.number}/confirm-payment/",

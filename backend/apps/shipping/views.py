@@ -11,10 +11,12 @@ from decimal import Decimal
 
 from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, serializers
+from rest_framework import serializers
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.authentication import AdminJWTAuthentication
+from apps.accounts.rbac import HasAdminScope
 from apps.orders.models import Order
 from apps.shipping.models import ShippingQuote
 from apps.shipping.services import (
@@ -43,7 +45,28 @@ def _get_quote(number: str) -> ShippingQuote:
 
 
 class _FreightView(APIView):
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    """Base for all four freight endpoints. ALL of them are `orders.manage`.
+
+    Nothing in the freight lifecycle is operational in the sense `orders.operate` means,
+    even though none of it looks like a refund:
+
+    * quote   — sets the amount a customer is about to be asked to pay. Setting a price
+                is a money decision however it is spelled.
+    * waive   — the merchant absorbs the forwarder's bill. That is a cost, chosen.
+    * cancel  — parks the order at `on_hold` with the goods payment already taken, which
+                is what puts it on the refunds-owed worklist. It CREATES a refund
+                obligation without settling one.
+    * receipt — records money as having arrived, same shape and same trust model as
+                confirming a bank transfer in apps/payments/views.py.
+
+    They share one permission declaration because the answer is the same for all four,
+    not because nobody looked. A separate `shipping.manage` scope was considered and
+    rejected: it would be granted to exactly the roles that already hold `orders.manage`,
+    and a scope nobody can hold independently is a scope that only adds a lookup.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
 
     def _run(self, request, number, serializer_class, action):
         quote = _get_quote(number)

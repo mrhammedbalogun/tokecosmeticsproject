@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 from rest_framework.test import APIClient
 
+from apps.accounts.tests.factories import staff_user
 from apps.catalog.factories import ProductVariantFactory
 from apps.core.models import Country
 from apps.inventory.factories import StockItemFactory, WarehouseFactory
@@ -54,8 +55,7 @@ def _url(order):
 def test_staff_confirming_a_transfer_fulfils_the_order(django_user_model):
     ng, ngn, variant = _setup()
     order, _ = _order_awaiting_transfer("TC-310001", ng, ngn, variant)
-    staff = django_user_model.objects.create_user(email="staff@x.com", password="pw",
-                                                  is_staff=True)
+    staff = staff_user(django_user_model)
     client = APIClient()
     client.force_authenticate(staff)
 
@@ -91,8 +91,7 @@ def test_a_discrepancy_comes_back_with_the_numbers_the_ui_must_show(django_user_
     built from this body, so the two numbers have to be in it."""
     ng, ngn, variant = _setup()
     order, _ = _order_awaiting_transfer("TC-310003", ng, ngn, variant)
-    staff = django_user_model.objects.create_user(email="staff@x.com", password="pw",
-                                                  is_staff=True)
+    staff = staff_user(django_user_model)
     client = APIClient()
     client.force_authenticate(staff)
 
@@ -112,8 +111,7 @@ def test_one_statement_line_cannot_release_two_orders(django_user_model):
     ng, ngn, variant = _setup(qty=20)
     first, _ = _order_awaiting_transfer("TC-310004", ng, ngn, variant)
     second, _ = _order_awaiting_transfer("TC-310005", ng, ngn, variant)
-    staff = django_user_model.objects.create_user(email="staff@x.com", password="pw",
-                                                  is_staff=True)
+    staff = staff_user(django_user_model)
     client = APIClient()
     client.force_authenticate(staff)
 
