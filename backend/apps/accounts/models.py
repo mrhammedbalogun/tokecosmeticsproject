@@ -159,6 +159,92 @@ class StaffInvite(TimeStampedModel):
         return "pending"
 
 
+class StaffTOTP(TimeStampedModel):
+    """One staff member's second factor. See `apps/accounts/totp.py` for the decisions;
+    this docstring is about the SHAPE and why each field is what it is.
+
+    **`secret_ciphertext` is Fernet, not a hash, and not plaintext.** A TOTP secret has
+    to be recoverable in order to verify a code, so hashing is not available. Plaintext
+    is: the nightly database backup leaves this box for S3, and a plaintext column there
+    is the second factor for every administrator, free. The key lives in the environment
+    (`TOTP_ENCRYPTION_KEY`), which a backup never contains, and it is deliberately
+    separate from `SECRET_KEY` so the two can be rotated independently.
+
+    **`confirmed_at` is the ONLY thing that counts as "enrolled".** A row with a secret
+    and no `confirmed_at` is inert in both directions, and both directions matter:
+
+    * the password step still returns a preauth token, so a half-finished enrolment
+      (wrong app, closed tab) cannot lock anyone out of the flow that fixes it;
+    * nothing anywhere treats it as a second factor, so an unconfirmed secret grants
+      nothing.
+
+    Calling enrol again REPLACES an unconfirmed secret and REFUSES a confirmed one. If
+    enrol could overwrite a confirmed secret, anyone holding a stolen staff password
+    could move the second factor onto their own phone, which would make TOTP decorative.
+    The only route back to enrolment is a recovery code (or `manage.py
+    reset_staff_totp`, which is root-only over SSH by design — see the runbook §6).
+
+    **`last_verified_step` is the replay guard**, and it is a BigInteger because it
+    holds a Unix-time-derived step number (currently ~6e7, growing forever). Any step at
+    or below it is refused, so a code observed over a shoulder or in a phished form
+    cannot be replayed inside its 90-second window. It is updated by an atomic
+    conditional UPDATE in the same transaction as the success path, which is what makes
+    two simultaneous submissions of one code resolve to exactly one winner.
+
+    ONE ROW PER USER (`OneToOneField`): a staff member has one authenticator, and the
+    alternative — several devices — would need a policy for which of them counts, which
+    is a feature nobody has asked for and a hole nobody has audited. CASCADE because a
+    deleted user has no second factor to keep.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="totp")
+    secret_ciphertext = models.TextField(editable=False)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    last_verified_step = models.BigIntegerField(default=0)
+
+    class Meta:
+        verbose_name = "staff TOTP enrolment"
+        verbose_name_plural = "staff TOTP enrolments"
+
+    def __str__(self) -> str:
+        return f"TOTP for {self.user_id} ({'confirmed' if self.confirmed_at else 'pending'})"
+
+    @property
+    def is_confirmed(self) -> bool:
+        return self.confirmed_at is not None
+
+
+class StaffRecoveryCode(TimeStampedModel):
+    """One single-use bypass of the TOTP FACTOR — never of the ceremony.
+
+    A code is only ever accepted from a caller who already holds a preauth token, which
+    means password and Turnstile have already been verified. There is no bare
+    recovery-code-to-session path, so a leaked code sheet on its own is worth nothing.
+    Consuming one mints NO admin token: it voids the secret and the remaining codes and
+    returns the holder to enrolment, which keeps "only TOTP-confirm mints an admin
+    token" literally true with zero exceptions.
+
+    **SHA-256, no work factor**, and lookup by digest. Same reasoning as the invite
+    token: `secrets.token_hex(10)` is 80 bits, so there is nothing to enumerate and a
+    slow KDF would only buy an attacker a CPU-DoS lever. The digest is uniquely indexed
+    so the lookup is one equality match rather than a scan.
+
+    `used_at` rather than deletion so that a burnt code is still visibly a burnt code —
+    though the durable record is the ERROR-level `apps.security` line, since the whole
+    set is deleted and replaced on the next enrolment.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="totp_recovery_codes")
+    code_hash = models.CharField(max_length=64, unique=True, editable=False)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "used_at"])]
+
+    def __str__(self) -> str:
+        return f"recovery code for {self.user_id} ({'used' if self.used_at else 'unused'})"
+
+
 class Address(TimeStampedModel):
     """Structured, per-country address. Validation rules live in core.address_rules."""
 

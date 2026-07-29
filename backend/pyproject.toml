@@ -26,6 +26,28 @@ dependencies = [
     "pymysql>=1.1.0",
     "phpserialize>=1.3",
     "sentry-sdk>=2.66.1",
+    # --- staff TOTP (Plan-16 Task 3b) ---
+    # Pinned to a minor series, the same convention as django above: patch releases
+    # (which for cryptography are usually the security ones) still flow, a minor bump
+    # is a deliberate edit, and uv.lock records the exact build either way.
+    #
+    # pyotp RATHER THAN django-otp. django-otp's value is its session middleware and
+    # its django.contrib.admin integration — precisely the machinery this project does
+    # not have and does not want. Staff auth here is pure JWT with a private audience
+    # claim (apps/accounts/authentication.py); adopting django-otp would mean fighting
+    # its request/session model in order to throw most of it away. pyotp is a thin
+    # RFC 6238 implementation and the ceremony is already ours.
+    "pyotp==2.10.*",
+    # cryptography (Fernet) for the TOTP secret AT REST. A TOTP secret is symmetric and
+    # must be recoverable in order to verify a code, so it cannot be hashed. The database
+    # does not stay on the VPS: it leaves nightly for an S3 bucket whose write key can
+    # also delete, with versioning off (memory project_tokecosmetics_s3_backup_risk). In
+    # a stolen dump, password hashes are slow to attack; plaintext TOTP secrets would be
+    # the weakest artifact in the file — the second factor for every staff account, free.
+    # Encrypting under an env-held key makes backup exfiltration non-fatal, because a
+    # backup never contains the env. Fernet is the boring, most-vetted choice; there is
+    # no homegrown crypto anywhere in this feature.
+    "cryptography==49.0.*",
 ]
 
 [dependency-groups]

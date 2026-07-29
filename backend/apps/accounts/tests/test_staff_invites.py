@@ -377,12 +377,15 @@ def test_accepting_returns_a_preauth_token_and_no_refresh(owner_client, mailbox)
     assert AccessToken(r.data["preauth_token"])[ADMIN_AUDIENCE_CLAIM] == ADMIN_PREAUTH_AUDIENCE
 
 
-def test_the_preauth_token_opens_nothing(owner_client, mailbox):
+def test_the_preauth_token_opens_only_the_totp_ceremony(owner_client, mailbox):
     """Amendment 6's invariant has no bootstrap exception: the admin audience claim
-    means password + Turnstile + TOTP, and TOTP does not exist yet. So a freshly
-    accepted invite produces an account that is real, is_staff, in its group — and can
-    reach nothing at all. That is correct and fail-closed. Task 3b gives the preauth
-    claim exactly two destinations (TOTP enrol, TOTP confirm) and no others."""
+    means password + Turnstile + TOTP, and accepting an invite proves only the first
+    two. So a freshly accepted invite produces an account that is real, is_staff, in its
+    group — and reaches nothing but the enrolment it owes.
+
+    The exact three-endpoint set is asserted in `test_staff_totp.py`; what this file
+    cares about is that the token accept-invite hands out is on the same footing as the
+    one the login hands out, i.e. that there is ONE bootstrap path and not two."""
     _response, raw = invite_for(owner_client, mailbox)
     preauth = APIClient().post(
         ACCEPT, {"token": raw, "password": NEW_PW}, format="json"
@@ -392,6 +395,10 @@ def test_the_preauth_token_opens_nothing(owner_client, mailbox):
     client.credentials(HTTP_AUTHORIZATION=f"Bearer {preauth}")
     assert client.get(ADMIN_ME).status_code == 401
     assert client.get("/api/v1/admin/orders/").status_code == 401
+    assert client.get("/api/v1/auth/me/").status_code == 401
+
+    # ...but it does open enrolment, which is the whole point of handing it out.
+    assert client.post("/api/v1/auth/admin-totp/enrol/", {}, format="json").status_code == 200
 
 
 def test_the_preauth_token_is_short_lived(owner_client, mailbox):
@@ -409,22 +416,43 @@ def test_the_preauth_token_is_short_lived(owner_client, mailbox):
     assert remaining.total_seconds() > PREAUTH_TOKEN_LIFETIME.total_seconds() - 60
 
 
-def test_the_new_staff_account_cannot_log_into_the_admin_yet(owner_client, mailbox):
-    """The password is real and the account is staff, so `/auth/admin-token/` will
-    happily mint a full admin session — which is exactly the hole Task 3b closes by
-    requiring TOTP there. Pinned here so the day it changes, it changes deliberately.
+def test_the_new_staff_account_cannot_log_into_the_admin(owner_client, mailbox):
+    """**THE HOLE TASK 3b CLOSED**, now asserted as closed.
+
+    Until 3b this test asserted the opposite, with a note addressed to whoever built
+    TOTP. The password an invite sets is real and the account is `is_staff`, so
+    `/auth/admin-token/` minted a full admin session for it — which meant the preauth
+    token accept-invite so carefully returned was a fence around a door that was still
+    open, and Amendment 6's invariant ("the `toke-admin` claim means password +
+    Turnstile + TOTP") was a description of an intention.
+
+    The password step now mints nothing at all. A newly invited administrator holds a
+    real password and reaches exactly one thing with it: the TOTP enrolment they owe.
     """
+    from apps.accounts.authentication import ADMIN_AUDIENCE_CLAIM, ADMIN_PREAUTH_AUDIENCE
+    from rest_framework_simplejwt.tokens import AccessToken
+
     _response, raw = invite_for(owner_client, mailbox)
     APIClient().post(ACCEPT, {"token": raw, "password": NEW_PW}, format="json")
+
     r = APIClient().post(
         "/api/v1/auth/admin-token/",
         {"email": "newhire@toke.test", "password": NEW_PW},
         format="json",
     )
-    assert r.status_code == 200, (
-        "expected the pre-Task-3b behaviour; if this now fails, TOTP landed and this "
-        "test should be rewritten to assert the preauth response instead"
+    assert r.status_code == 200
+    assert "access" not in r.data and "refresh" not in r.data, (
+        "a correct staff password must not produce an admin session — TOTP confirm is "
+        "the only mint"
     )
+    assert AccessToken(r.data["preauth_token"])[ADMIN_AUDIENCE_CLAIM] == ADMIN_PREAUTH_AUDIENCE
+    assert r.data["totp_enrolled"] is False
+
+    # And that preauth token is worth nothing on the admin surface.
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['preauth_token']}")
+    assert client.get(ADMIN_ME).status_code == 401
+    assert client.get("/api/v1/admin/orders/").status_code == 401
 
 
 # --- accept: every way an invite can be refused -------------------------------

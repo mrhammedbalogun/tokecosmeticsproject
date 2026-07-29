@@ -4,9 +4,8 @@ from django.contrib.auth.password_validation import validate_password
 from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import TokenObtainSerializer
 
-from apps.accounts.authentication import ADMIN_AUDIENCE, ADMIN_AUDIENCE_CLAIM
 from apps.accounts.models import Address, StaffInvite
 from apps.core.address_rules import required_fields_for
 
@@ -130,44 +129,118 @@ class EmailVerifySerializer(serializers.Serializer):
     token = serializers.CharField()
 
 
-class AdminTokenObtainPairSerializer(TokenObtainPairSerializer):
-    """Token pair for STAFF only (`/auth/admin-token/`).
+class AdminPasswordSerializer(TokenObtainSerializer):
+    """Step ONE of the staff ceremony (`/auth/admin-token/`): password only.
 
-    The check hangs off `get_token` rather than `validate` for two reasons:
+    IT MINTS NOTHING, and that is the change Task 3b made. It subclasses
+    `TokenObtainSerializer` — SimpleJWT's base, which authenticates and stops — rather
+    than `TokenObtainPairSerializer`, which authenticates AND issues a refresh/access
+    pair. Two consequences, both wanted:
 
-    * `get_token` is called at exactly the right moment — after
-      `authenticate()` has confirmed the password, before a refresh token is
-      minted. Rejecting here means a non-staff attempt never creates an
-      `OutstandingToken` row for a token nobody will ever hold.
-    * It is one hook instead of re-deriving SimpleJWT's authentication flow,
-      which changes shape between releases.
+    * There is no code path anywhere in this project that turns a password into an
+      admin-audience token. Amendment 6's invariant becomes a property of the call
+      graph rather than a rule people follow; `apps/accounts/authentication.py`'s
+      `mint_admin_token_pair` is the single mint and TOTP-confirm is its single caller.
+    * No `OutstandingToken` row is created for a token nobody will ever hold. Before
+      3b the alternative shape considered here was "mint the pair and discard it",
+      which would have left the database quietly accumulating rows describing live
+      refresh tokens that do not exist.
 
-    THE ERROR IS DELIBERATELY IDENTICAL to the wrong-password path — same message,
-    same `no_active_account` code, same 401. Saying "not a staff account" would
-    turn this endpoint into an oracle: an attacker with a list of leaked customer
-    addresses could sort it into "real accounts" and, worse, "real staff accounts",
-    which is precisely the list worth phishing. The difference is recorded in the
-    `apps.security` log instead, where only we can read it.
+    The staff check hangs off `validate` after `super().validate()` has confirmed the
+    password, so a non-staff caller is refused at the same point a wrong password is.
 
-    This is also the ONLY place the admin audience claim is minted. It goes on the
-    REFRESH token, not the access token, because SimpleJWT copies a refresh token's
-    claims onto every access token it derives — so one write here covers the initial
-    pair and every subsequent renewal through the shared `/auth/token/refresh/`
-    endpoint, with no admin-specific refresh code to keep in sync. See
-    `apps/accounts/authentication.py` for what enforces it and why the claim is not
-    called `aud`.
+    THE ERROR IS DELIBERATELY IDENTICAL to the wrong-password path — same message, same
+    `no_active_account` code, same 401. Saying "not a staff account" would turn this
+    endpoint into an oracle: an attacker with a list of leaked customer addresses could
+    sort it into "real accounts" and, worse, "real staff accounts", which is precisely
+    the list worth phishing. The difference is recorded in the `apps.security` log
+    instead, where only we can read it.
+
+    `turnstile_token` is read straight off `request.data` by `require_turnstile` (as on
+    every other gated endpoint) and is declared here only so the generated schema tells
+    the admin app to send it.
     """
+
+    turnstile_token = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        if not self.user.is_staff:
+            raise AuthenticationFailed(
+                self.error_messages["no_active_account"],
+                "no_active_account",
+            )
+        return data
 
     @classmethod
     def get_token(cls, user):
-        if not user.is_staff:
-            raise AuthenticationFailed(
-                cls.default_error_messages["no_active_account"],
-                "no_active_account",
-            )
-        token = super().get_token(user)
-        token[ADMIN_AUDIENCE_CLAIM] = ADMIN_AUDIENCE
-        return token
+        """Unreachable, and loudly so.
+
+        `TokenObtainSerializer.validate` never calls this — only the *pair* subclass
+        does — so overriding it costs nothing and closes the one way this class could
+        quietly regain the ability to mint: someone subclassing it later, or a future
+        SimpleJWT release moving the call into the base. The guard test walks the AST
+        for calls to `mint_admin_token_pair`; this covers the other direction.
+        """
+        raise NotImplementedError(
+            "the staff password step mints nothing — an admin token comes only from "
+            "apps.accounts.authentication.mint_admin_token_pair, called by TOTP confirm"
+        )
+
+
+class AdminPreauthResponseSerializer(serializers.Serializer):
+    """Response shape of `/auth/admin-token/`. Response-only; documents the schema.
+
+    `totp_enrolled` exists so the admin app knows which screen to draw next — "scan this
+    QR code" or "enter the code from your app". It leaks nothing: only a caller who has
+    already produced this account's password and a solved Turnstile token ever sees it,
+    and they could learn the same fact by calling enrol and reading the status code.
+    """
+
+    preauth_token = serializers.CharField(read_only=True)
+    expires_in = serializers.IntegerField(read_only=True)
+    totp_enrolled = serializers.BooleanField(read_only=True)
+
+
+class TOTPCodeSerializer(serializers.Serializer):
+    """A six-digit code, or a twenty-character recovery code. One field, no validation
+    beyond presence: every judgement about the value belongs in
+    `apps/accounts/totp.py`, where the failure is counted against both caps. A
+    serializer-level format check would 400 before those counters ran, which is a free
+    guessing attempt."""
+
+    code = serializers.CharField(write_only=True, max_length=64)
+
+
+class TOTPEnrolResponseSerializer(serializers.Serializer):
+    """Response shape of TOTP enrol. Returned ONCE, never stored, never logged: the
+    provisioning URI carries the secret in its query string, so a copy in a log line is
+    a copy of the second factor."""
+
+    secret = serializers.CharField(read_only=True)
+    provisioning_uri = serializers.CharField(read_only=True)
+    issuer = serializers.CharField(read_only=True)
+
+
+class TOTPConfirmResponseSerializer(serializers.Serializer):
+    """Response shape of TOTP confirm — the only response in the project that carries an
+    admin-audience token. `recovery_codes` is present only on the response that CONFIRMS
+    a new enrolment, not on an ordinary login: reissuing a set every login would make
+    whatever the staff member printed wrong within a day."""
+
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
+    recovery_codes = serializers.ListField(child=serializers.CharField(), read_only=True)
+
+
+class TOTPRecoveryResponseSerializer(serializers.Serializer):
+    """Response shape of recovery-code verification. Note what is ABSENT: any token.
+    Consuming a code voids the secret and the remaining codes and returns the holder to
+    enrolment, which keeps "only TOTP-confirm mints an admin token" true with zero
+    exceptions."""
+
+    detail = serializers.CharField(read_only=True)
+    enrolment_required = serializers.BooleanField(read_only=True)
 
 
 class StaffInviteSerializer(serializers.ModelSerializer):

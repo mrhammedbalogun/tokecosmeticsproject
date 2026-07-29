@@ -18,7 +18,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from apps.core.log_safety import scrub
 from apps.notifications.tasks import send_email_task
 
-from .authentication import AdminJWTAuthentication
+from .authentication import AdminJWTAuthentication, AdminPreauthJWTAuthentication
 
 from .rbac import HasAdminScope, scopes_for_user
 
@@ -41,7 +41,8 @@ from .serializers import (
     AccountDeletionSerializer,
     AddressSerializer,
     AdminMeSerializer,
-    AdminTokenObtainPairSerializer,
+    AdminPasswordSerializer,
+    AdminPreauthResponseSerializer,
     EmailVerifySerializer,
     LogoutSerializer,
     MeSerializer,
@@ -52,6 +53,10 @@ from .serializers import (
     StaffInviteAcceptSerializer,
     StaffInviteCreateSerializer,
     StaffInviteSerializer,
+    TOTPCodeSerializer,
+    TOTPConfirmResponseSerializer,
+    TOTPEnrolResponseSerializer,
+    TOTPRecoveryResponseSerializer,
 )
 
 User = get_user_model()
@@ -107,12 +112,25 @@ def _submitted_email(request) -> str:
     return "<no email>"
 
 
-class AdminLoginView(TokenObtainPairView):
-    """`/auth/admin-token/` — the staff gate.
+class AdminLoginView(APIView):
+    """`/auth/admin-token/` — the staff gate. **Step one of three, and it mints nothing.**
 
-    Same machinery as LoginView, three deliberate differences:
+    WHAT CHANGED IN TASK 3b, because the name still says "token". This endpoint used to
+    return a full admin token pair for a correct staff password. It now returns a
+    ten-minute PREAUTH token, whether or not the caller has a confirmed TOTP enrolment,
+    and that token opens exactly three endpoints: TOTP enrol, TOTP confirm, and
+    recovery-code verification. Amendment 6's invariant — the `toke-admin` claim means
+    password + Turnstile + TOTP and is minted nowhere else — is only true because of
+    this: there is now no code path at all from a password to an admin session.
 
-    **1. Staff-only, silently.** `AdminTokenObtainPairSerializer` rejects a non-staff
+    ONE BOOTSTRAP PATH, NOT TWO. Returning a session to the enrolled and a preauth to
+    the rest would be two credential-minting paths, and the second is where the hole
+    grows. `totp_enrolled` in the response tells the admin app which screen to draw; it
+    is not a branch in the security logic.
+
+    Four deliberate differences from `LoginView`:
+
+    **1. Staff-only, silently.** `AdminPasswordSerializer` rejects a non-staff
     user with the same body as a wrong password, so the endpoint never confirms that
     an address belongs to a real customer, let alone a real administrator.
 
@@ -127,14 +145,21 @@ class AdminLoginView(TokenObtainPairView):
     Be clear about sizing, so nobody mistakes this for the fence: Turnstile stops
     dumb bots. A targeted attacker buys solver tokens for about $1/1k, and the admin
     is the target worth paying for — compromise here means editing the payout bank
-    account and every bank-transfer order pays the attacker. The controls actually
-    sized to that threat are the strict throttles below and mandatory TOTP
-    (Amendment 2, Task 3b).
+    account and every bank-transfer order pays the attacker. The control actually sized
+    to that threat is the TOTP step this endpoint now hands off to.
 
     **3. Its own throttle scopes**, far tighter than the customer rates — see
     throttling.py. `AdminLoginIPThrottle` is FIRST and is not optional: listing
     throttle_classes REPLACES the global defaults, and without an IP key password
     spraying across many addresses touches no per-email counter at all.
+
+    **4. It hands off rather than finishing.** A successful password produces a preauth
+    token, and `apps/accounts/totp.py` carries the caps for the step that follows —
+    which are a different shape on purpose. NOTE THE ASYMMETRY, because it is the reason
+    the TOTP caps could be strict where these had to be loosened: an attacker who holds
+    the staff password produces *successful* password authentications here, so both of
+    these failure-counting throttles stay at zero throughout a TOTP brute-force attempt.
+    They cannot see that attack at all. The per-user hourly TOTP cap is what does.
 
     LOGGING, and why it is written out rather than left to the signal: a failed admin
     login logs to `apps.security` at ERROR, because Sentry's logging integration turns
@@ -160,7 +185,17 @@ class AdminLoginView(TokenObtainPairView):
     `log_throttling_at_error` below and `config/exception_handler.py`.
     """
 
-    serializer_class = AdminTokenObtainPairSerializer
+    # `authentication_classes` is deliberately LEFT AT THE PROJECT DEFAULT rather than
+    # set to `[]`, which is what it looks like it should be for a login. DRF turns an
+    # `AuthenticationFailed` into 403 instead of 401 when a view has no authenticator to
+    # build a `WWW-Authenticate` header from (`APIView.handle_exception`), so emptying
+    # the list silently changes every refusal here from 401 to 403 — and 401-vs-403 is
+    # load-bearing elsewhere in this app (see
+    # `test_admin_me_rejects_a_customer_over_real_http_at_both_fences`, which
+    # distinguishes the authentication fence from the permission fence by exactly that).
+    # The customer `LoginView` has always behaved this way; matching it keeps one story.
+    permission_classes = [permissions.AllowAny]
+    serializer_class = AdminPasswordSerializer
     throttle_classes = [AdminLoginIPThrottle, AdminLoginEmailThrottle]
 
     # Read by config.exception_handler. Someone reaching the cap on the STAFF gate is
@@ -172,7 +207,13 @@ class AdminLoginView(TokenObtainPairView):
     # this signal under storefront noise.
     log_throttling_at_error = True
 
+    @extend_schema(
+        request=AdminPasswordSerializer, responses={200: AdminPreauthResponseSerializer}
+    )
     def post(self, request, *args, **kwargs):
+        from apps.accounts.authentication import PREAUTH_TOKEN_LIFETIME, mint_preauth_token
+        from apps.accounts.models import StaffTOTP
+
         # Seeded before the try so a body so malformed that reading it raises still
         # produces the ERROR line rather than an unlogged 400.
         email = "<no email>"
@@ -180,7 +221,9 @@ class AdminLoginView(TokenObtainPairView):
             email = _submitted_email(request)
             # After throttling (dispatch runs that first), before credentials.
             require_turnstile(request, secret=admin_turnstile_secret())
-            response = super().post(request, *args, **kwargs)
+            serializer = AdminPasswordSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            user = serializer.user
         except exceptions.APIException as exc:
             # Every refused attempt on the staff gate is one line, one Sentry event:
             # a bot blocked by Turnstile, a wrong password, and a customer trying the
@@ -206,7 +249,367 @@ class AdminLoginView(TokenObtainPairView):
         # on an attacker's own address where no login will ever succeed.
         AdminLoginEmailThrottle().reset(request)
         AdminLoginIPThrottle().reset(request)
-        return response
+
+        enrolment = StaffTOTP.objects.filter(user=user).first()
+        return Response(
+            {
+                "preauth_token": mint_preauth_token(user),
+                "expires_in": int(PREAUTH_TOKEN_LIFETIME.total_seconds()),
+                # `confirmed_at`, not "a row exists". An unconfirmed enrolment is inert
+                # in both directions — see the StaffTOTP docstring — and reporting it as
+                # enrolled would send the admin app to a code prompt for a secret nobody
+                # finished scanning.
+                "totp_enrolled": bool(enrolment and enrolment.is_confirmed),
+            }
+        )
+
+
+# --- the TOTP ceremony ---------------------------------------------------------
+#
+# THREE ENDPOINTS, ONE MINT. These are the only destinations a preauth token has, and
+# `tests/test_admin_surface_guard.py` asserts that set exactly against the live URLconf
+# in both directions. `AdminTOTPConfirmView` is the only caller of
+# `mint_admin_token_pair` anywhere in the project, which the same file asserts by
+# walking the AST — that pair of tests IS Amendment 6, executable.
+#
+# WHY THEY ARE NOT UNDER `/api/v1/admin/`. The guard walker treats everything on that
+# prefix as an admin view and requires `AdminJWTAuthentication` exactly; these three
+# take the preauth class instead, so they would need a third allowlist that meant
+# "guarded, but by the other class". They sit next to `admin-token/` under `/auth/`
+# because that is what they are — steps of the login ceremony — and the preauth guard
+# test walks the WHOLE URLconf, so mounting them here hides them from nothing.
+
+
+class _PreauthTOTPView(APIView):
+    """Shared body for the three. Preauth-only, and per-user rate-capped.
+
+    `throttle_classes = []` is deliberate and is NOT the absence of a limit: the caps
+    that matter here are in `apps/accounts/totp.py`, keyed on the USER read out of a
+    validated token. DRF's throttles key on an address, and every legitimate staff
+    request will arrive from one shared Vercel egress address once the admin app exists
+    (see `throttling._IPKeyedThrottle`) — an address-keyed cap on this path would be a
+    staff lockout button, exactly as it was on the login. Inheriting the global
+    `UserRateThrottle` would be harmless but misleading: it would look like the control
+    while the real one lived elsewhere.
+
+    The per-user hard deny is checked HERE rather than in each handler so that reaching
+    the cap closes all three doors at once. A caller at the cap gets 429 — the honest
+    code for "this is a rate limit", and one that tells them nothing about the account.
+    """
+
+    authentication_classes = [AdminPreauthJWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    throttle_classes = []
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        from apps.accounts.totp import USER_LOCK_SECONDS, user_is_locked
+
+        if user_is_locked(request.user):
+            raise exceptions.Throttled(USER_LOCK_SECONDS)
+
+    @property
+    def preauth_jti(self):
+        """The `jti` of the token that authenticated this request — the key layer 1
+        counts against. Read off the validated token DRF stored, never off the body."""
+        from rest_framework_simplejwt.settings import api_settings
+
+        return (self.request.auth or {}).get(api_settings.JTI_CLAIM)
+
+    def count_failure(self, request, *, reason: str) -> None:
+        """One rejected code: charge it to both layers and say so, once.
+
+        The two counters and the log line are emitted from ONE place for the same reason
+        `AdminLoginView` emits its ERROR line beside its `record_failure` calls — two
+        independent detectors of the same event eventually disagree about what happened.
+
+        WARNING, not ERROR. A mistyped code is the most common thing this endpoint sees;
+        at ERROR every typo would be a Sentry event and whoever reads that stream would
+        learn to dismiss it — which is where the two cap alerts live.
+        """
+        from apps.accounts.totp import (
+            PREAUTH_FAILURE_LIMIT,
+            record_preauth_failure,
+            record_user_failure,
+        )
+
+        security_logger.warning(
+            "admin TOTP code rejected for %s (%s)", scrub(request.user.email), scrub(reason)
+        )
+        jti = self.preauth_jti
+        if jti:
+            exp = (request.auth or {}).get("exp")
+            remaining = int(exp - timezone.now().timestamp()) if exp else 60
+            count = record_preauth_failure(jti, ttl=remaining)
+            if count >= PREAUTH_FAILURE_LIMIT:
+                # ERROR: a Sentry event. Five wrong codes behind a correct password is
+                # not a typo pattern, and the token is now dead — this is the line that
+                # explains why the person on the phone says the admin logged them out.
+                security_logger.error(
+                    "admin TOTP: preauth token invalidated for %s after %d failed codes",
+                    scrub(request.user.email),
+                    count,
+                )
+        # Layer 2 logs its own ERROR when it trips; see `totp.record_user_failure`.
+        record_user_failure(request.user)
+
+    def refuse(self, request, *, reason: str):
+        """Always raises. One message for every rejection, because the differences
+        (wrong code, replayed code, unknown recovery code) are exactly what a guesser
+        would use to tell a near miss from a miss."""
+        self.count_failure(request, reason=reason)
+        raise exceptions.AuthenticationFailed(
+            "That code is not valid. Check your authenticator app and try again."
+        )
+
+
+class _AlreadyEnrolled(exceptions.APIException):
+    """409, because this is a state conflict rather than an authorisation failure.
+
+    DRF ships no `Conflict`. The distinction is worth the four lines: the admin app's
+    next screen differs — a 403 means "you may not do this", a 400 means "your request
+    was malformed", and this means "your account is already in the state you were
+    trying to reach, go to the code prompt instead".
+    """
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "already_enrolled"
+    default_detail = (
+        "Two-factor authentication is already set up on this account. Use a recovery "
+        "code, or ask an operator to reset it."
+    )
+
+
+class AdminTOTPEnrolView(_PreauthTOTPView):
+    """`/auth/admin-totp/enrol/` — hand out a secret. Returned ONCE.
+
+    The provisioning URI carries the secret in its query string, so it is never logged
+    and never stored; the ciphertext in the database is the only durable copy, and it is
+    the only copy that is any use without the environment's encryption key.
+
+    **Calling this again replaces an UNCONFIRMED secret and refuses a CONFIRMED one**,
+    and both halves are load-bearing:
+
+    * replacing an unconfirmed one is what stops a half-finished enrolment (scanned into
+      the wrong app, closed the tab) from stranding a new staff member with a secret
+      nobody has;
+    * refusing a confirmed one is what stops someone holding a stolen staff password
+      from simply enrolling their own phone. That would make the whole factor
+      decorative. The only routes back to enrolment are a recovery code and
+      `manage.py reset_staff_totp`, which needs root SSH by design (runbook §6).
+
+    409 rather than 403 for the refusal: it is a state conflict, not an authorisation
+    failure, and the admin app's next screen is different for each.
+    """
+
+    serializer_class = TOTPEnrolResponseSerializer
+
+    @extend_schema(request=None, responses={200: TOTPEnrolResponseSerializer})
+    def post(self, request):
+        from apps.accounts.models import StaffTOTP
+        from apps.accounts.totp import ISSUER, encrypt_secret, new_secret, provisioning_uri
+
+        existing = StaffTOTP.objects.filter(user=request.user).first()
+        if existing is not None and existing.is_confirmed:
+            raise _AlreadyEnrolled()
+
+        secret = new_secret()
+        StaffTOTP.objects.update_or_create(
+            user=request.user,
+            defaults={
+                "secret_ciphertext": encrypt_secret(secret),
+                "confirmed_at": None,
+                # Reset with the secret: step numbers are only meaningful relative to
+                # the secret that produced them, and carrying the old high-water mark
+                # onto a new secret would refuse the first ~30 codes of the new one for
+                # no reason a user could understand.
+                "last_verified_step": 0,
+            },
+        )
+        # INFO. A deliberate act by someone who has already proved a password; useful
+        # provenance when reading the stream backwards, not worth an alert.
+        security_logger.info(
+            "admin TOTP enrolment started for %s", scrub(request.user.email)
+        )
+        return Response(
+            {
+                "secret": secret,
+                "provisioning_uri": provisioning_uri(request.user, secret),
+                "issuer": ISSUER,
+            }
+        )
+
+
+class AdminTOTPConfirmView(_PreauthTOTPView):
+    """`/auth/admin-totp/confirm/` — **the only place an admin-audience token is minted.**
+
+    It serves two situations with one code path, on purpose:
+
+    * an UNCONFIRMED enrolment: the code proves the authenticator app really holds the
+      secret, `confirmed_at` is set, and a fresh set of recovery codes is issued;
+    * a CONFIRMED enrolment: this is the second factor of an ordinary staff login.
+
+    Splitting them would mean two mints, and Amendment 6's whole value is that there is
+    one. `tests/test_admin_surface_guard.py` walks the AST of every module under `apps/`
+    and `config/` and asserts `mint_admin_token_pair` is called from exactly here.
+
+    ── REPLAY ──────────────────────────────────────────────────────────────────────
+
+    `last_verified_step` is advanced by an atomic conditional UPDATE — `WHERE
+    last_verified_step < step` — inside the same transaction that mints. The predicate
+    lives in the WHERE clause and NOT in Python, for the same reason `invites.claim`
+    does it that way: read-check-save lets two requests carrying the same code both see
+    an unconsumed step and both win. Here that is not merely a duplicate row, it is a
+    replayed second factor. A code observed over a shoulder, in a screen share or in a
+    phished form is therefore worthless the moment it has been used once, rather than
+    for the remaining 90 seconds of its window.
+
+    ── RECOVERY CODES ──────────────────────────────────────────────────────────────
+
+    Issued only on the response that CONFIRMS an enrolment, never on an ordinary login.
+    A fresh set every login would make whatever the staff member printed wrong within a
+    day, which is how printed codes come to be ignored.
+    """
+
+    serializer_class = TOTPCodeSerializer
+
+    @extend_schema(request=TOTPCodeSerializer, responses={200: TOTPConfirmResponseSerializer})
+    def post(self, request):
+        from apps.accounts.authentication import mint_admin_token_pair
+        from apps.accounts.models import StaffTOTP
+        from apps.accounts.totp import (
+            decrypt_secret,
+            issue_recovery_codes,
+            reset_preauth_failures,
+            reset_user_failures,
+            verify_code,
+        )
+
+        serializer = TOTPCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        enrolment = StaffTOTP.objects.filter(user=request.user).first()
+        if enrolment is None:
+            self.refuse(request, reason="no enrolment")
+
+        step = verify_code(decrypt_secret(enrolment.secret_ciphertext), serializer.validated_data["code"])
+        if step is None:
+            self.refuse(request, reason="wrong code")
+
+        first_confirmation = not enrolment.is_confirmed
+        now = timezone.now()
+        with transaction.atomic():
+            advanced = StaffTOTP.objects.filter(
+                pk=enrolment.pk, last_verified_step__lt=step
+            ).update(
+                last_verified_step=step,
+                confirmed_at=enrolment.confirmed_at or now,
+                updated_at=now,
+            )
+            if advanced != 1:
+                # The step was already consumed — a replay, or the loser of a race
+                # between two submissions of the same code. Both are refusals.
+                self.refuse(request, reason="replayed code")
+            payload = mint_admin_token_pair(request.user)
+            if first_confirmation:
+                payload["recovery_codes"] = issue_recovery_codes(request.user)
+
+        # Proving the second factor clears both failure layers: a staff member who
+        # fumbles a few codes must not carry that around for the rest of the hour.
+        reset_preauth_failures(self.preauth_jti)
+        reset_user_failures(request.user)
+
+        if first_confirmation:
+            # WARNING. A new administrator credential now exists — the most
+            # consequential thing this endpoint does, and worth standing out in the
+            # stream. Not ERROR: it is the expected happy path of a flow someone
+            # deliberately started, and paging on expected outcomes is how alerts get
+            # ignored. (Sentry treats INFO and WARNING alike, so this is about what a
+            # human greps for.)
+            security_logger.warning(
+                "admin TOTP enrolment confirmed for %s", scrub(request.user.email)
+            )
+        else:
+            security_logger.info(
+                "admin TOTP verified for %s", scrub(request.user.email)
+            )
+        return Response(payload)
+
+
+class AdminTOTPRecoveryView(_PreauthTOTPView):
+    """`/auth/admin-totp/recovery/` — the lost-device path. **Mints nothing.**
+
+    ── SCOPE: THE FACTOR, NEVER THE CEREMONY ───────────────────────────────────────
+
+    A recovery code is accepted only from a caller who already holds a preauth token,
+    which means the password and Turnstile steps have already passed. There is no bare
+    recovery-code-to-session path anywhere, so a leaked code sheet on its own is worth
+    nothing — it is one factor, not a skeleton key.
+
+    ── WHY IT RETURNS NO TOKEN ─────────────────────────────────────────────────────
+
+    This is where the argument for an exception to "only TOTP-confirm mints" is
+    strongest, and it is refused. Consuming a code voids the old secret and the
+    REMAINING codes and returns the holder to enrol/confirm with a fresh secret; a new
+    code set issues when that confirm succeeds. It costs one extra screen and it keeps
+    the invariant literal, with zero exceptions, which is worth more — an invariant with
+    one exception is an invariant nobody can check by reading.
+
+    Voiding the remaining codes is not tidiness: a code is used because a device is
+    gone, and the other codes from the same set were in the same drawer, printout or
+    password manager. Treating one as lost and the rest as safe would be a guess.
+
+    ── LOGGING AT ERROR ────────────────────────────────────────────────────────────
+
+    A Sentry event, deliberately. A staff member losing a phone is genuinely rare and
+    genuinely worth knowing about — and it is also exactly what an attacker who stole a
+    password and a code sheet would do. There is no way to tell those apart from here,
+    which is precisely why a human should look.
+    """
+
+    serializer_class = TOTPCodeSerializer
+
+    @extend_schema(request=TOTPCodeSerializer, responses={200: TOTPRecoveryResponseSerializer})
+    def post(self, request):
+        from apps.accounts.models import StaffRecoveryCode, StaffTOTP
+        from apps.accounts.totp import (
+            consume_recovery_code,
+            reset_preauth_failures,
+            reset_user_failures,
+        )
+
+        serializer = TOTPCodeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        if not consume_recovery_code(request.user, serializer.validated_data["code"]):
+            self.refuse(request, reason="recovery code")
+
+        with transaction.atomic():
+            # DELETED, not merely un-confirmed. Clearing `confirmed_at` alone left the
+            # old ciphertext in place, and TOTP confirm verifies against whatever secret
+            # is stored — so the lost phone's authenticator app would have re-confirmed
+            # the enrolment and minted an admin session. Found by
+            # `test_consuming_a_recovery_code_voids_the_secret_and_the_remaining_codes`,
+            # which is why that test asserts against the old app rather than against the
+            # column.
+            StaffTOTP.objects.filter(user=request.user).delete()
+            StaffRecoveryCode.objects.filter(user=request.user).delete()
+
+        reset_preauth_failures(self.preauth_jti)
+        reset_user_failures(request.user)
+
+        security_logger.error(
+            "admin TOTP recovery code used by %s — the enrolment has been voided and "
+            "must be set up again",
+            scrub(request.user.email),
+        )
+        return Response(
+            {
+                "detail": "Recovery code accepted. Set up your authenticator app again "
+                "to finish signing in.",
+                "enrolment_required": True,
+            }
+        )
 
 
 class AdminMeView(APIView):

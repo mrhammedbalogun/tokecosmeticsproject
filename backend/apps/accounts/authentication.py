@@ -67,7 +67,7 @@ from drf_spectacular.contrib.rest_framework_simplejwt import SimpleJWTScheme
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.settings import api_settings
-from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 # Private claim name (see the module docstring for why it is not `aud`).
 ADMIN_AUDIENCE_CLAIM = "toke_aud"
@@ -76,23 +76,23 @@ ADMIN_AUDIENCE = "toke-admin"
 # The BOOTSTRAP audience. Same claim, different value, so the equality check in
 # `AdminJWTAuthentication` rejects it without needing to know it exists.
 #
-# WHY IT EXISTS AND WHY IT OPENS NOTHING TODAY. Amendment 6's invariant is that
-# `toke-admin` means the FULL admin ceremony completed — password, Turnstile and TOTP —
-# and is minted nowhere else. Accepting a staff invite completes only the first two, so
-# it cannot mint one; bootstrap is not an exception to the invariant, because an
-# exception is where the hole grows. What it mints instead is this: a short-lived token
-# that says "this person has proved the invite and set a password, and now owes a TOTP
-# enrolment".
+# WHY IT EXISTS. Amendment 6's invariant is that `toke-admin` means the FULL admin
+# ceremony completed — password, Turnstile and TOTP — and is minted nowhere else. The
+# two ways a person arrives at this system (accepting a staff invite; logging in at
+# `/auth/admin-token/`) complete only the first two steps, so neither can mint one.
+# Bootstrap is not an exception to the invariant, because an exception is where the hole
+# grows. What both mint instead is this: a short-lived token that says "this person has
+# proved a password and a human check, and now owes a TOTP code".
 #
-# Task 3b will give it exactly two destinations — TOTP enrol and TOTP confirm. Until
-# then it reaches NOTHING AT ALL, which is correct and fail-closed rather than an
-# oversight; a temporary escape hatch here would be a second bootstrap path, and the
-# enumerated allowlist in `tests/test_admin_surface_guard.py` exists so adding one is a
-# deliberate, reviewed edit.
+# IT HAS EXACTLY THREE DESTINATIONS — TOTP enrol, TOTP confirm, and recovery-code
+# verification — and `tests/test_admin_surface_guard.py` asserts that set EXACTLY
+# against the live URLconf, in both directions. A fourth destination is a deliberate,
+# reviewed edit; it cannot be a side effect of adding a view.
 #
-# NOTE FOR TASK 3b: `/auth/admin-token/` presented with a valid password + Turnstile by
-# a staff account with NO TOTP enrolled must return this SAME preauth token, routing to
-# those SAME two endpoints. One bootstrap path, not two.
+# ONE BOOTSTRAP PATH, NOT TWO: `/auth/admin-token/` returns this token whether or not
+# the caller has a confirmed enrolment. The alternative — a full session for the
+# enrolled and a preauth for the rest — would mean two code paths that mint credentials,
+# and the second one is where the hole grows.
 ADMIN_PREAUTH_AUDIENCE = "toke-admin-preauth"
 
 # Long enough to scan a QR code and type a six-digit code, short enough that a preauth
@@ -106,15 +106,41 @@ def mint_preauth_token(user) -> str:
     """A bootstrap credential for `user`. Never an admin-audience token.
 
     An ACCESS token rather than a refresh pair on purpose: there is nothing to renew.
-    It has one job, one short life, and if it expires the person re-uses their invite
-    link — or, once Task 3b lands, logs in again. Handing out a refresh token here
-    would create a long-lived credential for an account that has not finished proving
-    who it is.
+    It has one job, one short life, and if it expires the person logs in again (or
+    re-uses their invite link). Handing out a refresh token here would create a
+    long-lived credential for an account that has not finished proving who it is.
     """
     token = AccessToken.for_user(user)
     token[ADMIN_AUDIENCE_CLAIM] = ADMIN_PREAUTH_AUDIENCE
     token.set_exp(lifetime=PREAUTH_TOKEN_LIFETIME)
     return str(token)
+
+
+def mint_admin_token_pair(user) -> dict[str, str]:
+    """THE ONLY PLACE AN ADMIN-AUDIENCE TOKEN IS CREATED. Amendment 6, in one function.
+
+    It is called from exactly one place — `AdminTOTPConfirmView`, after a TOTP code has
+    verified — and `tests/test_admin_surface_guard.py` asserts that by walking the AST of
+    every module under `apps/` and `config/`. A second call site is a test failure, not a
+    code review question, which is the difference between an invariant and an intention.
+
+    The claim goes on the REFRESH token rather than the access token because SimpleJWT's
+    `RefreshToken.access_token` copies every claim except its `no_copy_claims` denylist
+    (`token_type`, `exp`, `jti`, `iat`). One write therefore covers the initial pair and
+    every renewal through the SHARED `/auth/token/refresh/` endpoint, with no
+    admin-specific refresh code to keep in sync — and a customer's refresh token can
+    never grow the claim, because nothing else ever writes it.
+
+    NO `is_staff` CHECK HERE, deliberately: this function is unreachable without a
+    preauth token, which `AdminPasswordSerializer` only issues to a staff account, and
+    the permission layer re-reads `is_staff` from the database on every admin request
+    anyway (that second read is what makes revocation immediate). A third copy of the
+    check here would look like the guarantee while being the least load-bearing of the
+    three.
+    """
+    refresh = RefreshToken.for_user(user)
+    refresh[ADMIN_AUDIENCE_CLAIM] = ADMIN_AUDIENCE
+    return {"refresh": str(refresh), "access": str(refresh.access_token)}
 
 
 class _AudienceScopedJWTAuthentication(JWTAuthentication):
@@ -174,22 +200,86 @@ class AdminJWTAuthentication(_AudienceScopedJWTAuthentication):
 class AdminPreauthJWTAuthentication(_AudienceScopedJWTAuthentication):
     """Accepts ONLY the bootstrap token minted by `mint_preauth_token`.
 
-    NOTHING USES THIS YET, and that is the design rather than an omission. It exists now
-    so that the accept-invite flow has something to return that is provably not an admin
-    session, and so Task 3b has a mechanism to attach its two TOTP endpoints to instead
-    of inventing one under deadline pressure.
-
     The pairing that makes it safe is mutual exclusion by construction: `toke_aud` holds
     one value, both authentication classes compare it for equality, so a preauth token
     is refused everywhere an admin token is accepted and vice versa. There is no
     ordering, precedence or subset relationship to get wrong.
 
     `tests/test_admin_surface_guard.py` keeps an explicitly enumerated list of the views
-    allowed to accept this class. It is empty today. Adding a view to it is the moment
-    to ask what a half-authenticated caller can now reach.
+    allowed to accept this class, and asserts it against the URLconf in both directions.
+    It holds exactly three: TOTP enrol, TOTP confirm, recovery-code verification. Adding
+    a fourth is the moment to ask what a half-authenticated caller can now reach.
+
+    THE INVALIDATION CHECK LIVES HERE RATHER THAN IN THE VIEWS, and that placement is
+    the whole reason it is reliable. Five wrong codes kill a preauth token (see
+    `totp.record_preauth_failure`); a JWT cannot be un-issued, so the kill is a cache
+    entry keyed on the token's `jti` with a TTL equal to its remaining life. Checking it
+    in the authentication class means all three endpoints inherit it, and so does the
+    fourth one somebody adds — a per-view check is exactly the kind of thing that gets
+    remembered twice and forgotten once.
     """
 
     audience = ADMIN_PREAUTH_AUDIENCE
+
+    def get_validated_token(self, raw_token):
+        from apps.accounts.totp import preauth_is_denied
+
+        token = super().get_validated_token(raw_token)
+        if preauth_is_denied(token.get(api_settings.JTI_CLAIM)):
+            # The same generic message as any other bad token: a caller who has just
+            # burnt their guesses learns that the token no longer works, not that it was
+            # a *guessing* limit they hit rather than an expiry.
+            raise AuthenticationFailed(
+                _("Given token not valid for this endpoint"),
+                code="token_not_valid",
+            )
+        return token
+
+
+class CustomerJWTAuthentication(JWTAuthentication):
+    """The project default. Stock behaviour, minus one thing: it refuses PREAUTH tokens.
+
+    FOUND BY TEST, during Task 3b, and worth writing down because it is not obvious. A
+    preauth token is an ordinary SimpleJWT *access* token with one extra claim, and
+    stock `JWTAuthentication` does not look at claims it was not taught about — so
+    `DEFAULT_AUTHENTICATION_CLASSES` accepted it happily and a token that was supposed to
+    open three endpoints opened the entire customer surface: `/auth/me/`,
+    `/me/addresses/`, the cart, everything. `test_a_preauth_token_reaches_exactly_those_
+    three_endpoints_and_nothing_else` is what surfaced it; the guard walker could not,
+    because it reasons about which views declare which classes and every one of those
+    views declares nothing at all.
+
+    SEVERITY, HONESTLY: this was not a privilege escalation. A preauth token is issued
+    only after a correct password, and anyone with the password could have obtained a
+    full customer token from `/auth/token/` instead. What it WAS is a credential doing
+    something its own definition said it could not do, and "half-authenticated" is a
+    concept that only survives if it is enforced somewhere. Enforced here, once, rather
+    than in each of the ~40 customer views.
+
+    THE ADMIN AUDIENCE IS DELIBERATELY *NOT* REFUSED HERE, and the asymmetry is a
+    decision rather than an oversight. An admin token represents a COMPLETED ceremony —
+    strictly more proof than a customer login — so letting it act on its holder's own
+    customer resources gains an attacker nothing. Refusing it would, however, break the
+    ordinary things an administrator does with their own account, `/auth/logout/` first
+    among them, and a sign-out that 401s is how sessions get left open.
+    """
+
+    def get_validated_token(self, raw_token):
+        token = super().get_validated_token(raw_token)
+        if token.get(ADMIN_AUDIENCE_CLAIM) == ADMIN_PREAUTH_AUDIENCE:
+            raise AuthenticationFailed(
+                _("Given token not valid for this endpoint"),
+                code="token_not_valid",
+            )
+        return token
+
+
+class CustomerJWTScheme(SimpleJWTScheme):
+    """Keeps drf-spectacular describing the default class as bearer-JWT auth. Without
+    it every customer endpoint is documented as having no security requirement."""
+
+    target_class = "apps.accounts.authentication.CustomerJWTAuthentication"
+    name = "jwtAuth"
 
 
 class AdminJWTScheme(SimpleJWTScheme):

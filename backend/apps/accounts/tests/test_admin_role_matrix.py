@@ -35,7 +35,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.accounts.rbac import ROLES, SCOPE_GRANTS
-from apps.accounts.serializers import AdminTokenObtainPairSerializer
+from apps.accounts.authentication import mint_admin_token_pair
 from apps.accounts.tests.test_admin_surface_guard import ADMIN_SURFACE
 
 pytestmark = pytest.mark.django_db
@@ -161,16 +161,24 @@ def roles(django_user_model):
 
 
 def _admin_client(user) -> APIClient:
-    """A client carrying a token minted the way `/auth/admin-token/` mints one.
+    """A client carrying a token minted the way the real ceremony mints one.
 
-    Uses the real serializer rather than `force_authenticate` on purpose: forcing
+    Uses the real mint rather than `force_authenticate` on purpose: forcing
     authentication skips `AdminJWTAuthentication` entirely, so the audience claim would
     never be exercised and this file would silently stop covering half of what it says
     it covers.
+
+    It calls `mint_admin_token_pair` directly rather than driving password -> preauth ->
+    enrol -> confirm over HTTP, because this file is a role/scope matrix run against
+    every endpoint for every role — several hundred parametrised cases — and making each
+    one perform a full TOTP ceremony would add a PBKDF2 hash and four requests apiece for
+    no coverage this file is responsible for. `test_staff_totp.py` owns the ceremony;
+    this owns what the resulting token may do. Note that this is a TEST call site: the
+    guard test's "exactly one caller" rule deliberately excludes test modules, since
+    fixtures legitimately need to construct the credential under test.
     """
-    refresh = AdminTokenObtainPairSerializer.get_token(user)
     client = APIClient()
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {refresh.access_token}")
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {mint_admin_token_pair(user)['access']}")
     return client
 
 

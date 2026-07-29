@@ -50,13 +50,25 @@ per entry:
   weaken the guard for every route or to mount it where the walker cannot see it. An
   entry is not a waiver: allowlisted routes are held to a stricter rule than guarded
   ones (see `test_public_admin_routes_declare_their_own_openness`).
-* `PREAUTH_ACCEPTING_VIEWS` — views allowed to accept the TOTP-bootstrap claim. Empty
-  today; Task 3b populates it.
+* `PREAUTH_ACCEPTING_VIEWS` — views allowed to accept the TOTP-bootstrap claim. Exactly
+  three, asserted against the URLconf in both directions.
+
+TASK 3b ADDED THE TEST THIS FILE WAS ALWAYS MISSING. Everything above checks that the
+right classes are attached to the right routes, which is a statement about *reachability*
+— it says nothing about where an admin-audience token can come from. Amendment 6's
+invariant is about ORIGIN: the claim means the full ceremony and is minted nowhere else.
+`test_only_totp_confirm_can_mint_an_admin_token` walks the AST of every production
+module and asserts exactly one call site for the single mint function. That is the
+invariant in executable form, and it fails on the day a second mint is written rather
+than on the day one is routed.
 
 WHAT THIS FILE DOES NOT CHECK is behaviour: that the declared scope actually keeps
 the wrong role out over real HTTP, with the right status code, is
 `test_admin_role_matrix.py`. This file checks the wiring; that one checks the wire.
 """
+import ast
+import pathlib
+
 import pytest
 from django.urls import get_resolver, reverse
 from rest_framework.permissions import AllowAny, IsAdminUser
@@ -92,11 +104,36 @@ PUBLIC_ADMIN_ROUTES: dict[str, str] = {
 }
 
 # Views permitted to accept `AdminPreauthJWTAuthentication` — the bootstrap claim minted
-# by accept-invite. EMPTY TODAY, and correct: the preauth token reaches nothing at all
-# until Task 3b builds TOTP enrolment and confirmation, which are the only two
-# destinations it will ever have. Enumerated rather than discovered so that widening it
-# is a deliberate, reviewed edit and not a side effect of adding a view.
-PREAUTH_ACCEPTING_VIEWS: tuple[str, ...] = ()
+# by accept-invite and by the staff password step. EXACTLY THREE, and the number is the
+# point: a preauth token is a caller who has proved a password and a human check and
+# owes a TOTP code, so the only things it may reach are the ones that finish the
+# ceremony. Enumerated rather than discovered so that widening it is a deliberate,
+# reviewed edit and not a side effect of adding a view — and asserted against the live
+# URLconf in BOTH directions below, so it can be neither quietly widened nor quietly
+# emptied.
+PREAUTH_ACCEPTING_VIEWS: tuple[str, ...] = (
+    "AdminTOTPEnrolView",  # hand out a secret (refused once one is confirmed)
+    "AdminTOTPConfirmView",  # verify a code — the ONLY mint of an admin token
+    "AdminTOTPRecoveryView",  # burn a recovery code; voids the factor, mints nothing
+)
+
+# The routes those three are expected to occupy. A second copy of the same fact as the
+# names above, on purpose: the names answer "which classes", these answer "at which
+# URLs", and a view re-mounted somewhere else would satisfy the first and not the second.
+PREAUTH_ACCEPTING_PATHS: frozenset[str] = frozenset(
+    {
+        "api/v1/auth/admin-totp/enrol/",
+        "api/v1/auth/admin-totp/confirm/",
+        "api/v1/auth/admin-totp/recovery/",
+    }
+)
+
+# The one function allowed to create a `toke-admin` token, and the one place allowed to
+# call it. `test_only_totp_confirm_can_mint_an_admin_token` walks the AST of every module
+# under `apps/` and `config/` to enforce it. See that test for why this is the executable
+# form of Amendment 6.
+ADMIN_MINT_FUNCTION = "mint_admin_token_pair"
+ADMIN_MINT_CALLER = ("apps/accounts/views.py", "AdminTOTPConfirmView")
 
 # The admin views that are NOT under that prefix, by URL name. Kept tiny and explicit:
 # each entry is a route someone deliberately put somewhere else, and writing it down is
@@ -417,18 +454,28 @@ def test_public_admin_routes_declare_their_own_openness(view_name):
     )
 
 
+def preauth_accepting_paths() -> set[str]:
+    """Every routed path whose view accepts the preauth claim. Importable because
+    `test_staff_totp.py` asserts the same set from the behavioural side."""
+    return {
+        pattern
+        for pattern, _name, callback in _walk(get_resolver())
+        if AdminPreauthJWTAuthentication
+        in getattr(_view_class(callback), "authentication_classes", [])
+    }
+
+
 def test_only_enumerated_views_accept_the_preauth_claim():
-    """The bootstrap claim (`toke-admin-preauth`) is minted when a staff invite is
-    accepted: password set, account created, TOTP not yet enrolled. Amendment 6's
-    invariant is that the ADMIN audience claim means the full ceremony and is minted
-    nowhere else — so bootstrap gets its own claim, and that claim must reach only the
+    """The bootstrap claim (`toke-admin-preauth`) is minted at two moments — accepting a
+    staff invite, and passing the staff password step — and both mean the same thing: a
+    password and a human check have been proved, and a TOTP code is owed. Amendment 6's
+    invariant is that the ADMIN audience claim means the FULL ceremony and is minted
+    nowhere else, so bootstrap gets its own claim and that claim must reach only the
     endpoints that finish the ceremony.
 
-    The list is empty today because Task 3b has not built them, which means a preauth
-    token currently opens nothing at all. That is fail-closed and deliberate. This test
-    walks the WHOLE URLconf rather than the admin prefix, because a preauth-accepting
-    endpoint mounted anywhere else would be exactly as dangerous and exactly as easy to
-    add by accident.
+    This walks the WHOLE URLconf rather than the admin prefix, because a
+    preauth-accepting endpoint mounted anywhere else would be exactly as dangerous and
+    exactly as easy to add by accident.
     """
     offenders = []
     for pattern, _name, callback in _walk(get_resolver()):
@@ -441,6 +488,172 @@ def test_only_enumerated_views_accept_the_preauth_claim():
     assert not offenders, (
         "these views accept the TOTP-bootstrap claim without being enumerated in "
         f"PREAUTH_ACCEPTING_VIEWS: {sorted(set(offenders))}"
+    )
+
+
+def test_the_preauth_claim_reaches_exactly_three_routes():
+    """The other direction, and the half that a one-sided allowlist always misses.
+
+    The test above catches WIDENING — a fourth endpoint that started accepting the
+    claim. This one catches NARROWING and RE-MOUNTING: a TOTP endpoint whose
+    `authentication_classes` were changed to something else would leave the ceremony
+    reachable by the wrong credential and pass the test above silently, because a view
+    that no longer accepts the claim is simply not an offender.
+
+    Asserted as PATHS rather than class names because that is the property that matters
+    operationally: these three URLs, and no others, may be opened by a caller who has
+    proved a password but not a second factor.
+    """
+    assert preauth_accepting_paths() == set(PREAUTH_ACCEPTING_PATHS)
+
+
+@pytest.mark.parametrize("view_name", sorted(PREAUTH_ACCEPTING_VIEWS))
+def test_a_preauth_view_accepts_the_preauth_class_and_nothing_else(view_name):
+    """Equality, for the same reason the admin views are held to equality: listing a
+    second authenticator alongside means a request can be authenticated by whichever
+    runs first, and a list is exactly the kind of line a reviewer's eye slides over.
+    Stock `JWTAuthentication` here would be the sharpest version — it would let any
+    logged-in CUSTOMER enrol a TOTP secret against their own account and then walk
+    through the confirm endpoint, which mints admin tokens."""
+    routed = {
+        _view_class(callback).__name__: _view_class(callback)
+        for _pattern, _name, callback in _walk(get_resolver())
+        if _view_class(callback) is not None
+    }
+    view_class = routed.get(view_name)
+    assert view_class is not None, f"{view_name} is in PREAUTH_ACCEPTING_VIEWS but not routed"
+    assert view_class.authentication_classes == [AdminPreauthJWTAuthentication], (
+        f"{view_name} must authenticate with AdminPreauthJWTAuthentication and nothing "
+        f"else — got {[c.__name__ for c in view_class.authentication_classes]}"
+    )
+
+
+def _python_sources():
+    """Every production Python module in the backend, excluding tests and migrations.
+
+    Tests are excluded because they legitimately mint tokens to construct fixtures;
+    migrations because they cannot call a view. The exclusion is by path so that a new
+    app is covered automatically — the opposite of an allowlist, which is what a check
+    on "where can an admin token come from" has to be.
+    """
+    root = pathlib.Path(__file__).resolve().parents[3]  # backend/
+    for path in sorted((root / "apps").rglob("*.py")) + sorted((root / "config").rglob("*.py")):
+        parts = set(path.parts)
+        if "tests" in parts or "migrations" in parts or path.name.startswith("test_"):
+            continue
+        yield path.relative_to(root).as_posix(), path.read_text(encoding="utf-8")
+
+
+def _enclosing_class(tree, node) -> str | None:
+    """The name of the class a node sits inside, if any. Walks down from the module
+    rather than up, because `ast` nodes carry no parent pointer."""
+    for candidate in ast.walk(tree):
+        if isinstance(candidate, ast.ClassDef):
+            for descendant in ast.walk(candidate):
+                if descendant is node:
+                    return candidate.name
+    return None
+
+
+def test_only_totp_confirm_can_mint_an_admin_token():
+    """**AMENDMENT 6, EXECUTABLE.** The invariant is that the `toke-admin` audience claim
+    means the full ceremony completed — password, Turnstile, TOTP — and is minted
+    nowhere else. Until Task 3b that was an intention: `/auth/admin-token/` minted a
+    full session for a password alone, so the claim actually meant "password", and the
+    preauth token accept-invite returned was a fence around a door that was still open.
+
+    The invariant is now a property of the CALL GRAPH, and this is what checks it: there
+    is exactly one function that writes the claim (`mint_admin_token_pair`), and the AST
+    of every production module is searched for calls to it. Exactly one may exist, in
+    `AdminTOTPConfirmView`.
+
+    WHY STATIC RATHER THAN DRIVING EVERY ROUTE. A behavioural sweep can only exercise
+    the request shapes a test happens to construct — it proves things about the routes
+    it reached, not about the URLconf. This proves something about all code: a new view
+    that mints an admin token fails here on the day it is written, before it is ever
+    routed, and so does an "exception" added to an existing one. `test_staff_totp.py`
+    carries the behavioural half (a preauth token opens exactly three endpoints; the
+    password step returns no session; a superuser gets no shortcut), and the two
+    together are the guarantee. Neither alone is.
+    """
+    call_sites = []
+    for relative_path, source in _python_sources():
+        tree = ast.parse(source, filename=relative_path)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            name = getattr(func, "attr", None) or getattr(func, "id", None)
+            if name == ADMIN_MINT_FUNCTION:
+                call_sites.append((relative_path, _enclosing_class(tree, node), node.lineno))
+
+    assert len(call_sites) == 1, (
+        f"{ADMIN_MINT_FUNCTION} must be called from exactly one place — TOTP confirm. "
+        f"Found: {call_sites}"
+    )
+    path, enclosing_class, _lineno = call_sites[0]
+    assert (path, enclosing_class) == ADMIN_MINT_CALLER, (
+        f"the admin token mint moved to {path}:{enclosing_class}; the only place "
+        f"allowed to mint one is {ADMIN_MINT_CALLER}"
+    )
+
+
+def test_nothing_else_writes_the_admin_audience_claim():
+    """The complement, and the reason the test above is not enough on its own: a new
+    call site is caught there, but assigning `ADMIN_AUDIENCE` onto a token directly
+    would bypass the named function entirely.
+
+    Only `authentication.py` may name the constant in an assignment or a comparison —
+    it defines it, mints with it, and compares it in `AdminJWTAuthentication`. Anywhere
+    else is either a second mint or a second enforcement point, and both are how a
+    single invariant becomes two things that disagree.
+    """
+    offenders = []
+    for relative_path, source in _python_sources():
+        if relative_path.endswith("apps/accounts/authentication.py"):
+            continue
+        if "ADMIN_AUDIENCE" in source:
+            # `ADMIN_AUDIENCE_CLAIM` is the claim NAME and is harmless to read; the
+            # value is what mints. Distinguish them by token, not by substring.
+            for line in source.splitlines():
+                if "ADMIN_AUDIENCE" in line and "ADMIN_AUDIENCE_CLAIM" not in line:
+                    offenders.append(f"{relative_path}: {line.strip()}")
+    assert not offenders, (
+        "the admin audience VALUE is referenced outside authentication.py, which is "
+        f"where the mint and the check both live: {offenders}"
+    )
+
+
+def test_no_view_anywhere_uses_session_authentication():
+    """The companion trapdoor, guarded rather than re-investigated.
+
+    `django.contrib.admin` IS mounted at `/django-admin/` (`config/urls.py`), and the
+    live Apache vhost denies it outright — `<Location /django-admin/> Require all
+    denied`, verified externally as 403 from the public internet. That is configuration
+    and cannot be asserted from here. What CAN be asserted is the thing that would make
+    a Django admin session dangerous even so: if any DRF view accepted
+    `SessionAuthentication`, a Django login cookie would authenticate API calls, and the
+    admin audience claim — which a session cannot carry — would be bypassed entirely for
+    every view that had it.
+
+    `DEFAULT_AUTHENTICATION_CLASSES` contains only `JWTAuthentication` today. This test
+    is what keeps that true, and it sweeps the URLconf as well as the setting because a
+    single view opting in would be enough.
+    """
+    from django.conf import settings
+    from rest_framework.authentication import SessionAuthentication
+
+    configured = settings.REST_FRAMEWORK.get("DEFAULT_AUTHENTICATION_CLASSES", [])
+    assert not any("SessionAuthentication" in str(entry) for entry in configured), configured
+
+    offenders = [
+        f"{pattern} -> {_view_class(callback).__name__}"
+        for pattern, _name, callback in _walk(get_resolver())
+        if SessionAuthentication in getattr(_view_class(callback), "authentication_classes", [])
+    ]
+    assert not offenders, (
+        "these views accept a Django session cookie, which cannot carry the admin "
+        f"audience claim and therefore bypasses it: {sorted(set(offenders))}"
     )
 
 

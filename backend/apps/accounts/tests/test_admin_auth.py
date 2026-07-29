@@ -23,6 +23,15 @@ Four properties are load-bearing here and each has a test that fails loudly:
 
 conftest.py force-disables Turnstile for the whole suite, so the tests here that
 exercise the gate switch it on explicitly (same pattern as test_turnstile.py).
+
+TASK 3b CHANGED WHAT `/auth/admin-token/` RETURNS. It is now step ONE of three and
+mints nothing: a correct staff password yields a ten-minute PREAUTH token, and the
+admin token pair comes only from TOTP confirm. Every test here that needs a real admin
+session therefore runs the whole ceremony through `admin_session()` below rather than
+reading `response.data["access"]`. The ceremony itself — drift, replay, the two
+brute-force caps, recovery codes — belongs to `test_staff_totp.py`; this file still owns
+the password step, the Turnstile gate, the throttles, and what an admin-audience token
+may do once it exists.
 """
 import logging
 
@@ -30,6 +39,8 @@ import httpx
 import pytest
 from django.contrib.auth.models import Group
 from rest_framework.test import APIClient
+
+from apps.accounts.tests.test_staff_totp import full_ceremony
 
 pytestmark = pytest.mark.django_db
 
@@ -85,13 +96,28 @@ def _siteverify(monkeypatch, *, success=True):
     return recorder
 
 
+def admin_session(user, password=PW) -> dict:
+    """The full ceremony: password -> preauth -> TOTP enrol -> TOTP confirm.
+
+    Returns the confirm response, which is the only place in the project an
+    admin-audience token pair comes from.
+    """
+    _secret, data = full_ceremony(user, password)
+    return data
+
+
 # --- staff-only, and silent about why -----------------------------------------
 
 
-def test_staff_can_obtain_a_token_pair(owner):
+def test_staff_password_yields_a_preauth_token_and_no_session(owner):
+    """THE TASK 3b CHANGE, pinned. This endpoint used to answer a correct staff password
+    with a full admin session — which meant the `toke-admin` claim actually meant
+    "password", and the preauth token accept-invite returned was a fence around a door
+    that was still open. It now mints nothing at all."""
     r = APIClient().post(ADMIN_TOKEN, {"email": owner.email, "password": PW}, format="json")
     assert r.status_code == 200
-    assert "access" in r.data and "refresh" in r.data
+    assert "access" not in r.data and "refresh" not in r.data
+    assert r.data["preauth_token"]
 
 
 def test_customer_with_correct_credentials_is_rejected(customer):
@@ -143,9 +169,8 @@ def _claim_of(raw_access):
     return AccessToken(raw_access).get(ADMIN_AUDIENCE_CLAIM), ADMIN_AUDIENCE
 
 
-def test_admin_token_carries_the_audience_claim(owner):
-    r = APIClient().post(ADMIN_TOKEN, {"email": owner.email, "password": PW}, format="json")
-    claim, expected = _claim_of(r.data["access"])
+def test_a_completed_ceremony_carries_the_audience_claim(owner):
+    claim, expected = _claim_of(admin_session(owner)["access"])
     assert claim == expected
 
 
@@ -173,10 +198,10 @@ def test_a_refreshed_admin_token_still_carries_the_claim(owner):
     endpoint needs no admin-specific code. If that ever stops being true, an admin
     session would silently die 15 minutes after login."""
     client = APIClient()
-    login = client.post(ADMIN_TOKEN, {"email": owner.email, "password": PW}, format="json")
+    login = admin_session(owner)
 
     refreshed = client.post(
-        "/api/v1/auth/token/refresh/", {"refresh": login.data["refresh"]}, format="json"
+        "/api/v1/auth/token/refresh/", {"refresh": login["refresh"]}, format="json"
     )
     assert refreshed.status_code == 200
     claim, expected = _claim_of(refreshed.data["access"])
@@ -787,15 +812,17 @@ def test_a_raw_refresh_token_is_refused_by_the_admin_class(owner, monkeypatch):
     from rest_framework_simplejwt.settings import api_settings
     from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
+    # The ceremony runs BEFORE the monkeypatch: it uses preauth tokens, and widening
+    # AUTH_TOKEN_CLASSES first would change what is under test into something else.
+    login = admin_session(owner)
     monkeypatch.setattr(api_settings, "AUTH_TOKEN_CLASSES", (AccessToken, RefreshToken))
 
     client = APIClient()
-    login = client.post(ADMIN_TOKEN, {"email": owner.email, "password": PW}, format="json")
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['refresh']}")
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login['refresh']}")
     assert client.get(ADMIN_ME).status_code == 401
 
     # The access token from the same login must still work, or the check is just broken.
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login['access']}")
     assert client.get(ADMIN_ME).status_code == 200
 
 
@@ -803,8 +830,7 @@ def test_admin_me_rejects_a_demoted_staff_member_holding_a_valid_admin_token(own
     """Claims outlive revocation: the token still says `toke-admin` after is_staff is
     withdrawn. The DB check is what closes that window."""
     client = APIClient()
-    login = client.post(ADMIN_TOKEN, {"email": owner.email, "password": PW}, format="json")
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {admin_session(owner)['access']}")
     assert client.get(ADMIN_ME).status_code == 200
 
     owner.is_staff = False
@@ -816,11 +842,10 @@ def test_admin_me_rejects_anonymous():
     assert APIClient().get(ADMIN_ME).status_code == 401
 
 
-def test_a_token_from_admin_token_works_on_admin_me(owner):
-    """End-to-end: the pair minted by admin-token authenticates the admin session."""
+def test_a_token_from_the_completed_ceremony_works_on_admin_me(owner):
+    """End-to-end: the pair minted by TOTP confirm authenticates the admin session."""
     client = APIClient()
-    login = client.post(ADMIN_TOKEN, {"email": owner.email, "password": PW}, format="json")
-    client.credentials(HTTP_AUTHORIZATION=f"Bearer {login.data['access']}")
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {admin_session(owner)['access']}")
     r = client.get(ADMIN_ME)
     assert r.status_code == 200
     assert r.data["email"] == owner.email
