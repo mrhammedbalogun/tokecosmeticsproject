@@ -301,6 +301,43 @@ without touching the bucket, and each countable failure costs a solved token.
 break-glass `redis-cli DEL` one-liner in the runbook regardless. **Customer-side
 failure-counting stays in the pre-Plan-22 gate work, not here.**
 
+### Amendment 10 — the admin app's session shape (Task 5, supersedes the Task 5 text)
+
+The original Task 5 text predates TOTP and describes a ONE-step login. What was built:
+
+1. **Preauth gets its own cookie** (`admin_preauth`, httpOnly, SameSite=Strict, 600s).
+   Not form state — that puts it in the React payload. Not shared with `admin_access` —
+   that forces the proxy to read claims it **cannot verify**, since the BFF must never
+   hold Django's signing key, and an unverified-decode discriminator is the
+   declaration-vs-behaviour trap with new paint. Distinct names let the gate
+   discriminate **on presence alone**. Mutual exclusivity is enforced **at write time**,
+   which turns "both cookies present" from an ambiguity into a detectable anomaly.
+2. **Five-state default-deny gate matrix**; the both-cookies anomaly clears everything
+   rather than falling through to "pair wins". Crucially, **the gate is a router with
+   defence-in-depth value, NOT the fence** — the backend enforces the boundary
+   behaviourally, so a gate bug here is a UX incident, not a security one. The real
+   per-page gate is `decideAuth`, which grew a third (preauth) state, mirroring the
+   storefront's own "the proxy check is presence theatre" structure.
+3. **Turnstile: a SEPARATE admin widget** (pairs with the `TURNSTILE_ADMIN_SECRET`
+   indirection; gives admin-only break-glass so dropping the staff gate in an incident
+   does not drop the customer gate). Needs Hammed in the Cloudflare dashboard — but
+   Cloudflare's **permanent test keys** make this a LAUNCH dependency, not a build one.
+4. **Deployment Protection: previews YES, production NO.** See the strike-through below.
+5. **Cut** the wholesale storefront session port — mechanics only. Guest-cart merge,
+   account claiming and Turnstile-proof minting have no admin analogue, and dead ported
+   code on the admin origin is attack surface with no constituency.
+6. **Added:** `/accept-invite?token=` public page; recovery-code UI; **10min/12h**
+   session lifetimes (do NOT inherit the storefront's long-lived refresh — a daily
+   re-ceremony is what makes the TOTP factor mean anything over time); `no-store` on
+   every BFF response; and **zero third-party scripts on this origin, ever**, which is
+   what makes the token-in-URL accept-invite page safe from leak-by-script.
+
+**Two bugs only a live walkthrough found, worth remembering:** the anomaly redirect was
+an INFINITE LOOP (proxy → `/login`, which is itself gated, sees the same anomaly,
+bounces again — and nothing in the cycle can delete a cookie), and purging during Server
+Component render threw a 500 because a component may not write cookies. A correct gate
+specification still produced two live failures in implementation.
+
 ### Resolved 2026-07-28 — the Vercel account is **Pro** (confirmed by Hammed)
 
 This settles all three dependent decisions:
@@ -308,8 +345,14 @@ This settles all three dependent decisions:
    That is the correct — and only — home for a control that sees real client IPs on the
    storefront path (see Amendment 5 / memory `project_tokecosmetics_real_client_ip_gap`).
    Not Plan-16 work, but it is now unblocked and should be scheduled.
-2. **Production Deployment Protection is available**, so Amendment 4 applies it to
-   production as well as previews, not previews only.
+2. ~~**Production Deployment Protection is available**, so Amendment 4 applies it to
+   production as well as previews, not previews only.~~ **SUPERSEDED at Task 5 — see
+   Amendment 10.4. Previews only; production stays auth-wall-only.** Availability is not
+   the same as desirability: Vercel's fence guards the UI *shell*, while the asset is
+   admin tokens and `api.tokecosmetics.com` is directly reachable regardless of what
+   sits in front of the UI. It would also bind store operations to Vercel session state,
+   require a paid seat per future staff member, and make Vercel membership into shadow
+   authorization running alongside the RBAC this plan just built.
 3. **BFF-real-IP does NOT promote** off the hardening backlog — the Vercel rule covers
    the gap it existed to cover. Revisit only if tighter IP rates or `remoteip` on
    siteverify is wanted.
