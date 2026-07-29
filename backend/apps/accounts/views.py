@@ -1,5 +1,6 @@
 import logging
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.db import transaction
@@ -19,13 +20,14 @@ from apps.notifications.tasks import send_email_task
 
 from .authentication import AdminJWTAuthentication
 
-from .rbac import scopes_for_user
+from .rbac import HasAdminScope, scopes_for_user
 
 from .turnstile import admin_turnstile_secret, require_turnstile
 
 from .throttling import (
     AdminLoginEmailThrottle,
     AdminLoginIPThrottle,
+    client_ip,
     LoginBurstThrottle,
     LoginIPThrottle,
     LoginSustainedThrottle,
@@ -47,6 +49,9 @@ from .serializers import (
     PasswordResetConfirmSerializer,
     PasswordResetSerializer,
     RegisterSerializer,
+    StaffInviteAcceptSerializer,
+    StaffInviteCreateSerializer,
+    StaffInviteSerializer,
 )
 
 User = get_user_model()
@@ -247,6 +252,271 @@ class AdminMeView(APIView):
                 "scopes": sorted(scopes_for_user(user)),
             }
         )
+
+
+class StaffInviteListCreateView(generics.ListCreateAPIView):
+    """`/admin/staff/invites/` — the Owner's staff-creation surface.
+
+    NO THROTTLE, and that is a decision rather than an omission — which is why it is
+    written down here instead of leaving its absence to look like one. Reaching this
+    endpoint requires the full admin ceremony (an admin-audience token, minted only by
+    `/auth/admin-token/` behind Turnstile and the failure-counting staff throttles) plus
+    the `staff.manage` scope, which exactly one role holds. The population that can
+    reach it is one person. A rate limit on top of that meters nobody: it cannot slow an
+    attacker, because an attacker who can reach this endpoint has already won outright,
+    and its only realistic effect is to 429 the owner. Decoration on a door that is
+    already locked.
+
+    THE LIST IS HERE BECAUSE REVOCATION NEEDS AN ID. A kill switch nobody can address is
+    not a kill switch, and the alternative — the Owner reading invite ids out of the
+    database — makes the operational answer to a mis-sent invite "SSH in".
+
+    LOGGING AT INFO. Creating an invite is an authenticated, authorised, deliberate act
+    by the one person entitled to perform it, so it is provenance rather than anomaly:
+    valuable to read later, wrong to alert on. (Sentry treats INFO and WARNING alike —
+    both are breadcrumbs — so the level here is about what a human greps for, not about
+    what pages someone.) The line carries actor, target and role because `invited_by` on
+    the row is the deletable half of that record and this stream is the durable half.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("staff.manage")]
+    serializer_class = StaffInviteSerializer
+    pagination_class = None  # outstanding invites are a handful, not a feed
+
+    def get_queryset(self):
+        from apps.accounts.models import StaffInvite
+
+        return StaffInvite.objects.select_related("role", "invited_by")
+
+    @extend_schema(request=StaffInviteCreateSerializer, responses={201: StaffInviteSerializer})
+    def post(self, request, *args, **kwargs):
+        from apps.accounts.invites import issue_invite
+
+        serializer = StaffInviteCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        email = serializer.validated_data["email"]
+        role = serializer.validated_data["role"]
+
+        invite, raw_token = issue_invite(email=email, role=role, invited_by=request.user)
+
+        # The raw token leaves this process exactly once, in the mail. It is not
+        # returned, not stored and not logged: see the StaffInvite docstring for why the
+        # recipient's mailbox (and Resend's stored copy) is the accepted exposure and a
+        # log line is not.
+        send_email_task.delay(
+            "staff_invite",
+            invite.email,
+            {
+                "invite_url": f"{settings.ADMIN_URL}/accept-invite?token={raw_token}",
+                "role": role.name,
+                "invited_by": request.user.get_full_name() or request.user.email,
+                "expires_hours": settings.STAFF_INVITE_TTL_HOURS,
+            },
+        )
+        security_logger.info(
+            "staff invite created for %s as %s by %s",
+            scrub(invite.email),
+            scrub(role.name),
+            scrub(request.user.email),
+        )
+        return Response(StaffInviteSerializer(invite).data, status=status.HTTP_201_CREATED)
+
+
+class StaffInviteRevokeView(APIView):
+    """`/admin/staff/invites/<pk>/revoke/` — the kill switch.
+
+    BUILT NOW, not "later". An outstanding invite is a live staff-creation capability;
+    mis-send one — wrong address, typo, wrong role — and without this the only remedy is
+    to wait out the whole TTL while a stranger's inbox holds the ability to become an
+    administrator. "Resend" is revoke + a new invite, deliberately: refreshing a token
+    in place would leave the old one working for whoever already has it, which is the
+    exact situation revocation exists to end.
+
+    Idempotent on an already-revoked invite (the state the caller wants is already
+    true, and an operator hammering the button should not get an error), but NOT
+    permitted on an accepted one: the account exists, deleting the invite row would not
+    un-make it, and returning success would tell the Owner they had undone something
+    they had not. The honest action there is to demote the staff member.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("staff.manage")]
+    serializer_class = StaffInviteSerializer
+
+    @extend_schema(request=None, responses={200: StaffInviteSerializer})
+    def post(self, request, pk):
+        from django.shortcuts import get_object_or_404
+
+        from apps.accounts.models import StaffInvite
+
+        invite = get_object_or_404(StaffInvite, pk=pk)
+        if invite.accepted_at is not None:
+            raise exceptions.ValidationError(
+                "That invite has already been accepted. Remove the staff account's role "
+                "instead."
+            )
+        if invite.revoked_at is None:
+            invite.revoked_at = timezone.now()
+            invite.save(update_fields=["revoked_at", "updated_at"])
+            security_logger.info(
+                "staff invite revoked for %s by %s",
+                scrub(invite.email),
+                scrub(request.user.email),
+            )
+        return Response(StaffInviteSerializer(invite).data)
+
+
+# One message for three different failures. See `StaffInviteAcceptView`.
+_INVITE_REFUSED = "That invite link is not valid. Ask for a new one."
+_INVITE_EXPIRED = "That invite link has expired. Ask for a new one."
+
+
+class StaffInviteAcceptView(APIView):
+    """`/admin/staff/invites/accept/` — **deliberately PUBLIC**, and the security-critical
+    half of this feature.
+
+    It is public because it has to be: the person accepting has no account yet, or has a
+    customer account whose credentials are irrelevant here. The proof it accepts is the
+    token, which proves control of the invited inbox — the same proof
+    `/auth/password/reset/` runs on. `test_admin_surface_guard.py` carries an explicit
+    allowlist so this route reads as public ON PURPOSE, distinct from the
+    `APIRootView` that Task 2 found sitting on the admin prefix because someone forgot.
+
+    ── THE ORDER OF OPERATIONS IS THE DESIGN ──────────────────────────────────────────
+
+    1. **Turnstile**, against the admin widget's secret (`TURNSTILE_ADMIN_SECRET`,
+       falling back to the customer secret) — this page is served by the admin app's
+       hostname and Turnstile widgets are domain-scoped.
+    2. **Validate the body**, including password strength. Before the claim, so that a
+       weak password cannot burn a single-use capability on a typo and strand the new
+       hire.
+    3. **Hash the submitted token and look it up by digest** (one indexed equality
+       match).
+    4. **If it is valid: proceed, touching NO throttle bucket.**
+    5. **Only if it is invalid: check-and-increment the failure bucket**, then return
+       the uniform error.
+
+    Step 4 is the inversion, and it is the opposite of what a reviewer expects — the
+    full argument, including the state of the shared-egress assumption today, is in
+    `throttling.StaffInviteAcceptThrottle`. In one paragraph: any bucket checked BEFORE
+    a request proves itself is a denial button, this endpoint's traffic will arrive from
+    one shared Vercel egress address once the admin app exists, and the legitimate user
+    gets exactly one shot. Ordinary request-counting would let a stranger 429 the new
+    hire out of their own invite for free. Counting only invalid tokens is safe precisely
+    because the token is unguessable: an attacker cannot manufacture the bypass
+    condition without already holding the capability the bucket protects. New-hire
+    lockout becomes structurally impossible rather than merely unlikely.
+
+    ── WHAT IT RETURNS ────────────────────────────────────────────────────────────────
+
+    A PREAUTH token, never an admin session. See `authentication.ADMIN_PREAUTH_AUDIENCE`:
+    the admin audience claim means password + Turnstile + TOTP, and bootstrap is not an
+    exception to that. Today the preauth token reaches nothing at all, because Task 3b's
+    TOTP endpoints do not exist yet. That is correct and fail-closed.
+
+    ── ERRORS ─────────────────────────────────────────────────────────────────────────
+
+    Unknown, revoked and already-used share ONE message. Distinguishing them would
+    confirm that a token was once real, which is exactly the feedback someone who
+    scraped a mailbox, a proxy log or a browser history needs. EXPIRED is distinguished,
+    deliberately: only a holder of a genuine token can ever see it, so it leaks nothing,
+    and "your link expired, ask for another" is the difference between a new hire who
+    re-invites themselves and one who reports the admin as broken.
+
+    ── LOGGING LEVELS, chosen rather than defaulted ───────────────────────────────────
+
+    * accepted -> WARNING. A new administrator now exists, which is the most
+      consequential thing this endpoint can do and worth standing out in the stream. Not
+      ERROR: it is the expected happy path of a flow the Owner deliberately started, and
+      paging on expected outcomes is how alerts get ignored.
+    * unknown / revoked token -> ERROR, i.e. a Sentry event. There is no benign way to
+      reach it — the only legitimate callers hold a token out of their own inbox — and
+      the volume is bounded by the failure bucket above.
+    * expired -> INFO. A real new hire who waited too long. Alerting on it would train
+      whoever reads Sentry to dismiss the alert that matters.
+    * a 429 here stays a WARNING breadcrumb (no `log_throttling_at_error`): every
+      countable failure has already raised its own ERROR event, so promoting the cap
+      would raise a second event describing the same attack.
+    """
+
+    authentication_classes = []  # public: no credential is accepted, so none can be forged
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = []  # NOT an oversight — see the ordering above
+    serializer_class = StaffInviteAcceptSerializer
+
+    @extend_schema(request=StaffInviteAcceptSerializer, responses={200: None})
+    def post(self, request):
+        from apps.accounts.authentication import PREAUTH_TOKEN_LIFETIME, mint_preauth_token
+        from apps.accounts.invites import InviteRejected, accept_invite, find_invite
+
+        require_turnstile(request, secret=admin_turnstile_secret())
+
+        serializer = StaffInviteAcceptSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        raw_token = serializer.validated_data["token"]
+
+        # This lookup is deliberately separate from the one inside `accept_invite`, and
+        # the duplication is the point rather than an oversight: the throttle decision
+        # has to be made BEFORE anything is claimed, and folding the two together would
+        # mean either metering valid tokens or claiming before metering. One extra
+        # indexed equality match is a cheap price for keeping that order legible.
+        if find_invite(raw_token) is None:
+            self._refuse(request, "unknown")
+
+        try:
+            invite, user, created = accept_invite(
+                raw_token, password=serializer.validated_data["password"]
+            )
+        except InviteRejected as exc:
+            self._refuse(request, exc.reason, invite=exc.invite)
+
+        security_logger.warning(
+            "staff invite accepted for %s as %s (%s)",
+            scrub(user.email),
+            scrub(invite.role.name),
+            "new account" if created else "existing customer promoted",
+        )
+        return Response(
+            {
+                "detail": "Your account is ready. Set up two-factor authentication to finish.",
+                "preauth_token": mint_preauth_token(user),
+                "expires_in": int(PREAUTH_TOKEN_LIFETIME.total_seconds()),
+            }
+        )
+
+    def _refuse(self, request, reason: str, invite=None):
+        """Count the failure (if it is one), log it, and raise the uniform error.
+
+        Always raises. Factored out so the counting and the logging cannot drift apart —
+        the same reasoning that put `AdminLoginView`'s ERROR line and its
+        `record_failure` calls in one place.
+        """
+        from apps.accounts.throttling import StaffInviteAcceptThrottle
+
+        if reason == "expired":
+            # Genuine token, genuine person, benign outcome: no bucket, no alert.
+            security_logger.info(
+                "staff invite accept failed: expired link for %s",
+                scrub(invite.email if invite else "<unknown>"),
+            )
+            raise exceptions.ValidationError(_INVITE_EXPIRED)
+
+        throttle = StaffInviteAcceptThrottle()
+        if not throttle.allow_request(request, self):
+            raise exceptions.Throttled(throttle.wait())
+        throttle.record_failure(request)
+
+        # `client_ip` reads CF-Connecting-IP, which is only unforgeable because the
+        # origin accepts nothing but Cloudflare. On the direct-to-API path it is
+        # attacker-chosen text heading for a plain-text log line, so it is scrubbed —
+        # the same newline-forgery lesson as the login email field.
+        security_logger.error(
+            "staff invite accept failed: %s token from %s",
+            scrub(reason),
+            scrub(client_ip(request)),
+        )
+        raise exceptions.ValidationError(_INVITE_REFUSED)
 
 
 class RegisterView(generics.CreateAPIView):

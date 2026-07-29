@@ -117,7 +117,65 @@ integration turns into events:
   was renamed or deleted in the Django admin and somebody has silently lost every
   scope. `accounts.W001` reports the same condition at deploy time.
 
-## 5. Staff role groups
+## 5. Staff invites
+
+An outstanding invite is a **live staff-creation capability**: whoever holds the token
+in that email can mint an `is_staff` account in the named role. Treat a mis-sent invite
+the way you would treat a leaked password.
+
+- **Mis-sent one?** Revoke it: `POST /api/v1/admin/staff/invites/<id>/revoke/` (Owner
+  scope, and the Plan-16 Task 7 staff page will put a button on it). Revocation is
+  checked inside the same atomic claim as expiry and single-use, so it cannot lose a
+  race with an acceptance already in flight.
+- **"Resend" is revoke + a new invite.** There is deliberately no token refresh: a
+  refreshed token in place would leave the old one working for whoever already has it.
+  The create endpoint refuses a second outstanding invite for the same address for the
+  same reason.
+- **TTL is 72 hours**, `STAFF_INVITE_TTL_HOURS` in the prod env. Lowering it costs
+  nothing operationally.
+- **Accepting does not produce an admin session.** It returns a short-lived *preauth*
+  token which, until Task 3b lands, opens nothing at all. The account exists, is
+  `is_staff`, is in its group, and reaches nothing. That is intended.
+- **Accepting always sets a new password**, including when the address already had a
+  customer account (which is promoted rather than duplicated). No customer-era password
+  ever becomes a staff password.
+- **Clearing the accept throttle bucket** (only invalid tokens count toward it, so
+  legitimate users never hit it):
+
+```
+ssh tokecosmetics 'docker exec -i $(docker ps -qf name=redis) redis-cli --scan --pattern "*throttle_invite_accept_ip*" | xargs -r docker exec -i $(docker ps -qf name=redis) redis-cli DEL'
+```
+
+Security lines to expect in `apps.security`: `staff invite created ...` (INFO),
+`staff invite revoked ...` (INFO), `staff invite accepted ...` (WARNING), and
+`staff invite accept failed: <reason> token from <ip>` (ERROR — a Sentry event; the
+`expired` reason logs at INFO instead, because that is a real new hire who waited too
+long).
+
+## 6. OUTSTANDING — lost-device TOTP recovery is a `manage.py` command, not an endpoint
+
+**Status: nothing to run yet. TOTP itself is Plan-16 Task 3b and has not been built.**
+This entry exists now so that whoever builds it does not solve the problem the cheap
+way.
+
+A staff member who loses their phone must NOT be able to reset their own TOTP over the
+web. Any such endpoint becomes the cheapest door into the admin — it is, by
+construction, a way to turn "I control this inbox" or "I answer these questions" back
+into full administrator access, which is exactly the fence TOTP was added to build
+(Amendment 1: the catastrophic scenario is admin compromise → attacker edits the payout
+bank account → every bank-transfer order pays them).
+
+Recovery is therefore an operator action requiring root SSH:
+
+```
+ssh tokecosmetics 'cd /opt/tokecosmetics/repo && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f infra/docker-compose.prod.yml exec api python manage.py reset_staff_totp <email>'
+```
+
+Task 3b must ship that command. The staff population is ~1 and the store owner holds
+the SSH key, so the operational cost is a few minutes and the security saving is an
+entire attack surface.
+
+## 7. Staff role groups
 
 Roles are Django Groups named exactly `Owner`, `Manager`, `Support`, `Content`
 (`accounts/migrations/0003_seed_admin_roles.py`). **Do not rename them in the Django

@@ -41,19 +41,62 @@ sees a customer token as *unauthenticated* and answers 401. A permission-only ch
 fails OPEN: forget it once and the customer token walks in. This test enforces the
 first arrangement so the second can never be introduced by accident.
 
+TWO EXPLICIT ALLOWLISTS, added in Task 3, both deliberately short and both commented
+per entry:
+
+* `PUBLIC_ADMIN_ROUTES` — admin-prefix routes that are public ON PURPOSE. Task 2's
+  headline find was an ACCIDENTALLY public admin route; accept-invite is a deliberately
+  public one, and without somewhere to say so the only ways to ship it would be to
+  weaken the guard for every route or to mount it where the walker cannot see it. An
+  entry is not a waiver: allowlisted routes are held to a stricter rule than guarded
+  ones (see `test_public_admin_routes_declare_their_own_openness`).
+* `PREAUTH_ACCEPTING_VIEWS` — views allowed to accept the TOTP-bootstrap claim. Empty
+  today; Task 3b populates it.
+
 WHAT THIS FILE DOES NOT CHECK is behaviour: that the declared scope actually keeps
 the wrong role out over real HTTP, with the right status code, is
 `test_admin_role_matrix.py`. This file checks the wiring; that one checks the wire.
 """
 import pytest
 from django.urls import get_resolver, reverse
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import AllowAny, IsAdminUser
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from apps.accounts.authentication import AdminJWTAuthentication
+from apps.accounts.authentication import AdminJWTAuthentication, AdminPreauthJWTAuthentication
 
 # Every admin route in the project is mounted under this prefix by config/urls.py.
 ADMIN_URL_PREFIX = "api/v1/admin/"
+
+# Routes on the admin prefix that are PUBLIC ON PURPOSE, by view class name, each with
+# the reason. This list is the whole point of the addition: Task 2's headline find was
+# an ACCIDENTALLY public admin route (DefaultRouter's `APIRootView`, inheriting AllowAny
+# plus the stock authentication class, answering anonymous GETs with a directory of the
+# admin API). Without somewhere to write "this one is deliberate", the only two options
+# for a genuinely public admin endpoint are to weaken the guard for everybody or to
+# hide the route somewhere the walker cannot see it. Both end with the next accidental
+# one going unnoticed.
+#
+# An entry here is not a waiver. `test_public_admin_routes_declare_their_own_openness`
+# holds them to a STRICTER standard than the guarded routes: they must declare
+# `permission_classes` and `authentication_classes` on the class itself, and the
+# authentication list must be EMPTY. A route that accepts no credential cannot act on
+# behalf of one, and — the property that matters here — it cannot be public by
+# inheriting a default nobody looked at, which is exactly how `APIRootView` got in.
+PUBLIC_ADMIN_ROUTES: dict[str, str] = {
+    "StaffInviteAcceptView": (
+        "Accept a staff invite. The caller has no account yet (or a customer account "
+        "whose credentials are irrelevant), so the proof it accepts is the invite "
+        "token, which proves control of the invited inbox. Turnstile-gated; the "
+        "throttle is applied inside the view, only to invalid tokens."
+    ),
+}
+
+# Views permitted to accept `AdminPreauthJWTAuthentication` — the bootstrap claim minted
+# by accept-invite. EMPTY TODAY, and correct: the preauth token reaches nothing at all
+# until Task 3b builds TOTP enrolment and confirmation, which are the only two
+# destinations it will ever have. Enumerated rather than discovered so that widening it
+# is a deliberate, reviewed edit and not a side effect of adding a view.
+PREAUTH_ACCEPTING_VIEWS: tuple[str, ...] = ()
 
 # The admin views that are NOT under that prefix, by URL name. Kept tiny and explicit:
 # each entry is a route someone deliberately put somewhere else, and writing it down is
@@ -108,6 +151,11 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # admin-me answers "who am I and what may I do". Every staff member must be able
     # to ask it, including one whose role grants nothing yet, so it holds no scope.
     "AdminMeView": None,
+    # Inviting staff mints administrators, so `staff.manage` is Owner-only. Revocation
+    # carries the same scope because an invite is a live staff-creation capability
+    # either way: being able to cancel one is as consequential as being able to send it.
+    "StaffInviteListCreateView": "staff.manage",
+    "StaffInviteRevokeView": "staff.manage",
 }
 
 
@@ -148,6 +196,8 @@ def discover_admin_views() -> dict[str, type]:
             continue
         view_class = _view_class(callback)
         assert view_class is not None, f"{pattern} does not resolve to a class-based view"
+        if view_class.__name__ in PUBLIC_ADMIN_ROUTES:
+            continue  # deliberately public — held to the rules below instead
         existing = found.setdefault(view_class.__name__, view_class)
         # Two different classes sharing a name would let one hide behind the other's
         # entry in ADMIN_SURFACE. Cheap to rule out, silent and nasty if it happened.
@@ -158,7 +208,22 @@ def discover_admin_views() -> dict[str, type]:
     return found
 
 
+def discover_public_admin_views() -> dict[str, type]:
+    """The admin-prefix routes named in `PUBLIC_ADMIN_ROUTES`, as they are actually
+    routed. Separate from `discover_admin_views` so a name in the allowlist that no
+    longer corresponds to a route fails loudly instead of quietly exempting nothing."""
+    found: dict[str, type] = {}
+    for pattern, _name, callback in _walk(get_resolver()):
+        if not pattern.startswith(ADMIN_URL_PREFIX):
+            continue
+        view_class = _view_class(callback)
+        if view_class is not None and view_class.__name__ in PUBLIC_ADMIN_ROUTES:
+            found[view_class.__name__] = view_class
+    return found
+
+
 ADMIN_VIEWS = discover_admin_views()
+PUBLIC_ADMIN_VIEWS = discover_public_admin_views()
 
 
 def test_every_routed_admin_view_is_declared():
@@ -301,6 +366,92 @@ def test_the_admin_prefix_has_no_route_of_its_own():
         if pattern.startswith(ADMIN_URL_PREFIX) and name == "api-root"
     ]
     assert not roots, f"an ungated router root is mounted on the admin prefix: {roots}"
+
+
+def test_every_public_admin_route_in_the_allowlist_still_exists():
+    """Symmetric, for the same reason `test_every_routed_admin_view_is_declared` is: a
+    stale exemption is worse than no exemption, because the next person reading
+    PUBLIC_ADMIN_ROUTES treats it as a description of the surface. A name here that is
+    no longer routed also means the guard is silently exempting nothing while looking
+    like it exempts something."""
+    assert set(PUBLIC_ADMIN_VIEWS) == set(PUBLIC_ADMIN_ROUTES), (
+        f"allowlisted but not routed: {sorted(set(PUBLIC_ADMIN_ROUTES) - set(PUBLIC_ADMIN_VIEWS))}"
+    )
+
+
+def test_no_view_is_both_guarded_and_exempt():
+    """The two sets must not overlap, or a view could satisfy the exemption while its
+    ADMIN_SURFACE entry made it look guarded."""
+    assert not (set(PUBLIC_ADMIN_VIEWS) & set(ADMIN_VIEWS))
+
+
+@pytest.mark.parametrize("view_name", sorted(PUBLIC_ADMIN_ROUTES))
+def test_public_admin_routes_declare_their_own_openness(view_name):
+    """A deliberately public admin route must SAY SO ON THE CLASS.
+
+    This is the check that would have caught `APIRootView`. That view was public not
+    because anybody decided it should be, but because it declared nothing and inherited
+    the project defaults — `AllowAny` (DRF's own default; the project sets no
+    `DEFAULT_PERMISSION_CLASSES`) plus stock `JWTAuthentication`. Asserting
+    `permission_classes == [AllowAny]` alone would not have caught it, because the
+    inherited value IS `[AllowAny]`. So the assertion is on `vars(view_class)`: the
+    attribute must be defined on the class itself.
+
+    `authentication_classes` must additionally be EMPTY. A public endpoint that still
+    runs an authenticator can act on behalf of whatever credential it happens to be
+    handed, and a malformed token there turns a public route into a 401 for no reason.
+    Nothing on this list needs to know who is calling — that is what makes it public.
+    """
+    view_class = PUBLIC_ADMIN_VIEWS[view_name]
+    assert "permission_classes" in vars(view_class), (
+        f"{view_name} is public by INHERITANCE, not by decision — declare "
+        f"permission_classes = [AllowAny] on the class"
+    )
+    assert "authentication_classes" in vars(view_class), (
+        f"{view_name} inherits its authentication classes; declare them on the class"
+    )
+    assert view_class.permission_classes == [AllowAny], view_class.permission_classes
+    assert view_class.authentication_classes == [], (
+        f"{view_name} is public but still accepts a credential: "
+        f"{[c.__name__ for c in view_class.authentication_classes]}"
+    )
+
+
+def test_only_enumerated_views_accept_the_preauth_claim():
+    """The bootstrap claim (`toke-admin-preauth`) is minted when a staff invite is
+    accepted: password set, account created, TOTP not yet enrolled. Amendment 6's
+    invariant is that the ADMIN audience claim means the full ceremony and is minted
+    nowhere else — so bootstrap gets its own claim, and that claim must reach only the
+    endpoints that finish the ceremony.
+
+    The list is empty today because Task 3b has not built them, which means a preauth
+    token currently opens nothing at all. That is fail-closed and deliberate. This test
+    walks the WHOLE URLconf rather than the admin prefix, because a preauth-accepting
+    endpoint mounted anywhere else would be exactly as dangerous and exactly as easy to
+    add by accident.
+    """
+    offenders = []
+    for pattern, _name, callback in _walk(get_resolver()):
+        view_class = _view_class(callback)
+        if view_class is None:
+            continue
+        if AdminPreauthJWTAuthentication in getattr(view_class, "authentication_classes", []):
+            if view_class.__name__ not in PREAUTH_ACCEPTING_VIEWS:
+                offenders.append(f"{pattern} -> {view_class.__name__}")
+    assert not offenders, (
+        "these views accept the TOTP-bootstrap claim without being enumerated in "
+        f"PREAUTH_ACCEPTING_VIEWS: {sorted(set(offenders))}"
+    )
+
+
+def test_no_admin_view_accepts_the_preauth_claim_as_well_as_the_admin_one():
+    """The two audiences are mutually exclusive by construction — one claim, compared
+    for equality by each class — but listing both classes on one view would union them
+    and let a half-authenticated caller through. Cheap to rule out."""
+    for view_name, view_class in ADMIN_VIEWS.items():
+        assert AdminPreauthJWTAuthentication not in view_class.authentication_classes, (
+            f"{view_name} accepts a bootstrap token that has not completed TOTP"
+        )
 
 
 def test_the_admin_token_endpoint_is_not_itself_behind_the_admin_class():

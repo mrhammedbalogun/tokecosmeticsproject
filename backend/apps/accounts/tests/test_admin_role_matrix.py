@@ -115,6 +115,12 @@ MATRIX: list[Row] = [
         body={"note": "no answer"}),
     Row("FreightReceiptView", "post", f"{_ORDER}/freight/receipt/", _MANAGERS,
         body={"amount_received": "1.00", "bank_reference": "REF1"}),
+    # --- staff: Owner only, because inviting staff MINTS ADMINISTRATORS ----------
+    # The most consequential scope in the table: everything else changes data, this
+    # changes who can change data. Revoking carries the same scope because an
+    # outstanding invite is the same capability either way.
+    Row("StaffInviteListCreateView", "get", "/api/v1/admin/staff/invites/", _OWNER),
+    Row("StaffInviteRevokeView", "post", "/api/v1/admin/staff/invites/999999/revoke/", _OWNER),
     # --- identity: every staff member, whatever their role -----------------------
     Row("AdminMeView", "get", "/api/v1/auth/admin-me/", ALL_ROLES),
 ]

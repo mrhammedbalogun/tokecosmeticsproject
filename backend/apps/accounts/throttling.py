@@ -343,6 +343,70 @@ class AdminLoginEmailThrottle(_FailureCountingMixin, _EmailKeyedThrottle):
     scope = "admin_login_email"
 
 
+# --- staff invite acceptance ---------------------------------------------------
+
+
+class StaffInviteAcceptThrottle(_FailureCountingMixin, _IPKeyedThrottle):
+    """The accept-invite bucket. **Checked AFTER the token is known to be invalid.**
+
+    THIS INVERTS THE ORDER EVERY OTHER THROTTLE IN THE PROJECT USES, deliberately, and
+    a reviewer should expect to find that suspicious — so here is the argument in full.
+
+    DRF checks throttles in `APIView.initial()`, before the view body runs and therefore
+    before the request has proved anything about itself. On most endpoints that is
+    correct. On this one it is a denial button, for the same shared-egress reason that
+    made the admin login throttles a staff lockout (see `_IPKeyedThrottle`): the admin
+    app that will serve the accept page is a Next BFF calling this endpoint SERVER-side,
+    so every legitimate acceptance will arrive from one Vercel egress address, shared
+    with every attacker who uses the same page. And unlike login, the legitimate user
+    gets exactly ONE shot: a new hire has a single invite, valid once. An attacker who
+    fills the bucket with junk 429s the only person the endpoint exists to serve, and
+    the recovery is the Owner noticing, revoking and re-inviting into the same jammed
+    bucket.
+
+    STATE OF THAT ASSUMPTION TODAY, per the standing rule about docstrings describing
+    what actually exists: the admin app is Plan-16 Task 5 and IS NOT BUILT. Right now
+    the only callers are tests and anything hitting the API directly, where
+    `CF-Connecting-IP` is a real per-client address. The design is sized for the
+    deployed shape rather than the current one deliberately — this is the same
+    shared-egress fact that was asserted, wrongly, NOT to apply to the admin login, and
+    cost a free staff lockout. If Task 5 ships a client-side call instead, revisit this
+    and `_IPKeyedThrottle` together.
+
+    So `StaffInviteAcceptView` does not list this class in `throttle_classes` at all.
+    The order is: Turnstile -> hash the submitted token -> indexed lookup -> if the
+    token is VALID, proceed and touch no bucket -> only on an INVALID token, check the
+    bucket (denying at the cap) and then count the failure.
+
+    WHY THAT IS SAFE RATHER THAN A BYPASS. The bypass condition is "hold a valid
+    token", and the token is 256 bits from `secrets.token_urlsafe(32)`. An attacker
+    cannot manufacture it; possessing one already means possessing the capability the
+    bucket is protecting, at which point metering is pointless. The property this buys
+    is stronger than the usual trade-off between availability and abuse: new-hire
+    lockout becomes structurally impossible rather than merely unlikely.
+
+    WHAT THE BUCKET IS ACTUALLY FOR, then. Not guess-rate — guessing is not a threat at
+    this entropy. It caps the JUNK VOLUME a single origin can push through a public
+    endpoint that does a Turnstile round-trip (5s timeout) and a database lookup per
+    request. Rate today: `invite_accept_ip` = 10/hour, counted per FAILED token.
+
+    The volume cap that could tell a new hire and an attacker apart would have to sit at
+    a hop that sees real client IPs, i.e. the edge. **No such rule is configured for this
+    endpoint, and none is specified** — unlike the admin login, where two edge rules are
+    written out in `docs/runbooks/admin-gate.md` §1 and are also still unconfigured. That
+    is a smaller gap than it sounds: this endpoint is only reachable in a useful way
+    while an invite is outstanding, which is a few days a year.
+
+    Inherits `_FailureCountingMixin` so `allow_request` reads without writing, and the
+    view calls `record_failure` explicitly. Reset-on-success is NOT used: a successful
+    accept never touches the bucket in the first place, so there is nothing to clear,
+    and clearing it would hand an attacker holding one genuinely-consumed invite a way
+    to wipe the counter.
+    """
+
+    scope = "invite_accept_ip"
+
+
 # --- registration ------------------------------------------------------------
 # The IP throttle is the one that matters. RegisterView mails the SUBMITTED address,
 # so an unmetered endpoint is a spam cannon pointed at strangers from our own domain,

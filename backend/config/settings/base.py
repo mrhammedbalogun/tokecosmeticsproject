@@ -201,6 +201,11 @@ REST_FRAMEWORK = {
         # one gate cannot deny logins on the other.
         "admin_login_ip": "5/min",
         "admin_login_email": "10/hour",
+        # Staff invite acceptance. Counts INVALID tokens only — see
+        # `StaffInviteAcceptThrottle`, which deliberately inverts the usual order so a
+        # valid token never touches the bucket. 10/hour is a junk-volume cap, not a
+        # guess cap: at 256 bits of token entropy, guessing is not the threat model.
+        "invite_accept_ip": "10/hour",
         # The _ip rates below are DELIBERATELY loose. All storefront traffic egresses
         # from Vercel, so these are shared by every customer at once -- at 10/hour they
         # were a store-wide cap of ten signups and ten password resets per hour, which
@@ -284,6 +289,15 @@ RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 # admin; whichever happens first wins. Plan-11's verified-purchase review rule and
 # Plan-28's accounting both read this status, so it has to actually get set.
 RETURN_WINDOW_DAYS = env.int("RETURN_WINDOW_DAYS", default=14)
+
+# --- Staff invites ---
+# How long an invite link stays usable. 72 hours is long enough to survive a weekend
+# and short enough that a link forwarded, screenshotted or left in a mailbox stops
+# being a staff-creation capability quickly. Env-tunable because the right number
+# depends on how the person is actually onboarded, and the only alternative to tuning
+# it is people asking for a re-invite. Lowering it costs nothing: "resend" is
+# revoke + invite, which is a two-click operation for the Owner.
+STAFF_INVITE_TTL_HOURS = env.int("STAFF_INVITE_TTL_HOURS", default=72)
 
 # --- JWT (SimpleJWT) ---
 from datetime import timedelta  # noqa: E402

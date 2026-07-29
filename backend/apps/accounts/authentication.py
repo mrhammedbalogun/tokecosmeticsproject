@@ -60,6 +60,8 @@ anything locks every staff member out, and setting it to our own value would sta
 the claim onto CUSTOMER tokens too and reopen the bypass completely. A private,
 non-reserved claim name is not subject to either.
 """
+from datetime import timedelta
+
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.contrib.rest_framework_simplejwt import SimpleJWTScheme
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -71,8 +73,75 @@ from rest_framework_simplejwt.tokens import AccessToken
 ADMIN_AUDIENCE_CLAIM = "toke_aud"
 ADMIN_AUDIENCE = "toke-admin"
 
+# The BOOTSTRAP audience. Same claim, different value, so the equality check in
+# `AdminJWTAuthentication` rejects it without needing to know it exists.
+#
+# WHY IT EXISTS AND WHY IT OPENS NOTHING TODAY. Amendment 6's invariant is that
+# `toke-admin` means the FULL admin ceremony completed — password, Turnstile and TOTP —
+# and is minted nowhere else. Accepting a staff invite completes only the first two, so
+# it cannot mint one; bootstrap is not an exception to the invariant, because an
+# exception is where the hole grows. What it mints instead is this: a short-lived token
+# that says "this person has proved the invite and set a password, and now owes a TOTP
+# enrolment".
+#
+# Task 3b will give it exactly two destinations — TOTP enrol and TOTP confirm. Until
+# then it reaches NOTHING AT ALL, which is correct and fail-closed rather than an
+# oversight; a temporary escape hatch here would be a second bootstrap path, and the
+# enumerated allowlist in `tests/test_admin_surface_guard.py` exists so adding one is a
+# deliberate, reviewed edit.
+#
+# NOTE FOR TASK 3b: `/auth/admin-token/` presented with a valid password + Turnstile by
+# a staff account with NO TOTP enrolled must return this SAME preauth token, routing to
+# those SAME two endpoints. One bootstrap path, not two.
+ADMIN_PREAUTH_AUDIENCE = "toke-admin-preauth"
 
-class AdminJWTAuthentication(JWTAuthentication):
+# Long enough to scan a QR code and type a six-digit code, short enough that a preauth
+# token left in a browser history or a proxy log is worthless by the time anyone finds
+# it. Not env-tunable: there is no operational reason to lengthen it, and the only
+# effect of doing so would be to widen that window.
+PREAUTH_TOKEN_LIFETIME = timedelta(minutes=10)
+
+
+def mint_preauth_token(user) -> str:
+    """A bootstrap credential for `user`. Never an admin-audience token.
+
+    An ACCESS token rather than a refresh pair on purpose: there is nothing to renew.
+    It has one job, one short life, and if it expires the person re-uses their invite
+    link — or, once Task 3b lands, logs in again. Handing out a refresh token here
+    would create a long-lived credential for an account that has not finished proving
+    who it is.
+    """
+    token = AccessToken.for_user(user)
+    token[ADMIN_AUDIENCE_CLAIM] = ADMIN_PREAUTH_AUDIENCE
+    token.set_exp(lifetime=PREAUTH_TOKEN_LIFETIME)
+    return str(token)
+
+
+class _AudienceScopedJWTAuthentication(JWTAuthentication):
+    """Shared body: accept only ACCESS tokens whose `toke_aud` equals `audience`.
+
+    One implementation for both audiences so the two can never drift — in particular so
+    a future edit cannot relax the `token_type` pin on one of them and leave the other
+    looking identical while behaving differently.
+    """
+
+    audience: str = ""
+
+    def get_validated_token(self, raw_token):
+        token = super().get_validated_token(raw_token)
+        wrong_type = token.get(api_settings.TOKEN_TYPE_CLAIM) != AccessToken.token_type
+        if wrong_type or token.get(ADMIN_AUDIENCE_CLAIM) != self.audience:
+            # Deliberately generic, and deliberately the same shape as any other
+            # bad token: the response must not teach a caller holding a valid
+            # customer token that a *different kind* of token would have worked.
+            raise AuthenticationFailed(
+                _("Given token not valid for this endpoint"),
+                code="token_not_valid",
+            )
+        return token
+
+
+class AdminJWTAuthentication(_AudienceScopedJWTAuthentication):
     """Accepts only ACCESS tokens minted by `/auth/admin-token/`.
 
     The claim is set on the REFRESH token at login. SimpleJWT's
@@ -99,18 +168,28 @@ class AdminJWTAuthentication(JWTAuthentication):
     the claim-plus-`is_staff` pair below.
     """
 
-    def get_validated_token(self, raw_token):
-        token = super().get_validated_token(raw_token)
-        wrong_type = token.get(api_settings.TOKEN_TYPE_CLAIM) != AccessToken.token_type
-        if wrong_type or token.get(ADMIN_AUDIENCE_CLAIM) != ADMIN_AUDIENCE:
-            # Deliberately generic, and deliberately the same shape as any other
-            # bad token: the response must not teach a caller holding a valid
-            # customer token that a *different kind* of token would have worked.
-            raise AuthenticationFailed(
-                _("Given token not valid for this endpoint"),
-                code="token_not_valid",
-            )
-        return token
+    audience = ADMIN_AUDIENCE
+
+
+class AdminPreauthJWTAuthentication(_AudienceScopedJWTAuthentication):
+    """Accepts ONLY the bootstrap token minted by `mint_preauth_token`.
+
+    NOTHING USES THIS YET, and that is the design rather than an omission. It exists now
+    so that the accept-invite flow has something to return that is provably not an admin
+    session, and so Task 3b has a mechanism to attach its two TOTP endpoints to instead
+    of inventing one under deadline pressure.
+
+    The pairing that makes it safe is mutual exclusion by construction: `toke_aud` holds
+    one value, both authentication classes compare it for equality, so a preauth token
+    is refused everywhere an admin token is accepted and vice versa. There is no
+    ordering, precedence or subset relationship to get wrong.
+
+    `tests/test_admin_surface_guard.py` keeps an explicitly enumerated list of the views
+    allowed to accept this class. It is empty today. Adding a view to it is the moment
+    to ask what a half-authenticated caller can now reach.
+    """
+
+    audience = ADMIN_PREAUTH_AUDIENCE
 
 
 class AdminJWTScheme(SimpleJWTScheme):

@@ -1,11 +1,13 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from rest_framework import serializers
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from apps.accounts.authentication import ADMIN_AUDIENCE, ADMIN_AUDIENCE_CLAIM
-from apps.accounts.models import Address
+from apps.accounts.models import Address, StaffInvite
 from apps.core.address_rules import required_fields_for
 
 User = get_user_model()
@@ -166,6 +168,110 @@ class AdminTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
         token[ADMIN_AUDIENCE_CLAIM] = ADMIN_AUDIENCE
         return token
+
+
+class StaffInviteSerializer(serializers.ModelSerializer):
+    """READ shape. Note what is absent: `token_hash`.
+
+    Not merely uninteresting — a digest is the lookup key, so returning it to any
+    caller who can list invites would let them mount an offline check against a
+    candidate token without touching the throttled endpoint. It is excluded by an
+    explicit field list rather than by `exclude`, so a field added later is opt-in.
+    """
+
+    role = serializers.CharField(source="role.name", read_only=True)
+    invited_by = serializers.EmailField(source="invited_by.email", read_only=True, default=None)
+    state = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = StaffInvite
+        fields = [
+            "id", "email", "role", "state", "expires_at",
+            "invited_by", "accepted_at", "revoked_at", "created_at",
+        ]
+        read_only_fields = fields
+
+
+class StaffInviteCreateSerializer(serializers.Serializer):
+    """WRITE shape for `POST /admin/staff/invites/`.
+
+    THE TWO REFUSALS ARE THE INTERESTING PART, and both are about keeping "an invite"
+    a single unambiguous thing:
+
+    1. **An address that is already staff is refused.** An invite whose meaning is
+       sometimes-create-an-administrator and sometimes-modify-an-existing-one has no
+       single answer to "how did this person get this role?", which is the question the
+       whole invite trail exists to answer. Changing an existing staff member's role is
+       a group edit.
+    2. **A second outstanding invite for the same address is refused.** Two live tokens
+       for one address means the older one survives the "resend" meant to replace it —
+       and since accepting ALWAYS sets a password, a stale token is a silent
+       staff-password reset sitting in an old inbox. Resend is revoke + invite; this is
+       what makes that the only way to do it.
+
+    `role` is a group NAME validated against `rbac.ROLES` rather than a primary key.
+    Ruling 3 says views never name groups, and this endpoint is the one place that rule
+    cannot hold — it is *about* groups — so the constraint is enforced here instead: the
+    only accepted names are the four seeded roles, which means an invite can never point
+    at some other group that happens to exist and grants nothing.
+    """
+
+    email = serializers.EmailField()
+    role = serializers.CharField()
+
+    def validate_email(self, value):
+        value = value.strip().lower()
+        if User.objects.filter(email__iexact=value, is_staff=True).exists():
+            raise serializers.ValidationError(
+                "That address is already a staff account. Manage their groups directly."
+            )
+        return value
+
+    def validate_role(self, value):
+        from apps.accounts.rbac import ROLES
+
+        if value not in ROLES:
+            raise serializers.ValidationError(f"Unknown role. Choose one of: {', '.join(ROLES)}.")
+        group = Group.objects.filter(name=value).first()
+        if group is None:
+            # The seed migration creates these; a missing one means the group was
+            # deleted or renamed, which `accounts.W001` also reports. Fail loudly here
+            # rather than inviting someone into a role that cannot exist.
+            raise serializers.ValidationError(
+                f"The {value} role group is missing. Re-run the accounts.0003 seed."
+            )
+        return group
+
+    def validate(self, attrs):
+        outstanding = StaffInvite.objects.filter(
+            email__iexact=attrs["email"],
+            accepted_at__isnull=True,
+            revoked_at__isnull=True,
+            expires_at__gt=timezone.now(),
+        )
+        if outstanding.exists():
+            raise serializers.ValidationError(
+                "That address already has an outstanding invite. Revoke it first, "
+                "then send a new one."
+            )
+        return attrs
+
+
+class StaffInviteAcceptSerializer(serializers.Serializer):
+    """WRITE shape for the PUBLIC accept endpoint.
+
+    The password is validated HERE, before the view claims the invite, so a rejected
+    password cannot burn a single-use capability on a typo — see
+    `StaffInviteAcceptView` for the ordering and why it is what it is.
+
+    `turnstile_token` is read straight off `request.data` by `require_turnstile` (same
+    as every other gated endpoint) and is declared here only so the generated schema
+    tells the admin app to send it.
+    """
+
+    token = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+    turnstile_token = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
 
 class AdminMeSerializer(serializers.Serializer):

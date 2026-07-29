@@ -175,6 +175,25 @@ a staff account without TOTP enrolled can only reach the enrolment screen. Libra
 global constraints. Tests: enrolment, replay rejection of a used code, clock skew
 window, recovery-code single-use, non-enrolled staff blocked from all other routes.
 
+**BUILT IN TASK 3, WAITING FOR 3b — read before starting.** The bootstrap mechanism
+already exists: `authentication.ADMIN_PREAUTH_AUDIENCE` (`toke-admin-preauth`, same
+`toke_aud` claim, different value), `mint_preauth_token()` (10-minute access token, no
+refresh), and `AdminPreauthJWTAuthentication`. Accepting a staff invite returns one of
+these and **nothing accepts it yet**, which is deliberate and fail-closed. Three
+constraints on 3b:
+
+1. Attach the TOTP enrol and confirm endpoints to `AdminPreauthJWTAuthentication` and
+   add them to `PREAUTH_ACCEPTING_VIEWS` in `tests/test_admin_surface_guard.py`. That
+   list is currently empty and a guard test fails if a view accepts the claim without
+   being enumerated.
+2. `/auth/admin-token/` with a valid password + Turnstile from a staff account with **no
+   TOTP enrolled** must return the SAME preauth token routing to the SAME two
+   endpoints. One bootstrap path, not two — a second path is where the hole grows.
+3. **Lost-device recovery is a `manage.py` command over SSH, not an endpoint.** The
+   runbook entry is already written (`docs/runbooks/admin-gate.md` §6) and names the
+   command 3b must ship: `reset_staff_totp <email>`. A web-reachable TOTP reset would be
+   the new cheapest door.
+
 ### Amendment 3 — the preview deploy comes INTO Plan-16 (Task 8 rewritten)
 
 The original Task 8 deferred Hammed's checkpoint "until a preview deploy exists",
