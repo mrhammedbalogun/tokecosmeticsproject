@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Toke Admin
 
-## Getting Started
-
-First, run the development server:
+The staff administration app — the third deployable, alongside `backend/` and
+`storefront/`. Next 16 (App Router), port **3001** in development, which is what
+`backend`'s `ADMIN_URL` defaults to (staff-invite links are built from it).
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm --prefix admin run dev        # http://localhost:3001
+npm --prefix admin test           # vitest
+npm --prefix admin run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| variable | who reads it | notes |
+|---|---|---|
+| `API_URL` | server only | Django base, e.g. `http://localhost:8000`. Never exposed to the browser. |
+| `NEXT_PUBLIC_API_URL` | browser | Same URL, published so the topbar can show a red **STAGING** badge whenever it is not `https://api.tokecosmetics.com`. Also the fallback for `API_URL`. |
+| `NEXT_PUBLIC_TURNSTILE_ADMIN_SITE_KEY` | browser | The **admin** Turnstile widget's site key. Unset = widget off, matching an unset `TURNSTILE_ADMIN_SECRET`/`TURNSTILE_SECRET` on the backend. |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+There is deliberately nothing else. No secret belongs in this bundle beyond a
+`NEXT_PUBLIC_*` site key.
 
-## Learn More
+### Turnstile in development — use Cloudflare's permanent test keys
 
-To learn more about Next.js, take a look at the following resources:
+The real admin widget is a **separate** Turnstile widget from the storefront's, because
+widgets are domain-scoped and this is a new hostname — and because a separate widget pairs
+with `TURNSTILE_ADMIN_SECRET`, which is what lets an operator drop the *staff* gate during
+a siteverify outage without also dropping the customer gate
+(`docs/runbooks/admin-gate.md` §2). Creating it needs a human in the Cloudflare dashboard,
+and that is a **launch** dependency, not a build one.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Cloudflare publishes permanent, documented test keys. Use them locally; the full
+three-step ceremony is verifiable end to end with them, and production cutover is swapping
+two values.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| behaviour | site key (`NEXT_PUBLIC_TURNSTILE_ADMIN_SITE_KEY`) | secret (`TURNSTILE_ADMIN_SECRET`, backend) |
+|---|---|---|
+| always passes | `1x00000000000000000000AA` | `1x0000000000000000000000000000000AA` |
+| always fails (use to exercise the rejection path) | `2x00000000000000000000AB` | `2x0000000000000000000000000000000AA` |
 
-## Deploy on Vercel
+They are **not** defaulted in the source. A widget that silently always passes is exactly
+the kind of thing that ships to production once and is never noticed.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Rules this app is built to
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **ZERO third-party scripts or analytics on this origin, ever.** No tag manager, no
+  session replay, no font CDN. It is what makes `/accept-invite?token=…` (a staff-creation
+  capability in a URL) and the TOTP setup screen (a secret on screen) safe. The only
+  exception is Cloudflare's own Turnstile widget, loaded on the two unauthenticated forms.
+  Enforced by the CSP in `next.config.ts`.
+- **No service worker**, and `Cache-Control: no-store` on every page and BFF response
+  (`src/proxy.ts`).
+- **Never link to this hostname from the storefront**, and never add a sitemap.
+  `X-Robots-Tag: noindex` is set site-wide.
+
+## The BFF surface, in full
+
+Short on purpose. Every entry below is a place cookies are written or a credential is
+forwarded; the list is meant to stay countable on one hand.
+
+| surface | what it does |
+|---|---|
+| `app/login/actions.ts` | password + Turnstile → stores the **preauth** cookie |
+| `app/totp/actions.ts` | enrol / confirm / recovery — confirm is the only thing that stores a session |
+| `app/accept-invite/actions.ts` | invite token + password → stores the **preauth** cookie |
+| `app/(shell)/actions.ts` | sign out: blacklists the refresh token, clears every cookie |
+| `app/api/[...path]/route.ts` | the generic authenticated proxy |
+| `app/api/auth/refresh-redirect/route.ts` | renewal bounce for Server Components (they cannot write cookies) |
+| `app/api/auth/purge/route.ts` | clears the three cookies and returns to `/login` — the destination a page's "anomaly" decision redirects to, for the same reason: a page cannot delete a cookie |
+
+## Session model
+
+Three httpOnly, `SameSite=Strict` cookies, and the third one is the design:
+
+- `admin_preauth` (10 min) — the bootstrap credential. Opens exactly three backend
+  endpoints and nothing else.
+- `admin_access` (10 min) / `admin_refresh` (**12 h**, not the storefront's 14 days) — a
+  real session, obtainable only from `/auth/admin-totp/confirm/`.
+
+The two sets are **mutually exclusive at write time**, so holding both is an anomaly the
+gate purges rather than an ambiguity it has to guess about. The full matrix, with the
+reasoning, is at the top of `src/lib/auth-guard.ts`.
+
+## What is NOT here yet
+
+- **No QR code on the TOTP setup screen.** Rendering one needs a QR encoder, and this app
+  may take new dependencies only where the storefront already uses the equivalent — it has
+  none. The screen shows the setup key for manual entry plus the raw `otpauth://` URI,
+  which every authenticator app accepts. Pointing an `<img>` at a QR web service is **not**
+  an option: it would put the TOTP secret in a third party's request log.
+- Every nav item except Dashboard links to a page Plans 17-19 will build.

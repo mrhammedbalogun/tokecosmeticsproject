@@ -295,3 +295,75 @@ owner will not notice, because superusers short-circuit to every scope.
 If it happens: rename the group back. `manage.py check` reports it as
 `accounts.W001`, and it is logged at ERROR the first time an affected staff member
 makes a request.
+
+## 8. The admin app (`admin/`) — Plan-16 Task 5
+
+**Status: BUILT.** Next 16, port 3001 in development. Full developer detail is in
+`admin/README.md`; this section is what an operator needs.
+
+### 8.1 What sign-out actually revokes — read this before promising anything
+
+Signing out clears all three cookies AND calls `/auth/logout/`, which **genuinely
+blacklists the refresh token**: `rest_framework_simplejwt.token_blacklist` is in
+`INSTALLED_APPS`, so this is real revocation and no further renewal can succeed.
+
+**The access token is NOT revocable.** It lives for up to ten minutes after sign-out and
+any copy of it (a stolen cookie jar, a captured proxy log) keeps working until it expires.
+That is the honest reason the admin access cookie is 10 minutes and not an hour.
+
+If you need to end a staff member's access *immediately* and completely, remove
+`is_staff` — `HasAdminScope` and `IsAdminUser` re-read it from the database on every
+request, so it takes effect on the next call rather than on the next token.
+
+### 8.2 Three cookies, and why "both sets present" is an alarm
+
+- `admin_preauth` (10 min) — issued by step one, opens only the three TOTP endpoints.
+- `admin_access` (10 min) + `admin_refresh` (**12 h**) — a real session, obtainable only
+  from `/auth/admin-totp/confirm/`.
+
+They are written mutually exclusively, so a browser can never legitimately hold both. If
+one does, the app throws **all** cookies away and returns to `/login`. A staff member
+reporting "it keeps signing me out at the login screen" with no other symptom is worth one
+look at whether something is writing cookies outside `lib/admin-session.ts`.
+
+**Idle behaviour, so it is not reported as a bug:** the refresh cookie is 12 hours, so a
+staff member signs in with a password *and* a TOTP code roughly once a working day. That
+is deliberate. A fortnight-long staff session would mean the second factor was proved once
+and then trusted for two weeks.
+
+### 8.3 Turnstile on the admin — one outstanding human step
+
+The admin uses its **own** Turnstile widget (`NEXT_PUBLIC_TURNSTILE_ADMIN_SITE_KEY` in
+Vercel, `TURNSTILE_ADMIN_SECRET` in `.env.prod`). Widgets are domain-scoped, so the
+storefront's key will not work on the admin hostname — and a separate secret is what makes
+the break-glass in §2 able to drop the staff gate without dropping the customer gate.
+
+**Creating the widget needs Hammed in the Cloudflare dashboard.** Until then the app is
+built and verified against Cloudflare's permanent test keys (see `admin/README.md`), which
+pass siteverify for real. **Do not ship those to production** — an always-pass widget is
+indistinguishable from a working one on screen.
+
+### 8.4 Deployment Protection — previews YES, production NO
+
+Turn Vercel Deployment Protection on for **preview** deployments: a preview may point at a
+real backend, and a leaked preview URL is the classic way an unreleased admin becomes
+public.
+
+**Leave production on the auth wall only.** The outer fence does not guard the asset: the
+admin UI is a shell, the asset is admin tokens, and `api.tokecosmetics.com` is directly
+reachable regardless of what Vercel puts in front of the UI. Protecting production would
+also bind store operations to Vercel session state, cost a paid seat per future staff
+member, and make Vercel org membership shadow the RBAC that was just built. (This narrows
+the Plan-16 "resolved 2026-07-28" note, which said production too now that the account is
+Pro.)
+
+### 8.5 Standing rule: zero third-party scripts on the admin origin
+
+No analytics, no tag manager, no session replay, no error-reporting snippet, no font CDN.
+Enforced by the CSP in `admin/next.config.ts`. The reason is concrete: `/accept-invite`
+carries a staff-creation token **in the URL**, and the TOTP setup screen renders a secret
+on the page. Any third-party script can read both. The only exception is Cloudflare's own
+Turnstile widget, on the two unauthenticated forms.
+
+Also: no service worker, `Cache-Control: no-store` on every page and BFF response, and the
+storefront must never link to the admin hostname.

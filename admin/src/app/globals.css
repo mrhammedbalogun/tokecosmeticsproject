@@ -1,26 +1,57 @@
 @import "tailwindcss";
 
+/* ── Toke ADMIN design tokens ───────────────────────────────────────────────────────
+   Built from the storefront's token STRUCTURE (same variable names, same @theme inline
+   bridge, same Tailwind v4 setup) with deliberately different VALUES.
+
+   Nobody should ever be one glance away from mistaking this app for the shop. The
+   storefront is warm — cream #fbf9f5, forest green #1c7a3e, a serif display face. The
+   admin is cool: a grey-blue canvas, a graphite shell, and an indigo accent that appears
+   nowhere in the customer-facing palette. That is not decoration; the two apps show the
+   same order data and only one of them can refund it.
+
+   No web font either — see layout.tsx. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-canvas: #f3f4f7;        /* page background — cool, never cream */
+  --color-surface: #ffffff;       /* cards, panels */
+  --color-shell: #171a21;         /* sidebar / topbar chrome */
+  --color-shell-soft: #262b36;    /* hover within the chrome */
+  --color-ink: #14161a;           /* primary text */
+  --color-ink-soft: #5c6270;      /* secondary text */
+  --color-line: #dde0e7;          /* hairline borders */
+  --color-accent: #4338ca;        /* indigo — buttons, links, active nav */
+  --color-accent-strong: #312e81;
+  --color-danger: #b91c1c;        /* destructive actions, the STAGING badge */
+  --color-warn: #b45309;
+  --radius-card: 0.5rem;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-background: var(--color-canvas);
+  --color-surface: var(--color-surface);
+  --color-shell: var(--color-shell);
+  --color-shell-soft: var(--color-shell-soft);
+  --color-foreground: var(--color-ink);
+  --color-muted: var(--color-ink-soft);
+  --color-line: var(--color-line);
+  --color-accent: var(--color-accent);
+  --color-accent-strong: var(--color-accent-strong);
+  --color-danger: var(--color-danger);
+  --color-warn: var(--color-warn);
+  --radius-card: var(--radius-card);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
