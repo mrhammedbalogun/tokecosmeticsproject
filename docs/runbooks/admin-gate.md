@@ -343,6 +343,13 @@ built and verified against Cloudflare's permanent test keys (see `admin/README.m
 pass siteverify for real. **Do not ship those to production** — an always-pass widget is
 indistinguishable from a working one on screen.
 
+**The step-by-step procedure — widget creation, both env values, rollout order,
+verification and rotation — is [`turnstile-admin-setup.md`](./turnstile-admin-setup.md).**
+Hostname decided 2026-07-29: `admin.tokecosmetics.com` (production) and
+`admin-preview.tokecosmetics.com` (previews). The Plan-02 placeholder
+`backend.tokecosmetics.com` is retired; `ADMIN_URL` in `.env.prod` still points at it and
+is corrected as part of that procedure.
+
 ### 8.4 Deployment Protection — previews YES, production NO
 
 Turn Vercel Deployment Protection on for **preview** deployments: a preview may point at a
