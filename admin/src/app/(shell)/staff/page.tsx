@@ -3,7 +3,7 @@ import { InviteForm, InviteList } from "@/components/InvitePanel";
 import { StaffTable } from "@/components/StaffTable";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
-import type { StaffInvite, StaffMember } from "@/lib/staff";
+import { isOutstanding, type StaffInvite, type StaffMember } from "@/lib/staff";
 import { inviteAction, revokeAction } from "./actions";
 
 export const metadata: Metadata = { title: "Staff" };
@@ -86,7 +86,19 @@ export default async function StaffPage() {
           <InviteForm action={inviteAction} />
 
           {invites ? (
-            <InviteList invites={invites} revokeAction={revokeAction} />
+            // FILTERED HERE, ON THE SERVER, and not only inside `InviteList`.
+            //
+            // Props handed to a Client Component are serialised into the RSC payload, so
+            // an unfiltered array arrives in the browser in full even though the
+            // component renders none of it. Found by the Task 8 walkthrough: a REVOKED
+            // invite's whole row — address, role, inviter — was sitting in the flight
+            // data of a page that visibly showed nothing.
+            //
+            // Not a privilege leak (only an Owner reaches this page, and the API hands
+            // them revoked invites anyway), but a page should not ship data it has
+            // decided not to show. `InviteList` keeps its own filter so the component is
+            // correct standalone; both call `isOutstanding`, so there is one rule.
+            <InviteList invites={invites.filter(isOutstanding)} revokeAction={revokeAction} />
           ) : (
             <p className="rounded-[var(--radius-card)] border border-warn/30 bg-warn/5 p-4 text-sm text-warn">
               The invite list could not be loaded.
