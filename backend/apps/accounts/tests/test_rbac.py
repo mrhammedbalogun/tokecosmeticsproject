@@ -70,15 +70,17 @@ def test_owner_holds_every_scope():
         assert scope in scopes_for_role("Owner"), f"Owner is missing {scope}"
 
 
-def test_no_scope_named_view_is_ever_a_write_scope():
-    """Naming discipline, enforced. A `.view` scope that mutates state will eventually
-    be granted by someone who read the name and believed it — which is how Support
-    would have silently acquired the power to transition orders. Anything that writes
-    gets a verb: `.operate` (state transitions) or `.manage` (money / destructive).
+def test_every_scope_ends_in_a_recognised_verb():
+    """A STRING-FORMAT check, and nothing more — named for what it does.
+
+    It used to be called `test_no_scope_named_view_is_ever_a_write_scope`, which is
+    Amendment 7's headline rule and is NOT what this asserts: a `.view` scope wired
+    onto a POST endpoint satisfies every line below. The rule itself needs the
+    URLconf, so it lives where the routes are, in
+    `test_admin_surface_guard.py::test_nothing_named_view_is_routed_onto_a_writing_method`.
     """
-    writeable_suffixes = (".manage", ".operate")
     for scope in SCOPES:
-        assert scope.endswith((".view", *writeable_suffixes)), (
+        assert scope.endswith((".view", ".operate", ".manage")), (
             f"{scope} uses an unrecognised verb; use .view, .operate or .manage"
         )
 
@@ -109,41 +111,195 @@ def test_role_names_match_the_declared_roles():
 
 
 @pytest.mark.django_db
-def test_the_four_roles_exist_as_groups_and_nothing_else_does():
-    """The seed migration and the scope table must not drift apart: a group with no
-    row in the table grants nothing, and a role in the table with no group can never
-    be assigned."""
-    assert set(Group.objects.values_list("name", flat=True)) == set(ROLES)
+def test_every_role_exists_exactly_once_as_a_group():
+    """The seed migration and the scope table must not drift apart: a role in the table
+    with no group can never be assigned, and two groups sharing a name would split the
+    memberships silently.
+
+    Deliberately scoped to the four names rather than asserting over EVERY Group in the
+    database. The previous version did the latter, which made this RBAC test the thing
+    that breaks the day an unrelated feature seeds a group of its own — a failure with
+    nothing to do with what this file is about, in a file whose name sends the reader
+    looking in the wrong place.
+    """
+    names = list(Group.objects.filter(name__in=ROLES).values_list("name", flat=True))
+    assert sorted(names) == sorted(ROLES)
+
+
+# --- the seed migration -------------------------------------------------------
+# These run the migration's own functions against the HISTORICAL app registry — the
+# `apps` object Django actually hands a RunPython — rather than the live one. The
+# distinction is not pedantry: `apps.get_model` on the live registry returns the real
+# model with its real managers and signals, so a migration that only works there
+# passes the test and fails at `migrate` time (or vice versa).
+
+
+def _migration_module():
+    import importlib
+
+    return importlib.import_module("apps.accounts.migrations.0003_seed_admin_roles")
+
+
+def _historical_apps():
+    """The registry as of 0003 — what `RunPython` passes its callables."""
+    from django.db import connection
+    from django.db.migrations.executor import MigrationExecutor
+
+    loader = MigrationExecutor(connection).loader
+    return loader.project_state(("accounts", "0003_seed_admin_roles")).apps
 
 
 @pytest.mark.django_db
 def test_reseeding_the_roles_is_a_no_op(django_user_model):
-    """The seed migration must survive being replayed against a database that already
-    has the groups — production may well be seeded by hand before the migration lands,
-    and a second Owner group (or a recreated one) would silently orphan every
-    membership attached to the first.
+    """The seed must survive being replayed against a database that already has the
+    groups — production may well be seeded by hand before the migration lands, and a
+    second Owner group (or a recreated one) would silently orphan every membership
+    attached to the first.
     """
-    import importlib
-
-    from django.apps import apps as global_apps
-
-    seed = importlib.import_module("apps.accounts.migrations.0003_seed_admin_roles")
+    seed = _migration_module()
     owner_group = Group.objects.get(name="Owner")
     staff = django_user_model.objects.create_user(
         email="owner@toke.test", password="x", is_staff=True
     )
     staff.groups.add(owner_group)
 
-    seed.seed_roles(global_apps, None)
+    seed.seed_roles(_historical_apps(), None)
 
-    assert Group.objects.count() == len(ROLES)
+    assert Group.objects.filter(name__in=ROLES).count() == len(ROLES)
     assert Group.objects.get(name="Owner").pk == owner_group.pk
     assert scopes_for_user(staff) == OWNER
+
+
+@pytest.mark.django_db
+def test_reversing_the_seed_destroys_nothing(django_user_model):
+    """THE DATA-LOSS BUG. `get_or_create` on names as generic as `Owner`, `Manager`,
+    `Support` and `Content` ADOPTS any group that already had one of those names,
+    together with its members and its Permission rows — and the reverse then deleted
+    it. Attaching a member to `Support` and unmigrating destroyed the membership,
+    which the forward migration cannot put back.
+
+    Down-then-up is worse than down alone: the groups come back EMPTY, so every staff
+    account is still `is_staff=True` with zero scopes. Nobody notices, because the one
+    account anybody tests with is the owner's, and `scopes_for_user` short-circuits
+    superusers to everything.
+
+    A reverse that destroys data the forward cannot restore is not a reverse. This one
+    is a documented no-op, and this test is what keeps it that way.
+    """
+    support = Group.objects.get(name="Support")
+    staff = django_user_model.objects.create_user(
+        email="support@toke.test", password="x", is_staff=True
+    )
+    staff.groups.add(support)
+
+    operation = _migration_module().Migration.operations[0]
+    assert operation.reversible, "unmigrating past 0003 must not be a hard error"
+    operation.reverse_code(_historical_apps(), None)
+
+    assert Group.objects.filter(name="Support").exists(), "the reverse deleted a role"
+    assert Group.objects.get(name="Support").pk == support.pk
+    assert list(staff.groups.values_list("name", flat=True)) == ["Support"], (
+        "the reverse stripped a staff member's role"
+    )
+    assert scopes_for_user(staff) == SUPPORT
 
 
 def test_unknown_role_has_no_scopes():
     """A typo'd or deleted group must fail closed, not raise or grant."""
     assert scopes_for_role("Manger") == frozenset()
+
+
+# --- a renamed group ----------------------------------------------------------
+# Failing closed is right and it is also SILENT, which is the problem. `Group.name` is
+# editable in the Django admin with no warning attached, and renaming `Support` to
+# `Customer Support` — a completely reasonable-looking tidy-up — revokes every scope
+# from everyone in it. No exception, no 500, no log line: their admin simply stops
+# having anything in it, and the one person who would notice is a superuser, for whom
+# `scopes_for_user` short-circuits to everything.
+#
+# TWO DETECTORS, deliberately, because they catch it at different moments:
+#
+# * the system check runs at deploy time (`migrate` and `manage.py check` both run it)
+#   and finds the condition whether or not anyone has tried to log in yet;
+# * the log line fires at the moment a real person is actually affected, and lands in
+#   Sentry, which is the surface someone is watching.
+#
+# Neither alone is enough: the check is only seen by whoever reads deploy output, and
+# the log line cannot fire for a staff member who has already given up and gone home.
+
+
+@pytest.mark.django_db
+def test_the_system_check_is_quiet_when_the_roles_are_intact():
+    from apps.accounts.checks import admin_role_groups_check
+
+    assert admin_role_groups_check(None) == []
+
+
+@pytest.mark.django_db
+def test_the_system_check_reports_a_renamed_role_group():
+    from apps.accounts.checks import admin_role_groups_check
+
+    Group.objects.filter(name="Support").update(name="Customer Support")
+
+    issues = admin_role_groups_check(None)
+    assert [issue.id for issue in issues] == ["accounts.W001"]
+    assert "Support" in issues[0].msg
+
+
+@pytest.mark.django_db
+def test_the_system_check_stays_quiet_before_the_tables_exist(monkeypatch):
+    """`manage.py migrate` runs system checks BEFORE applying migrations, so on a fresh
+    database this check runs against a table that does not exist yet. Raising there
+    would make the project unable to bootstrap itself."""
+    from django.db.utils import ProgrammingError
+
+    from apps.accounts import checks
+
+    def _explode():
+        raise ProgrammingError('relation "auth_group" does not exist')
+
+    monkeypatch.setattr(checks, "_existing_role_names", _explode)
+    assert checks.admin_role_groups_check(None) == []
+
+
+@pytest.mark.django_db
+def test_a_staff_member_whose_group_grants_nothing_is_logged(django_user_model, caplog):
+    """The data invariant. This is the moment the rename actually costs someone their
+    access, and before this line it was the moment nothing at all happened."""
+    import logging
+
+    Group.objects.filter(name="Support").update(name="Customer Support")
+    user = django_user_model.objects.create_user(
+        email="support@toke.test", password="x", is_staff=True
+    )
+    user.groups.add(Group.objects.get(name="Customer Support"))
+
+    with caplog.at_level(logging.INFO, logger="apps.security"):
+        assert scopes_for_user(user) == frozenset()  # still fails closed
+
+    errors = [
+        rec
+        for rec in caplog.records
+        if rec.name == "apps.security" and rec.levelno == logging.ERROR
+    ]
+    assert errors, "a staff member silently lost every scope and nothing was recorded"
+    assert "Customer Support" in errors[0].getMessage()
+
+
+@pytest.mark.django_db
+def test_a_staff_member_with_no_group_at_all_is_not_logged(django_user_model, caplog):
+    """The noise check that makes the line above worth having. A freshly created staff
+    account with no role yet is a NORMAL state — it is what every invite produces
+    before a role is attached — and alerting on it would train whoever reads Sentry to
+    ignore the alert that matters."""
+    import logging
+
+    user = django_user_model.objects.create_user(
+        email="new-hire@toke.test", password="x", is_staff=True
+    )
+    with caplog.at_level(logging.INFO, logger="apps.security"):
+        assert scopes_for_user(user) == frozenset()
+    assert not [rec for rec in caplog.records if rec.levelno == logging.ERROR]
 
 
 # --- scopes_for_user ----------------------------------------------------------
@@ -247,3 +403,20 @@ def test_the_permission_factory_is_usable_as_a_permission_class(rf):
     cls = HasAdminScope("orders.view")
     assert isinstance(cls, type)
     assert cls().has_permission  # instantiable with no args, DRF-style
+
+
+def test_the_same_scope_always_yields_the_same_class():
+    """The factory used to mint a FRESH class per call, so `HasAdminScope("x") is not
+    HasAdminScope("x")` and, worse, `HasAdminScope("x") != HasAdminScope("x")`.
+
+    Nothing depended on it — but the obvious way to write a future guard is
+    `assert HasAdminScope("orders.manage") in view.permission_classes`, and that would
+    have silently always been False: a guard that can never pass reads exactly like a
+    guard that never fires. Memoising the factory makes the natural spelling correct
+    instead of leaving a trap for whoever writes it.
+    """
+    assert HasAdminScope("orders.manage") is HasAdminScope("orders.manage")
+    assert HasAdminScope("orders.manage") != HasAdminScope("orders.view")
+    # Memoising must not swallow the typo check — that is the factory's other job.
+    with pytest.raises(ValueError):
+        HasAdminScope("orders.mange")

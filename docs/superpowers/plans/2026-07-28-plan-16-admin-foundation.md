@@ -282,11 +282,15 @@ without touching the bucket, and each countable failure costs a solved token.
 break-glass `redis-cli DEL` one-liner in the runbook regardless. **Customer-side
 failure-counting stays in the pre-Plan-22 gate work, not here.**
 
-### Open item, not a Task-1 blocker
+### Resolved 2026-07-28 — the Vercel account is **Pro** (confirmed by Hammed)
 
-The Vercel plan tier is not exposed via CLI and needs confirming. It gates three
-things: whether a Vercel Firewall **rate-limit** rule is available for the storefront
-`/api/auth/*` (rate-limit rules generally need Pro; custom WAF rules are broader),
-whether production Deployment Protection is available (Amendment 4), and whether the
-BFF-real-IP work promotes off the backlog (it does *only* if the Vercel rate-limit
-rule is unavailable, since something must see real client IPs on the storefront path).
+This settles all three dependent decisions:
+1. **Vercel Firewall rate-limit rules ARE available** for the storefront `/api/auth/*`.
+   That is the correct — and only — home for a control that sees real client IPs on the
+   storefront path (see Amendment 5 / memory `project_tokecosmetics_real_client_ip_gap`).
+   Not Plan-16 work, but it is now unblocked and should be scheduled.
+2. **Production Deployment Protection is available**, so Amendment 4 applies it to
+   production as well as previews, not previews only.
+3. **BFF-real-IP does NOT promote** off the hardening backlog — the Vercel rule covers
+   the gap it existed to cover. Revisit only if tighter IP rates or `remoteip` on
+   siteverify is wanted.

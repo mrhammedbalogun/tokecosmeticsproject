@@ -231,6 +231,56 @@ def test_no_admin_view_falls_back_to_the_customer_stack(view_name):
         )
 
 
+# HTTP methods that cannot change state. `options` and `head` are DRF/Django's own
+# and are always present; `get` is the read.
+SAFE_METHODS = frozenset({"get", "head", "options"})
+
+
+def _routed_methods(callback) -> set[str]:
+    """The HTTP methods this particular ROUTE exposes, lowercase.
+
+    Per route, not per class, because a DRF viewset is one class behind several routes
+    with different method maps: the list route is `{get: list, post: create}` and the
+    detail route is `{get: retrieve, patch: partial_update, delete: destroy}`. Asking
+    the class alone would answer "all of them" for both.
+    """
+    actions = getattr(callback, "actions", None)
+    if actions:  # router-generated viewset route
+        return {method.lower() for method in actions}
+    view_class = _view_class(callback)
+    return {m for m in view_class.http_method_names if hasattr(view_class, m)}
+
+
+def test_nothing_named_view_is_routed_onto_a_writing_method():
+    """AMENDMENT 7's HEADLINE RULE, finally asserted against the routes.
+
+    `test_rbac.py` claimed to enforce this and did not: it only checked that scope
+    STRINGS end in `.view`/`.operate`/`.manage`, so declaring
+    `HasAdminScope("orders.view")` on a POST endpoint passed happily. The rule is
+    about what a scope lets you DO, and that is a property of the URLconf, not of the
+    string — which is why the check has to live here.
+
+    Why it matters concretely: `orders.view` is the scope you hand a temp, a
+    contractor, or an analyst because the name promises reading. The three-way order
+    split exists precisely so that Support's ability to move an order lives on
+    `orders.operate` instead. A write reachable with `.view` quietly hands that
+    ability to everyone the name was chosen to reassure.
+    """
+    offenders = []
+    for pattern, _name, callback in _walk(get_resolver()):
+        if not pattern.startswith(ADMIN_URL_PREFIX):
+            continue
+        scope = ADMIN_SURFACE.get(_view_class(callback).__name__)
+        if scope is None or not scope.endswith(".view"):
+            continue
+        writes = _routed_methods(callback) - SAFE_METHODS
+        if writes:
+            offenders.append(f"{pattern} ({scope}) exposes {sorted(writes)}")
+    assert not offenders, (
+        "a scope named `.view` is routed onto a method that writes: " + "; ".join(offenders)
+    )
+
+
 def test_the_admin_prefix_has_no_route_of_its_own():
     """`/api/v1/admin/` itself must not be routed.
 

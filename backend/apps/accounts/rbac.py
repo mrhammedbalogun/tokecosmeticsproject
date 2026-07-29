@@ -51,7 +51,14 @@ to mark orders delivered.
 """
 from __future__ import annotations
 
+import functools
+import logging
+
 from rest_framework import permissions
+
+from apps.core.log_safety import scrub
+
+_security_logger = logging.getLogger("apps.security")
 
 # The four seeded roles. Kept as a tuple so it can be iterated in a stable order by
 # the seed migration, the tests, and any future staff-admin UI.
@@ -116,6 +123,19 @@ def scopes_for_user(user) -> frozenset[str]:
     Superusers short-circuit to everything. That is Django's existing contract for
     `is_superuser` and re-implementing it as "Owner group membership" would create
     exactly the second source of truth ruling 1 rejected.
+
+    THE UNKNOWN-GROUP LINE is a data invariant, not a permission decision — the answer
+    is still "no scopes", and failing closed stays right. It exists because failing
+    closed here is also SILENT: `Group.name` is editable in the Django admin, so
+    renaming `Support` to `Customer Support` revokes every scope from everyone in it
+    with no exception, no 500, and nothing to trace a complaint back to. Logged at
+    ERROR so Sentry raises it as an event at the moment a real person is affected;
+    `apps/accounts/checks.py` catches the same condition at deploy time, which is
+    earlier but only seen by whoever reads deploy output.
+
+    Deliberately NOT fired for a staff member with no groups at all — that is the
+    normal state of a freshly invited account, and alerting on it would train whoever
+    reads Sentry to dismiss the alert that matters.
     """
     if not getattr(user, "is_authenticated", False):
         return frozenset()
@@ -125,8 +145,17 @@ def scopes_for_user(user) -> frozenset[str]:
         return SCOPES
     # One query, names only — this runs on every admin request.
     granted: frozenset[str] = frozenset()
+    unknown: list[str] = []
     for name in user.groups.values_list("name", flat=True):
+        if name not in ROLES:
+            unknown.append(name)
         granted |= scopes_for_role(name)
+    if unknown:
+        _security_logger.error(
+            "staff account %s is in group(s) that grant nothing: %s",
+            scrub(getattr(user, "email", "<unknown>")),
+            scrub(", ".join(sorted(unknown))),
+        )
     return granted
 
 
@@ -142,6 +171,7 @@ class _BaseAdminScopePermission(permissions.BasePermission):
         return f"HasAdminScope({self.scope!r})"
 
 
+@functools.lru_cache(maxsize=None)
 def HasAdminScope(scope: str) -> type[_BaseAdminScopePermission]:  # noqa: N802
     """`permission_classes = [HasAdminScope("orders.manage")]`.
 
@@ -160,7 +190,18 @@ def HasAdminScope(scope: str) -> type[_BaseAdminScopePermission]:  # noqa: N802
     declares it, so a typo is a startup crash. The alternative failure mode is far
     worse and silent: `HasAdminScope("orders.mange")` would deny everyone except
     superusers forever, and since the owner IS a superuser in this deployment,
-    nobody would notice until a staff member complained.
+    nobody would notice until a staff member complained. `lru_cache` does not cache
+    exceptions, so that check keeps firing on every call.
+
+    MEMOISED so that one scope always means one class. As first written the factory
+    minted a fresh class per call, which made `HasAdminScope("x") is
+    HasAdminScope("x")` false and — the part that would have bitten — made
+    `HasAdminScope("x") == HasAdminScope("x")` false too. Nothing depended on that,
+    but the natural way to write a future guard is
+    `assert HasAdminScope("orders.manage") in view.permission_classes`, and it would
+    have been silently, permanently False. A guard that can never pass is
+    indistinguishable from a guard that never fires. Cheaper to make the obvious
+    spelling correct than to leave a comment asking people not to write it.
     """
     if scope not in SCOPE_GRANTS:
         raise ValueError(

@@ -64,6 +64,8 @@ from django.utils.translation import gettext_lazy as _
 from drf_spectacular.contrib.rest_framework_simplejwt import SimpleJWTScheme
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.settings import api_settings
+from rest_framework_simplejwt.tokens import AccessToken
 
 # Private claim name (see the module docstring for why it is not `aud`).
 ADMIN_AUDIENCE_CLAIM = "toke_aud"
@@ -71,7 +73,7 @@ ADMIN_AUDIENCE = "toke-admin"
 
 
 class AdminJWTAuthentication(JWTAuthentication):
-    """Accepts only tokens minted by `/auth/admin-token/`.
+    """Accepts only ACCESS tokens minted by `/auth/admin-token/`.
 
     The claim is set on the REFRESH token at login. SimpleJWT's
     `RefreshToken.access_token` copies every claim except its `no_copy_claims`
@@ -79,11 +81,28 @@ class AdminJWTAuthentication(JWTAuthentication):
     free — which is why the shared `/auth/token/refresh/` endpoint needs no
     admin-specific code, and why a customer's refresh token can never grow the
     claim: nothing but the admin serializer ever writes it.
+
+    THAT DESIGN IS ALSO WHY `token_type` IS CHECKED HERE. The claim lives on the
+    refresh token, so a raw refresh token presented as a bearer credential carries a
+    perfectly valid `toke_aud`. `JWTAuthentication.get_validated_token` loops over
+    `AUTH_TOKEN_CLASSES` and accepts whatever validates, without looking at
+    `token_type` — so the only thing standing between a refresh token and an admin
+    session was the SETTING. Measured by monkeypatching `AUTH_TOKEN_CLASSES` to
+    `(AccessToken, RefreshToken)`: `/auth/admin-me/` returned 200 for a raw refresh
+    token.
+
+    That is not the current configuration, and `test_admin_auth.py` now pins it. But a
+    setting is the wrong place for this guarantee to live alone: adding `RefreshToken`
+    to that tuple is a plausible thing to do while wiring up a token-verify or
+    introspection endpoint, and it would silently upgrade a 30-day, browser-held
+    credential into an admin session key. Two independent fences, same argument as
+    the claim-plus-`is_staff` pair below.
     """
 
     def get_validated_token(self, raw_token):
         token = super().get_validated_token(raw_token)
-        if token.get(ADMIN_AUDIENCE_CLAIM) != ADMIN_AUDIENCE:
+        wrong_type = token.get(api_settings.TOKEN_TYPE_CLAIM) != AccessToken.token_type
+        if wrong_type or token.get(ADMIN_AUDIENCE_CLAIM) != ADMIN_AUDIENCE:
             # Deliberately generic, and deliberately the same shape as any other
             # bad token: the response must not teach a caller holding a valid
             # customer token that a *different kind* of token would have worked.

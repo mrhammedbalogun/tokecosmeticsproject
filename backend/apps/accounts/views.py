@@ -14,6 +14,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenObtainPairView
 
+from apps.core.log_safety import scrub
 from apps.notifications.tasks import send_email_task
 
 from .authentication import AdminJWTAuthentication
@@ -73,20 +74,31 @@ class LoginView(TokenObtainPairView):
         # The failure line comes from the user_login_failed signal (signals.py);
         # JWT flows never fire user_logged_in, so the success line lives here.
         if response.status_code == 200:
-            data = request.data
-            email = data.get("email", "<no email>") if hasattr(data, "get") else "<no email>"
-            security_logger.info("login succeeded for %s", email)
+            security_logger.info("login succeeded for %s", _submitted_email(request))
         return response
 
 
 def _submitted_email(request) -> str:
     """The address a login attempt claimed, for the security log. Never trusted for
-    anything else, and safe on a malformed body (request.data may not be a dict)."""
+    anything else, and safe on a malformed body (request.data may not be a dict).
+
+    SCRUBBED, because this value is read from `request.data` BEFORE any validation and
+    goes straight into a plain-text log line. `.strip()` alone was not enough: it takes
+    the newlines off the ENDS and leaves the ones in the middle, so an email of
+    `attacker@evil.test\\nadmin login succeeded for owner@toke.test` forged a complete,
+    well-formed success line for the shop owner into `apps.security` — the one stream
+    anybody would later read to find out what happened. `scrub` also caps the length,
+    which matters here specifically because admin failures log at ERROR and ERROR
+    records become Sentry events: uncapped, a 50 KB field is a quota attack.
+
+    The scrub happens HERE rather than in the logging call so that every caller of this
+    helper gets it, including ones that do not exist yet.
+    """
     data = getattr(request, "data", None)
     if hasattr(data, "get"):
         value = data.get("email")
         if isinstance(value, str) and value.strip():
-            return value.strip()
+            return scrub(value.strip())
     return "<no email>"
 
 
@@ -130,18 +142,30 @@ class AdminLoginView(TokenObtainPairView):
     authentication succeeded; it was the staff check that refused), which is the single
     most interesting event this endpoint can produce.
 
-    THE ERROR LINE AND THE EMAIL COUNTER ARE THE SAME EVENT, so they are emitted from
-    the same place rather than from two independent detectors that could drift.
-    `AdminLoginEmailThrottle` counts failures, not requests (see throttling.py), which
-    is what stops ten anonymous junk POSTs from locking a staff member out for an
-    hour. Only `AuthenticationFailed` counts: a malformed or incomplete request is not
-    a credential guess, and letting it count would hand the lockout primitive straight
-    back. Volume from such requests is the IP throttle's job, and it still counts
-    every request.
+    THE ERROR LINE AND THE FAILURE COUNTERS ARE THE SAME EVENT, so they are emitted
+    from the same place rather than from two independent detectors that could drift.
+    BOTH admin throttles count failures rather than requests (see throttling.py), which
+    is what stops anonymous junk from locking staff out — of one account for an hour via
+    the email key, or of the whole admin indefinitely via the shared-egress IP key. Only
+    `AuthenticationFailed` counts: a malformed or incomplete request is not a credential
+    guess, and letting it count hands the lockout primitive straight back.
+
+    THROTTLE REJECTIONS ON THIS VIEW ARE ALERTS, not breadcrumbs — `Throttled` is
+    raised in `initial()`, before this method runs, so nothing here can log it. See
+    `log_throttling_at_error` below and `config/exception_handler.py`.
     """
 
     serializer_class = AdminTokenObtainPairSerializer
     throttle_classes = [AdminLoginIPThrottle, AdminLoginEmailThrottle]
+
+    # Read by config.exception_handler. Someone reaching the cap on the STAFF gate is
+    # the single loudest signal this endpoint can produce, and it was the one that
+    # never alerted: `Throttled` is raised in `initial()` before `post()`, so the ERROR
+    # line below never fired and the handler's generic WARNING became a Sentry
+    # breadcrumb attached to no event. Opt-in per view rather than promoting every 429
+    # in the project, because ordinary customer rate limiting is routine and would bury
+    # this signal under storefront noise.
+    log_throttling_at_error = True
 
     def post(self, request, *args, **kwargs):
         # Seeded before the try so a body so malformed that reading it raises still
@@ -162,15 +186,21 @@ class AdminLoginView(TokenObtainPairView):
             )
             if isinstance(exc, exceptions.AuthenticationFailed):
                 # A real credential was submitted and rejected — the only thing that
-                # counts against the account. Turnstile rejections and malformed
-                # bodies deliberately do not, or the lockout vector comes straight
-                # back at zero cost.
+                # counts, against either key. Turnstile rejections and malformed bodies
+                # deliberately do not, or the lockout vector comes straight back at
+                # zero cost.
                 AdminLoginEmailThrottle().record_failure(request)
+                AdminLoginIPThrottle().record_failure(request)
             raise
         security_logger.info("admin login succeeded for %s", email)
-        # Proving who you are clears the failure count; otherwise a bad morning
-        # follows a staff member around for the rest of the hour.
+        # Proving who you are clears both failure counts. On the email key that stops a
+        # bad morning following a staff member around for the rest of the hour; on the
+        # IP key it is what makes the bucket the whole staff SHARES survivable, and it
+        # is safe for exactly that reason — only a real staff member can produce a
+        # success, so the reset can only ever land on the shared egress address, never
+        # on an attacker's own address where no login will ever succeed.
         AdminLoginEmailThrottle().reset(request)
+        AdminLoginIPThrottle().reset(request)
         return response
 
 

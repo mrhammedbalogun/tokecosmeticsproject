@@ -135,14 +135,67 @@ class _IPKeyedThrottle(CloudflareIdentMixin, throttling.SimpleRateThrottle):
     sees real client addresses. That control does not exist and could not:
     next.tokecosmetics.com is a bare CNAME to vercel-dns-017.com and is NOT proxied
     through Cloudflare, so no Cloudflare rule on that hostname can ever fire. Nothing on
-    the storefront path currently sees a real per-customer IP. The candidates are a
-    Vercel Firewall rate-limit rule (plan-tier dependent) or the signed-BFF-header work;
-    until one lands, the per-email keys carry the whole weight on the shared path. See
-    memory project_tokecosmetics_real_client_ip_gap.
+    the storefront path currently sees a real per-customer IP. The candidate is a Vercel
+    Firewall rate-limit rule (available — the account is Pro); until it lands, the
+    per-email keys carry the whole weight on the shared path. See memory
+    project_tokecosmetics_real_client_ip_gap.
 
-    The ADMIN login throttles below are the one place this caveat does not bite: staff
-    log in from a browser to the admin origin, and there is no legitimate shared-egress
-    population to protect, so those rates can be set to what abuse deserves.
+    SECOND CORRECTION (2026-07-28, Plan-16 Task 1/2 review). This docstring also used to
+    end by claiming the caveat "does not bite" for the ADMIN throttles below, because
+    "staff log in from a browser to the admin origin". THAT WAS FALSE, and it was false
+    by this plan's own design: Task 5 specifies an admin login built like the
+    storefront's, and the storefront's Server Function calls the API SERVER-SIDE
+    (storefront/src/lib/auth-session.ts). Every legitimate staff login therefore arrives
+    from the same Vercel egress address as every other — `admin_login_ip` is one bucket
+    shared by the entire staff, exactly like `login_ip`.
+
+    That made a request-counting 5/min cap on the admin login a free, total, indefinite
+    staff lockout: `check_throttles()` runs in `initial()`, i.e. BEFORE
+    `require_turnstile`, so five EMPTY JSON POSTs a minute — no Turnstile solved, no
+    password guessed, no victim address needed — 429'd every staff login for as long as
+    an anonymous stranger cared to keep sending them. The Turnstile gate going live in
+    production does not help, because the junk is counted before it is refused.
+
+    WHAT WAS DONE ABOUT IT, and why not simply a bigger number. A pure-IP VOLUME cap is
+    the wrong shape for an endpoint whose entire legitimate population shares one
+    address: any denial keyed on that address denies the victim by construction, so
+    raising the rate only raises the price of the lockout. Three changes, in order of
+    how much they matter:
+
+    1. `AdminLoginIPThrottle` now COUNTS FAILURES (`_FailureCountingMixin`), not
+       requests — Amendment 9's mechanism, which was applied to the email key only.
+       Traffic that never reached a password check now costs the staff nothing at all,
+       which is what makes the zero-cost lockout impossible rather than merely dearer.
+    2. A successful staff login RESETS the IP bucket. Safe precisely because the bucket
+       is shared: only a real staff member can produce a success, so the reset lands on
+       the shared egress address and never on an attacker's own address, where no login
+       will ever succeed.
+    3. The volume cap that can actually tell staff and attacker apart belongs at the
+       VERCEL FIREWALL, which is the only hop on this path that sees real client IPs.
+       That is configuration, not code. It is NOT YET CONFIGURED; the rule to create
+       is written out in docs/runbooks/admin-gate.md §1 so this stays a known gap
+       rather than becoming another comment describing a control that does not exist.
+
+    TWO RESIDUALS, stated plainly rather than argued away.
+
+    (a) An attacker willing to spend real credential attempts (and, with the gate on, a
+    solved Turnstile token each) can still fill the shared bucket and cause a rolling
+    60-second staff lockout. Bounded, self-healing, cleared by any successful staff
+    login, and loud — every one of those attempts is an ERROR-level Sentry event.
+
+    (b) THE COST OF (1), NAMED: `/auth/admin-token/` now has NO request-volume cap in
+    Django at all. Listing `throttle_classes` on a view REPLACES the global defaults,
+    both classes here count failures, and so junk that never reaches a password check
+    is unmetered — including junk carrying a bogus Turnstile token, each of which costs
+    one outbound siteverify call to Cloudflare with a 5s timeout. That is accepted
+    rather than fixed here, because it cannot be fixed here: ANY request-counting deny
+    keyed on an address the whole staff shares is a lockout button, whatever number it
+    is set to, and swapping a lockout for a load problem would be trading a security
+    property for an availability one. Volume belongs at a hop that sees real client
+    IPs, and BOTH such hops need a rule (runbook §1): Vercel's Firewall for the
+    via-BFF path, and Cloudflare's for the direct-to-API path — api.tokecosmetics.com
+    IS Cloudflare-proxied, which is the same fact that makes CF-Connecting-IP
+    trustworthy above.
     """
 
     def get_cache_key(self, request, view):
@@ -181,15 +234,21 @@ class LoginSustainedThrottle(_EmailKeyedThrottle):
 
 # --- admin login -------------------------------------------------------------
 # Separate scopes from the customer login on purpose, and far stricter (5/min per IP,
-# 10/hour per address vs 30/min and 20/hour). Three reasons this costs nothing:
+# 10/hour per address vs 30/min and 20/hour). Two reasons that survive scrutiny:
 #
 # * Legitimate staff login volume is near zero -- a handful of people, a few times a
 #   day -- so a rate that would be absurd for the storefront is generous here.
-# * A staff lockout is recoverable: root SSH access to the box can clear the cache or
-#   the rate. A customer lockout is not recoverable and is a support call.
 # * Separate scopes also mean separate BUCKETS: an attack on the admin gate cannot
 #   throttle the storefront's login, and vice versa. Sharing login_ip would have made
 #   the admin endpoint a lever for denying customers their own logins.
+#
+# A THIRD REASON USED TO BE GIVEN AND IS WITHDRAWN: "a staff lockout is recoverable
+# with root SSH, so brutal rates cost nothing". That treated a lockout as an
+# inconvenience with a known fix. It is not — it is the outcome an attacker WANTS
+# (nobody can watch the store, or reverse what they did, while it lasts), and pricing
+# it at "one SSH session" is how both admin throttles ended up as denial-of-service
+# levers an anonymous stranger could pull for free. Both now count FAILURES rather
+# than requests; see `_FailureCountingMixin` and `_IPKeyedThrottle`.
 #
 # Turnstile sits in front of this too (Plan-16 Amendment 1), but Turnstile stops dumb
 # bots, not a targeted attacker buying solver tokens -- these rates are what makes the
@@ -197,46 +256,39 @@ class LoginSustainedThrottle(_EmailKeyedThrottle):
 # pointless.
 
 
-class AdminLoginIPThrottle(_IPKeyedThrottle):
-    """Volume cap on staff login. MUST be listed first in AdminLoginView.throttle_classes
-    -- same reasoning as LoginIPThrottle: it is the only cap that meters password
-    spraying (one guess each against many addresses), and listing it first means it
-    records before the email throttle touches request.data."""
+class _FailureCountingMixin:
+    """Checked on the way in, written only when the caller says the attempt FAILED.
 
-    scope = "admin_login_ip"
+    The two throttles on the staff gate are the only ones in the project that do not
+    count requests, and the reason is residual risk 1 in this module's docstring made
+    acute by the admin's tiny user population. `SimpleRateThrottle` counts every
+    request before authentication runs, so junk POSTs that never reach a password
+    check filled the buckets:
 
+    * at 10/hour per address, ten anonymous junk POSTs carrying the owner's (publicly
+      known) address locked him out of his own store for an hour;
+    * at 5/min per address-of-origin — one bucket for the whole staff, because the
+      admin BFF calls this endpoint server-side — five EMPTY POSTs a minute locked out
+      every staff member indefinitely, without even needing to know a victim's name.
 
-class AdminLoginEmailThrottle(_EmailKeyedThrottle):
-    """Per-account cap on staff login, counting FAILURES rather than requests.
+    Both were zero-cost denial-of-service primitives, and at a staff population of one
+    either takes the whole admin down. Counting failures instead means:
 
-    This is the one throttle in the project that does not count requests, and the
-    reason is residual risk 1 in this module's docstring, made acute by the admin's
-    tiny user population. `SimpleRateThrottle` counts every request before
-    authentication runs, so with request-counting at 10/hour, ten anonymous junk
-    POSTs carrying the owner's (publicly known) address locked him out of his own
-    store for an hour — zero cost to the attacker, recoverable only by SSHing into
-    the box to clear Redis. That is a denial-of-service primitive handed out for
-    free, and at a staff population of one it takes the whole admin down.
-
-    Counting failures instead means:
-
-    * a request that never reached a password check cannot consume the bucket, so
-      Turnstile-blocked junk is free to the victim as well as costly to the attacker;
+    * a request that never reached a password check cannot consume a bucket, so
+      Turnstile-blocked junk and malformed bodies are free to the victim as well as
+      costly to the attacker;
     * once the Turnstile gate is on, every countable failure costs a solved token;
-    * a proven login clears the count, so a staff member who fumbles their password
-      is not one typo away from an afternoon of lockout;
-    * an attacker already at the cap does not extend their own lockout by keeping
-      going — blocked requests never reach the recorder — which is fine, because the
-      IP throttle is the volume cap and it still counts every request.
+    * a proven login clears the count (`reset`), so a staff member who fumbles their
+      password is not one typo away from an afternoon of lockout;
+    * an attacker already at the cap does not extend the lockout by keeping going —
+      blocked requests never reach the recorder.
 
-    The caller decides what counts, because only the caller knows how the attempt
+    THE CALLER DECIDES WHAT COUNTS, because only the caller knows how the attempt
     failed: `AdminLoginView` records exactly where it emits its `apps.security` ERROR
     line, so the alert and the counter can never disagree about what happened.
     Deliberately NOT applied to the customer login throttles — that change has to be
     weighed against Plan-22's imported-customer wave separately.
     """
-
-    scope = "admin_login_email"
 
     def throttle_success(self) -> bool:
         """Checked, not counted. Overriding this is the whole mechanism: DRF's
@@ -245,7 +297,7 @@ class AdminLoginEmailThrottle(_EmailKeyedThrottle):
         return True
 
     def record_failure(self, request) -> None:
-        """Count one failed credential attempt against the submitted address."""
+        """Count one failed credential attempt against this throttle's key."""
         if self.rate is None:
             return
         key = self.get_cache_key(request, view=None)
@@ -257,10 +309,38 @@ class AdminLoginEmailThrottle(_EmailKeyedThrottle):
         self.cache.set(key, history, self.duration)
 
     def reset(self, request) -> None:
-        """Clear the count for the submitted address — call on a proven login."""
+        """Clear the count for this key — call on a proven login."""
         key = self.get_cache_key(request, view=None)
         if key is not None:
             self.cache.delete(key)
+
+
+class AdminLoginIPThrottle(_FailureCountingMixin, _IPKeyedThrottle):
+    """Spray cap on staff login. MUST be listed first in AdminLoginView.throttle_classes
+    -- same reasoning as LoginIPThrottle: it is the only cap that meters password
+    spraying (one guess each against many addresses), and listing it first means it
+    records before the email throttle touches request.data.
+
+    Called a SPRAY cap and no longer a volume cap, deliberately. It counts failed
+    credential attempts, so it does not meter volume at all any more — volume from
+    traffic that never reaches a password check is now unmetered here on purpose, and
+    is the Vercel Firewall's job. See `_IPKeyedThrottle` for the whole argument; the
+    short version is that on an endpoint where the entire legitimate population shares
+    one egress address, a volume cap IS a lockout button.
+    """
+
+    scope = "admin_login_ip"
+
+
+class AdminLoginEmailThrottle(_FailureCountingMixin, _EmailKeyedThrottle):
+    """Per-account cap on staff login (Plan-16 Amendment 9).
+
+    The key an attacker cannot rotate away from: it is read from the request body, not
+    from a header a proxy hop can rewrite. See `_FailureCountingMixin` for why it does
+    not count requests.
+    """
+
+    scope = "admin_login_email"
 
 
 # --- registration ------------------------------------------------------------
