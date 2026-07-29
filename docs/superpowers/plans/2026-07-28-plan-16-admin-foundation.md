@@ -356,3 +356,85 @@ This settles all three dependent decisions:
 3. **BFF-real-IP does NOT promote** off the hardening backlog — the Vercel rule covers
    the gap it existed to cover. Revisit only if tighter IP rates or `remoteip` on
    siteverify is wanted.
+
+---
+
+## Task 8 — verification record (2026-07-29)
+
+Both suites, both builds, and the plan's whole live list, driven against a real Django +
+Postgres + Next dev server. Nothing mocked.
+
+**Suites and builds.** backend 1358 passed / 4 skipped · admin 189 passed (19 files) ·
+admin `tsc --noEmit` clean · `next build` clean, all three new routes dynamic · eslint
+clean · ruff clean · `spectacular` generates with no new warnings.
+
+**Role matrix in the browser.** One staff account per role, each taken through the full
+ceremony (password → TOTP enrol → TOTP confirm). Sidebar contents were exact for all four:
+
+| role | nav rendered |
+|---|---|
+| Owner | all eleven |
+| Manager | Dashboard, Orders, Products, Inventory, Customers, Reviews, Coupons, Reports |
+| Support | Dashboard, Orders, Customers |
+| Content | Dashboard, Reviews, Content |
+
+Non-Owners typing `/staff` or `/settings/audit` get a rendered page with the refusal
+message and **no data** — the API answers 403 and the page shows it as an answer rather
+than a crash. Owner gets 200 on both. This is the documented shape: nav hiding is
+ergonomics, `HasAdminScope` is the fence.
+
+**Invite flow, end to end.** Create → the row appears on `/staff` with its revoke form →
+the console-backend email carries the accept link → accept creates an `is_staff` account
+in the invited role → the response is a PREAUTH token, not a session → the token is
+single-use (second attempt 400) → the new hire appears on the roster flagged **Not
+enrolled**. Revoke returns 200, the state becomes `revoked`, and the row leaves the page.
+
+**Audit rows from real writes.** The invites above produced `staff_invite`,
+`staff_invite_accept` and `staff_invite_revoke` rows, each naming the actor, with no
+password or token material in `changes`. The viewer renders them under a model filter and
+resolves the model label.
+
+**Idle / renewal.** No access cookie but a good refresh → 307 to
+`/api/auth/refresh-redirect`, **not** `/login`, and a new access cookie is persisted. No
+cookies at all → `/login?next=…`. Preauth *and* session cookies together → the purge
+handler. The matrix behaves as `auth-guard.ts` describes.
+
+### One real bug, found here and fixed
+
+`/staff` visibly hid revoked invites — `InviteList` filters on `isOutstanding` — but the
+whole row (address, role, expiry, inviter) was being serialised into the page's **RSC
+payload**, because props to a Client Component cross the wire before that component
+filters them. Not a privilege leak (only an Owner reaches the page, and the API hands
+them revoked invites anyway), but a page must not ship data it has decided not to show.
+Filtering moved into the page; the component keeps its own filter so it stays correct
+standalone, and both call `isOutstanding`. Verified at the payload level before and after.
+
+This is the class of bug that only a live walkthrough finds: every unit test passed
+throughout, because the DOM was always correct.
+
+### CHECKPOINT — blocked, and not on anything in this plan
+
+Hammed logging into a preview URL as Owner cannot happen yet. The admin preview points at
+`api.tokecosmetics.com` because there is no staging backend, so the checkpoint needs the
+Plan-16 **backend** in production:
+
+1. **Production runs `backend-v0.3.0` (`fa78ebe`, the Plan-15 merge).** None of Tasks 1–7
+   is deployed — `/api/v1/auth/admin-token/` answers **404**. Closing this means merging
+   this branch to main, tagging, and deploying **8 new migrations** (accounts 0003–0006,
+   core 0005–0006, catalog 0009, orders 0006), two of which build search indexes and one
+   of which installs the audit-log append-only trigger.
+2. **`TURNSTILE_ADMIN_SECRET` is absent from `/opt/tokecosmetics/.env.prod`.** The staff
+   gate therefore falls back to `TURNSTILE_SECRET` and would verify a token minted by the
+   *admin* widget against the *customer* widget's secret — every admin login 403. See
+   `docs/runbooks/turnstile-admin-setup.md`.
+3. **`ADMIN_URL` is still `https://backend.tokecosmetics.com`**, the Plan-02 placeholder,
+   so staff-invite links would point at a retired scaffold host.
+
+Fixed in passing: the Vercel admin project (`tokecosmeticsproject-ytgp`, root directory
+`admin`) had **no** `API_URL` or `NEXT_PUBLIC_API_URL` at all, so the app defaulted to
+`http://localhost:8000`. Both added for Production and Preview. Preview deployments are
+behind Vercel SSO, which is Amendment 10.4's requirement.
+
+Note also that `admin.tokecosmetics.com` currently serves the Plan-01 "Create Next App"
+placeholder in production, because `main`'s `admin/` is still that scaffold. Harmless, but
+it is a public page on the hostname that is about to become the admin.
