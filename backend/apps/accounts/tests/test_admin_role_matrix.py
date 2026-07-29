@@ -121,6 +121,7 @@ MATRIX: list[Row] = [
     # outstanding invite is the same capability either way.
     Row("StaffInviteListCreateView", "get", "/api/v1/admin/staff/invites/", _OWNER),
     Row("StaffInviteRevokeView", "post", "/api/v1/admin/staff/invites/999999/revoke/", _OWNER),
+    Row("StaffListView", "get", "/api/v1/admin/staff/", _OWNER),
     # --- audit: Owner only. It records what every other role did, so a role that
     # could read it could also watch for whether anyone had noticed it yet ---------
     Row("AuditLogListView", "get", "/api/v1/admin/audit/", _OWNER),

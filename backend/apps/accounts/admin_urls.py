@@ -15,9 +15,12 @@ from .views import (
     StaffInviteAcceptView,
     StaffInviteListCreateView,
     StaffInviteRevokeView,
+    StaffListView,
 )
 
 urlpatterns = [
+    # The roster. Before `staff/invites/` only for readability; the paths cannot collide.
+    path("staff/", StaffListView.as_view(), name="admin-staff-list"),
     path("staff/invites/", StaffInviteListCreateView.as_view(), name="admin-staff-invites"),
     # Before the <int:pk> route only for readability; the converters cannot collide.
     path("staff/invites/accept/", StaffInviteAcceptView.as_view(), name="staff-invite-accept"),

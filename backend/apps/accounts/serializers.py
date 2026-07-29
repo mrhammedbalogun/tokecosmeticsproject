@@ -353,6 +353,49 @@ class StaffInviteAcceptSerializer(serializers.Serializer):
     turnstile_token = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
 
+class StaffRosterSerializer(serializers.ModelSerializer):
+    """READ shape for `/admin/staff/` — one administrator per row.
+
+    AN EXPLICIT FIELD LIST, on a `ModelSerializer` over the USER model, which is the
+    riskiest base class in this file: `fields = "__all__"` here would serialise
+    `password`. The list is therefore opt-in, and `test_no_password_material_is_ever_
+    serialised` asserts the outcome rather than trusting the list.
+
+    `roles` comes from group membership and is a LIST rather than a single value even
+    though the invite flow only ever assigns one. Django permits several, `createsuperuser`
+    assigns none, and a serializer that rendered `groups[0]` would silently hide the
+    second role on the day somebody adds one by hand.
+
+    `totp_confirmed` is derived from the related row's `confirmed_at`, never stored
+    twice — see the model docstring for why `confirmed_at` is the only thing that counts
+    as enrolled.
+    """
+
+    roles = serializers.SerializerMethodField()
+    totp_confirmed = serializers.SerializerMethodField()
+    name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = [
+            "id", "email", "name", "roles", "is_active", "is_superuser",
+            "totp_confirmed", "last_login", "date_joined",
+        ]
+        read_only_fields = fields
+
+    def get_roles(self, obj) -> list[str]:
+        # `obj.groups.all()` and not a fresh query: the view prefetches, so this is the
+        # difference between one query and one per administrator.
+        return sorted(group.name for group in obj.groups.all())
+
+    def get_totp_confirmed(self, obj) -> bool:
+        totp = getattr(obj, "totp", None)
+        return bool(totp and totp.confirmed_at)
+
+    def get_name(self, obj) -> str:
+        return f"{obj.first_name} {obj.last_name}".strip()
+
+
 class AdminMeSerializer(serializers.Serializer):
     """Shape of `/auth/admin-me/`. Response-only — the admin shell reads it to decide
     which nav items and actions to render, so `scopes` is the field that matters.

@@ -193,6 +193,11 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # either way: being able to cancel one is as consequential as being able to send it.
     "StaffInviteListCreateView": "staff.manage",
     "StaffInviteRevokeView": "staff.manage",
+    # The roster: who holds an administrator account today, and which of them has not
+    # confirmed a second factor. Same scope as inviting, because it is the same subject
+    # — and because the list of administrators together with their enrolment gaps is a
+    # target list, not a staff directory. Nobody but the Owner needs it.
+    "StaffListView": "staff.manage",
     # --- search ------------------------------------------------------------------
     # `None`, and this is the one entry in the dict where that needs an argument rather
     # than a sentence. Every OTHER `None` here means "gates on is_staff and that is the
