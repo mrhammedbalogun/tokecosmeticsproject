@@ -15,8 +15,10 @@
  * no review-specific scope to point at. When Plan-18/19 bind those endpoints to a scope,
  * this entry should be narrowed to match whatever they choose rather than left to drift.
  *
- * Every href below except `/` is a placeholder until Plans 17-19 build the page. That is
- * deliberate and matches the plan text: the shell is what Task 5 proves.
+ * `Settings` and `Staff` are real pages as of Task 7; every other href below is a
+ * placeholder until Plans 17-19 build it. That is deliberate and matches the plan text:
+ * the shell is what Task 5 proves, and Task 7's two pages are what prove the shell holds
+ * a real page.
  */
 export interface NavItem {
   label: string;

@@ -102,11 +102,27 @@ The box is rendered for every staff member for the same reason.
 The 250 ms debounce is UX. The controls are server-side: a three-character minimum, ten
 results per section with no pagination, and 60/min per staff user.
 
+## The pages that exist (Task 7)
+
+| page | scope | what it is |
+|---|---|---|
+| `/settings` | `settings.manage` | index; lists only what is built |
+| `/settings/audit` | `settings.manage` | the audit log — filters, pagination, per-row value expander |
+| `/staff` | `staff.manage` | the roster, outstanding invites, and the invite form |
+
+Two things about the audit viewer that are design, not omission. The table shows **which
+fields** a row recorded and hides the **values** behind a per-row expander, because
+`changes` on an order or customer edit is personal data and a table renders every row at
+once. And **loading the page writes an audit row** — `AuditLogListView` is read-audited
+deliberately, since "who has been reading the log" is what precedes deciding which rows to
+remove.
+
+The staff page has no deactivate control. There is no backend endpoint for it (Plan-16
+built invite and revoke, which govern accounts that do not exist yet), and a button that
+either does nothing or calls an unreviewed endpoint is worse than the runbook's
+`manage.py` path.
+
 ## What is NOT here yet
 
-- **No QR code on the TOTP setup screen.** Rendering one needs a QR encoder, and this app
-  may take new dependencies only where the storefront already uses the equivalent — it has
-  none. The screen shows the setup key for manual entry plus the raw `otpauth://` URI,
-  which every authenticator app accepts. Pointing an `<img>` at a QR web service is **not**
-  an option: it would put the TOTP secret in a third party's request log.
-- Every nav item except Dashboard links to a page Plans 17-19 will build.
+- Every nav item except Dashboard, Settings and Staff links to a page Plans 17-19 will
+  build.
