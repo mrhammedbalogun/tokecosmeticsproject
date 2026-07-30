@@ -225,6 +225,42 @@ inputs; non-field errors to a banner on the active tab.
 **Verify:** edit a name and a country set, save, re-read; a validation error lands on the
 right input; the unsaved-vs-saved distinction from Decision 1 is visible in the UI.
 
+**DONE 2026-07-30.** No backend change was needed. Four things worth carrying forward:
+
+1. **The Availability panel states the empty case in words.** `available_countries` empty
+   means **everywhere**, and a bare checkbox grid renders "none ticked" and "sold in every
+   market" identically — so somebody clearing the last box to *withdraw* a product would
+   have published it to all of them. The panel says which of the two is true, in a
+   highlighted box, and a test pins both wordings.
+
+2. **The PATCH body is built from an explicit `EDITABLE_FIELDS` list**, not by spreading
+   form state. The serializer also writes `brand`, `related`, `published_at` and the legacy
+   columns; a spread payload would send `undefined` for whichever a built tab does not own
+   and clobber a value nobody on screen could see. Task 4 extends the list; that is the
+   whole change.
+
+3. **Saving uses the ORIGINAL slug in the URL and the new one in the body.** PATCHing to
+   the edited slug would address a product that does not exist yet. On success the client
+   `replace()`s to whatever slug came back — read from the response, not assumed, since the
+   backend may normalise it — because the old URL now 404s and `push` would hand the back
+   button a broken page.
+
+4. **Reference pickers walk every page.** `/admin/categories/` and `/admin/tags/` paginate
+   at 24 against 40 categories and ~84 tags, so a one-page fetch would silently omit the
+   rest — presenting as "that category does not exist". `fetchAllPages` requests by page
+   NUMBER rather than following the API's absolute `next`, which points at the Django
+   origin and would bypass this app's API base.
+
+`isDirty` is order-insensitive for multi-selects: a checkbox grid produces whatever order
+the user clicked in, and treating `NG,GB` vs `GB,NG` as an edit would leave the
+unsaved-changes bar up forever.
+
+Verified: admin vitest **259 passed** (25 files, 40 new), `tsc --noEmit` clean, `eslint`
+clean, `next build` succeeds with `/products/[slug]` in the route table.
+
+Note: `@testing-library/user-event` is NOT a dependency of this app. Interaction tests use
+`fireEvent` from `@testing-library/react`, matching `TotpPanel.test.tsx`.
+
 ### Task 4 — Content and SEO tabs
 
 Content: ingredients, directions, warnings, plus `specs` and `faqs`, which are

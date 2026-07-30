@@ -13,6 +13,7 @@
  * keeping page 3 while narrowing the results is how somebody lands on an empty page and
  * concludes their search matched nothing.
  */
+import Link from "next/link";
 import { STATUSES, statusLabel, type ProductFilters } from "@/lib/products";
 
 const FIELD =
@@ -58,10 +59,12 @@ export function ProductFilterForm({ filters }: { filters: ProductFilters }) {
           Search
         </button>
         {/* A link, not `type="reset"`: reset restores the fields to the values the page
-            was rendered with, which on a filtered page is the filter itself. */}
-        <a href="/products" className="text-sm text-muted underline-offset-2 hover:underline">
+            was rendered with, which on a filtered page is the filter itself. `Link` rather
+            than a bare `<a>` because this addresses a real route — `no-html-link-for-pages`
+            catches it, and a full document load would discard the shell for no reason. */}
+        <Link href="/products" className="text-sm text-muted underline-offset-2 hover:underline">
           Clear
-        </a>
+        </Link>
       </div>
     </form>
   );
