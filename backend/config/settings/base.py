@@ -20,6 +20,15 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Required by `OpClass` in an expression index: `PostgresConfig.ready()` is what
+    # registers it as an index-expression WRAPPER, and without that registration Django
+    # emits `USING gin ((UPPER("email") gin_trgm_ops))` — the operator class inside the
+    # expression's parentheses, which Postgres rejects as a syntax error. Added in Plan-16
+    # Task 6 for the admin search box's trigram indexes (accounts/0006, orders/0006,
+    # catalog/0009). It also registers the `trigram_similar`/`unaccent` lookups and the
+    # array/range field lookups; nothing here uses those today, and none of it changes the
+    # behaviour of code that does not ask for it.
+    "django.contrib.postgres",
     # third-party
     "rest_framework",
     "rest_framework_simplejwt.token_blacklist",
@@ -157,8 +166,19 @@ REST_FRAMEWORK = {
     # Logs 429s (the only signal several endpoints emit under attack), then
     # delegates to DRF's default — responses are unchanged.
     "EXCEPTION_HANDLER": "config.exception_handler.logging_exception_handler",
+    # Our own subclass, NOT the stock class. It is stock behaviour minus one refusal:
+    # a PREAUTH token (password proved, TOTP still owed) must not authenticate anything
+    # outside the three TOTP endpoints, and stock JWTAuthentication does not look at the
+    # `toke_aud` claim at all — so it accepted one on the whole customer surface. See
+    # apps/accounts/authentication.CustomerJWTAuthentication.
+    #
+    # NOTE `SessionAuthentication` is deliberately absent and must stay absent:
+    # django.contrib.admin is mounted at /django-admin/ (denied at the Apache vhost in
+    # production), and a session cookie cannot carry the admin audience claim, so a view
+    # accepting one would bypass the admin gate entirely.
+    # test_admin_surface_guard.test_no_view_anywhere_uses_session_authentication pins it.
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.accounts.authentication.CustomerJWTAuthentication",
     ],
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
@@ -194,6 +214,22 @@ REST_FRAMEWORK = {
         # against login_sustained. 20 rapid attempts therefore spend the whole hour.
         "login_burst": "5/min",
         "login_sustained": "20/hour",
+        # Staff login (/auth/admin-token/). Deliberately brutal compared with the
+        # customer rates above: legitimate staff volume is near zero, a staff lockout
+        # is recoverable with root access, and the account being guessed at can change
+        # the payout bank account. Separate scopes = separate buckets, so an attack on
+        # one gate cannot deny logins on the other.
+        "admin_login_ip": "5/min",
+        "admin_login_email": "10/hour",
+        # Staff invite acceptance. Counts INVALID tokens only — see
+        # `StaffInviteAcceptThrottle`, which deliberately inverts the usual order so a
+        # valid token never touches the bucket. 10/hour is a junk-volume cap, not a
+        # guess cap: at 256 bits of token entropy, guessing is not the threat model.
+        "invite_accept_ip": "10/hour",
+        # Global admin search. Keyed on the authenticated staff USER, request-counted —
+        # see `AdminSearchThrottle` for why that is safe here and is a lockout button
+        # everywhere else on this surface. Generous because it is a box a human types into.
+        "admin_search": "60/min",
         # The _ip rates below are DELIBERATELY loose. All storefront traffic egresses
         # from Vercel, so these are shared by every customer at once -- at 10/hour they
         # were a store-wide cap of ten signups and ten password resets per hour, which
@@ -254,6 +290,21 @@ if SENTRY_DSN:
 # See apps/accounts/turnstile.py.
 TURNSTILE_SECRET = env("TURNSTILE_SECRET", default="")
 
+# The staff gate (/auth/admin-token/) reads this FIRST and falls back to
+# TURNSTILE_SECRET when it is empty. Two reasons it exists, both operational:
+#
+# 1. Turnstile widgets are DOMAIN-SCOPED. The existing widget's allowlist is
+#    next.tokecosmetics.com; the admin app is a new hostname, so unless that hostname
+#    is added to the existing widget it needs its own widget — and its own secret.
+#    Without this setting, "give admin its own widget" would mean editing code.
+# 2. Break-glass granularity. During a Cloudflare/siteverify outage the rehearsed
+#    recovery is to drop the secret from the prod env and restart. With one shared
+#    secret that opens the customer gate too; with this one, staff can get back in
+#    while the customer gate stays closed (or the reverse).
+#
+# Unset by default, so nothing changes until an admin widget actually exists.
+TURNSTILE_ADMIN_SECRET = env("TURNSTILE_ADMIN_SECRET", default="")
+
 # --- Checkout ---
 RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 
@@ -262,6 +313,44 @@ RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 # admin; whichever happens first wins. Plan-11's verified-purchase review rule and
 # Plan-28's accounting both read this status, so it has to actually get set.
 RETURN_WINDOW_DAYS = env.int("RETURN_WINDOW_DAYS", default=14)
+
+# --- Staff invites ---
+# How long an invite link stays usable. 72 hours is long enough to survive a weekend
+# and short enough that a link forwarded, screenshotted or left in a mailbox stops
+# being a staff-creation capability quickly. Env-tunable because the right number
+# depends on how the person is actually onboarded, and the only alternative to tuning
+# it is people asking for a re-invite. Lowering it costs nothing: "resend" is
+# revoke + invite, which is a two-click operation for the Owner.
+STAFF_INVITE_TTL_HOURS = env.int("STAFF_INVITE_TTL_HOURS", default=72)
+
+# --- Staff TOTP (Plan-16 Task 3b) ---
+#
+# A DEDICATED KEY, NOT DERIVED FROM SECRET_KEY. A TOTP secret is symmetric and must be
+# recoverable in order to verify a code, so unlike a password it cannot be hashed —
+# encryption at rest is the only option, and the whole value of it is that a stolen
+# database backup does not contain the key. (The backups leave this box nightly for an
+# S3 bucket whose write credential can also delete, versioning off; see memory
+# project_tokecosmetics_s3_backup_risk.) Key separation is the point: SECRET_KEY signs
+# every JWT and every password-reset token, so rotating it logs the whole shop out,
+# while rotating this one is a background re-encrypt (`manage.py rotate_totp_key`).
+# Deriving one from the other would tie those two operations together forever.
+#
+# WHAT IS CONFIGURED TODAY. The default below is a literal, obviously-insecure
+# development key — the same convention as SECRET_KEY above — so the test suite and a
+# fresh checkout work with no setup. `config/settings/prod.py` re-reads this WITHOUT a
+# default, so a production process that has not been given a real key fails to start
+# rather than encrypting staff second factors under a value that is in the repository.
+#
+# Generate one with:
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+TOTP_ENCRYPTION_KEY = env(
+    "TOTP_ENCRYPTION_KEY", default="dG9rZS1kZXYtaW5zZWN1cmUtdG90cC1rZXktMzJieXQ="
+)
+# Decrypt-only keys, newest first — the same shape as Django's SECRET_KEY_FALLBACKS.
+# Rotation is: put the old key here, set the new one above, restart, run
+# `manage.py rotate_totp_key`, then empty this list and restart again. Documented in
+# docs/runbooks/admin-gate.md §6.
+TOTP_ENCRYPTION_KEY_FALLBACKS = env.list("TOTP_ENCRYPTION_KEY_FALLBACKS", default=[])
 
 # --- JWT (SimpleJWT) ---
 from datetime import timedelta  # noqa: E402
@@ -367,6 +456,10 @@ CELERY_BEAT_SCHEDULE = {
     "anonymize-deleted-accounts": {
         "task": "apps.accounts.tasks.anonymize_deleted_accounts",
         "schedule": 86400.0,  # daily — the grace window is measured in days
+    },
+    "tombstone-search-terms": {
+        "task": "apps.core.tasks.tombstone_search_terms",
+        "schedule": 86400.0,  # daily — the retention window is 90 days
     },
 }
 

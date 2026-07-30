@@ -7,3 +7,4 @@ class AccountsConfig(AppConfig):
 
     def ready(self):
         from . import signals  # noqa: F401 — connects the auth security-event receivers
+        from . import checks  # noqa: F401 — registers the staff-role check (accounts.W001)

@@ -1,7 +1,19 @@
-"""Root URL configuration.
+"""Root URL configuration. The versioned API lives under `/api/v1/`.
 
-`/django-admin/` is the low-level Django admin fallback (IP-restricted in prod, Plan-02).
-The versioned API lives under `/api/v1/`.
+`/django-admin/` is the low-level Django admin fallback. **In production it is DENIED
+OUTRIGHT at the web server**, not IP-restricted: the live Apache vhost carries
+`<Location /django-admin/> Require all denied`, verified 2026-07-28 as a 403 from the
+public internet. The previous wording here said "IP-restricted in prod", which described
+a control that does not exist — this project has been bitten three times by comments
+asserting controls nobody built, so the rule now is that a comment describes what is
+configured TODAY and aspirations go in a runbook as tracked TODOs.
+
+That denial is configuration and cannot be asserted from the test suite. What the suite
+DOES assert (`apps/accounts/tests/test_admin_surface_guard.py`) is the property that
+makes a Django admin session harmless to the API even if the vhost rule were ever
+removed: no DRF view anywhere accepts `SessionAuthentication`, so a Django login cookie
+authenticates nothing under `/api/v1/`. Without that, a session cookie would bypass the
+admin audience claim entirely, since a session cannot carry one.
 """
 from django.contrib import admin
 from django.urls import include, path
@@ -26,6 +38,8 @@ urlpatterns = [
     path("api/v1/", include("apps.checkout.urls")),
     path("api/v1/", include("apps.payments.urls")),
     path("api/v1/", include("apps.orders.urls")),
+    path("api/v1/admin/", include("apps.accounts.admin_urls")),
+    path("api/v1/admin/", include("apps.core.admin_urls")),
     path("api/v1/admin/", include("apps.catalog.admin_urls")),
     path("api/v1/admin/", include("apps.inventory.admin_urls")),
     path("api/v1/admin/", include("apps.payments.admin_urls")),

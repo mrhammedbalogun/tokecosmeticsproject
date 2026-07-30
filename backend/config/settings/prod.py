@@ -33,5 +33,13 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 
+# Staff TOTP secrets are encrypted at rest under this key. Re-read WITHOUT a default so
+# a production process that was never given one fails at import rather than silently
+# encrypting every staff second factor under the development literal in base.py — which
+# is in the repository, and therefore not a secret at all. The failure is loud, happens
+# at deploy time, and the fix is one env line; the alternative failure is silent and is
+# only discovered when a database backup is stolen.
+TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY")
+
 # Swagger/docs are staff-only in production.
 SPECTACULAR_SETTINGS = {**globals().get("SPECTACULAR_SETTINGS", {}), "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"]}

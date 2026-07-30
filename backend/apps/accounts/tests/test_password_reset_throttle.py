@@ -15,7 +15,6 @@ the configured protection actually bites.
 """
 import pytest
 from django.core.cache import cache
-from django.urls import reverse
 from rest_framework.test import APIClient
 
 pytestmark = pytest.mark.django_db

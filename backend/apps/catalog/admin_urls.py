@@ -1,5 +1,17 @@
+"""Catalogue admin routes.
+
+SimpleRouter, not DefaultRouter, and the difference matters here. `DefaultRouter` adds
+an `APIRootView` at the router's mount point — which, mounted under `api/v1/admin/`,
+is an endpoint on the admin surface that inherits the project defaults: `AllowAny` and
+stock `JWTAuthentication`. It answers unauthenticated GETs with a directory of the
+admin API. Not a data leak, but a route on this surface that none of the Plan-16
+controls touch, and `test_admin_surface_guard.py` refuses to let one exist.
+
+SimpleRouter generates the identical viewset routes without that root view and without
+the `.json` format-suffix duplicates. Nothing consumed either.
+"""
 from django.urls import path
-from rest_framework.routers import DefaultRouter
+from rest_framework.routers import SimpleRouter
 
 from apps.catalog.admin_views import (
     BrandAdminViewSet,
@@ -14,7 +26,7 @@ from apps.catalog.admin_views import (
     TagAdminViewSet,
 )
 
-router = DefaultRouter()
+router = SimpleRouter()
 router.register("products", ProductAdminViewSet, basename="admin-product")
 router.register("categories", CategoryAdminViewSet, basename="admin-category")
 router.register("brands", BrandAdminViewSet, basename="admin-brand")

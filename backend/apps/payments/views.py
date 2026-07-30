@@ -12,11 +12,14 @@ import logging
 from decimal import Decimal, InvalidOperation
 
 from django.shortcuts import get_object_or_404
-from rest_framework import permissions, serializers
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.accounts.authentication import AdminJWTAuthentication
+from apps.accounts.rbac import HasAdminScope
+from apps.core.audit import AdminAuditMixin
 from apps.orders.models import Order
 from apps.payments.gateways.base import GatewayError
 from apps.payments.gateways.registry import get_gateway
@@ -69,15 +72,25 @@ class PaymentStatusView(APIView):
         })
 
 
-class OrderRefundView(APIView):
+class OrderRefundView(AdminAuditMixin, APIView):
     """POST /api/v1/admin/orders/{number}/refunds/ — staff-initiated refund.
 
     Body: {amount, reason?, restock?, payment_id?}. `payment_id` disambiguates an order
     with more than one payment (e.g. a double charge being unwound); by default the
     collected payment is used.
+
+    `orders.manage`: money leaving the merchant account through the gateway. This is the
+    endpoint Amendment 7 named first, and the one Support must not hold.
     """
 
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
+    # No serializer: this view parses `request.data` by hand, so the allowlist lives on
+    # the view. Money leaving the merchant account is the single row somebody will most
+    # want to read back, so every key that shapes the amount is on it.
+    audit_action = "refund"
+    audit_model_label = "orders.order"
+    audit_allowlist = ("amount", "reason", "restock", "payment_id")
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)
@@ -126,6 +139,8 @@ class OrderRefundView(APIView):
 
 
 class ManualRefundSerializer(serializers.Serializer):
+    audit_allowlist = ("amount", "bank_reference", "note", "restock", "payment_id")
+
     amount = serializers.DecimalField(max_digits=12, decimal_places=2,
                                       min_value=Decimal("0.01"))
     bank_reference = serializers.CharField(max_length=128)
@@ -133,13 +148,24 @@ class ManualRefundSerializer(serializers.Serializer):
     restock = serializers.BooleanField(required=False, default=False)
 
 
-class ManualRefundView(APIView):
+class ManualRefundView(AdminAuditMixin, APIView):
     """POST /api/v1/admin/orders/{number}/manual-refund/ — staff record a refund they have
     already wired from the bank. The only refund path for a manual gateway, and the one
     the review flags that say "refund it" are telling staff to use.
+
+    `orders.manage`, and if anything more strongly than the gateway refund above: this
+    one is an unverified ASSERTION that money was wired, with no gateway to contradict
+    it. The only check on it is the person allowed to make it.
     """
 
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
+    # An UNVERIFIED assertion that money was wired, with no gateway to contradict it —
+    # the docstring above says the only check on it is the person allowed to make it.
+    # The audit row is the second check: it records which person, and which session.
+    audit_action = "manual_refund"
+    audit_model_label = "orders.order"
+    audit_serializers = (ManualRefundSerializer,)
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)
@@ -182,6 +208,14 @@ class ManualRefundView(APIView):
 
 
 class ConfirmManualReceiptSerializer(serializers.Serializer):
+    # `accept_discrepancy` and `allow_duplicate_reference` are the two overrides that
+    # switch OFF the guards stopping goods shipping twice against one transfer. They
+    # are the most important keys on this endpoint to have on the record.
+    audit_allowlist = (
+        "amount_received", "bank_reference", "note", "accept_discrepancy",
+        "allow_duplicate_reference",
+    )
+
     amount_received = serializers.DecimalField(
         max_digits=12, decimal_places=2, min_value=Decimal("0.01")
     )
@@ -191,11 +225,22 @@ class ConfirmManualReceiptSerializer(serializers.Serializer):
     allow_duplicate_reference = serializers.BooleanField(required=False, default=False)
 
 
-class ConfirmManualReceiptView(APIView):
+class ConfirmManualReceiptView(AdminAuditMixin, APIView):
     """POST /api/v1/admin/orders/{number}/confirm-payment/ — staff confirm a bank transfer
-    landed. This is the ONLY way a bank-transfer order can ever be fulfilled."""
+    landed. This is the ONLY way a bank-transfer order can ever be fulfilled.
 
-    permission_classes = [permissions.IsAdminUser]  # PLAN-16: fine-grained RBAC
+    `orders.manage`, named explicitly by Amendment 7. Bank transfer is the live gateway
+    for this store, so this endpoint is the point at which goods are released against
+    money nobody has verified but the person clicking. It can also override an amount
+    discrepancy and a duplicate bank reference — the two guards that stop goods shipping
+    twice against one transfer.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
+    audit_action = "confirm_bank_transfer"
+    audit_model_label = "orders.order"
+    audit_serializers = (ConfirmManualReceiptSerializer,)
 
     def post(self, request, number: str):
         order = get_object_or_404(Order, number=number)

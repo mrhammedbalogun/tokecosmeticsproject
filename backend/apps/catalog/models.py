@@ -1,5 +1,6 @@
-from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
+from django.db.models.functions import Upper
 
 from apps.core.models import TimeStampedModel
 
@@ -147,7 +148,16 @@ class Product(TimeStampedModel):
     class Meta:
         ordering = ["-published_at", "name"]
         indexes = [
+            # Bare column, used by the STOREFRONT's `TrigramSimilarity("name", q)` ranking
+            # (apps/search/backends.py). Kept as-is.
+            #
+            # IT DOES NOT SERVE `name__icontains`, verified by EXPLAIN in Plan-16 Task 6:
+            # Django compiles that lookup to `UPPER(name::text) LIKE UPPER(%s)`, and an
+            # index on the bare column is simply never consulted for it (200k rows: 88.7ms
+            # unindexed, 89.1ms with the bare index). Hence the second index below rather
+            # than an edit to this one — the two lookups need two different expressions.
             GinIndex(name="product_name_trgm", fields=["name"], opclasses=["gin_trgm_ops"]),
+            GinIndex(OpClass(Upper("name"), name="gin_trgm_ops"), name="product_name_upper_trgm"),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -174,6 +184,13 @@ class ProductVariant(TimeStampedModel):
 
     class Meta:
         ordering = ["position", "id"]
+        indexes = [
+            # SKU lookup from the admin search box. `sku` is already UNIQUE, and that btree
+            # cannot serve `%term%` — staff type the middle of a SKU as often as the start.
+            # On `UPPER(sku)` for the same reason as everywhere else: that is the
+            # expression Django's `icontains` compiles to (Plan-16 Task 6).
+            GinIndex(OpClass(Upper("sku"), name="gin_trgm_ops"), name="variant_sku_trgm"),
+        ]
 
     def __str__(self) -> str:
         return f"{self.product.name} — {self.name}"

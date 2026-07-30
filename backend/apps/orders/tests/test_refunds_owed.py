@@ -15,6 +15,7 @@ from decimal import Decimal
 import pytest
 from rest_framework.test import APIClient
 
+from apps.accounts.tests.factories import staff_user
 from apps.core.models import Country
 from apps.orders.factories import OrderFactory
 from apps.payments.models import Payment, Refund
@@ -113,7 +114,7 @@ def test_unpaid_declined_order_is_excluded():
 # --------------------------------------------------------------------------- endpoint
 @pytest.fixture
 def admin_client(django_user_model):
-    staff = django_user_model.objects.create_user(email="staff@x.com", password="pw", is_staff=True)
+    staff = staff_user(django_user_model)
     client = APIClient()
     client.force_authenticate(staff)
     return client

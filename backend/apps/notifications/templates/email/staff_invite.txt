@@ -1,0 +1,13 @@
+Hi,
+
+{{ invited_by }} has invited you to the Toke Cosmetics admin as {{ role }}.
+
+Open this link to choose a password and finish setting up your account.
+It expires in {{ expires_hours }} hours and can only be used once:
+
+{{ invite_url }}
+
+If you weren't expecting this, ignore this email and tell {{ invited_by }} —
+the link can be revoked.
+
+— Toke Cosmetics

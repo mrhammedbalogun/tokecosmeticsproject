@@ -18,6 +18,18 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "storefront", "run", "start"],
       "port": 3000
+    },
+    {
+      "name": "admin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "admin", "run", "dev"],
+      "port": 3001
+    },
+    {
+      "name": "admin-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "admin", "run", "start"],
+      "port": 3001
     }
   ]
 }

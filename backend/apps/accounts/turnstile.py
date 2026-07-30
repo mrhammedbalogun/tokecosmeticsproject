@@ -6,6 +6,9 @@ else (network error, non-2xx, non-JSON). The widget token arrives from the
 storefront BFF as ``turnstile_token`` in the JSON body (the BFF reads the
 browser's ``cf-turnstile-response`` form field).
 
+The staff login (``/auth/admin-token/``) is gated by the same function against a
+possibly different secret — see ``admin_turnstile_secret``.
+
 ``remoteip`` is deliberately NOT sent: storefront traffic egresses from Vercel,
 so the address Django sees is not the one that solved the challenge, and a
 mismatched remoteip fails every legitimate customer. Add it only once the BFF
@@ -27,11 +30,32 @@ SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 _DENIED = "Human verification failed. Refresh the page and try again."
 
 
-def require_turnstile(request) -> None:
+def admin_turnstile_secret() -> str:
+    """The secret the STAFF gate verifies against: ``TURNSTILE_ADMIN_SECRET`` if set,
+    otherwise the customer one.
+
+    The fallback is what makes the setting optional. Turnstile widgets are
+    domain-scoped and the admin app is a new hostname, so admin may need its own
+    widget — but it does not need one to ship, and until the widget exists the admin
+    gate should behave exactly like the customer gate rather than being silently off.
+    The override also lets a Cloudflare-outage break-glass open one gate without
+    opening both. See base.py for the full reasoning.
+    """
+    return settings.TURNSTILE_ADMIN_SECRET or settings.TURNSTILE_SECRET
+
+
+def require_turnstile(request, secret: str | None = None) -> None:
     """Raise ``PermissionDenied`` (403) unless the request carries a token that
-    Cloudflare confirms. No-op while ``TURNSTILE_SECRET`` is unset — that is the
-    rollout switch, not a bypass: see the setting's comment in base.py."""
-    secret = settings.TURNSTILE_SECRET
+    Cloudflare confirms. No-op while the secret is unset — that is the rollout
+    switch, not a bypass: see the setting's comment in base.py.
+
+    ``secret`` defaults to ``TURNSTILE_SECRET`` (the customer gate). Callers that
+    verify against a different widget pass it explicitly — a parameter rather than a
+    second copy of this function, so there stays exactly ONE siteverify
+    implementation and one fail-closed path to get right.
+    """
+    if secret is None:
+        secret = settings.TURNSTILE_SECRET
     if not secret:
         return
 

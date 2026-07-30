@@ -1,3 +1,23 @@
+"""Serializers for the catalogue admin surface.
+
+EVERY serializer here carries an `audit_allowlist`: the exact request-body keys that
+Plan-16 Task 4's `AuditLog.changes` may store. Anything not named is never written,
+which is the whole answer to "what stops a secret-shaped field ending up in the audit
+table" (`apps/core/audit.py` argues why an allowlist rather than a denylist, and
+`apps/core/tests/test_audit_guard.py` refuses any entry that names a `write_only`
+field -- the one category most likely to be a credential).
+
+TWO OMISSIONS ARE DELIBERATE AND ARE NOT OVERSIGHTS:
+
+* **Long prose is excluded** -- `description`, `ingredients`, `directions`, `warnings`,
+  `specs`, `faqs`. Each can be kilobytes on its own, and a single one of them would
+  blow the 8KB per-row cap and take the whole row's field list down with it into a
+  truncation marker. What an audit trail needs from a product edit is which of the
+  consequential fields moved (name, slug, status, brand, availability), not the copy.
+* **Uploaded files are excluded** -- `image`, `logo`. `request.data` holds an
+  `UploadedFile` there, so the stored value would be a filename: no evidentiary value,
+  and it invites somebody to later assume the file itself was captured.
+"""
 from rest_framework import serializers
 
 from apps.catalog.models import (
@@ -16,6 +36,12 @@ from apps.pricing.models import Price
 
 
 class ProductAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = (
+        "name", "slug", "brand", "categories", "tags", "status", "is_featured",
+        "related", "available_countries", "seo_title", "seo_description",
+        "published_at", "legacy_source", "legacy_wp_id",
+    )
+
     # Declared explicitly with defaults so they land in `attrs` even when omitted from
     # the request. Product.Meta has a 2-field partial UniqueConstraint
     # (legacy_source, legacy_wp_id) for Plan-21 migration idempotency; DRF auto-generates
@@ -38,48 +64,70 @@ class ProductAdminSerializer(serializers.ModelSerializer):
 
 
 class CategoryAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = ("name", "slug", "parent", "is_active", "sort_order", "seo_title", "seo_description")
+
     class Meta:
         model = Category
         fields = "__all__"
 
 
 class BrandAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = ("name", "slug", "is_active")
+
     class Meta:
         model = Brand
         fields = "__all__"
 
 
 class TagAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = ("name", "slug")
+
     class Meta:
         model = Tag
         fields = "__all__"
 
 
 class CollectionAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = ("name", "slug", "is_active", "rule", "products")
+
     class Meta:
         model = Collection
         fields = "__all__"
 
 
 class ProductVariantAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = (
+        "product", "sku", "barcode", "name", "option_values", "weight_grams",
+        "is_default", "is_active", "position",
+    )
+
     class Meta:
         model = ProductVariant
         fields = "__all__"
 
 
 class ProductVideoAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = ("product", "url", "position")
+
     class Meta:
         model = ProductVideo
         fields = "__all__"
 
 
 class PriceAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = (
+        "variant", "currency", "country", "amount", "compare_at_amount",
+        "starts_at", "ends_at",
+    )
+
     class Meta:
         model = Price
         fields = "__all__"
 
 
 class ProductImageAdminSerializer(serializers.ModelSerializer):
+    audit_allowlist = ("product", "alt", "position", "variant")
+
     class Meta:
         model = ProductImage
         fields = ["id", "product", "image", "alt", "position", "variant"]

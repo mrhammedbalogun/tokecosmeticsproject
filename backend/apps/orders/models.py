@@ -1,5 +1,7 @@
 from django.conf import settings
+from django.contrib.postgres.indexes import GinIndex, OpClass
 from django.db import models
+from django.db.models.functions import Upper
 from django.utils import timezone
 
 from apps.core.models import TimeStampedModel
@@ -64,6 +66,19 @@ class Order(TimeStampedModel):
             # minutes, and every admin order list filters on status.
             models.Index(fields=["status", "reservation_expires_at"]),
             models.Index(fields=["status", "-placed_at"]),
+            # Trigram indexes for the admin search box and the order queue's `search`
+            # filter, both of which do `icontains` on these three columns. On `UPPER(col)`
+            # rather than the bare column because that is what Django's `icontains`
+            # compiles to on PostgreSQL — measured at 200k orders (Plan-16 Task 6): 63ms
+            # unindexed, 0.24ms with these. `number` already has a UNIQUE btree and
+            # `legacy_number` a plain btree, and NEITHER helps: both patterns are
+            # unanchored `%term%`, which no btree can serve.
+            GinIndex(OpClass(Upper("number"), name="gin_trgm_ops"), name="order_number_trgm"),
+            GinIndex(
+                OpClass(Upper("legacy_number"), name="gin_trgm_ops"),
+                name="order_legacy_num_trgm",
+            ),
+            GinIndex(OpClass(Upper("email"), name="gin_trgm_ops"), name="order_email_trgm"),
         ]
 
     def __str__(self) -> str:

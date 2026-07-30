@@ -6,6 +6,7 @@ import pytest
 from django.core import mail
 from rest_framework.test import APIClient
 
+from apps.accounts.tests.factories import staff_user
 from apps.catalog.factories import ProductVariantFactory
 from apps.core.models import Country
 from apps.inventory.factories import StockItemFactory, WarehouseFactory
@@ -213,8 +214,7 @@ def test_refund_api_requires_staff(fakerf, django_user_model):
 
 def test_refund_api_creates_refund(fakerf, django_user_model):
     order, payment, _ = _paid_order()
-    staff = django_user_model.objects.create_user(email="staff@x.com", password="pw",
-                                                  is_staff=True)
+    staff = staff_user(django_user_model)
     client = APIClient()
     client.force_authenticate(staff)
     r = client.post(f"/api/v1/admin/orders/{order.number}/refunds/",
