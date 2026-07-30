@@ -93,8 +93,10 @@ export default async function AuditPage({ searchParams }: { searchParams: Search
             <AuditTable rows={rows} />
             <Pagination
               basePath={PATH}
-              filters={filters}
+              page={filters.page}
               total={pageCount(page?.count ?? 0)}
+              buildQuery={(target) => auditQueryString({ ...filters, page: target })}
+              label="Audit log pages"
             />
           </>
         )}

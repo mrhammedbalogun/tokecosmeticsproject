@@ -90,7 +90,28 @@ class ProductAdminViewSet(AdminBaseViewSet):
     # serializer a view can parse, and a body shape it cannot see is a body shape whose
     # write-only fields nobody checked.
     audit_serializers = (ProductAdminSerializer, ProductImageAdminSerializer)
-    queryset = Product.objects.all().order_by("-created_at")
+    # Prefetched for the list. Two groups, and the second was a PRE-EXISTING N+1 that the
+    # Task 2 query-budget test exposed rather than introduced:
+    #
+    #   images / variants__prices — the new thumbnail, variant-count and
+    #     priced-currencies columns.
+    #   categories / tags / related / available_countries — four M2M fields this
+    #     serializer has always rendered, each costing a query PER ROW. A 12-product page
+    #     measured 55 queries; the same page now measures 11, and a 24-row page does not
+    #     cost twice that. Nothing in the JSON differed either way, which is why it
+    #     survived this long.
+    queryset = (
+        Product.objects.all()
+        .prefetch_related(
+            "images",
+            "variants__prices",
+            "categories",
+            "tags",
+            "related",
+            "available_countries",
+        )
+        .order_by("-created_at")
+    )
     lookup_field = "slug"
     # BOTH backends named explicitly. Listing `filter_backends` on a view REPLACES
     # DEFAULT_FILTER_BACKENDS, so adding SearchFilter alone would silently drop

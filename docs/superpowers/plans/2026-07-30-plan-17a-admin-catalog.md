@@ -171,6 +171,42 @@ No bulk actions — dropped in the spec at 69 products.
 **Verify:** `/products` lists all 69 against production-shaped data; search by name and by
 SKU; status filter; page 2 works; a scopeless user sees the 403 sentence, not a crash.
 
+**DONE 2026-07-30, with three findings that were not in the plan.**
+
+1. **The column list was unbuildable as written.** `ProductAdminSerializer` exposed no
+   image, no variant count, no pricing signal and not even `updated_at`, so the specified
+   columns had no data behind them. Added as read-only `SerializerMethodField`s —
+   `thumbnail`, `variant_count`, `priced_currencies`, plus `updated_at`. Method fields
+   over prefetched relations rather than queryset annotations **on purpose**: an
+   annotation renders on a list and then raises `AttributeError` on the POST/PATCH
+   response, whose instance carries no annotation. A test pins that.
+
+   `priced_currencies` counts **currency-level rows only**. A country override prices one
+   country, and treating it as pricing the whole currency would report a product as
+   available in a market it is still hidden in — the exact thing the column exists to
+   surface.
+
+2. **A pre-existing N+1, found by the new query-budget test.** The serializer renders four
+   M2M fields (`categories`, `tags`, `related`, `available_countries`), none prefetched —
+   a 12-product page measured **55 queries** and is now **11**. The JSON was identical
+   either way, which is why it survived since Plan-05c. Not caused by this task; exposed
+   by it.
+
+3. **The admin CSP would have blocked every thumbnail.** `img-src 'self' data: blob:`
+   admits no CDN host, so production images would render broken with nothing but a console
+   violation to say why. Added `NEXT_PUBLIC_MEDIA_ORIGIN` to `img-src` — one directive,
+   one host we control, `script-src` and `connect-src` untouched. **Needs setting in the
+   Vercel project** to match the backend's `AWS_S3_CUSTOM_DOMAIN`; empty in dev, where
+   `'self'` already covers media served through the BFF.
+
+`components/Pagination.tsx` was generalised to take a `buildQuery` callback instead of
+importing `AuditFilters`, and the pagination arithmetic moved to `lib/pagination.ts`
+(re-exported from `lib/audit.ts`). The audit page's behaviour is unchanged and its tests
+still assert it.
+
+Verified: admin vitest **219 passed** (22 files), `tsc --noEmit` clean, `eslint` clean,
+`next build` succeeds with `/products` in the route table.
+
 ### Task 3 — editor shell + Details and Availability tabs
 
 One client component owning form state for every tab, per Design Decision 3. Tabs

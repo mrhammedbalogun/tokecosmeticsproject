@@ -39,13 +39,31 @@ import type { NextConfig } from "next";
  */
 const isProd = process.env.NODE_ENV === "production";
 
+/**
+ * The origin catalogue images are served from — CloudFront in production, and whatever
+ * `AWS_S3_CUSTOM_DOMAIN` resolves to elsewhere. Added to `img-src` in Plan-17a Task 2,
+ * because without it the products list renders every thumbnail as a broken image and the
+ * only evidence is a CSP violation in the console.
+ *
+ * ORIGIN ONLY, never a wildcard. This widens exactly one directive, for images, to one
+ * host we control. It does NOT touch `script-src` or `connect-src`, and the standing rule
+ * above — no third-party scripts on this origin, ever — is untouched by it: an image
+ * cannot read `location.href`, and `object-src 'none'` still forbids the plugin content
+ * types that could.
+ *
+ * Empty in local dev, where media is served from the Django origin through the BFF and
+ * `'self'` already covers it. Set `NEXT_PUBLIC_MEDIA_ORIGIN` in the Vercel project to the
+ * CloudFront hostname, matching the backend's `AWS_S3_CUSTOM_DOMAIN`.
+ */
+const MEDIA_ORIGIN = process.env.NEXT_PUBLIC_MEDIA_ORIGIN ?? "";
+
 const CSP = [
   "default-src 'self'",
   // Next's App Router requires inline bootstrap scripts. `unsafe-eval` is dev-only (React
   // Refresh needs it); production gets neither it nor any host but Turnstile's.
   `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  `img-src 'self' data: blob:${MEDIA_ORIGIN ? ` ${MEDIA_ORIGIN}` : ""}`,
   "font-src 'self' data:",
   // Same-origin only: every API call goes through this app's own BFF routes or its Server
   // Functions, never straight from the browser to Django. `ws:` is Next's dev HMR socket.
