@@ -444,3 +444,51 @@ behind Vercel SSO, which is Amendment 10.4's requirement.
 Note also that `admin.tokecosmetics.com` currently serves the Plan-01 "Create Next App"
 placeholder in production, because `main`'s `admin/` is still that scaffold. Harmless, but
 it is a public page on the hostname that is about to become the admin.
+
+---
+
+## Deployed to production — `backend-v0.4.0`, 2026-07-30
+
+Merged to main (`974adf3`), tagged, deployed by the tag pipeline in 1m28s.
+
+**Pre-flight.** VPS working tree clean (the deploy script refuses a dirty one), 62 GB
+free, rollback target `backend-v0.3.0` recorded. The three index migrations use plain
+`AddIndex`, not `CONCURRENTLY`, so they take a brief exclusive lock — checked against the
+real tables first: 1 user, 69 products, 0 brands, 1 order. Instantaneous.
+
+**Applied.** All 8 migrations, confirmed `[X]` on the server. Pre-deploy dump taken by
+`deploy.sh` at 00:31:09 (`toke-20260730-003109.sql.gz`, 85 KB) before any of them ran.
+The four role groups seeded. The `core_auditlog_append_only` trigger exists in
+`pg_trigger`.
+
+**Config.** `ADMIN_URL` corrected from the Plan-02 placeholder to
+`https://admin.tokecosmetics.com`; `.env.prod` backed up first. `CORS_ALLOWED_ORIGINS`
+now derives to `[next…, admin…]`. `TURNSTILE_ADMIN_SECRET` confirmed set and **distinct**
+from `TURNSTILE_SECRET` in the running settings. Both runbook §6.2 deploy checks pass:
+`TOTP_ENCRYPTION_KEY` present (the container would not boot otherwise) and the clock is
+NTP-synced, which TOTP depends on.
+
+**Live surface.** `/auth/admin-token/` went from **404** to **403 with the Turnstile
+message** — the endpoint exists and the gate is active. `/admin/staff/` and
+`/admin/audit/` answer 401 unauthenticated. `admin.tokecosmetics.com` now serves the real
+app (it was the Plan-01 scaffold until this merge): `/login` 200 with the widget rendered
+at `data-sitekey="0x4AAAAAAEBKTDukNbIMgaHL"` and `data-action="toke-admin"`, `/` and
+`/staff` bouncing to `/login?next=…`, and the admin's own CSP, `no-store` and
+`noindex, nofollow` headers on the response. Storefront and customer API unaffected
+throughout.
+
+### The first Owner
+
+A bootstrap problem the plan does not name: invites require `staff.manage`, which only an
+Owner holds, and production had no staff account at all. Resolved along the **designed**
+path rather than by inventing a second one — a `StaffInvite` issued from the server shell
+with `invited_by=None` (the FK is `SET_NULL`, so this is a supported state), and the
+normal invite email sent by `send_email_task`. Hammed sets his own password and enrols
+TOTP through the ordinary accept flow; no password or token passed through the operator
+or any transcript. Worker confirmed the send succeeded.
+
+`createsuperuser` was the alternative and was rejected: it bypasses the scope checks this
+plan exists to establish, and produces an account the roster labels "Superuser (all
+scopes)" rather than Owner.
+
+**Checkpoint remains open** until Hammed accepts that invite and signs in.
