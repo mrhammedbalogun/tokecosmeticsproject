@@ -10,6 +10,10 @@ does.
 that cannot live in the repository, and it is the part that supplies the volume cap
 Django deliberately no longer has.**
 
+**→ Step-by-step, with the exact CLI and dashboard settings, a log-first rollout and a
+lockout recovery: [`edge-rate-limits.md`](./edge-rate-limits.md).** The section below is
+the specification; that file is how to carry it out.
+
 ### Why it cannot be done in Django
 
 The admin app's login is a Server Function that calls the API **server-side** (the
