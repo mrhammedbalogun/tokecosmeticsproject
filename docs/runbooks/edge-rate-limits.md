@@ -418,3 +418,46 @@ reads "20 per 10 minutes" as a hard global ceiling.
 - [ ] Rule B deployed
 - [ ] Rule B verified with the curl loop from an expendable network
 - [x] `admin-gate.md` §1 updated — Rule A no longer outstanding
+
+---
+
+## Superseded in part — the BFF shared-secret gate (2026-07-30)
+
+Fable 5 was consulted on Rule B and rejected all three options in favour of something
+cheaper that this file had listed and walked past. It was right, and the reasoning
+generalises:
+
+**`/auth/admin-token/` and `/admin/staff/invites/accept/` have exactly ONE legitimate
+caller** — the admin BFF. Verified: `admin/src/lib/admin-session.ts` is the only call site
+in either app. An endpoint with a single known server-side caller should not be a public
+endpoint you then try to rate-limit; it should require proof of coming from that caller.
+
+`ADMIN_BFF_SECRET` + the `X-Admin-BFF-Secret` header now does that, checked with
+`hmac.compare_digest` **before** `require_turnstile`. The exposure this whole file was
+about — unmetered junk each costing an outbound siteverify call — is now *unreachable*
+rather than throttled. Shipped in `backend-v0.4.1`; see `apps/accounts/bff.py` and
+`admin-gate.md` §1b.
+
+**What that changes here:**
+
+- **Rule A stays.** It caps volume on the admin app's own `/login` route, which the
+  backend gate cannot see.
+- **Rule B is now optional.** Its job shrinks to keeping garbage off the origin — worth
+  having, since junk still consumes Apache connections and CPU shared with the live
+  WordPress stores, but no longer load-bearing.
+- **The Free-plan rule is the right size for that reduced job.** A 10-second flood brake
+  is the correct shape for burst protection; the long-window volume cap this file kept
+  reaching for is no longer needed by anything.
+- **Option 1 (origin rate limiting) is off the table** for the foreseeable future. It was
+  already the riskiest option; it is now solving a problem that no longer exists.
+
+**Two corrections to this file's own threat model, from the same review:**
+
+1. **The 5-second siteverify figure is a TIMEOUT, not a cost.** A bogus token is rejected
+   in ~100–300 ms. The realistic per-request amplification was always modest.
+2. **"43,000 requests/day unblocked" was a scary number about a non-threat.** 0.5 req/s of
+   quarter-second calls is noise. Worker exhaustion is a burst phenomenon, and bursts are
+   exactly what a short window brakes.
+
+Also unstated here previously: Cloudflare Free's automatic L7 DDoS mitigation sits in
+front of `api.*` regardless of any rule.
