@@ -423,10 +423,16 @@ Plan-16 **backend** in production:
    this branch to main, tagging, and deploying **8 new migrations** (accounts 0003–0006,
    core 0005–0006, catalog 0009, orders 0006), two of which build search indexes and one
    of which installs the audit-log append-only trigger.
-2. **`TURNSTILE_ADMIN_SECRET` is absent from `/opt/tokecosmetics/.env.prod`.** The staff
-   gate therefore falls back to `TURNSTILE_SECRET` and would verify a token minted by the
-   *admin* widget against the *customer* widget's secret — every admin login 403. See
-   `docs/runbooks/turnstile-admin-setup.md`.
+2. ~~**`TURNSTILE_ADMIN_SECRET` is absent from `/opt/tokecosmetics/.env.prod`.**~~
+   **CLOSED 2026-07-30.** Placed on the VPS from `backend/.env`, where Hammed had put it.
+   Pre-staging it was safe because the deployed code does not read the setting at all —
+   it arrives with Plan-16 — so the append is inert until the deploy and no restart was
+   needed. Verified before writing: Cloudflare's siteverify **recognises** the secret (a
+   deliberately invalid token returns `invalid-input-response`, not `invalid-input-secret`,
+   which is how a real secret can be distinguished from a wrong one without a browser
+   solving a widget), and it is **distinct** from `TURNSTILE_SECRET` — the property the
+   §2 break-glass depends on. Transferred over stdin rather than argv so it never entered
+   a process list, and confirmed intact by comparing SHA-256 prefixes end to end.
 3. **`ADMIN_URL` is still `https://backend.tokecosmetics.com`**, the Plan-02 placeholder,
    so staff-invite links would point at a retired scaffold host.
 

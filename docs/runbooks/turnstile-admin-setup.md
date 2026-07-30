@@ -164,6 +164,24 @@ change — it covers the API's own hostname, `api.tokecosmetics.com`, not the ca
 
 ---
 
+### Validating a secret WITHOUT a browser token
+
+Worth knowing before you paste a secret into production, and used on 2026-07-30 to check
+this one. Cloudflare's siteverify distinguishes the two failures:
+
+```bash
+curl -s https://challenges.cloudflare.com/turnstile/v0/siteverify \
+  -d "secret=$SECRET" -d "response=deliberately-invalid-token"
+```
+
+- `"error-codes":["invalid-input-secret"]` → **the secret is wrong or unknown.**
+- `"error-codes":["invalid-input-response"]` → **the secret is real**; only the token was
+  rejected, which is expected.
+
+That is the whole check, and it needs no widget, no browser and no staff account.
+
+---
+
 ## 5. Verify
 
 **a. Widget renders.** Load `https://admin.tokecosmetics.com/login`. The Turnstile box
@@ -241,10 +259,12 @@ TOTP setup screen renders a secret on the page. The CSP in `admin/next.config.ts
 - [ ] `API_URL` + `NEXT_PUBLIC_API_URL` set on the admin project
 - [ ] `NEXT_PUBLIC_TURNSTILE_ADMIN_SITE_KEY` set (production + preview), via bash `printf`
 - [ ] Admin app redeployed
-- [ ] `.env.prod` backed up
+- [x] `.env.prod` backed up *(2026-07-30, `/root/env-prod-2026-07-30-000534.bak`)*
 - [ ] `ADMIN_URL` corrected to `https://admin.tokecosmetics.com`
-- [ ] `TURNSTILE_ADMIN_SECRET` appended
-- [ ] `web` + `worker` recreated
+- [x] `TURNSTILE_ADMIN_SECRET` appended *(2026-07-30; inert until the Plan-16 backend
+      deploys, because the running v0.3.0 does not read the setting)*
+- [ ] `web` + `worker` recreated *(not needed for the secret alone — deferred to the
+      Plan-16 deploy, which restarts them anyway)*
 - [ ] Verified: widget renders · tokenless 403 · solved+wrong-password 401 · Sentry event
 - [ ] Vercel Deployment Protection **on for previews, off for production**
       ([`admin-gate.md` §8.4](./admin-gate.md))
