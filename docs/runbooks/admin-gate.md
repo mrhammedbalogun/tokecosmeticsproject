@@ -6,11 +6,18 @@ does.
 
 ## 1. OUTSTANDING — two edge rate-limit rules
 
-**Status 2026-07-30: Rule A is DONE and enforcing. Rule B is open and needs a decision —
-Cloudflare's Free plan allows only one rule in the whole zone, with a 10-second period and
-no `Host` field, so the rule below cannot be written as specified.** This is the part of
-Plan-16's admin rate limiting that cannot live in the repository, and it is the part that
-supplies the volume cap Django deliberately no longer has.
+**Status 2026-07-30: BOTH RULES ARE DONE AND ENFORCING, and a third control now does most
+of the work.** The spec below is kept as the reasoning; the carried-out version, the
+verification evidence and the Free-plan constraints are in
+[`edge-rate-limits.md`](./edge-rate-limits.md).
+
+- **Rule A** — Vercel Firewall, `POST /login`, 20 req / 600 s per IP, deny.
+- **Rule B** — Cloudflare, `http.request.uri.path eq "/api/v1/auth/admin-token/"`,
+  5 req / 10 s per IP, block. (Free plan: one rule per zone, 10-second period only, no
+  `Host` field — so the 20-per-10-minutes below could not be expressed.)
+- **The BFF shared-secret gate** (§1b, `backend-v0.4.1`) is what actually closed the gap
+  these rules were specified for: junk is now refused by a constant-time compare before
+  any siteverify call, so the two rules are defence in depth rather than load-bearing.
 
 **→ Step-by-step, with the exact CLI and dashboard settings, a log-first rollout and a
 lockout recovery: [`edge-rate-limits.md`](./edge-rate-limits.md).** The section below is

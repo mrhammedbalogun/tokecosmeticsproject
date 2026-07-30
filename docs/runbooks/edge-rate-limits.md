@@ -5,7 +5,40 @@
 | rule | state |
 |---|---|
 | **A — Vercel Firewall** | **DONE and enforcing.** `Admin login volume cap`, `rule_admin_login_volume_cap_fIQ5Tx`, 20 req / 600 s per IP on `POST /login`, action `deny`, no persistent duration. |
-| **B — Cloudflare** | **Not configured, and constrained by the Free plan — see §Rule B.** |
+| **B — Cloudflare** | **DONE and enforcing 2026-07-30.** `http.request.uri.path eq "/api/v1/auth/admin-token/"`, IP, 5 req / 10 s, block 10 s. Verified live: 12 rapid POSTs gave `403 403 403 403 403 429 429 …`, other paths unaffected, window self-cleared. |
+| **BFF shared-secret gate** | **DONE** (`backend-v0.4.1`) — the control that actually closed the gap. |
+
+### ⚠ What Rule B actually meters, which is not obvious
+
+Cloudflare sees **Vercel's egress IP** for a legitimate staff login, because the admin app
+calls the API server-side. It sees the **attacker's own IP** for a direct-to-API script.
+Two different buckets, and that asymmetry is the only reason a 5-per-10s cap is safe here:
+staff volume is a handful of logins a day, so the Vercel bucket never fills.
+
+Two practical consequences:
+
+- **Probing the rule from your own machine cannot lock you out of the admin.** Your browser
+  reaches the API through Vercel, so your home IP and the Vercel bucket are separate.
+- **It also means Rule B does not protect staff login from a determined attacker who
+  drives the admin UI** — that traffic shares Vercel's bucket with yours, which is exactly
+  why Rule A exists on the Vercel side.
+
+### Before this rule: a zone rule that matched nothing
+
+The pre-existing rule was
+`http.request.uri.path contains "/api/auth/" and not … "/api/auth/token/refresh"`, and it
+was **doubly inert**:
+
+1. **Wrong path for the only host Cloudflare can see.** Django serves `/api/v1/auth/…`;
+   the string `/api/v1/auth/token/` does not contain `/api/auth/`. Verified live:
+   `/api/auth/token/` → 404, `/api/v1/auth/token/` → 403.
+2. **The host where `/api/auth/*` does exist is not proxied.** Those are the storefront's
+   own Next.js BFF routes on `next.tokecosmetics.com`, which is a bare CNAME to Vercel —
+   `Server: Vercel`, no `CF-RAY`. Cloudflare is not in that path at all.
+
+Sixth instance of this codebase's recurring failure mode: a control written for
+infrastructure that does not route through the thing meant to enforce it. **Before
+trusting any rule, confirm the traffic you think it meters actually passes through it.**
 
 These are the last two items from Plan-16's admin hardening. They are specified in
 [`admin-gate.md` §1](./admin-gate.md); this file is the step-by-step.
@@ -476,10 +509,21 @@ reads "20 per 10 minutes" as a hard global ceiling.
 - [x] Rule A switched to **deny**, published; `/login` and `/accept-invite` confirmed still 200
 - [x] **BFF shared-secret gate shipped** (`backend-v0.4.1`) — this is what actually closed
       the gap; Rule B became optional
-- [ ] Rule B created in Cloudflare — **admin path only**, 5 req / 10 s, block 10 s
-- [ ] Rule B verified with the curl loop from an expendable network
-- [ ] Own admin login confirmed still working afterwards
-- [x] `admin-gate.md` §1 updated — Rule A no longer outstanding
+- [x] Rule B created in Cloudflare — **admin path only**, 5 req / 10 s, block 10 s
+- [x] Rule B verified: `403×5` then `429`, control path 200, window cleared after 12 s
+- [x] Own admin login confirmed still working afterwards
+- [x] `admin-gate.md` §1 updated — both rules closed
+
+**Nothing outstanding. Remaining optional hardening, in rough value order:**
+
+- A Vercel Firewall rule on the **storefront** project for customer auth — the thing the
+  old inert Cloudflare rule was reaching for. It belongs on Vercel because that is the
+  only vantage point with real client IPs for storefront traffic
+  (`project_tokecosmetics_real_client_ip_gap`). **Soak it in log mode first** — unlike the
+  admin rule, customer traffic mix is not predictable from first principles, and it sits
+  on the revenue path.
+- Extending the BFF shared-secret gate to `/auth/token/` and `/auth/register/`, which have
+  the same single-caller property. Bigger change, revenue path, wants its own pass.
 
 ---
 
