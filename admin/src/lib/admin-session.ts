@@ -84,6 +84,32 @@ function withTurnstile(
   return opts.turnstileToken ? { ...body, turnstile_token: opts.turnstileToken } : body;
 }
 
+/**
+ * The BFF shared-secret header, for the two endpoints whose only legitimate caller is
+ * this app. See `backend/apps/accounts/bff.py` for the full reasoning.
+ *
+ * IT IS NOT AUTHENTICATION and must never be described as such — it is an anti-abuse
+ * gate that makes junk cost Django a string compare instead of an outbound Turnstile
+ * siteverify call. Everything that actually protects the endpoint (Turnstile, the
+ * password, TOTP, the audience claim) is unchanged.
+ *
+ * SERVER-SIDE ONLY, and that is load-bearing rather than incidental: `ADMIN_BFF_SECRET`
+ * has no `NEXT_PUBLIC_` prefix, so Next will not inline it into a client bundle. It may
+ * only ever be read from a Server Function or Route Handler — which is exactly where
+ * these two calls already live.
+ *
+ * OMITTED, not blank, when unset. Django treats absent and empty the same, but sending
+ * an empty header asserts there is a secret and it happens to be nothing. It also keeps
+ * a gate-off deployment byte-identical to the old request shape.
+ *
+ * Applied to exactly two calls. Adding it to the TOTP calls would widen the secret's
+ * exposure for no gain — those carry a preauth token, which is a real credential.
+ */
+function bffHeaders(): Record<string, string> {
+  const secret = process.env.ADMIN_BFF_SECRET;
+  return secret ? { "X-Admin-BFF-Secret": secret } : {};
+}
+
 export interface PreauthResponse {
   preauth_token: string;
   expires_in: number;
@@ -106,6 +132,7 @@ export async function adminLogin(
   const out = await apiFetch<PreauthResponse>("/auth/admin-token/", {
     method: "POST",
     body: withTurnstile(credentials, opts),
+    headers: bffHeaders(),
   });
   storePreauth(jar, out.preauth_token);
   return out;
@@ -194,7 +221,7 @@ export async function acceptInvite(
 ): Promise<PreauthResponse & { detail?: string }> {
   const out = await apiFetch<PreauthResponse & { detail?: string }>(
     "/admin/staff/invites/accept/",
-    { method: "POST", body: withTurnstile({ ...payload }, opts) },
+    { method: "POST", body: withTurnstile({ ...payload }, opts), headers: bffHeaders() },
   );
   storePreauth(jar, out.preauth_token);
   return out;

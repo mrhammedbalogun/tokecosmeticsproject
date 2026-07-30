@@ -16,6 +16,7 @@ npm --prefix admin run build
 |---|---|---|
 | `API_URL` | server only | Django base, e.g. `http://localhost:8000`. Never exposed to the browser. |
 | `NEXT_PUBLIC_API_URL` | browser | Same URL, published so the topbar can show a red **STAGING** badge whenever it is not `https://api.tokecosmetics.com`. Also the fallback for `API_URL`. |
+| `ADMIN_BFF_SECRET` | server only | Shared secret sent as `X-Admin-BFF-Secret` on the two calls whose only legitimate caller is this app. Anti-abuse, NOT authentication — see `backend/apps/accounts/bff.py`. Must match Django. Unset = header omitted. |
 | `NEXT_PUBLIC_TURNSTILE_ADMIN_SITE_KEY` | browser | The **admin** Turnstile widget's site key. Unset = widget off, matching an unset `TURNSTILE_ADMIN_SECRET`/`TURNSTILE_SECRET` on the backend. |
 
 There is deliberately nothing else. No secret belongs in this bundle beyond a

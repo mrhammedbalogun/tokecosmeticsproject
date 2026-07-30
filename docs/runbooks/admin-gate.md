@@ -70,6 +70,47 @@ bucket full — is bounded to 60 seconds, self-healing, cleared by any successfu
 login, and raises an ERROR-level Sentry event per attempt. The edge rules are what
 stop it reaching Django at all.
 
+## 1b. The BFF shared-secret gate — and the symptom it produces
+
+`/auth/admin-token/` and `/admin/staff/invites/accept/` require a shared secret header,
+`X-Admin-BFF-Secret`, matching `ADMIN_BFF_SECRET` on both sides (Django's `.env.prod` and
+the admin app's Vercel environment). It is an **anti-abuse gate, not authentication** —
+full reasoning in `apps/accounts/bff.py`. It exists because those two endpoints each make
+an outbound siteverify call before anything else, and that cost could not be metered by
+volume: the admin app calls the API server-side, so staff and attackers share one Vercel
+egress address.
+
+### ⚠ The symptom, because it points at the wrong thing
+
+A refusal from this gate returns **the same message Turnstile returns** — "Human
+verification failed. Refresh the page and try again." That is deliberate: a distinct
+message would advertise that the endpoint wants a secret header.
+
+**So: "Human verification failed" on EVERY staff login at once means check this gate
+FIRST and Turnstile second.** The distinguishing evidence is in Sentry, not on screen —
+this gate logs `admin BFF gate refused a request to …` at ERROR. Turnstile logs its own
+wording.
+
+The realistic cause is a mismatch after rotating one side without the other. Compare:
+
+```bash
+ssh tokecosmetics 'grep -c "^ADMIN_BFF_SECRET=" /opt/tokecosmetics/.env.prod'
+cd tokecosmetics-platform/admin && npx vercel env ls production | grep ADMIN_BFF_SECRET
+```
+
+### Break-glass — open the gate
+
+Unset on the backend. Unset = OFF, exactly like `TURNSTILE_SECRET`:
+
+```
+ssh tokecosmetics 'sed -i "/^ADMIN_BFF_SECRET=/d" /opt/tokecosmetics/.env.prod && cd /opt/tokecosmetics/repo/infra && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f docker-compose.prod.yml up -d web worker'
+```
+
+This restores staff login immediately and costs only the anti-abuse property — every real
+security control on the endpoint is untouched. Rotating is the reverse: set the new value
+on **Vercel first and redeploy**, then on the VPS, so the window has the app sending a
+header the backend does not yet require rather than the other way round.
+
 ## 2. Break-glass — Cloudflare / Turnstile siteverify outage
 
 `require_turnstile` fails **closed**, so a siteverify outage blocks staff login.

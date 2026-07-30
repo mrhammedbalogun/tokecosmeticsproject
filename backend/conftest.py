@@ -10,9 +10,15 @@ def _turnstile_off(settings):
 
     TURNSTILE_ADMIN_SECRET is cleared for the same reason: it falls back to
     TURNSTILE_SECRET when empty, so leaving it set would gate /auth/admin-token/
-    for the whole suite the day someone puts an admin widget in backend/.env."""
+    for the whole suite the day someone puts an admin widget in backend/.env.
+
+    ADMIN_BFF_SECRET is cleared on exactly the same grounds: it will live in
+    backend/.env for manual dev against a locally-running admin app, and leaving it set
+    would 403 every admin-login-shaped test in the suite the moment it is added there.
+    `test_bff_gate.py` opts in per-test."""
     settings.TURNSTILE_SECRET = ""
     settings.TURNSTILE_ADMIN_SECRET = ""
+    settings.ADMIN_BFF_SECRET = ""
 
 
 @pytest.fixture(autouse=True)

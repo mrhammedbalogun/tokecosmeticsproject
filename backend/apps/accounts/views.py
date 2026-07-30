@@ -23,6 +23,8 @@ from .authentication import AdminJWTAuthentication, AdminPreauthJWTAuthenticatio
 
 from .rbac import HasAdminScope, scopes_for_user
 
+from .bff import require_bff_secret
+
 from .turnstile import admin_turnstile_secret, require_turnstile
 
 from .throttling import (
@@ -221,6 +223,11 @@ class AdminLoginView(APIView):
         email = "<no email>"
         try:
             email = _submitted_email(request)
+            # BEFORE Turnstile, deliberately: the gate exists so junk costs a string
+            # compare instead of an outbound siteverify call with a 5s timeout. Reversing
+            # these two lines breaks nothing visible and silently removes the feature,
+            # which is why a test asserts the order rather than a comment asking nicely.
+            require_bff_secret(request)
             # After throttling (dispatch runs that first), before credentials.
             require_turnstile(request, secret=admin_turnstile_secret())
             serializer = AdminPasswordSerializer(data=request.data)
@@ -914,6 +921,9 @@ class StaffInviteAcceptView(APIView):
         from apps.accounts.authentication import PREAUTH_TOKEN_LIFETIME, mint_preauth_token
         from apps.accounts.invites import InviteRejected, accept_invite, find_invite
 
+        # Same reasoning as AdminLoginView: sole caller is the admin BFF, and the
+        # siteverify call below is the cost this spares. See apps/accounts/bff.py.
+        require_bff_secret(request)
         require_turnstile(request, secret=admin_turnstile_secret())
 
         serializer = StaffInviteAcceptSerializer(data=request.data)

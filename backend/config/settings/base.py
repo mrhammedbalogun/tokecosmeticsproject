@@ -305,6 +305,20 @@ TURNSTILE_SECRET = env("TURNSTILE_SECRET", default="")
 # Unset by default, so nothing changes until an admin widget actually exists.
 TURNSTILE_ADMIN_SECRET = env("TURNSTILE_ADMIN_SECRET", default="")
 
+# --- Admin BFF shared secret ---
+# The anti-abuse gate on the two admin endpoints with exactly one legitimate caller
+# (`/auth/admin-token/` and `/admin/staff/invites/accept/`). NOT an authentication
+# control — see the long note in apps/accounts/bff.py before touching it.
+#
+# It exists because those two endpoints each make an outbound siteverify call before
+# anything else, and that cost could not be metered by request volume: the admin app
+# calls the API server-side, so staff and attackers share one Vercel egress address and
+# any volume cap keyed on it is a free staff lockout.
+#
+# Unset = OFF, the same contract TURNSTILE_SECRET has, so the backend can deploy before
+# the admin app sends the header and so an operator can break-glass by removing it.
+ADMIN_BFF_SECRET = env("ADMIN_BFF_SECRET", default="")
+
 # --- Checkout ---
 RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 
