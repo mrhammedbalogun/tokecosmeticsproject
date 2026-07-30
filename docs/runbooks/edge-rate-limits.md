@@ -258,26 +258,61 @@ This rule was always the outermost of four layers.
 
 ### If the Free rule is too weak — two better options
 
-**Option 1 — nginx on the VPS (free, unlimited, strongest).**
-The origin already sits behind Cloudflare, and the origin lock means direct-to-origin
-traffic gets 403 while Cloudflare-proxied traffic gets 200 — which is exactly what makes
-`CF-Connecting-IP` trustworthy here (`project_tokecosmetics_login_throttle_gap`). So nginx
-can rate-limit on the real client IP with no plan limits and no monthly cost:
+**Option 1 — origin-level rate limiting. NOT the drop-in it looks like. Read this before
+attempting it.**
+
+An earlier draft of this file recommended an nginx `limit_req` block as a quick free win.
+**That was wrong, and the investigation on 2026-07-30 is worth recording** because every
+step of it is a trap someone else would walk into.
+
+*a. nginx is not in the request path.* `ss -lntp` shows **`httpd` (Apache)** on 80 and 443;
+nginx is installed but `inactive`. `api.tokecosmetics.com` is an Apache vhost
+(`infra/proxy/zz-api.conf`) proxying to `127.0.0.1:8001`. The "nginx reverse-proxy on
+2002–2006" in the project notes is Webuzo's own internal arrangement, not this path.
+
+*b. Apache cannot see the real client IP here.* Every request arrives from a Cloudflare
+edge address, and `mod_remoteip` is deliberately **not loaded** — the vhost says so in a
+comment. So any Apache rate limit keyed on client IP would meter **Cloudflare edge nodes**,
+throttling every legitimate visitor funnelled through whichever node tripped first.
+
+*c. Loading `mod_remoteip` to fix (b) would take the API down.* The vhost's **origin lock**
+is a `Require ip` allowlist of Cloudflare's ranges. Apache's docs are explicit: the
+overridden useragent IP "is then used for the `mod_authz_host` `Require ip` feature". Load
+`mod_remoteip` and that allowlist starts testing the *visitor's* address against
+Cloudflare's ranges — which never matches. **403 on every API request.** The origin lock
+would have to be rewritten in the same change, on the same server that serves the live
+WordPress stores.
+
+The modules are present but unloaded (`mod_remoteip.so`, `mod_evasive20.so`,
+`mod_security2.so`), so this is possible — it is just not small, and its blast radius
+includes the WordPress stores on the shared Apache. `mod_evasive` is also a blunt fit:
+its counters are per-worker-process and its directives are server/vhost scoped, not
+per-path.
+
+**The clean version, if origin rate limiting is wanted: an nginx container inside the
+Docker stack.** It sidesteps every problem above — Apache's vhost keeps its origin lock
+untouched and only its `ProxyPass` target moves; the WordPress stores are unaffected; the
+config is version-controlled and ships through the existing tag pipeline; and
+`CF-Connecting-IP` is trustworthy as a header precisely *because* the origin lock
+guarantees only Cloudflare reaches Apache:
 
 ```nginx
 limit_req_zone $http_cf_connecting_ip zone=adminlogin:10m rate=2r/m;
 
-location = /api/v1/auth/admin-token/ {
-    limit_req zone=adminlogin burst=5 nodelay;
-    limit_req_status 429;
-    proxy_pass http://127.0.0.1:8001;
+server {
+    listen 8002;
+    location = /api/v1/auth/admin-token/ {
+        limit_req zone=adminlogin burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://web:8000;
+    }
+    location / { proxy_pass http://web:8000; }
 }
 ```
 
-This expresses the original intent properly — a real per-IP volume cap with a long window.
-It is a **live web-server config change** on a production store, so it wants its own
-change window, a config backup, `nginx -t` before reload, and a verification pass.
-Not done here; raise it when you want it.
+This is a **new component in the production request path** — a mini-plan (compose service,
+vhost change, local verification, deploy, rollback rehearsal), not a config tweak. Worth
+doing properly if the API ever moves off the shared Webuzo box. Not attempted here.
 
 **Option 2 — Cloudflare Pro ($20/mo).** Buys 2 rules, 1-minute periods, 1-hour mitigation
 and the `Host` field, so both login doors get their own properly-scoped rule. Reasonable
