@@ -528,6 +528,26 @@ class AdminTOTPConfirmView(_PreauthTOTPView):
         reset_preauth_failures(self.preauth_jti)
         reset_user_failures(request.user)
 
+        # `last_login`, written HERE and nowhere else on the staff path.
+        #
+        # Nothing else writes it: SimpleJWT only does so with `UPDATE_LAST_LOGIN`
+        # enabled, and even then only from `TokenObtainPairSerializer`, which this
+        # ceremony does not use — `/auth/admin-token/` mints a preauth token through its
+        # own serializer. Found in production the day the first Owner signed in, with
+        # `last_login` still NULL afterwards and the staff roster's "Last sign-in"
+        # column therefore reading "Never" for everyone, permanently.
+        #
+        # This step rather than the password step, because this is where an admin
+        # session is actually minted: the value then means "last completed the whole
+        # ceremony" rather than "last typed a password correctly", and the roster's
+        # question is who is still using the admin.
+        #
+        # `update_fields` so this cannot race with anything else on the row, and
+        # deliberately NOT the global `SIMPLE_JWT["UPDATE_LAST_LOGIN"]`, which would add
+        # a write to every customer login for a column no customer surface reads.
+        request.user.last_login = now
+        request.user.save(update_fields=["last_login"])
+
         if first_confirmation:
             # WARNING. A new administrator credential now exists — the most
             # consequential thing this endpoint does, and worth standing out in the

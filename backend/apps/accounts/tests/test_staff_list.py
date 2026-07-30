@@ -151,3 +151,42 @@ def test_a_manager_cannot_read_the_roster(manager):
 
 def test_anonymous_is_401_not_403():
     assert APIClient().get(STAFF).status_code == 401
+
+
+def test_completing_the_ceremony_records_last_login(owner_client, owner, settings):
+    """The roster's "Last sign-in" column depends on this, and nothing was writing it.
+
+    Found the day the first real Owner signed in to production: `last_login` was still
+    NULL immediately afterwards. SimpleJWT only writes it when `UPDATE_LAST_LOGIN` is
+    enabled, and even then only from `TokenObtainPairSerializer` — which the staff
+    ceremony does not use, because `/auth/admin-token/` mints a preauth token through a
+    serializer of its own. So the column would have read "Never" for every administrator
+    forever: not merely missing data, but a page actively asserting something false about
+    who is dormant.
+
+    TOTP-confirm is the right place to write it and the only one: it is where an admin
+    session is actually minted, so it means "last completed the whole ceremony" rather
+    than "last typed a password correctly".
+    """
+    import pyotp
+    from django.utils import timezone
+
+    from apps.accounts.authentication import mint_preauth_token
+    from apps.accounts.models import StaffTOTP
+    from apps.accounts.totp import encrypt_secret, new_secret
+
+    secret = new_secret()
+    StaffTOTP.objects.create(
+        user=owner, secret_ciphertext=encrypt_secret(secret), confirmed_at=timezone.now()
+    )
+    assert owner.last_login is None
+
+    client = APIClient()
+    client.credentials(HTTP_AUTHORIZATION=f"Bearer {mint_preauth_token(owner)}")
+    response = client.post(
+        "/api/v1/auth/admin-totp/confirm/", {"code": pyotp.TOTP(secret).now()}, format="json"
+    )
+
+    assert response.status_code == 200, response.data
+    owner.refresh_from_db()
+    assert owner.last_login is not None

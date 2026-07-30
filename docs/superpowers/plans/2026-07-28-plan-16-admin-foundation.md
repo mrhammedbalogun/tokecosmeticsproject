@@ -492,3 +492,38 @@ plan exists to establish, and produces an account the roster labels "Superuser (
 scopes)" rather than Owner.
 
 **Checkpoint remains open** until Hammed accepts that invite and signs in.
+
+---
+
+## CHECKPOINT MET — 2026-07-30
+
+Hammed accepted the bootstrap Owner invite and signed in through the full ceremony.
+Verified server-side rather than taken on trust:
+
+- `billztechnologiesofficial@gmail.com` — `is_staff`, group `Owner`, **TOTP confirmed**
+- the invite is `accepted`, at 03:08:45Z
+- an audit row exists for `staff_invite_accept`, naming the actor
+
+**Plan-16 is complete.** All eight tasks, checkpoint signed off.
+
+### The bug the checkpoint itself found
+
+The verification query showed `last_login=None` on an account that had just signed in
+successfully. Nothing on the staff path writes it: SimpleJWT only does with
+`UPDATE_LAST_LOGIN` enabled, and even then only from `TokenObtainPairSerializer`, which
+this ceremony does not use — `/auth/admin-token/` mints a preauth token through its own
+serializer.
+
+So the roster's **"Last sign-in" column would have read "Never" for every administrator,
+permanently**. Not missing data — a page actively asserting something false about who is
+dormant, on the screen an Owner would use to decide whose access to revoke.
+
+Fixed at `AdminTOTPConfirmView`, which is the only place an admin session is minted, so
+the value means "last completed the whole ceremony" rather than "last typed a password
+correctly". Deliberately not the global `SIMPLE_JWT["UPDATE_LAST_LOGIN"]`, which would add
+a write to every customer login for a column no customer surface reads.
+
+**The lesson, which is the same one Task 8 taught:** the walkthrough exercised the roster
+against accounts created in a test script, where `last_login` being NULL looked like
+correct rendering of a fresh account. Only a real human completing a real login made the
+column's emptiness a lie. Some defects are only visible after the first genuine use.
