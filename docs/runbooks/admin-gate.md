@@ -6,9 +6,11 @@ does.
 
 ## 1. OUTSTANDING — two edge rate-limit rules
 
-**Status: neither is configured. This is the part of Plan-16's admin rate limiting
-that cannot live in the repository, and it is the part that supplies the volume cap
-Django deliberately no longer has.**
+**Status 2026-07-30: Rule A is DONE and enforcing. Rule B is open and needs a decision —
+Cloudflare's Free plan allows only one rule in the whole zone, with a 10-second period and
+no `Host` field, so the rule below cannot be written as specified.** This is the part of
+Plan-16's admin rate limiting that cannot live in the repository, and it is the part that
+supplies the volume cap Django deliberately no longer has.
 
 **→ Step-by-step, with the exact CLI and dashboard settings, a log-first rollout and a
 lockout recovery: [`edge-rate-limits.md`](./edge-rate-limits.md).** The section below is

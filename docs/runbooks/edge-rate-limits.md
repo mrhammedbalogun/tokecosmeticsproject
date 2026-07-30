@@ -1,8 +1,11 @@
 # The two edge rate-limit rules — complete guide
 
-**Status as of 2026-07-30: neither is configured.** `vercel firewall overview` on the
-admin project reports *Not configured*, and there is no Cloudflare rate-limiting rule on
-`api.tokecosmetics.com`.
+**Status as of 2026-07-30:**
+
+| rule | state |
+|---|---|
+| **A — Vercel Firewall** | **DONE and enforcing.** `Admin login volume cap`, `rule_admin_login_volume_cap_fIQ5Tx`, 20 req / 600 s per IP on `POST /login`, action `deny`, no persistent duration. |
+| **B — Cloudflare** | **Not configured, and constrained by the Free plan — see §Rule B.** |
 
 These are the last two items from Plan-16's admin hardening. They are specified in
 [`admin-gate.md` §1](./admin-gate.md); this file is the step-by-step.
@@ -59,6 +62,27 @@ does not route through the thing enforcing it.
 ---
 
 ## Rule A — Vercel Firewall, on the admin login
+
+> **DONE 2026-07-30.** Live and enforcing; the steps below are kept as the record of how,
+> and as the procedure for changing or re-creating it.
+>
+> **The 24h log soak in Step A3 was deliberately compressed**, and the reasoning is worth
+> keeping because it is the argument for when a soak is and is not load-bearing. A soak
+> answers one question: *does legitimate traffic approach the limit?* Here that was
+> answerable without waiting —
+>
+> - only `POST /login` counts; page loads are GET and are excluded by the `method`
+>   condition, verified on the live rule;
+> - one form submit is one POST, so a login costs 1 against a budget of 20;
+> - Django's own `admin_login_ip` cuts in at **5 failed attempts per minute**, so a
+>   legitimate person is stopped by the application long before 20 requests in 10 minutes;
+> - real staff volume is a handful of logins a day.
+>
+> The margin is roughly twentyfold, and recovery is one command because the rule carries
+> no `--duration`. A soak buys evidence; when the arithmetic is unambiguous and reversal
+> is instant, waiting a day buys nothing. **Soak anyway** for any rule matching customer
+> traffic, anything using a `sub`/`re` operator, or anything keyed on JA4 or user agent —
+> there the traffic mix genuinely is not predictable from first principles.
 
 **Covers:** somebody hammering `admin.tokecosmetics.com/login`.
 
@@ -172,32 +196,93 @@ Same log → review → deny progression.
 `api.tokecosmetics.com`. This is the one that matters against scripted abuse, because a
 script has no reason to go through the UI.
 
-### Step B1 — create the rule
+### First: what the Free plan actually allows
+
+Rate limiting rules are **not** a paid-only feature — the Free plan includes **one** rule.
+But the Free tier is narrow enough that the rule has to be redesigned, not merely
+retyped. Per Cloudflare's
+[plan availability table](https://developers.cloudflare.com/waf/rate-limiting-rules/):
+
+| | Free | Pro | Business |
+|---|---|---|---|
+| rules per zone | **1** | 2 | 5 |
+| counting period | **10 s only** | up to 1 min | up to 10 min |
+| mitigation timeout | **10 s** | up to 1 h | up to 1 day |
+| counting characteristics | IP only | IP only | IP, headers, path, ASN… |
+| expression fields | **Path, Verified Bot** | + Host, URI, Query | + headers, bot data |
+
+Three consequences, and each one changes the rule:
+
+1. **No `Host` field.** The expression from the original spec cannot be written — match on
+   **path alone**. In practice that is fine: `/api/v1/auth/admin-token/` is served only by
+   `api.tokecosmetics.com`, and any other proxied host in the zone would 404 that path
+   anyway, so rate-limiting it there costs nothing.
+2. **10-second period, 10-second mitigation.** The specified 20-per-10-minutes cannot be
+   expressed. The honest translation is a much weaker guarantee — see below.
+3. **One rule for the whole zone.** It is a budget, and it is already spoken for twice
+   over: this rule and the still-open customer-login rule
+   (`project_tokecosmetics_login_throttle_gap`) both want it.
+
+### Step B1 — create the Free-plan rule
 
 1. [dash.cloudflare.com](https://dash.cloudflare.com) → zone **tokecosmetics.com**
 2. **Security → WAF → Rate limiting rules → Create rule**
-3. Name: `admin-token volume cap`
-4. **If incoming requests match** → *Edit expression* and paste:
+3. Name: `auth volume cap`
+4. **If incoming requests match** → *Edit expression*:
 
    ```
-   (http.host eq "api.tokecosmetics.com" and http.request.uri.path eq "/api/v1/auth/admin-token/")
+   (http.request.uri.path eq "/api/v1/auth/admin-token/") or (http.request.uri.path eq "/api/v1/auth/token/")
    ```
 
-5. **Rate limiting characteristics:** IP
-6. **Period:** 10 minutes · **Requests:** 20
-7. **Then take action:** Block · **Duration:** 10 minutes
+   Two exact paths OR'd, spending the single rule on **both** login doors — staff and
+   customer — rather than having to choose. `eq` on each, never a prefix: see the
+   `token/refresh/` warning below, which this expression is specifically shaped to avoid.
+5. **Characteristics:** IP
+6. **Period:** 10 seconds · **Requests:** 5
+7. **Action:** Block · **Duration:** 10 seconds
 8. Deploy
 
-### If 10 minutes is not offered
+Five requests per 10 seconds per IP. A human logging in sends one. It caps a flood at
+roughly 30/min sustained instead of unbounded.
 
-The available periods depend on your Cloudflare plan — the shorter ones (10s/60s) are
-always there, longer ones are not. Scale proportionally rather than raising the rate:
+### Be honest about what this buys
 
-| period available | use requests |
-|---|---|
-| 10 minutes | 20 |
-| 1 minute | 5 |
-| 10 seconds | 2 |
+A 10-second window with a 10-second timeout is a **flood brake, not a volume cap**. An
+attacker who paces at 5 requests per 10 seconds runs ~43,000 requests a day and is never
+blocked. Against the actual concern — unmetered outbound siteverify calls, each with a
+5-second timeout — that is a large improvement over nothing and well short of the spec.
+
+What is *not* weakened: Django still counts failed credential attempts per account and per
+origin, Turnstile still gates every attempt, and TOTP still stands behind the password.
+This rule was always the outermost of four layers.
+
+### If the Free rule is too weak — two better options
+
+**Option 1 — nginx on the VPS (free, unlimited, strongest).**
+The origin already sits behind Cloudflare, and the origin lock means direct-to-origin
+traffic gets 403 while Cloudflare-proxied traffic gets 200 — which is exactly what makes
+`CF-Connecting-IP` trustworthy here (`project_tokecosmetics_login_throttle_gap`). So nginx
+can rate-limit on the real client IP with no plan limits and no monthly cost:
+
+```nginx
+limit_req_zone $http_cf_connecting_ip zone=adminlogin:10m rate=2r/m;
+
+location = /api/v1/auth/admin-token/ {
+    limit_req zone=adminlogin burst=5 nodelay;
+    limit_req_status 429;
+    proxy_pass http://127.0.0.1:8001;
+}
+```
+
+This expresses the original intent properly — a real per-IP volume cap with a long window.
+It is a **live web-server config change** on a production store, so it wants its own
+change window, a config backup, `nginx -t` before reload, and a verification pass.
+Not done here; raise it when you want it.
+
+**Option 2 — Cloudflare Pro ($20/mo).** Buys 2 rules, 1-minute periods, 1-hour mitigation
+and the `Host` field, so both login doors get their own properly-scoped rule. Reasonable
+if you would rather not touch nginx, but note it is a recurring cost for something Option 1
+does better for free.
 
 ### Why the path is matched with `eq` and not `pre`
 
@@ -291,10 +376,10 @@ reads "20 per 10 minutes" as a hard global ceiling.
 
 ## Checklist
 
-- [ ] Rule A added in **log** mode, published
-- [ ] Rule A soaked ~24h; your own use confirmed well under 20/10min
-- [ ] Rule A switched to **deny**, published
-- [ ] Rule B created in Cloudflare, deployed
+- [x] Rule A added in **log** mode, published *(2026-07-30)*
+- [x] Rule A scope verified on the live rule — `path eq /login`, `method eq POST`, no persistent duration
+- [x] Rule A switched to **deny**, published; `/login` and `/accept-invite` confirmed still 200
+- [ ] **Decide Rule B:** Free-plan rule as specified above · nginx `limit_req` (Option 1) · Cloudflare Pro (Option 2)
+- [ ] Rule B deployed
 - [ ] Rule B verified with the curl loop from an expendable network
-- [ ] Both rules confirmed present: `npx vercel firewall rules list` and the Cloudflare WAF list
-- [ ] `admin-gate.md` §1 updated from "neither is configured"
+- [x] `admin-gate.md` §1 updated — Rule A no longer outstanding
