@@ -192,9 +192,23 @@ Same log → review → deny progression.
 
 ## Rule B — Cloudflare, on the API's staff-login endpoint
 
+> **OPTIONAL as of 2026-07-30, and read this before deciding to do it.**
+>
+> Rule B was originally the control that closed the volume gap. The **BFF shared-secret
+> gate** (`backend-v0.4.1`) closed it instead, and closed it better: junk without the
+> header is now refused by a constant-time string compare *before* any outbound siteverify
+> call. The exposure is unreachable rather than throttled.
+>
+> **What is left for Rule B** is keeping garbage off the origin. That still has value —
+> a request Django rejects cheaply has already consumed a Cloudflare→Apache connection and
+> VPS CPU on the box that also serves the **live legacy WordPress stores**. But it is now
+> defence in depth, not the thing standing between you and a problem.
+>
+> Ten minutes of dashboard work. If you skip it, nothing is broken.
+
 **Covers:** a caller who ignores the admin app and posts straight to
-`api.tokecosmetics.com`. This is the one that matters against scripted abuse, because a
-script has no reason to go through the UI.
+`api.tokecosmetics.com`. A script has no reason to go through the UI, so this is the path
+Rule A cannot see.
 
 ### First: what the Free plan actually allows
 
@@ -219,44 +233,90 @@ Three consequences, and each one changes the rule:
    anyway, so rate-limiting it there costs nothing.
 2. **10-second period, 10-second mitigation.** The specified 20-per-10-minutes cannot be
    expressed. The honest translation is a much weaker guarantee — see below.
-3. **One rule for the whole zone.** It is a budget, and it is already spoken for twice
-   over: this rule and the still-open customer-login rule
-   (`project_tokecosmetics_login_throttle_gap`) both want it.
+3. **One rule for the whole zone.** A budget, and it must be spent on the **admin** path.
+   See the warning below before considering anything else.
 
-### Step B1 — create the Free-plan rule
+### ⚠ Spend the single rule on the ADMIN path only
+
+An earlier draft of this guide said to OR the customer login path into the same rule,
+since only one rule exists and it seemed wasteful not to cover both doors. **That would
+have broken customer logins, and the reasoning is worth understanding because it is the
+same trap in a new place.**
+
+Customer logins do **not** arrive from customer IPs. `storefront/src/lib/auth-session.ts`
+calls `/auth/token/` **server-side**, exactly like the admin app does — verified: the
+storefront's `apiFetch` is documented "Server Components and Route Handlers ONLY". So
+every customer login on the site reaches Cloudflare from one of Vercel's handful of egress
+addresses.
+
+A 5-requests-per-10-seconds **per-IP** rule covering `/auth/token/` therefore meters *all
+customers collectively*. Six people logging in during the same ten seconds — an ordinary
+evening — and the sixth is blocked. That is the shared-bucket lockout the Django
+failure-counting rewrite removed, reinstalled at the edge and pointed at paying customers
+instead of staff.
+
+The admin path is safe from the same effect only because its legitimate volume is
+genuinely near zero: a handful of staff logins a day never approaches 5 in 10 seconds.
+
+**So: admin path only. Do not add `/auth/token/`.** If customer-login rate limiting is
+ever wanted it needs real client IPs, which means a Vercel Firewall rule on the storefront
+project — see `project_tokecosmetics_real_client_ip_gap`.
+
+### Step B1 — create the rule
 
 1. [dash.cloudflare.com](https://dash.cloudflare.com) → zone **tokecosmetics.com**
 2. **Security → WAF → Rate limiting rules → Create rule**
-3. Name: `auth volume cap`
-4. **If incoming requests match** → *Edit expression*:
+3. Name: `admin-token volume cap`
+4. **If incoming requests match** → *Edit expression*, and paste exactly:
 
    ```
-   (http.request.uri.path eq "/api/v1/auth/admin-token/") or (http.request.uri.path eq "/api/v1/auth/token/")
+   http.request.uri.path eq "/api/v1/auth/admin-token/"
    ```
 
-   Two exact paths OR'd, spending the single rule on **both** login doors — staff and
-   customer — rather than having to choose. `eq` on each, never a prefix: see the
-   `token/refresh/` warning below, which this expression is specifically shaped to avoid.
-5. **Characteristics:** IP
+   One path, matched with `eq`. Never a prefix — see below.
+5. **Rate limiting characteristics:** IP
 6. **Period:** 10 seconds · **Requests:** 5
-7. **Action:** Block · **Duration:** 10 seconds
-8. Deploy
+7. **Then take action:** Block · **Duration:** 10 seconds
+8. **Deploy**
 
-Five requests per 10 seconds per IP. A human logging in sends one. It caps a flood at
-roughly 30/min sustained instead of unbounded.
+Five requests per 10 seconds per IP. A staff login sends one. It caps a flood at roughly
+30/min sustained instead of unbounded.
 
 ### Be honest about what this buys
 
 A 10-second window with a 10-second timeout is a **flood brake, not a volume cap**. An
-attacker who paces at 5 requests per 10 seconds runs ~43,000 requests a day and is never
-blocked. Against the actual concern — unmetered outbound siteverify calls, each with a
-5-second timeout — that is a large improvement over nothing and well short of the spec.
+attacker pacing at 5 requests per 10 seconds is never blocked.
 
-What is *not* weakened: Django still counts failed credential attempts per account and per
-origin, Turnstile still gates every attempt, and TOTP still stands behind the password.
-This rule was always the outermost of four layers.
+That used to be the objection to it. Since the BFF gate shipped it is no longer much of
+one, because a flood brake is exactly the right shape for what remains: bursts are what
+cost Apache connections, and bursts are what a short window stops. Paced low-volume junk
+now dies on a string compare in Django and never reaches Turnstile at all.
 
-### If the Free rule is too weak — two better options
+The layers behind it, unchanged: the BFF secret, Turnstile, failed-credential counting per
+account and per origin, TOTP, and the audience claim. This rule is the outermost of six.
+
+### Verify it
+
+Run this from an expendable network — mobile data, not the machine you administer the
+store from. It is safe: with the BFF gate live these requests are refused by a string
+compare and cost Django nothing.
+
+```bash
+for i in $(seq 1 12); do
+  curl -s -o /dev/null -w "%{http_code} " --max-time 10 \
+    -X POST https://api.tokecosmetics.com/api/v1/auth/admin-token/ \
+    -H 'Content-Type: application/json' -d '{"email":"probe@example.com","password":"x"}'
+done; echo
+```
+
+Expect a run of `403` (the BFF gate refusing, correctly) turning into `429` or a
+Cloudflare block page once you pass 5 within a 10-second window. Wait 10 seconds and it
+clears.
+
+Then confirm your own admin login still works — the rule keys on IP, and yours is not the
+one being metered.
+
+### If the Free rule is too weak — the options, and why both are now moot
 
 **Option 1 — origin-level rate limiting. NOT the drop-in it looks like. Read this before
 attempting it.**
@@ -414,9 +474,11 @@ reads "20 per 10 minutes" as a hard global ceiling.
 - [x] Rule A added in **log** mode, published *(2026-07-30)*
 - [x] Rule A scope verified on the live rule — `path eq /login`, `method eq POST`, no persistent duration
 - [x] Rule A switched to **deny**, published; `/login` and `/accept-invite` confirmed still 200
-- [ ] **Decide Rule B:** Free-plan rule as specified above · nginx `limit_req` (Option 1) · Cloudflare Pro (Option 2)
-- [ ] Rule B deployed
+- [x] **BFF shared-secret gate shipped** (`backend-v0.4.1`) — this is what actually closed
+      the gap; Rule B became optional
+- [ ] Rule B created in Cloudflare — **admin path only**, 5 req / 10 s, block 10 s
 - [ ] Rule B verified with the curl loop from an expendable network
+- [ ] Own admin login confirmed still working afterwards
 - [x] `admin-gate.md` §1 updated — Rule A no longer outstanding
 
 ---
