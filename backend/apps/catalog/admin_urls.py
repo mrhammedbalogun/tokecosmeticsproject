@@ -21,6 +21,7 @@ from apps.catalog.admin_views import (
     ProductAdminViewSet,
     ProductCSVExportView,
     ProductCSVImportView,
+    ProductImageAdminViewSet,
     ProductVariantAdminViewSet,
     ProductVideoAdminViewSet,
     TagAdminViewSet,
@@ -33,6 +34,7 @@ router.register("brands", BrandAdminViewSet, basename="admin-brand")
 router.register("tags", TagAdminViewSet, basename="admin-tag")
 router.register("collections", CollectionAdminViewSet, basename="admin-collection")
 router.register("variants", ProductVariantAdminViewSet, basename="admin-variant")
+router.register("images", ProductImageAdminViewSet, basename="admin-image")
 router.register("videos", ProductVideoAdminViewSet, basename="admin-video")
 router.register("prices", PriceAdminViewSet, basename="admin-price")
 
