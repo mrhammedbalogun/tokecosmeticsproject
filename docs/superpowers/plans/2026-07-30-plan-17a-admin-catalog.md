@@ -655,3 +655,7 @@ landed on the dashboard with the Owner nav.
 
 **CHECKPOINT — still Hammed's to perform:** create one product end to end, himself.
 The path is verified working; the account, servers and a worked example are in place.
+
+**CHECKPOINT SIGNED OFF — Hammed, 2026-07-31.** He performed the create-a-product walk
+himself against the local stack, after the two walkthrough bugs above were fixed
+(`5c566cf`). Plan-17a is closed.

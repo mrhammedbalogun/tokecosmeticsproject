@@ -200,3 +200,7 @@ PDP rendering of the new labels.
 
 **CHECKPOINT — still Hammed's to perform:** build a two-axis product's variants from
 scratch, himself. The path is verified working end to end.
+
+**CHECKPOINT SIGNED OFF — Hammed, 2026-07-31.** He built a two-axis product's variants
+from scratch himself against the local stack, after the doubled-grid fix (`5c566cf`).
+Plan-17b is closed.
