@@ -92,3 +92,44 @@ export async function createVariantAction(input: {
     return { ok: false, error: message(e) };
   }
 }
+
+/**
+ * Updating one variant in place — the rename path.
+ *
+ * Renaming an axis rewrites `option_values` on EVERY variant of the product, so this is
+ * called in a loop like the creates, with the same consequence: no transaction, so partial
+ * application must be reported rather than hidden. A rename that got halfway would leave a
+ * product with two names for one axis, which is precisely the mess it exists to clean up —
+ * hence the per-row reporting rather than a single "done".
+ */
+export async function updateVariantAction(input: {
+  variantId: number;
+  optionValues?: Record<string, string>;
+  name?: string;
+}): Promise<VariantCreateResult> {
+  if (!Number.isInteger(input.variantId) || input.variantId < 1) {
+    return { ok: false, error: "That variant could not be identified." };
+  }
+
+  const body: Record<string, unknown> = {};
+  if (input.optionValues) body.option_values = input.optionValues;
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) return { ok: false, error: "A variant needs a name." };
+    body.name = name;
+  }
+  if (!Object.keys(body).length) {
+    return { ok: false, error: "Nothing to change." };
+  }
+
+  try {
+    const variant = await fetchWithAuth<CreatedVariant>(`/admin/variants/${input.variantId}/`, {
+      method: "PATCH",
+      body,
+    });
+    revalidatePath("/products");
+    return { ok: true, variant };
+  } catch (e) {
+    return { ok: false, error: message(e) };
+  }
+}

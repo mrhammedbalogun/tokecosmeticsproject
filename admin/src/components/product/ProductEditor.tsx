@@ -35,6 +35,7 @@ import {
   type RowState,
 } from "@/components/product/MatrixPreview";
 import { OptionEditor } from "@/components/product/OptionEditor";
+import { RenamePanel } from "@/components/product/RenamePanel";
 import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
 import { StockAdjustModal } from "@/components/product/StockAdjustModal";
@@ -57,6 +58,9 @@ import {
   cartesian,
   deriveAxes,
   diffMatrix,
+  nameMismatches,
+  remapOptions,
+  renameSummary,
   suggestSku,
   validateAxes,
   variantName,
@@ -110,6 +114,7 @@ export function ProductEditor({
   imageActions,
   variants,
   createVariant,
+  updateVariant,
   stock,
   initialPrices,
   currencies,
@@ -132,6 +137,11 @@ export function ProductEditor({
     name: string;
     optionValues: Record<string, string>;
     makeDefault: boolean;
+  }) => Promise<VariantCreateResult>;
+  updateVariant: (input: {
+    variantId: number;
+    optionValues?: Record<string, string>;
+    name?: string;
   }) => Promise<VariantCreateResult>;
   stock: StockRow[];
   initialPrices: PriceRow[];
@@ -221,7 +231,13 @@ export function ProductEditor({
   // Variants created this session, so the grid and the SKU-collision check see them
   // without a page reload.
   const [newVariants, setNewVariants] = useState<VariantRow[]>([]);
-  const allVariants = useMemo(() => [...variants, ...newVariants], [variants, newVariants]);
+  // Variants rewritten this session, keyed by id — so a rename shows on screen without a
+  // reload and without mutating the server-rendered `variants` prop.
+  const [updated, setUpdated] = useState<Record<number, VariantRow>>({});
+  const allVariants = useMemo(
+    () => [...variants, ...newVariants].map((v) => updated[v.id] ?? v),
+    [variants, newVariants, updated],
+  );
 
   // The preview is a SNAPSHOT, taken by Generate. Recomputing live on every keystroke
   // would rewrite the SKUs somebody is editing, and half-typed axes would churn the list.
@@ -297,6 +313,69 @@ export function ProductEditor({
       setApplying(false);
     });
   };
+
+  // The axes AS STORED, frozen at load. Renames are the difference between this and
+  // `axes`, so it must not be recomputed from `allVariants` — a successful rename updates
+  // those, and the offer would vanish mid-loop.
+  const [derivedAxes, setDerivedAxes] = useState<Axis[]>(() => deriveAxes(variants));
+  const renames = useMemo(() => renameSummary(derivedAxes, axes), [derivedAxes, axes]);
+  const mismatched = useMemo(() => nameMismatches(allVariants), [allVariants]);
+  const [tidyBusy, setTidyBusy] = useState(false);
+  const [tidyError, setTidyError] = useState<string | null>(null);
+  const [tidyDone, setTidyDone] = useState<string | null>(null);
+
+  /** One PATCH per variant, reporting the first failure and stopping — a half-applied
+   *  rename leaves a product with two names for one axis, which is the mess this exists to
+   *  clean up, so it must not be compounded by ploughing on. */
+  const runTidy = (
+    targets: { id: number; patch: { optionValues?: Record<string, string>; name?: string } }[],
+    describe: (n: number) => string,
+  ) => {
+    setTidyBusy(true);
+    setTidyError(null);
+    setTidyDone(null);
+    startImageTransition(async () => {
+      let changed = 0;
+      for (const target of targets) {
+        const res = await updateVariant({ variantId: target.id, ...target.patch });
+        if (!res.ok) {
+          setTidyError(`${res.error} ${changed} of ${targets.length} were changed.`);
+          setTidyBusy(false);
+          return;
+        }
+        changed += 1;
+        setNewVariants((current) =>
+          current.some((v) => v.id === res.variant.id)
+            ? current.map((v) => (v.id === res.variant.id ? (res.variant as unknown as VariantRow) : v))
+            : current,
+        );
+        setUpdated((current) => ({ ...current, [res.variant.id]: res.variant as unknown as VariantRow }));
+      }
+      setTidyDone(describe(changed));
+      setTidyBusy(false);
+    });
+  };
+
+  const onApplyRenames = () =>
+    runTidy(
+      allVariants
+        .filter((v) => Object.keys(v.option_values ?? {}).length > 0)
+        .map((v) => ({
+          id: v.id,
+          patch: { optionValues: remapOptions(v.option_values, derivedAxes, axes) },
+        })),
+      (n) => {
+        // The stored shape now matches what is on screen, so the offer must clear.
+        setDerivedAxes(axes);
+        return `Renamed on ${n} ${n === 1 ? "variant" : "variants"}.`;
+      },
+    );
+
+  const onFixNames = () =>
+    runTidy(
+      mismatched.map((v) => ({ id: v.id, patch: { name: variantName(v.option_values) } })),
+      (n) => `Renamed ${n} ${n === 1 ? "variant" : "variants"}.`,
+    );
 
   // --- stock -------------------------------------------------------------------------
   //
@@ -514,6 +593,19 @@ export function ProductEditor({
               errors={axisErrors}
               onChange={setAxes}
               hasVariants={allVariants.length > 0}
+            />
+
+            <RenamePanel
+              summary={renames}
+              affectedCount={
+                allVariants.filter((v) => Object.keys(v.option_values ?? {}).length > 0).length
+              }
+              mismatchCount={mismatched.length}
+              busy={tidyBusy}
+              error={tidyError}
+              done={tidyDone}
+              onApplyRenames={onApplyRenames}
+              onFixNames={onFixNames}
             />
 
             {axes.length > 0 && (

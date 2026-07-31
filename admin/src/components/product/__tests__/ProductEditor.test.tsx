@@ -66,6 +66,12 @@ type CreateVariantResult =
   | { ok: true; variant: ReturnType<typeof variantRow> }
   | { ok: false; error: string };
 
+interface UpdateVariantInput {
+  variantId: number;
+  optionValues?: Record<string, string>;
+  name?: string;
+}
+
 interface AdjustInput {
   stockItemId: number;
   quantity: number;
@@ -152,6 +158,7 @@ function setup(
     savePrice: ReturnType<typeof vi.fn>;
     adjustStock: ReturnType<typeof vi.fn>;
     createVariant: ReturnType<typeof vi.fn>;
+    updateVariant: ReturnType<typeof vi.fn>;
   }> = {},
 ) {
   const actions = {
@@ -171,6 +178,16 @@ function setup(
       ok: true,
       variant: { ...variantRow(900, i.sku), name: i.name, option_values: i.optionValues },
     }));
+  const updateVariant =
+    catalogue.updateVariant ??
+    vi.fn<(i: UpdateVariantInput) => Promise<CreateVariantResult>>(async (i) => ({
+      ok: true,
+      variant: {
+        ...variantRow(i.variantId, `SKU-${i.variantId}`),
+        ...(i.name ? { name: i.name } : {}),
+        ...(i.optionValues ? { option_values: i.optionValues } : {}),
+      },
+    }));
   const savePrice =
     catalogue.savePrice ??
     vi.fn(async (input: { priceId: number | null; variantId: number; currency: string; amount: string }) => ({
@@ -188,6 +205,7 @@ function setup(
       imageActions={actions}
       variants={catalogue.variants ?? []}
       createVariant={createVariant}
+      updateVariant={updateVariant}
       stock={catalogue.stock ?? []}
       initialPrices={catalogue.prices ?? []}
       currencies={CURRENCIES}
@@ -196,7 +214,7 @@ function setup(
       save={save}
     />,
   );
-  return { save, actions, savePrice, adjustStock, createVariant };
+  return { save, actions, savePrice, adjustStock, createVariant, updateVariant };
 }
 
 const tab = (name: string) => screen.getByRole("tab", { name });
@@ -1262,5 +1280,141 @@ describe("ProductEditor", () => {
     generate();
 
     expect(saveButton()).toBeDisabled();
+  });
+  // --- renaming and tidying (17b task 4) --------------------------------------------
+
+  /** The real production shape: every variant named after the PRODUCT. */
+  const COCO = [
+    variantRow(1, "TC-11089", 250, { "Product Size": "175g", "Price Options": "Pieces" }),
+    variantRow(2, "TC-11090", 250, { "Product Size": "175g", "Price Options": "Pack Price" }),
+  ].map((v) => ({ ...v, name: "Toke coco shea butter" }));
+
+  const renameAxis = (to: string) =>
+    fireEvent.change(screen.getByLabelText("Option 1 name"), { target: { value: to } });
+
+  it("offers no tidy-up when there is nothing to tidy", () => {
+    const tidy = [
+      { ...variantRow(1, "a", 250, { Size: "100ml" }), name: "100ml" },
+      { ...variantRow(2, "b", 250, { Size: "250ml" }), name: "250ml" },
+    ];
+    withCatalogue({ variants: tidy });
+
+    openMatrix();
+
+    expect(screen.queryByText("Tidy up")).not.toBeInTheDocument();
+  });
+
+  it("SPELLS OUT A RENAME AND HOW MANY VARIANTS IT REWRITES", () => {
+    // "Product Size" (55 production variants) and "Size" (12) are the same axis under two
+    // WooCommerce labels. Under Option A, fixing that rewrites every variant.
+    withCatalogue({ variants: COCO });
+    openMatrix();
+
+    renameAxis("Size");
+
+    expect(screen.getByText("Product Size")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rename on 2 variants" })).toBeInTheDocument();
+  });
+
+  it("does not rewrite anything until the button is pressed", () => {
+    // Editing the axis name changes what FUTURE variants are generated with. Nothing
+    // stored moves until somebody asks.
+    const updateVariant = vi.fn();
+    withCatalogue({ variants: COCO, updateVariant });
+    openMatrix();
+
+    renameAxis("Size");
+
+    expect(updateVariant).not.toHaveBeenCalled();
+  });
+
+  it("rewrites option_values on every variant, keeping the other axis", () => {
+    const updateVariant = vi.fn<(i: UpdateVariantInput) => Promise<CreateVariantResult>>(
+      async (i) => ({
+        ok: true,
+        variant: { ...variantRow(i.variantId, `SKU-${i.variantId}`), option_values: i.optionValues ?? {} },
+      }),
+    );
+    withCatalogue({ variants: COCO, updateVariant });
+    openMatrix();
+
+    renameAxis("Size");
+    fireEvent.click(screen.getByRole("button", { name: "Rename on 2 variants" }));
+
+    return waitFor(() => {
+      expect(updateVariant).toHaveBeenCalledTimes(2);
+      expect(updateVariant.mock.calls[0][0].optionValues).toEqual({
+        Size: "175g",
+        "Price Options": "Pieces",
+      });
+    });
+  });
+
+  it("STOPS ON A FAILURE and says how far it got", async () => {
+    // A half-applied rename leaves a product with two names for one axis — the exact mess
+    // this exists to clean up — so it must not plough on.
+    const updateVariant = vi
+      .fn<(i: UpdateVariantInput) => Promise<CreateVariantResult>>()
+      .mockResolvedValueOnce({ ok: true, variant: variantRow(1, "a") })
+      .mockResolvedValueOnce({ ok: false, error: "Nope." });
+    withCatalogue({ variants: COCO, updateVariant });
+    openMatrix();
+
+    renameAxis("Size");
+    fireEvent.click(screen.getByRole("button", { name: "Rename on 2 variants" }));
+
+    expect(await screen.findByText(/1 of 2 were changed/)).toBeInTheDocument();
+  });
+
+  it("counts the variants that are not named after their options", () => {
+    // All 7 variants of the real product are called "Toke coco shea butter".
+    withCatalogue({ variants: COCO });
+
+    openMatrix();
+
+    expect(screen.getByText(/are not named after their options/)).toHaveTextContent(
+      "2 variants are not named after their options.",
+    );
+    expect(
+      screen.getByRole("button", { name: "Name them from their options" }),
+    ).toBeInTheDocument();
+  });
+
+  it("names variants from their options when asked, and only when asked", async () => {
+    const updateVariant = vi.fn<(i: UpdateVariantInput) => Promise<CreateVariantResult>>(
+      async (i) => ({
+        ok: true,
+        variant: { ...variantRow(i.variantId, `SKU-${i.variantId}`), name: i.name ?? "" },
+      }),
+    );
+    withCatalogue({ variants: COCO, updateVariant });
+    openMatrix();
+
+    fireEvent.click(screen.getByRole("button", { name: "Name them from their options" }));
+
+    await waitFor(() => expect(updateVariant).toHaveBeenCalledTimes(2));
+    expect(updateVariant.mock.calls[0][0].name).toBe("175g · Pieces");
+    expect(updateVariant.mock.calls[1][0].name).toBe("175g · Pack Price");
+  });
+
+  it("offers no rename once the structure changed, because position stops meaning anything", () => {
+    withCatalogue({ variants: COCO });
+    openMatrix();
+
+    renameAxis("Size");
+    addValue(1, "500g");
+
+    expect(screen.queryByRole("button", { name: /^Rename on/ })).not.toBeInTheDocument();
+  });
+
+  it("clears the offer once the rename has been applied", async () => {
+    withCatalogue({ variants: COCO });
+    openMatrix();
+
+    renameAxis("Size");
+    fireEvent.click(screen.getByRole("button", { name: "Rename on 2 variants" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/Renamed on 2/));
+    expect(screen.queryByRole("button", { name: /^Rename on/ })).not.toBeInTheDocument();
   });
 });
