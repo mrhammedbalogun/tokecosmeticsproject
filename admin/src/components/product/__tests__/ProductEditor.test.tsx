@@ -54,6 +54,20 @@ const image = (id: number, position: number, alt = "") => ({
 /** The shape `savePrice` is called with. Declared so the mocks carry a parameter type —
  * `vi.fn(async () => ...)` types its calls as an EMPTY tuple, and every
  * `savePrice.mock.calls[0][0]` assertion below would fail to compile against it. */
+interface AdjustInput {
+  stockItemId: number;
+  quantity: number;
+  reason: string;
+  note: string;
+}
+
+type AdjustResultShape = {
+  ok: boolean;
+  item?: ReturnType<typeof stockRow>;
+  fieldErrors?: Record<string, string>;
+  error?: string;
+};
+
 type PriceResult = { ok: boolean; price?: ReturnType<typeof priceRow>; error?: string };
 
 interface PriceInput {
@@ -118,6 +132,7 @@ function setup(
     stock: ReturnType<typeof stockRow>[];
     prices: ReturnType<typeof priceRow>[];
     savePrice: ReturnType<typeof vi.fn>;
+    adjustStock: ReturnType<typeof vi.fn>;
   }> = {},
 ) {
   const actions = {
@@ -125,6 +140,12 @@ function setup(
     update: imageActions.update ?? vi.fn(async (id: number) => ({ ok: true, value: image(id, 0) })),
     remove: imageActions.remove ?? vi.fn().mockResolvedValue({ ok: true, value: null }),
   };
+  const adjustStock =
+    catalogue.adjustStock ??
+    vi.fn<(input: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
+      ok: true,
+      item: stockRow(1, 1, 42),
+    }));
   const savePrice =
     catalogue.savePrice ??
     vi.fn(async (input: { priceId: number | null; variantId: number; currency: string; amount: string }) => ({
@@ -145,10 +166,11 @@ function setup(
       initialPrices={catalogue.prices ?? []}
       currencies={CURRENCIES}
       savePrice={savePrice}
+      adjustStock={adjustStock}
       save={save}
     />,
   );
-  return { save, actions, savePrice };
+  return { save, actions, savePrice, adjustStock };
 }
 
 const tab = (name: string) => screen.getByRole("tab", { name });
@@ -844,6 +866,190 @@ describe("ProductEditor", () => {
     fireEvent.blur(cell);
 
     await waitFor(() => expect(savePrice).toHaveBeenCalled());
+    expect(saveButton()).toBeDisabled();
+  });
+  // --- stock adjust modal (task 7) --------------------------------------------------
+
+  const openAdjust = () => {
+    fireEvent.click(tab("Variants"));
+    fireEvent.click(screen.getByRole("button", { name: "Adjust" }));
+  };
+
+  it("opens the modal from the Variants tab, naming the SKU it will change", () => {
+    // The modal reads its SKU from the STOCK row, which is where the API puts it
+    // (`StockItemSerializer.sku`, sourced from `variant.sku`) — so the fixture's variant
+    // and stock row must agree, exactly as they would in production.
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)] });
+
+    openAdjust();
+
+    expect(screen.getByRole("dialog", { name: /adjust stock for SKU-1/i })).toBeInTheDocument();
+  });
+
+  it("prefills the current count and says it REPLACES rather than adds", () => {
+    // `adjust` SETS on-hand. Somebody reading the field as "add 47" would set the shelf
+    // to 47 and not notice.
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)] });
+
+    openAdjust();
+
+    expect(screen.getByLabelText("New quantity")).toHaveValue("12");
+    expect(screen.getByText(/replaces the count/i)).toBeInTheDocument();
+  });
+
+  it("shows the delta the ledger will record", () => {
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)] });
+    openAdjust();
+
+    fireEvent.change(screen.getByLabelText("New quantity"), { target: { value: "47" } });
+
+    expect(screen.getByText(/\+35/)).toBeInTheDocument();
+  });
+
+  it("NEVER offers `migration` as a reason", () => {
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)] });
+
+    openAdjust();
+
+    const options = screen.getAllByRole("option").map((o) => (o as HTMLOptionElement).value);
+    expect(options).not.toContain("migration");
+    expect(options).toContain("adjustment");
+  });
+
+  it("refuses to submit without a note", () => {
+    // The endpoint requires one, and that is the point of the endpoint.
+    const adjustStock = vi.fn();
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+
+    fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
+
+    expect(adjustStock).not.toHaveBeenCalled();
+    expect(screen.getByText(/goes in the stock ledger/i)).toBeInTheDocument();
+  });
+
+  it("does not nag about the note before a submit is attempted", () => {
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)] });
+
+    openAdjust();
+
+    expect(screen.queryByText(/goes in the stock ledger/i)).not.toBeInTheDocument();
+  });
+
+  it("submits an absolute quantity, a reason and a note", async () => {
+    const adjustStock = vi.fn<(i: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
+      ok: true,
+      item: stockRow(1, 1, 47),
+    }));
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+
+    fireEvent.change(screen.getByLabelText("New quantity"), { target: { value: "47" } });
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Recounted" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
+
+    await waitFor(() => expect(adjustStock).toHaveBeenCalledTimes(1));
+    expect(adjustStock.mock.calls[0][0]).toEqual({
+      stockItemId: 101,
+      quantity: 47,
+      reason: "adjustment",
+      note: "Recounted",
+    });
+  });
+
+  it("ACCEPTS ZERO, because that is how a sold-out line is recorded", async () => {
+    const adjustStock = vi.fn<(i: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
+      ok: true,
+      item: stockRow(1, 1, 0),
+    }));
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+
+    fireEvent.change(screen.getByLabelText("New quantity"), { target: { value: "0" } });
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Sold out" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
+
+    await waitFor(() => expect(adjustStock).toHaveBeenCalled());
+    expect(adjustStock.mock.calls[0][0].quantity).toBe(0);
+  });
+
+  it("adopts the SAVED row rather than the typed number", async () => {
+    // `adjust` returns the item as the database now holds it, and a concurrent
+    // reservation may have moved `reserved` since the modal opened.
+    const adjustStock = vi.fn<(i: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
+      ok: true,
+      item: { ...stockRow(1, 1, 47), reserved: 5 },
+    }));
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+
+    fireEvent.change(screen.getByLabelText("New quantity"), { target: { value: "47" } });
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Recounted" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText("47")).toBeInTheDocument();
+    expect(screen.getByText(/5 held/)).toBeInTheDocument();
+  });
+
+  it("keeps the modal open and shows a field error when the server refuses", async () => {
+    const adjustStock = vi.fn<(i: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
+      ok: false,
+      fieldErrors: { note: "This field may not be blank." },
+    }));
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("This field may not be blank.")).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("does not greet the next opening with the last failure", async () => {
+    const adjustStock = vi.fn<(i: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
+      ok: false,
+      error: "Nope.",
+    }));
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
+    await waitFor(() => expect(screen.getByText("Nope.")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Adjust" }));
+
+    expect(screen.queryByText("Nope.")).not.toBeInTheDocument();
+  });
+
+  it("closes on Cancel without writing anything", () => {
+    const adjustStock = vi.fn();
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(adjustStock).not.toHaveBeenCalled();
+  });
+
+  it("does not arm the product Save button, because stock is its own resource", async () => {
+    const adjustStock = vi.fn<(i: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
+      ok: true,
+      item: stockRow(1, 1, 47),
+    }));
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 12)], adjustStock });
+    openAdjust();
+
+    fireEvent.change(screen.getByLabelText("New quantity"), { target: { value: "47" } });
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Recounted" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
+
+    await waitFor(() => expect(adjustStock).toHaveBeenCalled());
     expect(saveButton()).toBeDisabled();
   });
 });

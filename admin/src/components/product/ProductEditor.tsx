@@ -31,7 +31,10 @@ import { DetailsPanel } from "@/components/product/DetailsPanel";
 import { ImagesPanel } from "@/components/product/ImagesPanel";
 import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
+import { StockAdjustModal } from "@/components/product/StockAdjustModal";
 import { VariantsPanel } from "@/components/product/VariantsPanel";
+import type { AdjustResult } from "@/app/(shell)/products/[slug]/stock-actions";
+import type { AdjustErrors } from "@/lib/stock-adjust";
 import type { ImageResult, ProductImage } from "@/app/(shell)/products/[slug]/image-actions";
 import type { PriceWriteResult } from "@/app/(shell)/products/[slug]/price-actions";
 import { positionWrites, reorder, sortImages } from "@/lib/product-images";
@@ -93,6 +96,7 @@ export function ProductEditor({
   initialPrices,
   currencies,
   savePrice,
+  adjustStock,
   save,
 }: {
   product: ProductDetail;
@@ -114,6 +118,12 @@ export function ProductEditor({
     amount: string;
     productSlug: string;
   }) => Promise<PriceWriteResult>;
+  adjustStock: (input: {
+    stockItemId: number;
+    quantity: number;
+    reason: string;
+    note: string;
+  }) => Promise<AdjustResult>;
   /** The Server Function. Injected so the component is testable without a server. */
   save: (slug: string, values: ProductFormValues) => Promise<SaveResult>;
 }) {
@@ -172,6 +182,46 @@ export function ProductEditor({
       if (!res.ok) return res.error;
       setImages((current) => current.filter((i) => i.id !== id));
       return null;
+    });
+  };
+
+  // --- stock -------------------------------------------------------------------------
+  //
+  // The rows live here for the same reason the images and prices do: the Variants panel
+  // unmounts on a tab switch, and an adjusted count must not revert on the way back.
+  const [stockRows, setStockRows] = useState<StockRow[]>(stock);
+  const [adjusting, setAdjusting] = useState<number | null>(null);
+  const [adjustErrors, setAdjustErrors] = useState<AdjustErrors>({});
+  const [adjustMessage, setAdjustMessage] = useState<string | null>(null);
+
+  const adjustTarget = stockRows.find((row) => row.id === adjusting) ?? null;
+
+  const openAdjust = (stockItemId: number) => {
+    // Cleared on OPEN, not on close: a message left from a previous failure would greet
+    // the next person to open the modal as though their own attempt had failed.
+    setAdjustErrors({});
+    setAdjustMessage(null);
+    setAdjusting(stockItemId);
+  };
+
+  const submitAdjust = (values: { quantity: number; reason: string; note: string }) => {
+    if (!adjustTarget) return;
+    setAdjustErrors({});
+    setAdjustMessage(null);
+    startImageTransition(async () => {
+      const res = await adjustStock({ stockItemId: adjustTarget.id, ...values });
+      if (!res.ok) {
+        setAdjustErrors(res.fieldErrors ?? {});
+        setAdjustMessage(res.error ?? null);
+        return;
+      }
+      // Adopt the saved row rather than assuming the typed number landed — `adjust`
+      // returns the item as the database now holds it, and a concurrent reservation may
+      // have moved `reserved` since the modal opened.
+      if (res.item) {
+        setStockRows((current) => current.map((row) => (row.id === res.item!.id ? res.item! : row)));
+      }
+      setAdjusting(null);
     });
   };
 
@@ -347,8 +397,9 @@ export function ProductEditor({
         {tab === "variants" && (
           <VariantsPanel
             variants={variants}
-            stock={stock}
-            warehouses={warehouseColumns(stock)}
+            stock={stockRows}
+            warehouses={warehouseColumns(stockRows)}
+            onAdjust={openAdjust}
           />
         )}
         {tab === "prices" && (
@@ -400,6 +451,20 @@ export function ProductEditor({
           </span>
         )}
       </div>
+
+      {adjustTarget && (
+        <StockAdjustModal
+          sku={adjustTarget.sku}
+          warehouseName={adjustTarget.warehouse_name}
+          currentQuantity={adjustTarget.quantity}
+          reserved={adjustTarget.reserved}
+          busy={imageBusy}
+          serverErrors={adjustErrors}
+          serverMessage={adjustMessage}
+          onSubmit={submitAdjust}
+          onClose={() => setAdjusting(null)}
+        />
+      )}
     </div>
   );
 }

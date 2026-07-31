@@ -20,6 +20,7 @@ import {
   type ProductImage,
 } from "./image-actions";
 import { savePriceAction } from "./price-actions";
+import { adjustStockAction } from "./stock-actions";
 import type { PriceRow, VariantRow } from "@/lib/product-prices";
 import type { StockRow } from "@/lib/product-stock";
 
@@ -174,6 +175,7 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
           initialPrices={prices}
           currencies={CURRENCIES}
           savePrice={savePriceAction}
+          adjustStock={adjustStockAction}
           save={saveProductAction}
         />
       </div>

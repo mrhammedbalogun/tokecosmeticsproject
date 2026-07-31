@@ -424,6 +424,41 @@ permits.
 **Verify:** adjust a quantity, confirm the new figure and a `StockMovement` row with actor,
 reason and note; confirm `migration` is not offered.
 
+**DONE 2026-07-30.** No backend change — the endpoint was already the right shape.
+
+- **The field is an ABSOLUTE count, not a change.** `inventory.services.adjust` SETS
+  on-hand and stores the difference as the movement, so the modal says "This replaces the
+  count, it is not added to it" and shows the delta live. Somebody reading it the other way
+  would set a shelf of 300 to 47 and not notice.
+- **Zero is valid and meaningful** (`IntegerField(min_value=0)`) — it is how a sold-out
+  line is recorded, so it is tested rather than treated as an empty field.
+- **`migration` is absent from the dropdown**, and the test asserts its absence rather than
+  the presence of the others. It is the sentinel `apps/migration_wp/importers/stock.py`
+  reads to find stock nobody has touched; a human writing it would strip that item's
+  clobber guard.
+- **All seven allowed reasons ARE offered**, in two labelled groups. A dropdown offering
+  fewer choices than the endpoint accepts is a UI that disagrees with it — but `sale`,
+  `reservation` and `release` are written automatically when an order moves, and a human
+  picking one puts a row in the ledger that reads as though an order caused it. Grouping
+  them under "Normally automatic" costs nothing and says so.
+- **The saved row is adopted, not the typed number.** `adjust` returns the item as the
+  database now holds it, and a concurrent reservation may have moved `reserved` since the
+  modal opened.
+- Errors are cleared on OPEN rather than on close, so a previous failure does not greet
+  the next person to open the modal as though their own attempt had failed.
+
+**GAP FOUND, not in scope, needs a decision.** Production keeps **one stock row per
+variant** across two warehouses, and the Variants tab renders "—" where a variant has no
+row in a warehouse. There is no Adjust button on those cells, because `adjust` operates on
+an existing `StockItem` — so **there is currently no admin path to start stocking a variant
+in a second warehouse.** `StockItemAdminViewSet` does accept POST, so the capability exists;
+nothing calls it. It belongs with 17c's inventory screen, but it should be a conscious
+deferral rather than a discovery: if the UK warehouse is ever to hold stock, this is the
+missing step.
+
+Verified: admin vitest **388 passed** (31 files, 26 new), `tsc --noEmit` clean, `eslint`
+clean, `next build` succeeds.
+
 ### Task 8 — `/products/new`
 
 Create flow. Minimum viable product record, then land on the editor for the rest — do not
