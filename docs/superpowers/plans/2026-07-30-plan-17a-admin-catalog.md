@@ -516,6 +516,43 @@ whether the backend enforces it and add it if not.
 
 **Verify:** reparent a category, reorder siblings, confirm the storefront nav still builds.
 
+**DONE 2026-07-30. The cycle question the task told me to check had a bad answer.**
+
+**Nothing prevented a cycle, and the damage lands on the storefront, not here.**
+`Category.parent` is a plain self-FK with no `clean()` and no database constraint, so one
+PATCH could make a category its own ancestor. Two things then hang, both public:
+
+- `Category.get_ancestors()` walked `node = node.parent` with no exit but `None` — it backs
+  the PDP breadcrumb;
+- `api_serializers.CategorySerializer.get_children` recurses into itself, so the category
+  tree endpoint blows the stack.
+
+A hung worker is worse than any tree shape, and this page — a parent select on all 40
+categories — is exactly what would have made it reachable. So the guard ships with it:
+`CategoryAdminSerializer.validate_parent` refuses a parent inside the category's own
+subtree (self, child, or any deeper descendant), and `get_ancestors` now terminates on a
+cycle already in the data rather than spinning. **This is a backend change and needs a
+deploy** — `backend-v0.5.0` is live without it.
+
+Other decisions:
+- **The select hides the category and its whole subtree**, which is a courtesy; the
+  endpoint is the fence. A check hiding only direct children would still offer a
+  grandchild, and choosing it makes a cycle.
+- **The form is keyed by the selected category**, so switching remounts it. That reloads
+  the uncontrolled inputs (otherwise the previous category's name sits in a form pointed
+  at a different record) *and* resets `useActionState`, so "Saved Skincare." does not hover
+  above the Haircare form. The first attempt used `setState` in an effect; eslint's
+  `react-hooks/set-state-in-effect` was right to refuse it.
+- **Product counts are derived from the products list**, since no endpoint reports them.
+  Affordable at 69 products, not at 6,900 — the answer then is an annotated count on the
+  serializer, not a bigger fetch. They answer "can I safely hide this?".
+- **Categories is its own nav item**, not a link inside Products: `activeHref` does
+  longest-prefix matching, so nesting it under `/products/…` would highlight Products while
+  the categories page was on screen.
+
+Verified: backend **1423 passed**, admin vitest **445 passed** (36 files, 33 new), `tsc`
+clean, `eslint` clean, `next build` succeeds with `/categories`.
+
 ---
 
 ## Testing discipline

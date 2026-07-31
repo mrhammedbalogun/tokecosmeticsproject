@@ -116,6 +116,58 @@ class CategoryAdminSerializer(serializers.ModelSerializer):
         model = Category
         fields = "__all__"
 
+    def validate_parent(self, value):
+        """Refuse a parent that would put a category inside its own subtree.
+
+        ── WHY THIS IS NOT COSMETIC ────────────────────────────────────────────────
+
+        Nothing else stops it. `Category.parent` is a plain self-FK with no `clean()`
+        and no database constraint, so before Plan-17a Task 10 a single PATCH could
+        make a category its own ancestor. Two things then hang, both on the PUBLIC
+        storefront rather than here:
+
+        * `Category.get_ancestors()` walks `node = node.parent` with no termination
+          condition but `None` — a cycle spins forever. It backs the PDP breadcrumb.
+        * `api_serializers.CategorySerializer.get_children` recurses into itself, so
+          the category tree endpoint blows the stack.
+
+        A hung worker is a worse outcome than any bad tree shape, and the admin UI is
+        what would have made it reachable — the tree page offers a parent select on
+        all 40 categories.
+
+        Checked here rather than in `validate()` so the message lands on the `parent`
+        field, which is the control the operator is looking at.
+        """
+        if value is None:
+            return value
+
+        instance = self.instance
+        # On create there is no subtree yet, so any existing parent is fine.
+        if instance is None or instance.pk is None:
+            return value
+
+        if value.pk == instance.pk:
+            raise serializers.ValidationError("A category cannot be its own parent.")
+
+        # Walk up from the proposed parent. Meeting `instance` means the proposed
+        # parent sits inside this category's own subtree.
+        #
+        # `seen` guards the walk itself: if the data ALREADY holds a cycle (written
+        # before this validator existed, or straight into the database), an unguarded
+        # loop here would hang the very request that was trying to fix it.
+        seen: set[int] = set()
+        node = value
+        while node is not None and node.pk not in seen:
+            if node.pk == instance.pk:
+                raise serializers.ValidationError(
+                    f"“{value.name}” is inside “{instance.name}”, so it cannot also be "
+                    "its parent."
+                )
+            seen.add(node.pk)
+            node = node.parent
+
+        return value
+
 
 class BrandAdminSerializer(serializers.ModelSerializer):
     audit_allowlist = ("name", "slug", "is_active")
