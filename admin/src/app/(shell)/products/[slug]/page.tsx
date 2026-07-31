@@ -97,6 +97,10 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
           categories={categories}
           tags={tags}
           countries={countries}
+          // Read here rather than in the client component: `process.env` is not available
+          // in the browser bundle for a non-NEXT_PUBLIC name, and the SEO preview's URL
+          // line is cosmetic enough that a wrong default would go unnoticed for months.
+          siteUrl={process.env.STOREFRONT_URL ?? "https://tokecosmetics.com"}
           save={saveProductAction}
         />
       </div>

@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   EDITABLE_FIELDS,
   isDirty,
+  normaliseFaqs,
+  normaliseSpecs,
   parseFieldErrors,
   toFormValues,
   toPatchPayload,
@@ -19,6 +21,13 @@ const values = (overrides: Partial<ProductFormValues> = {}): ProductFormValues =
   categories: [1, 2],
   tags: [5],
   available_countries: ["NG"],
+  ingredients: "",
+  directions: "",
+  warnings: "",
+  specs: [],
+  faqs: [],
+  seo_title: "",
+  seo_description: "",
   ...overrides,
 });
 
@@ -132,5 +141,105 @@ describe("parseFieldErrors", () => {
     expect(parseFieldErrors(null).fields).toEqual({});
     expect(parseFieldErrors("boom").fields).toEqual({});
     expect(parseFieldErrors(undefined).banner).toBeUndefined();
+  });
+});
+
+describe("normaliseSpecs / normaliseFaqs", () => {
+  it("keeps a half-populated row instead of discarding it", () => {
+    // These are JSONFields holding whatever the WordPress importer produced for 69
+    // migrated products. Dropping a partial row would delete migrated content on the next
+    // save of an unrelated tab — the quietest kind of data loss.
+    expect(normaliseSpecs([{ label: "Size" }])).toEqual([{ label: "Size", value: "" }]);
+    expect(normaliseFaqs([{ q: "Is it oily?" }])).toEqual([{ q: "Is it oily?", a: "" }]);
+  });
+
+  it("coerces a number or boolean into the string the input needs", () => {
+    // Meaningful content badly typed, not garbage. A raw number in a controlled input
+    // makes React switch the field to uncontrolled mid-edit.
+    expect(normaliseSpecs([{ label: "Weight", value: 250 }])).toEqual([
+      { label: "Weight", value: "250" },
+    ]);
+  });
+
+  it("discards entries that are not objects, because there is no field to show them in", () => {
+    expect(normaliseSpecs(["nonsense", null, 7])).toEqual([]);
+  });
+
+  it("returns an empty list for anything that is not an array", () => {
+    expect(normaliseSpecs(null)).toEqual([]);
+    expect(normaliseSpecs({ label: "x" })).toEqual([]);
+    expect(normaliseFaqs(undefined)).toEqual([]);
+  });
+});
+
+describe("toPatchPayload — content rows", () => {
+  it("drops rows nobody filled in", () => {
+    const payload = toPatchPayload(
+      values({
+        specs: [
+          { label: "Size", value: "250ml" },
+          { label: "", value: "" },
+        ],
+        faqs: [{ q: "", a: "" }],
+      }),
+    );
+
+    expect(payload.specs).toEqual([{ label: "Size", value: "250ml" }]);
+    expect(payload.faqs).toEqual([]);
+  });
+
+  it("KEEPS a half-filled row, because it is work in progress", () => {
+    // A question typed but not yet answered is not an empty row. Silently discarding it
+    // would lose what somebody just wrote.
+    const payload = toPatchPayload(values({ faqs: [{ q: "Is it oily?", a: "" }] }));
+
+    expect(payload.faqs).toEqual([{ q: "Is it oily?", a: "" }]);
+  });
+});
+
+describe("isDirty — ordered content rows", () => {
+  it("notices a reordered spec table", () => {
+    // specs and faqs are ORDERED rows, unlike the checkbox sets. A reorder is a real edit,
+    // and calling it none would leave it unsaved with the bar saying there was nothing.
+    const a = values({
+      specs: [
+        { label: "A", value: "1" },
+        { label: "B", value: "2" },
+      ],
+    });
+    const b = values({
+      specs: [
+        { label: "B", value: "2" },
+        { label: "A", value: "1" },
+      ],
+    });
+
+    expect(isDirty(a, b)).toBe(true);
+  });
+
+  it("does not arm Save for an empty row that was added and abandoned", () => {
+    // The row is dropped on the way out anyway, so offering to save it would promise a
+    // change that cannot happen — and the bar would never clear.
+    const a = values({ specs: [{ label: "A", value: "1" }] });
+    const b = values({
+      specs: [
+        { label: "A", value: "1" },
+        { label: "", value: "" },
+      ],
+    });
+
+    expect(isDirty(a, b)).toBe(false);
+  });
+
+  it("notices a real edit inside a row", () => {
+    const a = values({ specs: [{ label: "Size", value: "250ml" }] });
+    const b = values({ specs: [{ label: "Size", value: "500ml" }] });
+
+    expect(isDirty(a, b)).toBe(true);
+  });
+
+  it("notices edited prose and SEO fields", () => {
+    expect(isDirty(values(), values({ ingredients: "Shea butter" }))).toBe(true);
+    expect(isDirty(values(), values({ seo_title: "Best shea" }))).toBe(true);
   });
 });

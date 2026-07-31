@@ -26,7 +26,9 @@
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AvailabilityPanel } from "@/components/product/AvailabilityPanel";
+import { ContentPanel } from "@/components/product/ContentPanel";
 import { DetailsPanel } from "@/components/product/DetailsPanel";
+import { SeoPanel } from "@/components/product/SeoPanel";
 import {
   isDirty,
   toFormValues,
@@ -45,6 +47,8 @@ export interface SaveResult {
 const TABS = [
   { id: "details", label: "Details" },
   { id: "availability", label: "Availability" },
+  { id: "content", label: "Content" },
+  { id: "seo", label: "SEO" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -54,12 +58,15 @@ export function ProductEditor({
   categories,
   tags,
   countries,
+  siteUrl,
   save,
 }: {
   product: ProductDetail;
   categories: CategoryRef[];
   tags: TagRef[];
   countries: CountryRef[];
+  /** Storefront origin, for the SEO preview's URL line. */
+  siteUrl: string;
   /** The Server Function. Injected so the component is testable without a server. */
   save: (slug: string, values: ProductFormValues) => Promise<SaveResult>;
 }) {
@@ -146,6 +153,12 @@ export function ProductEditor({
             onChange={onChange}
             countries={countries}
           />
+        )}
+        {tab === "content" && (
+          <ContentPanel values={values} errors={errors} onChange={onChange} />
+        )}
+        {tab === "seo" && (
+          <SeoPanel values={values} errors={errors} onChange={onChange} siteUrl={siteUrl} />
         )}
       </div>
 

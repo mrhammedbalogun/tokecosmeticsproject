@@ -18,6 +18,13 @@ const product = (overrides: Partial<ProductDetail> = {}): ProductDetail => ({
   categories: [],
   tags: [],
   available_countries: [],
+  ingredients: "",
+  directions: "",
+  warnings: "",
+  specs: [],
+  faqs: [],
+  seo_title: "",
+  seo_description: "",
   updated_at: "2026-07-30T10:00:00Z",
   variant_count: 1,
   thumbnail: null,
@@ -43,6 +50,7 @@ function setup(overrides: Partial<ProductDetail> = {}, save = vi.fn().mockResolv
       categories={CATEGORIES}
       tags={TAGS}
       countries={COUNTRIES}
+      siteUrl="https://tokecosmetics.com"
       save={save}
     />,
   );
@@ -228,5 +236,127 @@ describe("ProductEditor", () => {
 
     expect(screen.getByRole("checkbox", { name: "Skincare" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Cleansers" })).toBeChecked();
+  });
+
+  // --- Content tab (task 4) ---------------------------------------------------------
+
+  it("invites input rather than looking broken when content is empty", () => {
+    // All 69 migrated products have empty ingredients/directions/warnings — the fields
+    // exist in no WordPress column. Empty is the NORMAL starting point here, not an error.
+    setup();
+
+    fireEvent.click(tab("Content"));
+
+    expect(screen.getByText(/no specifications yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/no questions yet/i)).toBeInTheDocument();
+  });
+
+  it("adds and removes a specification row", () => {
+    setup();
+    fireEvent.click(tab("Content"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add specification" }));
+    fireEvent.change(screen.getByLabelText("Specification 1 label"), {
+      target: { value: "Size" },
+    });
+    expect(screen.getByLabelText("Specification 1 label")).toHaveValue("Size");
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove specification 1" }));
+    expect(screen.queryByLabelText("Specification 1 label")).not.toBeInTheDocument();
+  });
+
+  it("edits one FAQ row without disturbing its neighbour", () => {
+    setup({
+      faqs: [
+        { q: "First?", a: "Yes" },
+        { q: "Second?", a: "No" },
+      ],
+    });
+    fireEvent.click(tab("Content"));
+
+    fireEvent.change(screen.getByLabelText("Answer 1"), { target: { value: "Absolutely" } });
+
+    expect(screen.getByLabelText("Answer 1")).toHaveValue("Absolutely");
+    expect(screen.getByLabelText("Answer 2")).toHaveValue("No");
+  });
+
+  it("does not arm Save for an added-then-abandoned empty row", () => {
+    setup();
+    fireEvent.click(tab("Content"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add specification" }));
+
+    expect(saveButton()).toBeDisabled();
+  });
+
+  it("drops blank rows from what gets sent", async () => {
+    const save = vi.fn().mockResolvedValue({ savedSlug: "carrot-shea-butter", savedAt: 1 });
+    setup({ specs: [{ label: "Size", value: "250ml" }] }, save);
+    fireEvent.click(tab("Content"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Add specification" }));
+    fireEvent.change(screen.getByLabelText("Specification 2 label"), {
+      target: { value: "Weight" },
+    });
+    fireEvent.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0][1].specs).toHaveLength(2);
+  });
+
+  // --- SEO tab (task 4) -------------------------------------------------------------
+
+  it("previews the title with the suffix the site actually appends", () => {
+    setup();
+
+    fireEvent.click(tab("SEO"));
+
+    expect(screen.getByText("Carrot Shea Butter | Toke Cosmetics")).toBeInTheDocument();
+  });
+
+  it("says when the title is falling back to the product name", () => {
+    setup({ seo_title: "" });
+
+    fireEvent.click(tab("SEO"));
+
+    expect(screen.getByText(/product name is used/i)).toBeInTheDocument();
+  });
+
+  it("warns when neither a description nor a fallback exists", () => {
+    setup({ seo_description: "", short_description: "" });
+
+    fireEvent.click(tab("SEO"));
+
+    expect(screen.getByText(/search engines will write/i)).toBeInTheDocument();
+  });
+
+  it("previews the PDP url with the singular product segment", () => {
+    setup();
+
+    fireEvent.click(tab("SEO"));
+
+    expect(
+      screen.getByText("https://tokecosmetics.com/product/carrot-shea-butter"),
+    ).toBeInTheDocument();
+  });
+
+  it("carries content and SEO edits into the save", async () => {
+    const save = vi.fn().mockResolvedValue({ savedSlug: "carrot-shea-butter", savedAt: 1 });
+    setup({}, save);
+
+    fireEvent.click(tab("Content"));
+    fireEvent.change(screen.getByPlaceholderText(/shea butter, carrot oil/i), {
+      target: { value: "Shea butter, carrot oil" },
+    });
+    fireEvent.click(tab("SEO"));
+    fireEvent.change(screen.getByPlaceholderText("Carrot Shea Butter"), {
+      target: { value: "Best Shea Butter" },
+    });
+    fireEvent.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    const values = save.mock.calls[0][1];
+    expect(values.ingredients).toBe("Shea butter, carrot oil");
+    expect(values.seo_title).toBe("Best Shea Butter");
   });
 });

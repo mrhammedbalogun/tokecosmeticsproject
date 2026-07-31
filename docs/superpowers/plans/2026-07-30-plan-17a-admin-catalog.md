@@ -276,6 +276,36 @@ fix that, so empty states should invite input rather than look broken.
 **Verify:** add two spec rows and one FAQ, save, re-read; the JSON shape matches what the
 storefront PDP already renders.
 
+**DONE 2026-07-30.** No backend change. Four decisions worth carrying:
+
+1. **The SEO preview mirrors the storefront rather than approximating it**, with the source
+   lines cited in `lib/seo-preview.ts`: `seo_title || name`
+   (`product/[slug]/page.tsx:39`), `seo_description || short_description` (`:40`), and the
+   `%s | Toke Cosmetics` template from `layout.tsx:21`. **Omitting that suffix would
+   under-report the rendered title by 17 characters** — which is wrong exactly when
+   somebody is trimming a title to fit. The URL uses `/product/<slug>`, singular; `/products`
+   is the listing.
+
+2. **A malformed spec/FAQ row is repaired, not discarded.** These are `JSONField(default=list)`
+   holding whatever the WordPress importer produced across 69 products. A row missing a key
+   gets `""` and survives; only non-objects are dropped. Silently deleting a partial row on
+   the next save of an unrelated tab is the quietest kind of data loss.
+
+3. **Blank rows are dropped on save but do not arm Save.** A row added and abandoned would
+   otherwise promise a change that cannot happen, and the unsaved bar would never clear. A
+   HALF-filled row is kept — a question typed but not yet answered is work in progress.
+
+4. **`isDirty` now distinguishes sets from ordered rows.** `categories`/`tags`/
+   `available_countries` are order-insensitive; `specs`/`faqs` are not, because reordering
+   a spec table is a real edit. The old implementation would have compared object rows via
+   `String(row)`, collapsing every row to `[object Object]`.
+
+The PATCH body now comes from `toPatchPayload` in one place rather than being spelled out
+in the action, so adding a tab is one edit to `EDITABLE_FIELDS`.
+
+Verified: admin vitest **290 passed** (26 files, 31 new), `tsc --noEmit` clean, `eslint`
+clean, `next build` succeeds.
+
 ### Task 5 — Images tab
 
 Upload (existing multipart action), reorder, alt text, delete — the last three via Task 1's

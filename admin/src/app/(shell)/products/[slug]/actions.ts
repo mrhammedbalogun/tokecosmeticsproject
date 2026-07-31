@@ -26,6 +26,7 @@ import { ApiError } from "@/lib/api";
 import {
   isProductStatus,
   parseFieldErrors,
+  toPatchPayload,
   type FieldErrors,
   type ProductFormValues,
 } from "@/lib/product-form";
@@ -71,17 +72,11 @@ export async function saveProductAction(
   try {
     saved = await fetchWithAuth<{ slug: string }>(`/admin/products/${currentSlug}/`, {
       method: "PATCH",
-      body: {
-        name,
-        slug,
-        status: values.status,
-        short_description: values.short_description,
-        description: values.description,
-        is_featured: values.is_featured,
-        categories: values.categories,
-        tags: values.tags,
-        available_countries: values.available_countries,
-      },
+      // Built by `toPatchPayload`, not spelled out here. It is the single place that knows
+      // which fields the built tabs own — so adding a tab is one edit to EDITABLE_FIELDS
+      // rather than two that can disagree, and blank spec/FAQ rows are dropped in one
+      // place rather than wherever somebody remembers.
+      body: { ...toPatchPayload(values), name, slug },
     });
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
