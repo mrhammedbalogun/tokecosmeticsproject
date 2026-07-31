@@ -194,10 +194,17 @@ SKU; status filter; page 2 works; a scopeless user sees the 403 sentence, not a 
 
 3. **The admin CSP would have blocked every thumbnail.** `img-src 'self' data: blob:`
    admits no CDN host, so production images would render broken with nothing but a console
-   violation to say why. Added `NEXT_PUBLIC_MEDIA_ORIGIN` to `img-src` — one directive,
-   one host we control, `script-src` and `connect-src` untouched. **Needs setting in the
-   Vercel project** to match the backend's `AWS_S3_CUSTOM_DOMAIN`; empty in dev, where
-   `'self'` already covers media served through the BFF.
+   violation to say why. The media host now joins `img-src` — one directive, one host we
+   control, `script-src` and `connect-src` untouched.
+
+   **Amended after review: the hostname is COMMITTED as the default**
+   (`dk4ivng9pnc2t.cloudfront.net`), not left to a Vercel dashboard entry. Same name
+   (`NEXT_PUBLIC_MEDIA_HOST`), same value and same reasoning as
+   `storefront/next.config.ts` — commit `1f97396` hard-coded it there precisely because
+   gating on a dashboard variable had already broken every production product image once.
+   The first version of this task recreated that trap in the admin. The env var still
+   overrides, for pointing a preview at another distribution. **No Vercel action is
+   required.**
 
 `components/Pagination.tsx` was generalised to take a `buildQuery` callback instead of
 importing `AuditFilters`, and the pagination arithmetic moved to `lib/pagination.ts`
