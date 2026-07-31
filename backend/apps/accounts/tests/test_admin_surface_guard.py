@@ -155,6 +155,9 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "TagAdminViewSet": "products.manage",
     "CollectionAdminViewSet": "products.manage",
     "ProductVariantAdminViewSet": "products.manage",
+    # Editing an uploaded image — alt text, order, deletion. Same scope as uploading it,
+    # because deleting a product photograph and adding one are the same authority.
+    "ProductImageAdminViewSet": "products.manage",
     "ProductVideoAdminViewSet": "products.manage",
     "PriceAdminViewSet": "products.manage",
     "ProductCSVExportView": "products.manage",

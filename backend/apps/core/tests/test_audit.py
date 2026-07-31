@@ -39,6 +39,7 @@ from rest_framework.test import APIClient
 from apps.accounts.authentication import mint_admin_token_pair
 from apps.accounts.tests.test_admin_surface_guard import ADMIN_SURFACE
 from apps.catalog.factories import ProductFactory, ProductVariantFactory
+from apps.catalog.models import ProductImage
 from apps.core.audit import MAX_CHANGES_BYTES, REDACTED, build_changes
 from apps.core.models import AuditLog, AuditLogImmutable, Country
 from apps.inventory.factories import StockItemFactory, WarehouseFactory
@@ -181,6 +182,25 @@ def _case_variant(client, monkeypatch):
         {"product": product.id, "sku": "SKU-1", "name": "50ml"},
         format="json",
     ), 201
+
+
+def _case_product_image(client, monkeypatch):
+    """PATCH rather than POST, because this viewset deliberately has no create route —
+    uploading stays on `POST /admin/products/{slug}/images/` (see ProductImageAdminViewSet).
+    So the write this endpoint must be proven to audit is an edit, not a creation.
+
+    `image` is assigned as a bare string rather than an uploaded file: naming a FileField
+    writes the name to the column and touches no storage at all, which keeps this case
+    from depending on whether the environment points `STORAGES` at S3 or the filesystem.
+    The PATCH only writes `alt`, so no file is ever read either.
+    """
+    product = ProductFactory(slug="p-image")
+    image = ProductImage.objects.create(
+        product=product, image="catalog/products/seed.png", alt="before", position=0
+    )
+    return client.patch(
+        f"/api/v1/admin/images/{image.id}/", {"alt": "after"}, format="json"
+    ), 200
 
 
 def _case_video(client, monkeypatch):
@@ -400,6 +420,11 @@ WRITE_CASES: dict[str, tuple] = {
     "TagAdminViewSet": (_case_tag, "create"),
     "CollectionAdminViewSet": (_case_collection, "create"),
     "ProductVariantAdminViewSet": (_case_variant, "create"),
+    # `partial_update`, not `create` and not `update`: the only writes this viewset
+    # exposes are PATCH and DELETE, and the mixin prefers the DRF ACTION NAME over the
+    # verb it would otherwise derive from the method — the same reason `adjust` reads as
+    # `adjust` rather than as `create`.
+    "ProductImageAdminViewSet": (_case_product_image, "partial_update"),
     "ProductVideoAdminViewSet": (_case_video, "create"),
     "PriceAdminViewSet": (_case_price, "create"),
     "ProductCSVImportView": (_case_product_csv_import, "import_csv"),

@@ -49,10 +49,20 @@ class Category(TimeStampedModel):
         return self.name
 
     def get_ancestors(self):
-        """Root-first list of ancestors (excludes self). Depth is small (<= 3)."""
+        """Root-first list of ancestors (excludes self). Depth is small (<= 3).
+
+        TERMINATES ON A CYCLE rather than spinning forever. `CategoryAdminSerializer`
+        refuses to create one (Plan-17a Task 10), but this is the storefront's
+        breadcrumb walk and it must not be the thing that hangs a web worker if a bad
+        parent ever reaches the table another way — a direct database edit, a fixture,
+        or a row written before that validator existed. Stopping early yields a short
+        breadcrumb; not stopping yields an unresponsive process.
+        """
         chain = []
+        seen = set()
         node = self.parent
-        while node is not None:
+        while node is not None and node.pk not in seen:
+            seen.add(node.pk)
             chain.append(node)
             node = node.parent
         return list(reversed(chain))

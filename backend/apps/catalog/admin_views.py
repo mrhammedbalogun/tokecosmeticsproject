@@ -21,8 +21,10 @@ So the whole app is `.manage` until there is a read-only catalogue surface to de
 the split around (Plan-17/19). Over-restriction is the safe direction to be wrong in.
 """
 from django.http import StreamingHttpResponse
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.filters import SearchFilter
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -49,6 +51,7 @@ from apps.catalog.models import (
     Category,
     Collection,
     Product,
+    ProductImage,
     ProductVariant,
     ProductVideo,
     Tag,
@@ -87,8 +90,45 @@ class ProductAdminViewSet(AdminBaseViewSet):
     # serializer a view can parse, and a body shape it cannot see is a body shape whose
     # write-only fields nobody checked.
     audit_serializers = (ProductAdminSerializer, ProductImageAdminSerializer)
-    queryset = Product.objects.all().order_by("-created_at")
+    # Prefetched for the list. Two groups, and the second was a PRE-EXISTING N+1 that the
+    # Task 2 query-budget test exposed rather than introduced:
+    #
+    #   images / variants__prices — the new thumbnail, variant-count and
+    #     priced-currencies columns.
+    #   categories / tags / related / available_countries — four M2M fields this
+    #     serializer has always rendered, each costing a query PER ROW. A 12-product page
+    #     measured 55 queries; the same page now measures 11, and a 24-row page does not
+    #     cost twice that. Nothing in the JSON differed either way, which is why it
+    #     survived this long.
+    queryset = (
+        Product.objects.all()
+        .prefetch_related(
+            "images",
+            "variants__prices",
+            "categories",
+            "tags",
+            "related",
+            "available_countries",
+        )
+        .order_by("-created_at")
+    )
     lookup_field = "slug"
+    # BOTH backends named explicitly. Listing `filter_backends` on a view REPLACES
+    # DEFAULT_FILTER_BACKENDS, so adding SearchFilter alone would silently drop
+    # DjangoFilterBackend and the `?status=` facet with it — the failure is a filter that
+    # is quietly ignored, which looks like "no results match" rather than like a bug.
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["status"]
+    # `variants__sku` is here because staff search by the SKU printed on the jar, and a
+    # SKU belongs to a variant. It is a reverse FK, so the join yields one row per
+    # matching variant; DRF's SearchFilter de-duplicates via `must_call_distinct`, and
+    # test_search_returns_a_multi_variant_product_exactly_once pins that it stays that
+    # way — 18 of 69 production products are multi-variant.
+    #
+    # NO `^` OR `=` PREFIXES: both compile to something other than `icontains`, and
+    # `icontains` is the one lookup the Plan-16 Task 6 indexes were built for
+    # (`product_name_upper_trgm`, `variant_sku_trgm`, both on UPPER(col)).
+    search_fields = ["name", "variants__sku"]
 
     @action(
         detail=True,
@@ -131,6 +171,34 @@ class CollectionAdminViewSet(AdminBaseViewSet):
 class ProductVariantAdminViewSet(AdminBaseViewSet):
     serializer_class = ProductVariantAdminSerializer
     queryset = ProductVariant.objects.all().order_by("product_id", "position")
+    # The editor's Variants tab asks for ONE product's variants. Unfiltered this endpoint
+    # returns all 122 in production, and narrowing that in the browser would serialise
+    # every one of them into the RSC payload of a page showing a handful (Plan-16 Task 8).
+    filterset_fields = ["product", "is_active"]
+
+
+class ProductImageAdminViewSet(AdminBaseViewSet):
+    """An uploaded image, as an editable thing.
+
+    Before this existed an image could be POSTed to `products/{slug}/images/` and never
+    touched again — no delete, no alt text, no reorder. The 17a Images tab needs all
+    three, and none of them is a new capability so much as the other half of one that
+    already shipped.
+
+    CREATION IS NOT HERE, and that is the point of `http_method_names`. Uploading stays
+    on `ProductAdminViewSet.images`, which owns the multipart parsers and binds `product`
+    from the URL it was called on. A second create path would be a second place for the
+    binding rules to live, and they would drift.
+
+    PUT IS ALSO OUT. `image` is the one field this JSON route cannot write, so a PUT —
+    which means "here is the whole record" — would have to silently ignore the file and
+    keep it. Refusing is honest; 405 tells the caller to PATCH.
+    """
+
+    serializer_class = ProductImageAdminSerializer
+    queryset = ProductImage.objects.all()  # Meta.ordering = ["position", "id"]
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+    filterset_fields = ["product", "variant"]
 
 
 class ProductVideoAdminViewSet(AdminBaseViewSet):
@@ -140,7 +208,17 @@ class ProductVideoAdminViewSet(AdminBaseViewSet):
 
 class PriceAdminViewSet(AdminBaseViewSet):
     serializer_class = PriceAdminSerializer
-    queryset = Price.objects.all()
+    # The Prices grid is variant x currency, so it fetches by variant and fills cells by
+    # currency. `country` is filterable so the grid can SEE a country-level override
+    # rather than silently showing the currency-level row underneath it — an edit that
+    # appears to succeed and changes nothing is the worst failure this screen can have
+    # (17a spec, "The Prices grid, precisely"). Writing overrides is 17c.
+    #
+    # `variant__product` added in Task 6: the grid needs EVERY price for a product at once,
+    # and `variant` is an exact match, so without it the editor would issue one request per
+    # variant — ten of them on the largest production product.
+    filterset_fields = ["variant", "variant__product", "currency", "country"]
+    queryset = Price.objects.select_related("variant", "currency", "country")
 
 
 class ProductCSVExportView(AdminAuditMixin, APIView):

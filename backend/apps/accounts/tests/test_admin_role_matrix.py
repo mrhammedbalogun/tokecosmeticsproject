@@ -79,6 +79,7 @@ MATRIX: list[Row] = [
     Row("TagAdminViewSet", "get", "/api/v1/admin/tags/", _MANAGERS),
     Row("CollectionAdminViewSet", "get", "/api/v1/admin/collections/", _MANAGERS),
     Row("ProductVariantAdminViewSet", "get", "/api/v1/admin/variants/", _MANAGERS),
+    Row("ProductImageAdminViewSet", "get", "/api/v1/admin/images/", _MANAGERS),
     Row("ProductVideoAdminViewSet", "get", "/api/v1/admin/videos/", _MANAGERS),
     Row("PriceAdminViewSet", "get", "/api/v1/admin/prices/", _MANAGERS),
     Row("ProductCSVExportView", "get", "/api/v1/admin/products/export.csv", _MANAGERS),

@@ -16,9 +16,10 @@
  * present an operator with a control that does nothing.
  */
 
-/** Mirrors DRF's `PAGE_SIZE` in `backend/config/settings/base.py`. If that changes, the
- *  page numbers rendered here stop lining up with the pages the API returns. */
-export const PAGE_SIZE = 24;
+// Moved to `lib/pagination.ts` in Plan-17a Task 2, when the products list became the
+// second paged consumer. Re-exported here so every existing import keeps working and
+// there is still one implementation of each.
+export { PAGE_SIZE, pageCount, pageWindow } from "@/lib/pagination";
 
 export interface AuditRow {
   id: number;
@@ -91,39 +92,6 @@ export function auditQueryString(filters: AuditFilters): string {
   // and makes "am I on the first page" answerable by looking at the address bar.
   if (filters.page > 1) params.set("page", String(filters.page));
   return params.toString();
-}
-
-export function pageCount(total: number): number {
-  // An empty log is one empty page, not zero pages: "Page 1 of 0" is nonsense on screen.
-  return Math.max(1, Math.ceil(total / PAGE_SIZE));
-}
-
-/**
- * The page numbers to render, with `"…"` standing in for a run of hidden pages.
- *
- * A gap marker is only used where it hides MORE THAN ONE page — `1 … 3` is both longer
- * than `1 2 3` and a click worse.
- */
-export function pageWindow(current: number, total: number): (number | "…")[] {
-  const pages = new Set<number>([1, total]);
-  for (let p = current - 1; p <= current + 1; p++) {
-    if (p >= 1 && p <= total) pages.add(p);
-  }
-  const sorted = [...pages].sort((a, b) => a - b);
-
-  const out: (number | "…")[] = [];
-  let previous = 0;
-  for (const page of sorted) {
-    const skipped = page - previous - 1;
-    if (previous !== 0 && skipped > 0) {
-      // Exactly one page hidden → render it instead of a marker.
-      if (skipped === 1) out.push(page - 1);
-      else out.push("…");
-    }
-    out.push(page);
-    previous = page;
-  }
-  return out;
 }
 
 /**

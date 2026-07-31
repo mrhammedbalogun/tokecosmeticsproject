@@ -31,6 +31,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/", scopes: [] },
   { label: "Orders", href: "/orders", scopes: ["orders.view"] },
   { label: "Products", href: "/products", scopes: ["products.manage"] },
+  // Its own item rather than a link inside Products: the tree is a separate job from
+  // editing a product, and `activeHref` does longest-prefix matching, so nesting it under
+  // `/products/…` would highlight Products while the categories page was on screen.
+  { label: "Categories", href: "/categories", scopes: ["products.manage"] },
   { label: "Inventory", href: "/inventory", scopes: ["products.manage"] },
   { label: "Customers", href: "/customers", scopes: ["customers.view"] },
   { label: "Reviews", href: "/reviews", scopes: ["products.manage", "cms.manage"] },

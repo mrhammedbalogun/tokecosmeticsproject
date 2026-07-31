@@ -53,8 +53,18 @@ export async function apiFetchRaw(
 
   const init: RequestInit = { method: opts.method ?? "GET", headers };
   if (opts.body !== undefined) {
-    headers.set("Content-Type", "application/json");
-    init.body = JSON.stringify(opts.body);
+    if (opts.body instanceof FormData) {
+      // MULTIPART, for the one endpoint that takes a file
+      // (`POST /admin/products/{slug}/images/`). Content-Type is deliberately NOT set:
+      // fetch generates it, and only fetch knows the boundary token it must carry. Setting
+      // `multipart/form-data` by hand produces a header with no boundary, and Django then
+      // parses an empty payload and answers "No file was submitted" for a request that
+      // plainly contains one.
+      init.body = opts.body;
+    } else {
+      headers.set("Content-Type", "application/json");
+      init.body = JSON.stringify(opts.body);
+    }
   }
   if (opts.signal) init.signal = opts.signal;
   // Admin data is never cached by the framework either — see the no-store discussion in

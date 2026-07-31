@@ -53,6 +53,50 @@ class ProductAdminSerializer(serializers.ModelSerializer):
     legacy_source = serializers.CharField(required=False, default="")
     legacy_wp_id = serializers.IntegerField(required=False, allow_null=True, default=None)
 
+    # --- read-only, for the admin products LIST (Plan-17a Task 2) --------------------
+    #
+    # The list has to answer "which product is this, and what still needs doing to it"
+    # at a glance, and none of that was expressible: the serializer carried no image, no
+    # variant count, no indication of which markets a product is priced for, and not even
+    # `updated_at`. Staff would have had to open every product to find the one they meant.
+    #
+    # ALL THREE ARE SerializerMethodFields READING PREFETCHED RELATIONS, deliberately, and
+    # NOT queryset annotations. An annotated field renders fine on a list and then raises
+    # AttributeError on the POST/PATCH response, because the instance the write returns is
+    # a plain model with no annotation attached. `len(obj.images.all())` is free when the
+    # viewset prefetched (the list) and costs one query when it did not (a create), which
+    # is the right trade in both directions.
+    thumbnail = serializers.SerializerMethodField()
+    variant_count = serializers.SerializerMethodField()
+    priced_currencies = serializers.SerializerMethodField()
+
+    def get_thumbnail(self, obj) -> str | None:
+        # ProductImage.Meta orders on ["position", "id"], so "first" is the gallery's
+        # first — the same image the storefront leads with, which is what makes the row
+        # recognisable to somebody who knows the shelf rather than the SKU.
+        images = list(obj.images.all())
+        return images[0].image.url if images else None
+
+    def get_variant_count(self, obj) -> int:
+        return len(obj.variants.all())
+
+    def get_priced_currencies(self, obj) -> list[str]:
+        """Which currencies this product has ANY price in, so the list can flag the ones
+        that are invisible in a market for want of a price.
+
+        Currency-level rows only (`country is None`). A country override is a narrower
+        statement than "this product is priced in GBP" and reading it as the same thing
+        would show a product as priced for a market it is still hidden in. Overrides are
+        17c; production has none today, and this must not be the code that assumes so.
+        """
+        codes = {
+            price.currency_id
+            for variant in obj.variants.all()
+            for price in variant.prices.all()
+            if price.country_id is None
+        }
+        return sorted(codes)
+
     class Meta:
         model = Product
         fields = [
@@ -60,7 +104,9 @@ class ProductAdminSerializer(serializers.ModelSerializer):
             "short_description", "status", "is_featured", "ingredients", "directions",
             "warnings", "specs", "faqs", "related", "available_countries",
             "seo_title", "seo_description", "published_at", "legacy_source", "legacy_wp_id",
+            "updated_at", "thumbnail", "variant_count", "priced_currencies",
         ]
+        read_only_fields = ["updated_at"]
 
 
 class CategoryAdminSerializer(serializers.ModelSerializer):
@@ -69,6 +115,58 @@ class CategoryAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
         fields = "__all__"
+
+    def validate_parent(self, value):
+        """Refuse a parent that would put a category inside its own subtree.
+
+        ── WHY THIS IS NOT COSMETIC ────────────────────────────────────────────────
+
+        Nothing else stops it. `Category.parent` is a plain self-FK with no `clean()`
+        and no database constraint, so before Plan-17a Task 10 a single PATCH could
+        make a category its own ancestor. Two things then hang, both on the PUBLIC
+        storefront rather than here:
+
+        * `Category.get_ancestors()` walks `node = node.parent` with no termination
+          condition but `None` — a cycle spins forever. It backs the PDP breadcrumb.
+        * `api_serializers.CategorySerializer.get_children` recurses into itself, so
+          the category tree endpoint blows the stack.
+
+        A hung worker is a worse outcome than any bad tree shape, and the admin UI is
+        what would have made it reachable — the tree page offers a parent select on
+        all 40 categories.
+
+        Checked here rather than in `validate()` so the message lands on the `parent`
+        field, which is the control the operator is looking at.
+        """
+        if value is None:
+            return value
+
+        instance = self.instance
+        # On create there is no subtree yet, so any existing parent is fine.
+        if instance is None or instance.pk is None:
+            return value
+
+        if value.pk == instance.pk:
+            raise serializers.ValidationError("A category cannot be its own parent.")
+
+        # Walk up from the proposed parent. Meeting `instance` means the proposed
+        # parent sits inside this category's own subtree.
+        #
+        # `seen` guards the walk itself: if the data ALREADY holds a cycle (written
+        # before this validator existed, or straight into the database), an unguarded
+        # loop here would hang the very request that was trying to fix it.
+        seen: set[int] = set()
+        node = value
+        while node is not None and node.pk not in seen:
+            if node.pk == instance.pk:
+                raise serializers.ValidationError(
+                    f"“{value.name}” is inside “{instance.name}”, so it cannot also be "
+                    "its parent."
+                )
+            seen.add(node.pk)
+            node = node.parent
+
+        return value
 
 
 class BrandAdminSerializer(serializers.ModelSerializer):

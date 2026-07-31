@@ -39,13 +39,39 @@ import type { NextConfig } from "next";
  */
 const isProd = process.env.NODE_ENV === "production";
 
+/**
+ * The host catalogue images are served from. In `img-src` since Plan-17a Task 2, because
+ * without it every product thumbnail renders broken and the only evidence is a CSP
+ * violation in the console.
+ *
+ * ── COMMITTED AS A DEFAULT, NOT LEFT TO A DASHBOARD ENTRY ───────────────────────────
+ *
+ * Same name, same value and same reasoning as `storefront/next.config.ts` (commit
+ * 1f97396): the CDN hostname is PUBLIC — it appears in every product page's HTML — so
+ * there is nothing to protect by hiding it in Vercel's environment, and gating on a
+ * dashboard variable means a missing entry breaks every production image. That is not
+ * hypothetical; it is what happened to the storefront, and hard-coding the default is
+ * what fixed it. `NEXT_PUBLIC_MEDIA_HOST` still overrides, so a preview can point at a
+ * different distribution.
+ *
+ * A BARE HOSTNAME, matching the storefront's variable exactly, so one value serves both
+ * apps and nobody has to remember which of the two wants a scheme. The `https://` below
+ * is added here because a CSP source expression needs one.
+ *
+ * ONE DIRECTIVE, ONE HOST WE CONTROL. This does NOT touch `script-src` or `connect-src`,
+ * and the standing rule above — no third-party scripts on this origin, ever — is
+ * unaffected: an image cannot read `location.href`, and `object-src 'none'` still forbids
+ * the content types that could.
+ */
+const MEDIA_HOST = process.env.NEXT_PUBLIC_MEDIA_HOST ?? "dk4ivng9pnc2t.cloudfront.net";
+
 const CSP = [
   "default-src 'self'",
   // Next's App Router requires inline bootstrap scripts. `unsafe-eval` is dev-only (React
   // Refresh needs it); production gets neither it nor any host but Turnstile's.
   `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${isProd ? "" : " 'unsafe-eval'"}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  `img-src 'self' data: blob:${MEDIA_HOST ? ` https://${MEDIA_HOST}` : ""}`,
   "font-src 'self' data:",
   // Same-origin only: every API call goes through this app's own BFF routes or its Server
   // Functions, never straight from the browser to Django. `ws:` is Next's dev HMR socket.
