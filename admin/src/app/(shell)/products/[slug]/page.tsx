@@ -19,6 +19,13 @@ import {
   uploadImageAction,
   type ProductImage,
 } from "./image-actions";
+import { savePriceAction } from "./price-actions";
+import type { PriceRow, VariantRow } from "@/lib/product-prices";
+import type { StockRow } from "@/lib/product-stock";
+
+/** The configured currencies, as on the products list. There is no endpoint listing them
+ *  until 17c; `core/migrations/0003_seed_countries_currencies.py` is the source. */
+const CURRENCIES = ["NGN", "GBP", "USD", "CAD"] as const;
 
 export const metadata: Metadata = { title: "Edit product" };
 
@@ -78,18 +85,46 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
   //
   // Fetched AFTER the product, deliberately: it needs the product's id, and a 404 on the
   // product should not be preceded by a pointless image request.
-  let images: ProductImage[] = [];
-  try {
-    const page = await fetchWithAuthOrBounce<{ results: ProductImage[] }>(
+  //
+  // FOUR PRODUCT-SCOPED LISTS, all filtered server-side. Unfiltered, `/admin/variants/`
+  // returns all 122 in production and `/admin/prices/` all 121 — and every one would be
+  // serialised into this page's RSC payload whether rendered or not.
+  //
+  // Each failure costs ONE TAB, never the page: the editor holds unsaved-able text in
+  // Details, Content and SEO, and a dead price endpoint must not take that with it.
+  const [imagesResult, variantsResult, stockResult, pricesResult] = await Promise.allSettled([
+    fetchWithAuthOrBounce<{ results: ProductImage[] }>(
       `/admin/images/?product=${product.id}`,
       path,
-    );
-    images = page.results ?? [];
-  } catch (e) {
-    // A failed image fetch costs the Images tab, not the page. The editor still holds
-    // unsaved-able text in four other tabs.
-    if (!(e instanceof ApiError)) throw e;
+    ),
+    fetchAllPages<VariantRow>(
+      fetchWithAuthOrBounce,
+      `/admin/variants/?product=${product.id}`,
+      path,
+    ),
+    fetchAllPages<StockRow>(
+      fetchWithAuthOrBounce,
+      `/admin/stock/?variant__product=${product.id}`,
+      path,
+    ),
+    fetchAllPages<PriceRow>(
+      fetchWithAuthOrBounce,
+      `/admin/prices/?variant__product=${product.id}`,
+      path,
+    ),
+  ]);
+
+  for (const result of [imagesResult, variantsResult, stockResult, pricesResult]) {
+    if (result.status === "rejected" && !(result.reason instanceof ApiError)) throw result.reason;
   }
+
+  const images = imagesResult.status === "fulfilled" ? (imagesResult.value.results ?? []) : [];
+  // `fetchAllPages` for these three, not a single request: DRF pages at 24, and a product
+  // with more variants or a fuller price matrix than today's would otherwise be silently
+  // truncated — the same trap the category picker had.
+  const variants = variantsResult.status === "fulfilled" ? variantsResult.value : [];
+  const stock = stockResult.status === "fulfilled" ? stockResult.value : [];
+  const prices = pricesResult.status === "fulfilled" ? pricesResult.value : [];
 
   const categories =
     categoriesResult.status === "fulfilled" ? orderCategories(categoriesResult.value) : [];
@@ -134,6 +169,11 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
             update: updateImageAction,
             remove: deleteImageAction,
           }}
+          variants={variants}
+          stock={stock}
+          initialPrices={prices}
+          currencies={CURRENCIES}
+          savePrice={savePriceAction}
           save={saveProductAction}
         />
       </div>

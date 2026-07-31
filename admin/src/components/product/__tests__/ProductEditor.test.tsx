@@ -51,6 +51,59 @@ const image = (id: number, position: number, alt = "") => ({
   variant: null,
 });
 
+/** The shape `savePrice` is called with. Declared so the mocks carry a parameter type —
+ * `vi.fn(async () => ...)` types its calls as an EMPTY tuple, and every
+ * `savePrice.mock.calls[0][0]` assertion below would fail to compile against it. */
+type PriceResult = { ok: boolean; price?: ReturnType<typeof priceRow>; error?: string };
+
+interface PriceInput {
+  priceId: number | null;
+  variantId: number;
+  currency: string;
+  amount: string;
+  productSlug: string;
+}
+
+const CURRENCIES = ["NGN", "GBP", "USD", "CAD"];
+
+const variantRow = (id: number, sku = `SKU-${id}`, weight: number | null = 250) => ({
+  id,
+  sku,
+  name: `${id}ml`,
+  weight_grams: weight,
+  is_active: true,
+  position: 0,
+});
+
+const stockRow = (variant: number, warehouse: number, quantity: number, name = "Lagos HQ") => ({
+  id: variant * 100 + warehouse,
+  variant,
+  sku: `SKU-${variant}`,
+  warehouse,
+  warehouse_name: name,
+  quantity,
+  reserved: 0,
+  available: quantity,
+  low_stock_threshold: 5,
+});
+
+const priceRow = (
+  id: number,
+  variant: number,
+  currency: string,
+  amount: string,
+  extra: Partial<{ country: string | null; starts_at: string | null }> = {},
+) => ({
+  id,
+  variant,
+  currency,
+  country: null,
+  amount,
+  starts_at: null,
+  ends_at: null,
+  ...extra,
+});
+
 function setup(
   overrides: Partial<ProductDetail> = {},
   save = vi.fn().mockResolvedValue({}),
@@ -60,12 +113,24 @@ function setup(
     update: ReturnType<typeof vi.fn>;
     remove: ReturnType<typeof vi.fn>;
   }> = {},
+  catalogue: Partial<{
+    variants: ReturnType<typeof variantRow>[];
+    stock: ReturnType<typeof stockRow>[];
+    prices: ReturnType<typeof priceRow>[];
+    savePrice: ReturnType<typeof vi.fn>;
+  }> = {},
 ) {
   const actions = {
     upload: imageActions.upload ?? vi.fn().mockResolvedValue({ ok: true, value: image(99, 9) }),
     update: imageActions.update ?? vi.fn(async (id: number) => ({ ok: true, value: image(id, 0) })),
     remove: imageActions.remove ?? vi.fn().mockResolvedValue({ ok: true, value: null }),
   };
+  const savePrice =
+    catalogue.savePrice ??
+    vi.fn(async (input: { priceId: number | null; variantId: number; currency: string; amount: string }) => ({
+      ok: true,
+      price: priceRow(input.priceId ?? 900, input.variantId, input.currency, input.amount),
+    }));
   render(
     <ProductEditor
       product={product(overrides)}
@@ -75,10 +140,15 @@ function setup(
       siteUrl="https://tokecosmetics.com"
       initialImages={images}
       imageActions={actions}
+      variants={catalogue.variants ?? []}
+      stock={catalogue.stock ?? []}
+      initialPrices={catalogue.prices ?? []}
+      currencies={CURRENCIES}
+      savePrice={savePrice}
       save={save}
     />,
   );
-  return { save, actions };
+  return { save, actions, savePrice };
 }
 
 const tab = (name: string) => screen.getByRole("tab", { name });
@@ -528,5 +598,252 @@ describe("ProductEditor", () => {
     fireEvent.click(tab("Images"));
 
     expect(screen.getByText(/shown first on the storefront/i)).toBeInTheDocument();
+  });
+
+  // --- Variants tab (task 6) --------------------------------------------------------
+
+  const withCatalogue = (over: Parameters<typeof setup>[4] = {}) =>
+    setup({}, undefined, [], {}, over);
+
+  it("lists existing variants with a stock column per warehouse", () => {
+    withCatalogue({
+        variants: [variantRow(1, "TC-1"), variantRow(2, "TC-2")],
+        stock: [stockRow(1, 1, 7), stockRow(2, 2, 3, "UK Warehouse")],
+      });
+
+    fireEvent.click(tab("Variants"));
+
+    expect(screen.getByText("TC-1")).toBeInTheDocument();
+    expect(screen.getByText("Lagos HQ")).toBeInTheDocument();
+    expect(screen.getByText("UK Warehouse")).toBeInTheDocument();
+  });
+
+  it("shows a dash, not a zero, for a variant with no weight", () => {
+    // Eight production variants have no weight. A "0 g" is a claim about a parcel rather
+    // than an absence — and it is the number a courier quote would be built from.
+    withCatalogue({ variants: [variantRow(1, "TC-1", null)] });
+
+    fireEvent.click(tab("Variants"));
+
+    expect(screen.getByTitle("No weight recorded")).toBeInTheDocument();
+  });
+
+  it("shows a dash where a variant has no stock row in a warehouse", () => {
+    // Production keeps one stock row per variant across two warehouses, so this is the
+    // common case and means something different from "none in stock here".
+    withCatalogue({
+        variants: [variantRow(1), variantRow(2)],
+        stock: [stockRow(1, 1, 7), stockRow(2, 2, 3, "UK Warehouse")],
+      });
+
+    fireEvent.click(tab("Variants"));
+
+    expect(screen.getAllByTitle("No stock record here")).toHaveLength(2);
+  });
+
+  it("offers no editable stock field, because the API refuses PATCH on quantity", () => {
+    // StockItemAdminViewSet drops PUT and PATCH; the only route to a quantity is `adjust`,
+    // which requires a reason and a note. A number input here would be a lie.
+    withCatalogue({ variants: [variantRow(1)], stock: [stockRow(1, 1, 7)] });
+
+    fireEvent.click(tab("Variants"));
+
+    expect(screen.getByText("7")).toBeInTheDocument();
+    expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
+  });
+
+  it("says variant creation is a later slice when there are none", () => {
+    withCatalogue({ variants: [] });
+
+    fireEvent.click(tab("Variants"));
+
+    expect(screen.getByText(/17b/)).toBeInTheDocument();
+  });
+
+  // --- Prices tab (task 6) ----------------------------------------------------------
+
+  it("renders a variant x currency grid", () => {
+    withCatalogue({
+        variants: [variantRow(1, "TC-1")],
+        prices: [priceRow(1, 1, "NGN", "1500.00")],
+      });
+
+    fireEvent.click(tab("Prices"));
+
+    expect(screen.getByLabelText("TC-1 price in NGN")).toHaveValue("1500.00");
+    expect(screen.getByLabelText("TC-1 price in GBP")).toHaveValue("");
+  });
+
+  it("flags the currencies a variant is not priced in", () => {
+    withCatalogue({
+        variants: [variantRow(1, "TC-1")],
+        prices: [priceRow(1, 1, "NGN", "1500.00")],
+      });
+
+    fireEvent.click(tab("Prices"));
+
+    expect(screen.getAllByText("Not priced")).toHaveLength(3);
+  });
+
+  it("saves a price on blur, creating one where none existed", async () => {
+    const savePrice = vi.fn<(input: PriceInput) => Promise<PriceResult>>(async () => ({ ok: true, price: priceRow(5, 1, "GBP", "40.00") }));
+    withCatalogue({ variants: [variantRow(1, "TC-1")], savePrice });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in GBP");
+    fireEvent.change(cell, { target: { value: "40" } });
+    fireEvent.blur(cell);
+
+    await waitFor(() => expect(savePrice).toHaveBeenCalledTimes(1));
+    expect(savePrice.mock.calls[0][0]).toMatchObject({
+      priceId: null,
+      variantId: 1,
+      currency: "GBP",
+      amount: "40",
+    });
+  });
+
+  it("PATCHes rather than POSTs when the cell already had a price", async () => {
+    const savePrice = vi.fn<(input: PriceInput) => Promise<PriceResult>>(async () => ({ ok: true, price: priceRow(1, 1, "NGN", "1600") }));
+    withCatalogue({
+        variants: [variantRow(1, "TC-1")],
+        prices: [priceRow(1, 1, "NGN", "1500.00")],
+        savePrice,
+      });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in NGN");
+    fireEvent.change(cell, { target: { value: "1600" } });
+    fireEvent.blur(cell);
+
+    await waitFor(() => expect(savePrice).toHaveBeenCalled());
+    expect(savePrice.mock.calls[0][0].priceId).toBe(1);
+  });
+
+  it("writes nothing when the value did not change", () => {
+    const savePrice = vi.fn();
+    withCatalogue({
+        variants: [variantRow(1, "TC-1")],
+        prices: [priceRow(1, 1, "NGN", "1500.00")],
+        savePrice,
+      });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in NGN");
+    // Same number, written differently — not an edit.
+    fireEvent.change(cell, { target: { value: "1500" } });
+    fireEvent.blur(cell);
+
+    expect(savePrice).not.toHaveBeenCalled();
+  });
+
+  it("refuses a thousands separator against the cell rather than sending it", () => {
+    const savePrice = vi.fn();
+    withCatalogue({ variants: [variantRow(1, "TC-1")], savePrice });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in NGN");
+    fireEvent.change(cell, { target: { value: "1,500" } });
+    fireEvent.blur(cell);
+
+    expect(savePrice).not.toHaveBeenCalled();
+    expect(screen.getByText(/use a dot/i)).toBeInTheDocument();
+  });
+
+  it("shows a save failure against the cell that failed", async () => {
+    const savePrice = vi.fn<(input: PriceInput) => Promise<PriceResult>>(async () => ({ ok: false, error: "Nope." }));
+    withCatalogue({ variants: [variantRow(1, "TC-1")], savePrice });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in NGN");
+    fireEvent.change(cell, { target: { value: "1500" } });
+    fireEvent.blur(cell);
+
+    await waitFor(() => expect(screen.getByText("Nope.")).toBeInTheDocument());
+  });
+
+  it("MAKES A COUNTRY-OVERRIDE CELL READ-ONLY AND SAYS WHY", async () => {
+    // Production has zero overrides, so this path only exists under test — which is
+    // exactly why it is tested. Editing the plain row while a narrower one governs GB
+    // would appear to succeed and change nothing for those customers.
+    const savePrice = vi.fn();
+    withCatalogue({
+        variants: [variantRow(1, "TC-1")],
+        prices: [
+          priceRow(1, 1, "NGN", "1500.00"),
+          priceRow(2, 1, "NGN", "1200.00", { country: "GB" }),
+        ],
+        savePrice,
+      });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in NGN");
+
+    expect(cell).toHaveAttribute("readonly");
+    expect(screen.getByText(/country-specific price is set for GB/i)).toBeInTheDocument();
+    fireEvent.blur(cell);
+    expect(savePrice).not.toHaveBeenCalled();
+  });
+
+  it("locks a scheduled cell too, and leaves the other currencies editable", () => {
+    withCatalogue({
+        variants: [variantRow(1, "TC-1")],
+        prices: [
+          priceRow(1, 1, "NGN", "1500.00"),
+          priceRow(2, 1, "NGN", "1800.00", { starts_at: "2026-12-01T00:00:00Z" }),
+        ],
+      });
+
+    fireEvent.click(tab("Prices"));
+
+    expect(screen.getByLabelText("TC-1 price in NGN")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("TC-1 price in GBP")).not.toHaveAttribute("readonly");
+  });
+
+  it("adopts the saved id, so a second edit updates instead of duplicating", async () => {
+    const savePrice = vi.fn<(input: PriceInput) => Promise<PriceResult>>(async () => ({ ok: true, price: priceRow(77, 1, "GBP", "40.00") }));
+    withCatalogue({ variants: [variantRow(1, "TC-1")], savePrice });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in GBP");
+    fireEvent.change(cell, { target: { value: "40" } });
+    fireEvent.blur(cell);
+    await waitFor(() => expect(savePrice).toHaveBeenCalledTimes(1));
+
+    fireEvent.change(screen.getByLabelText("TC-1 price in GBP"), { target: { value: "45" } });
+    fireEvent.blur(screen.getByLabelText("TC-1 price in GBP"));
+
+    await waitFor(() => expect(savePrice).toHaveBeenCalledTimes(2));
+    // The unique constraint would reject a second POST for the same variant+currency.
+    expect(savePrice.mock.calls[1][0].priceId).toBe(77);
+  });
+
+  it("keeps a price edit visible after switching tabs", async () => {
+    const savePrice = vi.fn<(input: PriceInput) => Promise<PriceResult>>(async () => ({ ok: true, price: priceRow(5, 1, "GBP", "40.00") }));
+    withCatalogue({ variants: [variantRow(1, "TC-1")], savePrice });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in GBP");
+    fireEvent.change(cell, { target: { value: "40" } });
+    fireEvent.blur(cell);
+    await waitFor(() => expect(savePrice).toHaveBeenCalled());
+
+    fireEvent.click(tab("Details"));
+    fireEvent.click(tab("Prices"));
+
+    expect(screen.getByLabelText("TC-1 price in GBP")).toHaveValue("40.00");
+  });
+
+  it("does not arm the product Save button, because prices are their own resource", async () => {
+    const savePrice = vi.fn<(input: PriceInput) => Promise<PriceResult>>(async () => ({ ok: true, price: priceRow(5, 1, "GBP", "40.00") }));
+    withCatalogue({ variants: [variantRow(1, "TC-1")], savePrice });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in GBP");
+    fireEvent.change(cell, { target: { value: "40" } });
+    fireEvent.blur(cell);
+
+    await waitFor(() => expect(savePrice).toHaveBeenCalled());
+    expect(saveButton()).toBeDisabled();
   });
 });

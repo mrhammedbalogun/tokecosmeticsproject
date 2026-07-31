@@ -29,9 +29,21 @@ import { AvailabilityPanel } from "@/components/product/AvailabilityPanel";
 import { ContentPanel } from "@/components/product/ContentPanel";
 import { DetailsPanel } from "@/components/product/DetailsPanel";
 import { ImagesPanel } from "@/components/product/ImagesPanel";
+import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
+import { VariantsPanel } from "@/components/product/VariantsPanel";
 import type { ImageResult, ProductImage } from "@/app/(shell)/products/[slug]/image-actions";
+import type { PriceWriteResult } from "@/app/(shell)/products/[slug]/price-actions";
 import { positionWrites, reorder, sortImages } from "@/lib/product-images";
+import {
+  amountChanged,
+  buildPriceGrid,
+  validateAmount,
+  type Cell,
+  type PriceRow,
+  type VariantRow,
+} from "@/lib/product-prices";
+import { warehouseColumns, type StockRow } from "@/lib/product-stock";
 import {
   isDirty,
   toFormValues,
@@ -50,6 +62,8 @@ export interface SaveResult {
 const TABS = [
   { id: "details", label: "Details" },
   { id: "availability", label: "Availability" },
+  { id: "variants", label: "Variants" },
+  { id: "prices", label: "Prices" },
   { id: "content", label: "Content" },
   { id: "images", label: "Images" },
   { id: "seo", label: "SEO" },
@@ -74,6 +88,11 @@ export function ProductEditor({
   siteUrl,
   initialImages,
   imageActions,
+  variants,
+  stock,
+  initialPrices,
+  currencies,
+  savePrice,
   save,
 }: {
   product: ProductDetail;
@@ -84,6 +103,17 @@ export function ProductEditor({
   siteUrl: string;
   initialImages: ProductImage[];
   imageActions: ImageActions;
+  variants: VariantRow[];
+  stock: StockRow[];
+  initialPrices: PriceRow[];
+  currencies: readonly string[];
+  savePrice: (input: {
+    priceId: number | null;
+    variantId: number;
+    currency: string;
+    amount: string;
+    productSlug: string;
+  }) => Promise<PriceWriteResult>;
   /** The Server Function. Injected so the component is testable without a server. */
   save: (slug: string, values: ProductFormValues) => Promise<SaveResult>;
 }) {
@@ -142,6 +172,78 @@ export function ProductEditor({
       if (!res.ok) return res.error;
       setImages((current) => current.filter((i) => i.id !== id));
       return null;
+    });
+  };
+
+  // --- prices ----------------------------------------------------------------------
+  //
+  // Same reason as the images: this state must outlive a tab switch, and the panel does
+  // not. Drafts are keyed by variant+currency so one cell's in-progress text never
+  // disturbs another's.
+  const [prices, setPrices] = useState<PriceRow[]>(initialPrices);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
+  const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
+  const [busyCell, setBusyCell] = useState<string | null>(null);
+
+  const grid = useMemo(
+    () => buildPriceGrid(variants, prices, currencies),
+    [variants, prices, currencies],
+  );
+
+  const onPriceDraft = (key: string, value: string) => {
+    setPriceDrafts((current) => ({ ...current, [key]: value }));
+    setPriceErrors((current) => {
+      if (!current[key]) return current;
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  };
+
+  /** Commit on blur. Nothing is written for an untouched or unchanged cell — that would
+   *  be a request and an audit row for typing nothing. */
+  const onPriceCommit = (variantId: number, currency: string, cell: Cell) => {
+    const key = cellKey(variantId, currency);
+    const typed = priceDrafts[key];
+    if (typed === undefined) return;
+
+    const invalid = validateAmount(typed);
+    if (invalid) {
+      setPriceErrors((current) => ({ ...current, [key]: invalid }));
+      return;
+    }
+    if (!amountChanged(cell, typed)) return;
+
+    setBusyCell(key);
+    startImageTransition(async () => {
+      const res = await savePrice({
+        priceId: cell.price?.id ?? null,
+        variantId,
+        currency,
+        amount: typed.trim(),
+        productSlug: baseline.slug,
+      });
+      setBusyCell(null);
+      if (!res.ok || !res.price) {
+        setPriceErrors((current) => ({
+          ...current,
+          [key]: res.error ?? "That price could not be saved.",
+        }));
+        return;
+      }
+      // Adopt the saved row — including its id, so a second edit of a cell that was
+      // empty a moment ago PATCHes rather than POSTing a duplicate the unique constraint
+      // would reject.
+      const saved = res.price as PriceRow;
+      setPrices((current) => {
+        const without = current.filter((p) => p.id !== saved.id);
+        return [...without, saved];
+      });
+      setPriceDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
     });
   };
 
@@ -240,6 +342,24 @@ export function ProductEditor({
             errors={errors}
             onChange={onChange}
             countries={countries}
+          />
+        )}
+        {tab === "variants" && (
+          <VariantsPanel
+            variants={variants}
+            stock={stock}
+            warehouses={warehouseColumns(stock)}
+          />
+        )}
+        {tab === "prices" && (
+          <PricesPanel
+            grid={grid}
+            currencies={currencies}
+            drafts={priceDrafts}
+            errors={priceErrors}
+            busyKey={busyCell}
+            onDraft={onPriceDraft}
+            onCommit={onPriceCommit}
           />
         )}
         {tab === "content" && (

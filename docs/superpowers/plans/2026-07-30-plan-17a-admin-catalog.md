@@ -378,6 +378,42 @@ appears to succeed and changes nothing — the worst class of bug. Test against 
 **Verify:** set a GBP price on a multi-variant product, re-read; the override fixture
 renders read-only and cannot be edited.
 
+**DONE 2026-07-30.** The locked-cell rule turned out to be wider than the spec described.
+
+**The spec named country overrides; `Price` has a second scoping axis too.** Its unique
+constraint is `(variant, currency, country, starts_at)`, so a variant+currency legitimately
+admits several rows: a country override, a **scheduled** future price, or both. The spec's
+argument — an edit that appears to succeed while a narrower row governs what customers pay
+is the worst failure this screen can have — applies identically to a scheduled row, so both
+lock the cell. A cell is editable only when the plain row (`country` NULL, `starts_at`
+NULL) is the *only* row for that variant+currency.
+
+Measured in production 2026-07-30 before designing this: **0 country overrides, 0 scheduled
+rows, 0 variant+currency pairs with more than one row**, so every locked path exists only
+under test — which is why it is tested rather than deferred.
+
+Two small backend additions, both additive and needing no guard changes:
+`variant__product` on `PriceAdminViewSet` and on `StockItemAdminViewSet`. `variant` is an
+exact-match filter, so without them the editor would issue one request per variant —
+**ten** on the largest production product.
+
+Other decisions:
+- **Weight renders blank, never `0 g`.** Eight production variants have no weight, and a
+  zero is a claim about a parcel rather than an absence — it is also the number a courier
+  quote would be built from.
+- **Warehouse columns are derived from the stock rows**, because no warehouse endpoint
+  exists until 17c. A warehouse holding none of this product contributes no column; with
+  one stock row per variant in production, a product routinely shows one column, not two.
+- **A comma in a price is refused, not parsed.** "1,500" is 1500 to a Nigerian reader and
+  1.5 to a German one, and guessing wrong writes a price off by a thousand.
+- **The saved row's id is adopted** after a create, so a second edit of a cell that was
+  empty a moment ago PATCHes instead of POSTing a duplicate the unique constraint rejects.
+- Prices commit on blur and **do not arm the product Save button** — they are their own
+  resource.
+
+Verified: backend suite green, admin vitest **362 passed** (30 files, 44 new), `tsc` clean,
+`eslint` clean, `next build` succeeds.
+
 ### Task 7 — stock adjust modal
 
 Quantity read-only text + **Adjust** button. Modal takes new quantity, reason (from the

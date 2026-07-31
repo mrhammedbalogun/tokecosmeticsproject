@@ -45,7 +45,10 @@ class StockItemAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         "warehouse__name", "variant__sku"
     )
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["warehouse", "variant"]
+    # `variant__product` added in Plan-17a Task 6: the editor's Variants tab shows stock
+    # per warehouse for every variant of one product, and `variant` is an exact match — so
+    # without it the page would issue one request per variant.
+    filterset_fields = ["warehouse", "variant", "variant__product"]
     http_method_names = ["get", "post", "head", "options"]  # no direct PUT/PATCH of numbers
 
     @action(detail=True, methods=["post"])

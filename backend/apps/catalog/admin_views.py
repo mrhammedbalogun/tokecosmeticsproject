@@ -208,13 +208,17 @@ class ProductVideoAdminViewSet(AdminBaseViewSet):
 
 class PriceAdminViewSet(AdminBaseViewSet):
     serializer_class = PriceAdminSerializer
-    queryset = Price.objects.all()
     # The Prices grid is variant x currency, so it fetches by variant and fills cells by
     # currency. `country` is filterable so the grid can SEE a country-level override
     # rather than silently showing the currency-level row underneath it — an edit that
     # appears to succeed and changes nothing is the worst failure this screen can have
     # (17a spec, "The Prices grid, precisely"). Writing overrides is 17c.
-    filterset_fields = ["variant", "currency", "country"]
+    #
+    # `variant__product` added in Task 6: the grid needs EVERY price for a product at once,
+    # and `variant` is an exact match, so without it the editor would issue one request per
+    # variant — ten of them on the largest production product.
+    filterset_fields = ["variant", "variant__product", "currency", "country"]
+    queryset = Price.objects.select_related("variant", "currency", "country")
 
 
 class ProductCSVExportView(AdminAuditMixin, APIView):
