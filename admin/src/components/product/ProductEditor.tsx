@@ -29,6 +29,12 @@ import { AvailabilityPanel } from "@/components/product/AvailabilityPanel";
 import { ContentPanel } from "@/components/product/ContentPanel";
 import { DetailsPanel } from "@/components/product/DetailsPanel";
 import { ImagesPanel } from "@/components/product/ImagesPanel";
+import {
+  combinationKey,
+  MatrixPreview,
+  type RowState,
+} from "@/components/product/MatrixPreview";
+import { OptionEditor } from "@/components/product/OptionEditor";
 import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
 import { StockAdjustModal } from "@/components/product/StockAdjustModal";
@@ -47,6 +53,17 @@ import {
   type VariantRow,
 } from "@/lib/product-prices";
 import { warehouseColumns, type StockRow } from "@/lib/product-stock";
+import {
+  cartesian,
+  deriveAxes,
+  diffMatrix,
+  suggestSku,
+  validateAxes,
+  variantName,
+  type Axis,
+  type MatrixDiff,
+} from "@/lib/variant-matrix";
+import type { VariantCreateResult } from "@/app/(shell)/products/[slug]/variant-actions";
 import {
   isDirty,
   toFormValues,
@@ -92,6 +109,7 @@ export function ProductEditor({
   initialImages,
   imageActions,
   variants,
+  createVariant,
   stock,
   initialPrices,
   currencies,
@@ -108,6 +126,13 @@ export function ProductEditor({
   initialImages: ProductImage[];
   imageActions: ImageActions;
   variants: VariantRow[];
+  createVariant: (input: {
+    productId: number;
+    sku: string;
+    name: string;
+    optionValues: Record<string, string>;
+    makeDefault: boolean;
+  }) => Promise<VariantCreateResult>;
   stock: StockRow[];
   initialPrices: PriceRow[];
   currencies: readonly string[];
@@ -182,6 +207,94 @@ export function ProductEditor({
       if (!res.ok) return res.error;
       setImages((current) => current.filter((i) => i.id !== id));
       return null;
+    });
+  };
+
+  // --- the option matrix (17b) ---------------------------------------------------------
+  //
+  // Seeded from the variants the product already has, then held here rather than in the
+  // panel: the Variants tab unmounts on every tab switch, and a half-defined matrix must
+  // not evaporate on the way to Details and back. Nothing here is written until Apply.
+  const [axes, setAxes] = useState<Axis[]>(() => deriveAxes(variants));
+  const axisErrors = useMemo(() => validateAxes(axes), [axes]);
+
+  // Variants created this session, so the grid and the SKU-collision check see them
+  // without a page reload.
+  const [newVariants, setNewVariants] = useState<VariantRow[]>([]);
+  const allVariants = useMemo(() => [...variants, ...newVariants], [variants, newVariants]);
+
+  // The preview is a SNAPSHOT, taken by Generate. Recomputing live on every keystroke
+  // would rewrite the SKUs somebody is editing, and half-typed axes would churn the list.
+  const [preview, setPreview] = useState<{ axes: Axis[]; diff: MatrixDiff } | null>(null);
+  const [rows, setRows] = useState<Record<string, RowState>>({});
+  const [applying, setApplying] = useState(false);
+
+  // Compared by value, not identity: `setAxes` produces a new array on every edit, so an
+  // identity check would call every preview stale the moment anything was touched.
+  const previewStale =
+    preview !== null && JSON.stringify(preview.axes) !== JSON.stringify(axes);
+
+  const onGenerate = () => {
+    const diff = diffMatrix(cartesian(axes), allVariants);
+    const taken = allVariants.map((v) => v.sku);
+    const next: Record<string, RowState> = {};
+    for (const combination of diff.missing) {
+      const sku = suggestSku(product.slug, combination, taken);
+      // Pushed onto `taken` as we go, or two combinations that truncate to the same base
+      // would both be suggested the identical SKU and the second would 400 on Apply.
+      taken.push(sku);
+      next[combinationKey(combination)] = {
+        sku,
+        name: variantName(combination),
+        status: "pending",
+      };
+    }
+    setRows(next);
+    setPreview({ axes, diff });
+  };
+
+  const onApply = () => {
+    if (!preview) return;
+    setApplying(true);
+    startImageTransition(async () => {
+      // COUNTED LOCALLY, not read from `allVariants`. That is a `useMemo` over state, and
+      // state set inside this loop is not visible to the next iteration's closure — so
+      // reading it here marked EVERY generated variant as the default instead of only the
+      // first, silently demoting each one as the next was created.
+      let variantCount = allVariants.length;
+
+      for (const combination of preview.diff.missing) {
+        const key = combinationKey(combination);
+        const row = rows[key];
+        if (!row || row.status === "created") continue;
+
+        setRows((current) => ({ ...current, [key]: { ...current[key], status: "creating" } }));
+        const res: VariantCreateResult = await createVariant({
+          productId: product.id,
+          sku: row.sku,
+          name: row.name,
+          optionValues: combination,
+          // Only ever true for a product that has none at all — see variant-actions.ts.
+          makeDefault: variantCount === 0,
+        });
+
+        if (res.ok) {
+          variantCount += 1;
+          setNewVariants((current) => [...current, res.variant as unknown as VariantRow]);
+          setRows((current) => ({
+            ...current,
+            [key]: { ...current[key], status: "created", error: undefined },
+          }));
+        } else {
+          // Left on screen with its message and an editable SKU, and the loop CONTINUES:
+          // one collision should not strand the remaining nine rows.
+          setRows((current) => ({
+            ...current,
+            [key]: { ...current[key], status: "failed", error: res.error },
+          }));
+        }
+      }
+      setApplying(false);
     });
   };
 
@@ -395,12 +508,51 @@ export function ProductEditor({
           />
         )}
         {tab === "variants" && (
-          <VariantsPanel
-            variants={variants}
-            stock={stockRows}
-            warehouses={warehouseColumns(stockRows)}
-            onAdjust={openAdjust}
-          />
+          <div className="space-y-6">
+            <OptionEditor
+              axes={axes}
+              errors={axisErrors}
+              onChange={setAxes}
+              hasVariants={allVariants.length > 0}
+            />
+
+            {axes.length > 0 && (
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onGenerate}
+                  disabled={axisErrors.length > 0 || applying}
+                  className="rounded border border-line px-3 py-1.5 text-sm hover:border-accent disabled:opacity-40"
+                >
+                  Generate variants
+                </button>
+                {axisErrors.length > 0 && (
+                  <span className="text-xs text-muted">Fix the options above first.</span>
+                )}
+              </div>
+            )}
+
+            {preview && (
+              <MatrixPreview
+                diff={preview.diff}
+                rows={rows}
+                busy={applying}
+                stale={previewStale}
+                onSku={(key, sku) =>
+                  setRows((current) => ({ ...current, [key]: { ...current[key], sku } }))
+                }
+                onApply={onApply}
+                onRegenerate={onGenerate}
+              />
+            )}
+
+            <VariantsPanel
+              variants={allVariants}
+              stock={stockRows}
+              warehouses={warehouseColumns(stockRows)}
+              onAdjust={openAdjust}
+            />
+          </div>
         )}
         {tab === "prices" && (
           <PricesPanel

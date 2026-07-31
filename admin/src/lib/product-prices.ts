@@ -46,6 +46,16 @@ export interface VariantRow {
   weight_grams: number | null;
   is_active: boolean;
   position: number;
+  /**
+   * The option axes this variant sits on, e.g. `{"Product Size": "175g"}`.
+   *
+   * Declared in Plan-17b: `ProductVariantAdminSerializer` uses `fields = "__all__"`, so the
+   * API has always returned this — the type simply under-declared it, and the option-matrix
+   * builder would have derived nothing at all from a well-populated response.
+   *
+   * `{}` on the 52 single-variant products, which is every product that has no options.
+   */
+  option_values: Record<string, string>;
 }
 
 export type Cell =

@@ -20,6 +20,7 @@ import {
   type ProductImage,
 } from "./image-actions";
 import { savePriceAction } from "./price-actions";
+import { createVariantAction } from "./variant-actions";
 import { adjustStockAction } from "./stock-actions";
 import type { PriceRow, VariantRow } from "@/lib/product-prices";
 import type { StockRow } from "@/lib/product-stock";
@@ -171,6 +172,7 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
             remove: deleteImageAction,
           }}
           variants={variants}
+          createVariant={createVariantAction}
           stock={stock}
           initialPrices={prices}
           currencies={CURRENCIES}
