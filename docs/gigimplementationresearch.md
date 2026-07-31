@@ -108,7 +108,51 @@ per-request trace ID and should be logged on every call — it is what GIG suppo
 
 ---
 
-## 3. The two flows, and why we should use DropOff
+## 2b. AMENDED 2026-07-31 — GIG's engineer disagreed, and was right
+
+We sent the questions. The reply was three sentences and answered none of them:
+
+> "before I respond I would advise you study the capture preshipping endpoints, that would
+> help us navigate these areas and help provide clarity to all the concerns you have"
+
+Reading `/capture/preshipment` properly shows why. **It dissolves three of the four
+blockers** §3 below was built to work around:
+
+| blocker (§7, and the questions doc) | under `/capture/preshipment` |
+|---|---|
+| `create/dropOff` returns a `TempCode`, not a `Waybill` | **Gone.** This returns `{"Waybill": …}` directly, so tracking and labels work. |
+| Mapping 774 LGAs onto `ReceiverStationId` | **Gone.** `ReceiverStationId` is **optional**; GIG resolves the station from the coordinates. |
+| Knowing an address is deliverable before quoting | **Largely gone.** `/price/v3` either prices the coordinates or refuses them. |
+| `/lga/active` and `/homedelivery/active` are blank in the docs | Mostly moot — they exist to build a mapping we would no longer need. |
+
+**So the recommendation in §3 is withdrawn.** It optimised for avoiding coordinates and in
+doing so chose the flow with no working waybill story. That was the wrong trade, and their
+engineer identified it in one sentence.
+
+**What the coordinate flow costs instead**, and it is not small:
+
+1. `Address` gains `latitude` / `longitude` — a migration.
+2. **Checkout must geocode.** We collect country → state → LGA → street text and no
+   coordinates. Either Places autocomplete on the form or server-side geocoding at quote
+   time; both cost per lookup and both change Plan-14's deployed checkout.
+3. Pricing becomes **distance-based between two points** rather than flat per LGA — more
+   accurate, less predictable.
+4. `VehicleType` becomes required, so somebody must choose a default for a cosmetics parcel.
+
+**The timing argument, and it is the strongest thing in this document.** Measured
+2026-07-31: production holds **2 users, 1 address, 1 order.** Adding coordinate columns now
+is adding them to an empty table. After Plan-22 imports the legacy customers it is thousands
+of addresses with no coordinates and no way to obtain them but bulk geocoding. **If this is
+going to happen, it is cheapest today and gets worse monotonically.**
+
+**Still open, and it decides the size of the build:** whether a shipment can be priced and
+created from a structured address — `ReceiverStationId` plus `DestinationServiceCenterId`,
+omitting `ReceiverLocation` — or whether coordinates are truly mandatory. That is question 2
+of `docs/gig-reply-capture-preshipment.md`.
+
+---
+
+## 3. The two flows — original analysis, superseded by §2b
 
 ### Flow A — PreShipment Mobile (GIG collects from us)
 

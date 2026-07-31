@@ -25,6 +25,14 @@ don't collect coordinates. Please tell us if that's the wrong call.
 
 ---
 
+> **SUPERSEDED 2026-07-31.** GIG replied asking us to study `/capture/preshipment` before
+> they answer. Doing so dissolved blockers 1, 3 and 4 below — that endpoint returns a
+> **Waybill** directly and treats `ReceiverStationId` as **optional**, resolving the station
+> from coordinates. The live reply is **`docs/gig-reply-capture-preshipment.md`**; the
+> reasoning is in `docs/gigimplementationresearch.md` §2b. This file is kept as the record
+> of what was asked, and the pricing, tracking and operations sections below are still
+> unanswered.
+
 ## The four that are blocking us
 
 **1. `/create/dropOff` gives us a `TempCode`, not a waybill.** It returns something like
