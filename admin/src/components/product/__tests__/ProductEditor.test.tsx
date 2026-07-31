@@ -54,6 +54,18 @@ const image = (id: number, position: number, alt = "") => ({
 /** The shape `savePrice` is called with. Declared so the mocks carry a parameter type —
  * `vi.fn(async () => ...)` types its calls as an EMPTY tuple, and every
  * `savePrice.mock.calls[0][0]` assertion below would fail to compile against it. */
+interface CreateVariantInput {
+  productId: number;
+  sku: string;
+  name: string;
+  optionValues: Record<string, string>;
+  makeDefault: boolean;
+}
+
+type CreateVariantResult =
+  | { ok: true; variant: ReturnType<typeof variantRow> }
+  | { ok: false; error: string };
+
 interface AdjustInput {
   stockItemId: number;
   quantity: number;
@@ -139,6 +151,7 @@ function setup(
     prices: ReturnType<typeof priceRow>[];
     savePrice: ReturnType<typeof vi.fn>;
     adjustStock: ReturnType<typeof vi.fn>;
+    createVariant: ReturnType<typeof vi.fn>;
   }> = {},
 ) {
   const actions = {
@@ -151,6 +164,12 @@ function setup(
     vi.fn<(input: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
       ok: true,
       item: stockRow(1, 1, 42),
+    }));
+  const createVariant =
+    catalogue.createVariant ??
+    vi.fn<(i: CreateVariantInput) => Promise<CreateVariantResult>>(async (i) => ({
+      ok: true,
+      variant: { ...variantRow(900, i.sku), name: i.name, option_values: i.optionValues },
     }));
   const savePrice =
     catalogue.savePrice ??
@@ -168,6 +187,7 @@ function setup(
       initialImages={images}
       imageActions={actions}
       variants={catalogue.variants ?? []}
+      createVariant={createVariant}
       stock={catalogue.stock ?? []}
       initialPrices={catalogue.prices ?? []}
       currencies={CURRENCIES}
@@ -176,7 +196,7 @@ function setup(
       save={save}
     />,
   );
-  return { save, actions, savePrice, adjustStock };
+  return { save, actions, savePrice, adjustStock, createVariant };
 }
 
 const tab = (name: string) => screen.getByRole("tab", { name });
@@ -1056,6 +1076,191 @@ describe("ProductEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Adjust stock" }));
 
     await waitFor(() => expect(adjustStock).toHaveBeenCalled());
+    expect(saveButton()).toBeDisabled();
+  });
+  // --- the option matrix: generate and apply (17b task 3) ---------------------------
+
+  const ONE_AXIS = [
+    variantRow(1, "SKU-1", 250, { Size: "100ml" }),
+    variantRow(2, "SKU-2", 250, { Size: "250ml" }),
+  ];
+
+  const openMatrix = () => fireEvent.click(tab("Variants"));
+  const generate = () =>
+    fireEvent.click(screen.getByRole("button", { name: "Generate variants" }));
+  const addValue = (axis: number, value: string) => {
+    fireEvent.change(screen.getByLabelText(`Add a value to option ${axis}`), {
+      target: { value },
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "Add" })[axis - 1]);
+  };
+  const okCreate = () =>
+    vi.fn<(i: CreateVariantInput) => Promise<CreateVariantResult>>(async (i) => ({
+      ok: true,
+      variant: { ...variantRow(900, i.sku), name: i.name, option_values: i.optionValues },
+    }));
+
+  it("seeds the option editor from the existing variants", () => {
+    withCatalogue({ variants: ONE_AXIS });
+
+    openMatrix();
+
+    expect(screen.getByLabelText("Option 1 name")).toHaveValue("Size");
+    expect(screen.getByText("100ml")).toBeInTheDocument();
+  });
+
+  it("reports nothing to create when the matrix already matches", () => {
+    withCatalogue({ variants: ONE_AXIS });
+
+    openMatrix();
+    generate();
+
+    expect(screen.getByText("Nothing new to create")).toBeInTheDocument();
+    expect(screen.getByText("2 already exist")).toBeInTheDocument();
+  });
+
+  it("suggests a slug-shaped SKU for each new combination", () => {
+    withCatalogue({ variants: ONE_AXIS });
+    openMatrix();
+
+    addValue(1, "500ml");
+    generate();
+
+    expect(screen.getByLabelText("SKU for 500ml")).toHaveValue("carrot-shea-butter-500ml");
+  });
+
+  it("creates only the missing combination, leaving the rest alone", async () => {
+    const createVariant = okCreate();
+    withCatalogue({ variants: ONE_AXIS, createVariant });
+    openMatrix();
+
+    addValue(1, "500ml");
+    generate();
+    fireEvent.click(screen.getByRole("button", { name: /Create 1 variant/ }));
+
+    await waitFor(() => expect(createVariant).toHaveBeenCalledTimes(1));
+    expect(createVariant.mock.calls[0][0]).toMatchObject({
+      sku: "carrot-shea-butter-500ml",
+      name: "500ml",
+      optionValues: { Size: "500ml" },
+      makeDefault: false,
+    });
+  });
+
+  it("marks the FIRST variant of a product as default, and only the first", async () => {
+    // api_serializers.py:101 falls back to variants[0] when none is default, so this is
+    // not fatal either way — but the choice should be made once, not left to row order.
+    const createVariant = okCreate();
+    withCatalogue({ variants: [], createVariant });
+    openMatrix();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add an option" }));
+    fireEvent.change(screen.getByLabelText("Option 1 name"), { target: { value: "Size" } });
+    addValue(1, "100ml");
+    addValue(1, "250ml");
+    generate();
+    fireEvent.click(screen.getByRole("button", { name: /Create 2 variants/ }));
+
+    await waitFor(() => expect(createVariant).toHaveBeenCalledTimes(2));
+    expect(createVariant.mock.calls[0][0].makeDefault).toBe(true);
+    expect(createVariant.mock.calls[1][0].makeDefault).toBe(false);
+  });
+
+  it("CARRIES ON AFTER A FAILED ROW instead of stranding the rest", async () => {
+    // Sequential POSTs with no bulk endpoint and no transaction: one SKU collision must
+    // not cost the remaining rows.
+    let call = 0;
+    const createVariant = vi.fn<(i: CreateVariantInput) => Promise<CreateVariantResult>>(
+      async (i) => {
+        call += 1;
+        if (call === 1) return { ok: false, error: "SKU: already exists." };
+        return {
+          ok: true,
+          variant: {
+            ...variantRow(900 + call, i.sku),
+            name: i.name,
+            option_values: i.optionValues,
+          },
+        };
+      },
+    );
+    withCatalogue({ variants: [], createVariant });
+    openMatrix();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add an option" }));
+    fireEvent.change(screen.getByLabelText("Option 1 name"), { target: { value: "Size" } });
+    addValue(1, "100ml");
+    addValue(1, "250ml");
+    generate();
+    fireEvent.click(screen.getByRole("button", { name: /Create 2 variants/ }));
+
+    await waitFor(() => expect(createVariant).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("SKU: already exists.")).toBeInTheDocument();
+    expect(screen.getByText("Created")).toBeInTheDocument();
+  });
+
+  it("WARNS WHEN ADDING AN AXIS ORPHANS EVERY EXISTING VARIANT", () => {
+    // diffMatrix matches on the exact key set, so {Size: 100ml} does not match
+    // {Size: 100ml, Shade: Fair}. Applying blind gives four variants where two were meant.
+    withCatalogue({ variants: ONE_AXIS });
+    openMatrix();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another option" }));
+    fireEvent.change(screen.getByLabelText("Option 2 name"), { target: { value: "Shade" } });
+    addValue(2, "Fair");
+    generate();
+
+    expect(screen.getByText(/None of the existing variants fit/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 outside this matrix/)).toBeInTheDocument();
+  });
+
+  it("says orphans are left alone, and why", () => {
+    withCatalogue({ variants: ONE_AXIS });
+    openMatrix();
+
+    fireEvent.click(screen.getByLabelText("Remove 250ml"));
+    generate();
+
+    expect(screen.getByText(/place in past orders/i)).toBeInTheDocument();
+  });
+
+  it("marks the preview stale when the options change under it", () => {
+    withCatalogue({ variants: ONE_AXIS });
+    openMatrix();
+    generate();
+
+    addValue(1, "500ml");
+
+    expect(screen.getByText(/options changed since this was generated/i)).toBeInTheDocument();
+  });
+
+  it("refuses to generate while the options are invalid", () => {
+    withCatalogue({ variants: ONE_AXIS });
+    openMatrix();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add another option" }));
+
+    expect(screen.getByRole("button", { name: "Generate variants" })).toBeDisabled();
+  });
+
+  it("shows a created variant in the table below without a reload", async () => {
+    const createVariant = okCreate();
+    withCatalogue({ variants: ONE_AXIS, createVariant });
+    openMatrix();
+
+    addValue(1, "500ml");
+    generate();
+    fireEvent.click(screen.getByRole("button", { name: /Create 1 variant/ }));
+
+    await waitFor(() => expect(createVariant).toHaveBeenCalled());
+    expect(screen.getByText("carrot-shea-butter-500ml")).toBeInTheDocument();
+  });
+
+  it("does not arm the product Save button, because variants are their own resource", () => {
+    withCatalogue({ variants: ONE_AXIS });
+    openMatrix();
+    generate();
+
     expect(saveButton()).toBeDisabled();
   });
 });
