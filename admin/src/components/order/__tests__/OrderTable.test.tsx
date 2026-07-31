@@ -50,15 +50,18 @@ describe("OrderTable", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows accumulated reasons verbatim rather than splitting them", () => {
-    // The "; " separator is ambiguous — one of the five reason strings contains it — so
-    // the text is rendered whole. See lib/orders.ts.
+  it("lists accumulated reasons separately", () => {
+    // Newline-separated since the backend separator fix, so a reason containing a
+    // semicolon stays whole. See lib/orders.ts.
     const both =
-      "overpaid by 500.00 NGN — refund the difference; " +
+      "overpaid by 500.00 NGN — refund the difference\n" +
       "possible double payment — order already processing; refund payment 7";
     render(<OrderTable rows={[row({ review_reason: both })]} />);
 
-    expect(screen.getByText(both)).toBeInTheDocument();
+    expect(screen.getByText("overpaid by 500.00 NGN — refund the difference")).toBeInTheDocument();
+    expect(
+      screen.getByText("possible double payment — order already processing; refund payment 7"),
+    ).toBeInTheDocument();
   });
 
   it("renders the date without applying the server's locale", () => {

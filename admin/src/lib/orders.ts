@@ -106,32 +106,30 @@ export function ordersQueryString(filters: OrderFilters): string {
 }
 
 /**
- * The flag text for an order, as something renderable.
+ * The reasons an order is flagged, as separate items.
  *
- * ── WHY THIS DOES NOT SPLIT ─────────────────────────────────────────────────────────
+ * `review_reason` accumulates through `_append_reason`
+ * (`backend/apps/payments/services.py`), **newline-separated**. One order can carry
+ * several — an overpayment and a duplicate reference, say.
  *
- * `review_reason` accumulates through `_add_review_reason`
- * (`backend/apps/payments/services.py`), joined by `"; "`. The obvious move is to split on
- * that and render a list — the Plan-18a plan said exactly that — and it is wrong, because
- * **one of the five reason strings contains the separator**:
+ * IT SPLITS ON A NEWLINE AND NOT ON "; ", and that is the whole point of the separator.
+ * The backend used to join with `"; "`, which one of the reasons contains:
  *
  *     "possible double payment — order already processing; refund payment 7"
  *
- * Splitting turns that one sentence into two fragments, the second of which reads as an
- * instruction with no context. The separator is ambiguous and nothing here can recover the
- * intent, so the text is rendered verbatim as a single block. Short enough to read, and
- * never wrong.
+ * Splitting on that turned one sentence into two fragments, the second reading as a bare
+ * instruction. It also broke the backend's own dedupe, so the sentence could be stored
+ * twice. Both were fixed by changing the separator to something no reason contains.
  *
- * (The same ambiguity is a real defect on the backend: `_add_review_reason` dedupes by
- * checking membership in the SPLIT list, so that reason never matches itself and can be
- * appended twice. Reported, not fixed here.)
- *
- * NEVER PARSED FOR MEANING either way. Each is a human sentence with amounts baked in, and
- * anything that pattern-matched them would break the first time one is reworded.
+ * NEVER PARSED FOR MEANING. Each is a human sentence with amounts baked in ("overpaid by
+ * ₦500 — refund the difference"), and anything that pattern-matched them would break the
+ * first time somebody rewords one. Split and display, nothing more.
  */
 export function reviewReasons(order: { review_reason: string }): string[] {
-  const text = order.review_reason.trim();
-  return text ? [text] : [];
+  return order.review_reason
+    .split("\n")
+    .map((reason) => reason.trim())
+    .filter(Boolean);
 }
 
 /** Human label for a status. The API's values are lowercase machine tokens. */

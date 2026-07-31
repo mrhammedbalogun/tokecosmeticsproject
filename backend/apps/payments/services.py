@@ -128,12 +128,30 @@ def _append_reason(order, reason: str) -> bool:
 
     Every writer of review_reason goes through here. It is not a formatting helper: a
     writer that assigns directly erases whatever an earlier writer put there, which is the
-    whole failure this exists to prevent (see _flag_review)."""
-    reasons = [r for r in order.review_reason.split("; ") if r]
+    whole failure this exists to prevent (see _flag_review).
+
+    ── THE SEPARATOR IS A NEWLINE, AND IT USED TO BE "; " ──────────────────────────────
+
+    That was a bug, because one of the reasons this function is called with CONTAINS a
+    semicolon-space:
+
+        "possible double payment — order already processing; refund payment 7"
+
+    Stored, split on "; " and looked for again, it came back as two fragments and never
+    matched itself — so a second webhook for the same double payment appended the whole
+    sentence a second time, with no upper bound. The flag an operator reads when money has
+    gone wrong would repeat itself.
+
+    A newline cannot appear in any of these reasons, so the split is exact in both
+    directions: dedupe works, and the admin UI can render accumulated reasons as separate
+    lines instead of one run-on block. Production carried zero flagged orders when this
+    changed, so there was nothing to migrate; a row written by the old code is simply
+    treated as one reason, which is the safe direction to be wrong in."""
+    reasons = [r for r in order.review_reason.split("\n") if r]
     if reason in reasons:
         return False
     reasons.append(reason)
-    order.review_reason = "; ".join(reasons)
+    order.review_reason = "\n".join(reasons)
     return True
 
 

@@ -92,19 +92,20 @@ describe("ordersQueryString", () => {
 });
 
 describe("reviewReasons", () => {
-  it("DOES NOT SPLIT ON THE SEPARATOR, because one reason contains it", () => {
-    // payments/services.py writes:
-    //   "possible double payment — order already processing; refund payment 7"
-    // and _add_review_reason joins with "; ". Splitting turns that one sentence into two
-    // fragments, the second reading as an instruction with no context. Nothing here can
-    // recover the intent, so the text is rendered verbatim.
+  it("SPLITS ON A NEWLINE, keeping a reason that contains a semicolon whole", () => {
+    // payments/services.py writes "possible double payment — order already processing;
+    // refund payment 7". The separator used to be "; ", which fragmented that sentence
+    // and broke the backend's own dedupe. It is a newline now, which no reason contains.
     const order = {
       review_reason:
-        "overpaid by 500.00 NGN — refund the difference; " +
+        "overpaid by 500.00 NGN — refund the difference\n" +
         "possible double payment — order already processing; refund payment 7",
     };
 
-    expect(reviewReasons(order)).toEqual([order.review_reason]);
+    expect(reviewReasons(order)).toEqual([
+      "overpaid by 500.00 NGN — refund the difference",
+      "possible double payment — order already processing; refund payment 7",
+    ]);
   });
 
   it("is empty for an unflagged order", () => {
