@@ -344,3 +344,18 @@ export function nameMismatches(variants: MatrixVariant[]): MatrixVariant[] {
     return expected !== "" && expected !== variant.name;
   });
 }
+
+/**
+ * The server's variant list merged with the ones created this session, without doubles.
+ *
+ * After Apply, a created variant exists in two places at once: in `newVariants` (state,
+ * so the grid shows it immediately) and — as soon as the revalidated page data lands — in
+ * the server-rendered `variants` prop as well. Concatenating the two rendered every fresh
+ * row twice, with the row's id as a duplicated React key, and fed the doubled list into
+ * the next Generate, whose diff then reported "8 outside this matrix" on a product with 4.
+ * The server copy wins here; the session copy only fills the gap until it arrives.
+ */
+export function mergeVariants<V extends { id: number }>(server: V[], created: V[]): V[] {
+  const known = new Set(server.map((variant) => variant.id));
+  return [...server, ...created.filter((variant) => !known.has(variant.id))];
+}

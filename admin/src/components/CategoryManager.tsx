@@ -16,7 +16,7 @@
  * server-side too, because a cycle hangs the storefront's breadcrumb walk and its
  * recursive tree serializer, and a select constrains a browser rather than a caller.
  */
-import { useActionState, useState } from "react";
+import { startTransition, useActionState, useState } from "react";
 import type { CategoryState } from "@/app/(shell)/categories/actions";
 import { categoryDepth, eligibleParents, type CategoryRef } from "@/lib/category-tree";
 
@@ -112,9 +112,35 @@ function CategoryForm({
   const [state, formAction, pending] = useActionState(action, {});
   const selected = category;
 
+  // CONTROLLED FIELDS + A MANUAL DISPATCH, and both halves are load-bearing. When a
+  // native `<form action>` completes, React resets the form: uncontrolled fields snap
+  // back to their defaultValue from the render BEFORE the save (the refreshed
+  // categories arrive in a later commit), and even a controlled field can be left
+  // desynced because React skips rewriting a DOM value it believes is unchanged. The
+  // visible symptom was the worst possible one for this surface: save "Men → parent
+  // Body", succeed, and watch the panel claim "No parent (top level)" while the tree
+  // shows the truth — one trusting second Save away from silently undoing the move.
+  // So the fields are controlled, and the submit handler calls the action dispatch
+  // itself instead of handing React the `action` prop — no native form action, no
+  // automatic reset. Seeded per category via the key={selected.id} remount above.
+  const [name, setName] = useState(selected.name);
+  const [slug, setSlug] = useState(selected.slug);
+  const [parent, setParent] = useState(selected.parent === null ? "" : String(selected.parent));
+  const [sortOrder, setSortOrder] = useState(String(selected.sort_order));
+  const [isActive, setIsActive] = useState(selected.is_active);
+
   return (
     <>
-        <form action={formAction} className="h-fit rounded-[var(--radius-card)] border border-line p-4">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const formData = new FormData(e.currentTarget);
+            // The dispatch is an async action, so React requires a transition when it is
+            // not invoked via the `action` prop — which is exactly what this avoids.
+            startTransition(() => formAction(formData));
+          }}
+          className="h-fit rounded-[var(--radius-card)] border border-line p-4"
+        >
           <input type="hidden" name="current_slug" value={selected.slug} />
 
           {state.error && (
@@ -134,7 +160,8 @@ function CategoryForm({
               <input
                 type="text"
                 name="name"
-                defaultValue={selected.name}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
                 className={`mt-1 ${FIELD}`}
               />
               {state.fieldErrors?.name && (
@@ -147,7 +174,8 @@ function CategoryForm({
               <input
                 type="text"
                 name="slug"
-                defaultValue={selected.slug}
+                value={slug}
+                onChange={(e) => setSlug(e.target.value)}
                 className={`mt-1 ${FIELD}`}
               />
               <p className="mt-1 text-xs text-muted">
@@ -162,7 +190,8 @@ function CategoryForm({
               Parent
               <select
                 name="parent"
-                defaultValue={selected.parent === null ? "" : String(selected.parent)}
+                value={parent}
+                onChange={(e) => setParent(e.target.value)}
                 className={`mt-1 ${FIELD}`}
               >
                 <option value="">No parent (top level)</option>
@@ -184,7 +213,8 @@ function CategoryForm({
                 type="text"
                 inputMode="numeric"
                 name="sort_order"
-                defaultValue={String(selected.sort_order)}
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
                 className={`mt-1 ${FIELD}`}
               />
               <p className="mt-1 text-xs text-muted">Lower sorts first among siblings.</p>
@@ -197,7 +227,8 @@ function CategoryForm({
               <input
                 type="checkbox"
                 name="is_active"
-                defaultChecked={selected.is_active}
+                checked={isActive}
+                onChange={(e) => setIsActive(e.target.checked)}
                 className="h-4 w-4 rounded border-line"
               />
               Visible on the storefront

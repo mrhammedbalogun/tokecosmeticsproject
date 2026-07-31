@@ -58,6 +58,7 @@ import {
   cartesian,
   deriveAxes,
   diffMatrix,
+  mergeVariants,
   nameMismatches,
   remapOptions,
   renameSummary,
@@ -235,7 +236,10 @@ export function ProductEditor({
   // reload and without mutating the server-rendered `variants` prop.
   const [updated, setUpdated] = useState<Record<number, VariantRow>>({});
   const allVariants = useMemo(
-    () => [...variants, ...newVariants].map((v) => updated[v.id] ?? v),
+    // mergeVariants, not a plain spread: once the revalidated page data lands, the
+    // server prop contains the variants created this session too, and concatenating
+    // showed every fresh row twice (and doubled the next Generate's arithmetic).
+    () => mergeVariants(variants, newVariants).map((v) => updated[v.id] ?? v),
     [variants, newVariants, updated],
   );
 

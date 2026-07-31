@@ -151,6 +151,22 @@ describe("CategoryManager", () => {
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved Skincare."));
   });
 
+  it("KEEPS THE CHOSEN PARENT ON SCREEN AFTER A SAVE", async () => {
+    // React resets uncontrolled fields to their pre-save defaultValue when a form
+    // action completes, and the refreshed tree lands in a later commit — so with
+    // defaultValue fields the panel showed "No parent (top level)" right after
+    // saving a reparent, one trusting second Save away from undoing it. The fields
+    // are controlled now; this pins that.
+    const { container } = setup({ saved: "Haircare" });
+
+    fireEvent.click(screen.getByRole("button", { name: /Haircare/ }));
+    fireEvent.change(parentSelect(), { target: { value: "1" } }); // → Skincare
+    fireEvent.submit(container.querySelector("form")!);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved Haircare."));
+    expect(parentSelect().value).toBe("1");
+  });
+
   it("says so when there are no categories at all", () => {
     render(<CategoryManager categories={[]} counts={{}} action={vi.fn(async () => ({}))} />);
 

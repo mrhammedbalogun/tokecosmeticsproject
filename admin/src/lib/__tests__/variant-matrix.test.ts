@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  mergeVariants,
   nameMismatches,
   remapOptions,
   renameSummary,
@@ -454,5 +455,31 @@ describe("nameMismatches", () => {
     expect(nameMismatches([{ id: 1, sku: "a", name: "Kids Shampoo", option_values: {} }])).toEqual(
       [],
     );
+  });
+});
+
+describe("mergeVariants", () => {
+  const v = (id: number) => ({ id, sku: `sku-${id}`, name: `V${id}`, option_values: {} });
+
+  it("keeps session-created variants the server has not returned yet", () => {
+    expect(mergeVariants([v(1)], [v(2)]).map((x) => x.id)).toEqual([1, 2]);
+  });
+
+  it("DROPS THE SESSION COPY once the revalidated server list contains it", () => {
+    // The doubled-grid bug: after Apply, the created variants sat in session state AND
+    // in the refreshed server prop. Every row rendered twice, and the next Generate
+    // diffed against the doubled list ("8 outside this matrix" on a product with 4).
+    const server = [v(1), v(2), v(3), v(4)];
+    const session = [v(3), v(4)];
+
+    const merged = mergeVariants(server, session);
+
+    expect(merged.map((x) => x.id)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("prefers the server row over the session copy of the same id", () => {
+    const fresh = { ...v(3), name: "server truth" };
+
+    expect(mergeVariants([fresh], [v(3)])).toEqual([fresh]);
   });
 });
