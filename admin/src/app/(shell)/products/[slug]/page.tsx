@@ -13,6 +13,12 @@ import {
 } from "@/lib/reference";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 import { saveProductAction } from "./actions";
+import {
+  deleteImageAction,
+  updateImageAction,
+  uploadImageAction,
+  type ProductImage,
+} from "./image-actions";
 
 export const metadata: Metadata = { title: "Edit product" };
 
@@ -64,6 +70,27 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
   }
 
   const product = productResult.value;
+
+  // Images are a SEPARATE fetch because `ProductAdminSerializer` does not nest them — only
+  // the list's single `thumbnail`. Filtered by product, which is possible because Task 1
+  // gave `ProductImageAdminViewSet` a `product` filter; unfiltered it would return every
+  // image in the catalogue and serialise them all into this page's RSC payload.
+  //
+  // Fetched AFTER the product, deliberately: it needs the product's id, and a 404 on the
+  // product should not be preceded by a pointless image request.
+  let images: ProductImage[] = [];
+  try {
+    const page = await fetchWithAuthOrBounce<{ results: ProductImage[] }>(
+      `/admin/images/?product=${product.id}`,
+      path,
+    );
+    images = page.results ?? [];
+  } catch (e) {
+    // A failed image fetch costs the Images tab, not the page. The editor still holds
+    // unsaved-able text in four other tabs.
+    if (!(e instanceof ApiError)) throw e;
+  }
+
   const categories =
     categoriesResult.status === "fulfilled" ? orderCategories(categoriesResult.value) : [];
   const tags = tagsResult.status === "fulfilled" ? tagsResult.value : [];
@@ -101,6 +128,12 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
           // in the browser bundle for a non-NEXT_PUBLIC name, and the SEO preview's URL
           // line is cosmetic enough that a wrong default would go unnoticed for months.
           siteUrl={process.env.STOREFRONT_URL ?? "https://tokecosmetics.com"}
+          initialImages={images}
+          imageActions={{
+            upload: uploadImageAction,
+            update: updateImageAction,
+            remove: deleteImageAction,
+          }}
           save={saveProductAction}
         />
       </div>

@@ -317,6 +317,42 @@ the rest of the form** — that is unsaved text the user cannot recover.
 **Verify:** upload, reorder, rename alt, delete; force a failed upload and confirm the
 Details tab's unsaved text survives.
 
+**DONE 2026-07-30.** First consumer of Task 1's `ProductImageAdminViewSet`. Five decisions:
+
+1. **`apiFetchRaw` gained a multipart branch.** It JSON-stringified every body and forced
+   `Content-Type: application/json`, so the upload endpoint was unreachable. FormData now
+   passes through with **no Content-Type set** — only fetch knows the boundary token, and a
+   hand-written `multipart/form-data` header carries none, making Django parse an empty
+   payload and answer "No file was submitted" for a request that plainly contains one. Its
+   own test file exists because that failure is invisible from the client.
+
+2. **No image action revalidates the editor page.** `revalidatePath` here would re-render
+   the Server Component, remount the editor, and discard unsaved text in Details or
+   Content — the spec names that as what a failed upload must not do, and a SUCCESS must
+   not do it either. `/products` is revalidated because its thumbnail column is now stale
+   and nothing there can be lost.
+
+3. **Reordering renumbers the whole list rather than swapping two positions.**
+   `ProductImage.position` has no uniqueness constraint and the migrated rows came from an
+   importer, so duplicates are possible — and swapping two equal numbers changes nothing,
+   with the row springing back on reload and no error anywhere. `positionWrites` then
+   narrows the renumber to the rows that actually moved, so a one-step move costs two
+   PATCHes.
+
+4. **Image state lives in `ProductEditor`, not `ImagesPanel`.** The panel unmounts on every
+   tab switch; state inside it would make an upload appear to vanish on the way to Details
+   and back.
+
+5. **Images get their own `useTransition`.** Sharing the save's would put the Save button
+   into "Saving…" and disable it during an upload — announcing a write that is not
+   happening, on the one tab whose whole point is that it does not save with the form.
+
+Alt text writes on blur, not per keystroke; deleting asks twice, because it is immediate
+and there is no undo; a failed reorder puts the order back.
+
+Verified: admin vitest **318 passed** (28 files, 28 new), `tsc --noEmit` clean, `eslint`
+clean, `next build` succeeds.
+
 ### Task 6 — Variants and Prices tabs
 
 Variants: flat list of existing variants — SKU, name, weight, stock per warehouse

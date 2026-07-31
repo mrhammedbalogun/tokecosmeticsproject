@@ -43,7 +43,29 @@ const COUNTRIES: CountryRef[] = [
   { code: "ZZ", name: "International", is_rest_of_world: true },
 ];
 
-function setup(overrides: Partial<ProductDetail> = {}, save = vi.fn().mockResolvedValue({})) {
+const image = (id: number, position: number, alt = "") => ({
+  id,
+  image: `https://cdn.test/${id}.png`,
+  alt,
+  position,
+  variant: null,
+});
+
+function setup(
+  overrides: Partial<ProductDetail> = {},
+  save = vi.fn().mockResolvedValue({}),
+  images: ReturnType<typeof image>[] = [],
+  imageActions: Partial<{
+    upload: ReturnType<typeof vi.fn>;
+    update: ReturnType<typeof vi.fn>;
+    remove: ReturnType<typeof vi.fn>;
+  }> = {},
+) {
+  const actions = {
+    upload: imageActions.upload ?? vi.fn().mockResolvedValue({ ok: true, value: image(99, 9) }),
+    update: imageActions.update ?? vi.fn(async (id: number) => ({ ok: true, value: image(id, 0) })),
+    remove: imageActions.remove ?? vi.fn().mockResolvedValue({ ok: true, value: null }),
+  };
   render(
     <ProductEditor
       product={product(overrides)}
@@ -51,10 +73,12 @@ function setup(overrides: Partial<ProductDetail> = {}, save = vi.fn().mockResolv
       tags={TAGS}
       countries={COUNTRIES}
       siteUrl="https://tokecosmetics.com"
+      initialImages={images}
+      imageActions={actions}
       save={save}
     />,
   );
-  return { save };
+  return { save, actions };
 }
 
 const tab = (name: string) => screen.getByRole("tab", { name });
@@ -358,5 +382,151 @@ describe("ProductEditor", () => {
     const values = save.mock.calls[0][1];
     expect(values.ingredients).toBe("Shea butter, carrot oil");
     expect(values.seo_title).toBe("Best Shea Butter");
+  });
+
+  // --- Images tab (task 5) ----------------------------------------------------------
+
+  it("says out loud that image changes are immediate", () => {
+    // 17a design decision 1: images are a separate resource and take effect at once. The
+    // decision's own words are that the UI must make that obvious rather than hide it.
+    setup({}, undefined, [image(1, 0)]);
+
+    fireEvent.click(tab("Images"));
+
+    expect(screen.getByText(/take effect/i)).toBeInTheDocument();
+  });
+
+  it("orders images by position, with the model's id tiebreak", () => {
+    setup({}, undefined, [image(9, 0), image(2, 0), image(5, 1)]);
+
+    fireEvent.click(tab("Images"));
+
+    const alts = screen.getAllByLabelText(/^Alt text for image/);
+    expect(alts).toHaveLength(3);
+  });
+
+  it("moves an image and writes only the rows that moved", async () => {
+    const update = vi.fn(async (id: number) => ({ ok: true, value: image(id, 0) }));
+    setup({}, undefined, [image(1, 0), image(2, 1), image(3, 2)], { update });
+
+    fireEvent.click(tab("Images"));
+    fireEvent.click(screen.getByLabelText("Move image 3 up"));
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update.mock.calls.map((c) => c[0]).sort()).toEqual([2, 3]);
+  });
+
+  it("PUTS THE ORDER BACK when a reorder write fails", async () => {
+    // A row that stays where it was dragged while the database disagrees is the worst of
+    // both — the next reload silently undoes what the screen said had happened.
+    const update = vi.fn().mockResolvedValue({ ok: false, error: "Nope." });
+    setup({}, undefined, [image(1, 0, "first"), image(2, 1, "second")], { update });
+
+    fireEvent.click(tab("Images"));
+    fireEvent.click(screen.getByLabelText("Move image 2 up"));
+
+    await waitFor(() => expect(screen.getByText("Nope.")).toBeInTheDocument());
+    expect(screen.getByLabelText("Alt text for image 1")).toHaveValue("first");
+  });
+
+  it("cannot move the first image up or the last one down", () => {
+    setup({}, undefined, [image(1, 0), image(2, 1)]);
+
+    fireEvent.click(tab("Images"));
+
+    expect(screen.getByLabelText("Move image 1 up")).toBeDisabled();
+    expect(screen.getByLabelText("Move image 2 down")).toBeDisabled();
+  });
+
+  it("writes alt text on blur rather than on every keystroke", async () => {
+    // A PATCH per character is dozens of writes and dozens of audit rows for one sentence.
+    const update = vi.fn(async (id: number) => ({ ok: true, value: image(id, 0, "a swatch") }));
+    setup({}, undefined, [image(1, 0)], { update });
+
+    fireEvent.click(tab("Images"));
+    const input = screen.getByLabelText("Alt text for image 1");
+    fireEvent.change(input, { target: { value: "a swatch" } });
+    expect(update).not.toHaveBeenCalled();
+
+    fireEvent.blur(input);
+
+    await waitFor(() => expect(update).toHaveBeenCalledWith(1, { alt: "a swatch" }));
+  });
+
+  it("does not write alt text that did not change", () => {
+    const update = vi.fn();
+    setup({}, undefined, [image(1, 0, "unchanged")], { update });
+
+    fireEvent.click(tab("Images"));
+    fireEvent.blur(screen.getByLabelText("Alt text for image 1"));
+
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("asks twice before deleting, because there is no undo", async () => {
+    const remove = vi.fn().mockResolvedValue({ ok: true, value: null });
+    setup({}, undefined, [image(1, 0)], { remove });
+
+    fireEvent.click(tab("Images"));
+    fireEvent.click(screen.getByLabelText("Delete image 1"));
+    expect(remove).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Really delete" }));
+
+    await waitFor(() => expect(remove).toHaveBeenCalledWith(1));
+  });
+
+  it("A FAILED IMAGE WRITE DOES NOT COST UNSAVED TEXT IN ANOTHER TAB", async () => {
+    // Named in the spec, and the reason no image action revalidates this page: a
+    // re-render would remount the editor and discard work nobody can recover.
+    const remove = vi.fn().mockResolvedValue({ ok: false, error: "Could not delete." });
+    setup({}, undefined, [image(1, 0)], { remove });
+
+    fireEvent.change(nameInput(), { target: { value: "Half-written name" } });
+    fireEvent.click(tab("Images"));
+    fireEvent.click(screen.getByLabelText("Delete image 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Really delete" }));
+
+    await waitFor(() => expect(screen.getByText("Could not delete.")).toBeInTheDocument());
+    fireEvent.click(tab("Details"));
+    expect(screen.getByDisplayValue("Half-written name")).toBeInTheDocument();
+  });
+
+  it("keeps an uploaded image visible after switching tabs", async () => {
+    // The panel unmounts on a tab switch, which is why the list lives in the editor. If it
+    // lived in the panel the upload would appear to vanish on the way to Details and back.
+    const upload = vi.fn().mockResolvedValue({ ok: true, value: image(7, 0, "new one") });
+    setup({}, undefined, [], { upload });
+
+    fireEvent.click(tab("Images"));
+    const file = new File(["x"], "a.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText(/image file/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+
+    await waitFor(() => expect(upload).toHaveBeenCalled());
+    fireEvent.click(tab("Details"));
+    fireEvent.click(tab("Images"));
+
+    expect(screen.getByLabelText("Alt text for image 1")).toHaveValue("new one");
+  });
+
+  it("surfaces an upload failure without clearing the other tabs", async () => {
+    const upload = vi.fn().mockResolvedValue({ ok: false, error: "Too large." });
+    setup({}, undefined, [], { upload });
+
+    fireEvent.click(tab("Images"));
+    const file = new File(["x"], "a.png", { type: "image/png" });
+    fireEvent.change(screen.getByLabelText(/image file/i), { target: { files: [file] } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload" }));
+
+    await waitFor(() => expect(screen.getByText("Too large.")).toBeInTheDocument());
+  });
+
+  it("says which image the storefront leads with", () => {
+    setup({}, undefined, [image(1, 0), image(2, 1)]);
+
+    fireEvent.click(tab("Images"));
+
+    expect(screen.getByText(/shown first on the storefront/i)).toBeInTheDocument();
   });
 });

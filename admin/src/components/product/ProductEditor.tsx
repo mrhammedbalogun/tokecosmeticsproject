@@ -28,7 +28,10 @@ import { useRouter } from "next/navigation";
 import { AvailabilityPanel } from "@/components/product/AvailabilityPanel";
 import { ContentPanel } from "@/components/product/ContentPanel";
 import { DetailsPanel } from "@/components/product/DetailsPanel";
+import { ImagesPanel } from "@/components/product/ImagesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
+import type { ImageResult, ProductImage } from "@/app/(shell)/products/[slug]/image-actions";
+import { positionWrites, reorder, sortImages } from "@/lib/product-images";
 import {
   isDirty,
   toFormValues,
@@ -48,8 +51,18 @@ const TABS = [
   { id: "details", label: "Details" },
   { id: "availability", label: "Availability" },
   { id: "content", label: "Content" },
+  { id: "images", label: "Images" },
   { id: "seo", label: "SEO" },
 ] as const;
+
+export interface ImageActions {
+  upload: (slug: string, formData: FormData) => Promise<ImageResult<ProductImage>>;
+  update: (
+    id: number,
+    patch: { alt?: string; position?: number },
+  ) => Promise<ImageResult<ProductImage>>;
+  remove: (id: number) => Promise<ImageResult<null>>;
+}
 
 type TabId = (typeof TABS)[number]["id"];
 
@@ -59,6 +72,8 @@ export function ProductEditor({
   tags,
   countries,
   siteUrl,
+  initialImages,
+  imageActions,
   save,
 }: {
   product: ProductDetail;
@@ -67,6 +82,8 @@ export function ProductEditor({
   countries: CountryRef[];
   /** Storefront origin, for the SEO preview's URL line. */
   siteUrl: string;
+  initialImages: ProductImage[];
+  imageActions: ImageActions;
   /** The Server Function. Injected so the component is testable without a server. */
   save: (slug: string, values: ProductFormValues) => Promise<SaveResult>;
 }) {
@@ -78,6 +95,77 @@ export function ProductEditor({
   const [baseline, setBaseline] = useState<ProductFormValues>(initial);
   const [result, setResult] = useState<SaveResult>({});
   const [pending, startTransition] = useTransition();
+
+  // IMAGE STATE LIVES HERE, not in ImagesPanel, because that panel unmounts whenever
+  // another tab is shown — state inside it would not survive a tab switch, and an upload
+  // would appear to vanish on the way to Details and back.
+  const [images, setImages] = useState<ProductImage[]>(() => sortImages(initialImages));
+  const [imageError, setImageError] = useState<string | null>(null);
+  // ITS OWN TRANSITION, not the save's. Sharing one would put the Save button into
+  // "Saving…" and disable it while an image uploaded — announcing a write that is not
+  // happening, on the one tab whose whole point is that it does NOT save with the form.
+  const [imageBusy, startImageTransition] = useTransition();
+
+  /** Every image write funnels through here, so there is one place that clears the
+   *  previous error and refuses to leave a failure silent. */
+  const runImageWrite = (work: () => Promise<string | null>) => {
+    setImageError(null);
+    startImageTransition(async () => {
+      setImageError(await work());
+    });
+  };
+
+  const onUpload = (file: File, alt: string) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    if (alt) formData.append("alt", alt);
+    runImageWrite(async () => {
+      const res = await imageActions.upload(baseline.slug, formData);
+      if (!res.ok) return res.error;
+      setImages((current) => sortImages([...current, res.value]));
+      return null;
+    });
+  };
+
+  const onAlt = (id: number, alt: string) => {
+    runImageWrite(async () => {
+      const res = await imageActions.update(id, { alt });
+      if (!res.ok) return res.error;
+      setImages((current) => current.map((i) => (i.id === id ? res.value : i)));
+      return null;
+    });
+  };
+
+  const onDelete = (id: number) => {
+    runImageWrite(async () => {
+      const res = await imageActions.remove(id);
+      if (!res.ok) return res.error;
+      setImages((current) => current.filter((i) => i.id !== id));
+      return null;
+    });
+  };
+
+  const onMove = (from: number, to: number) => {
+    const next = reorder(images, from, to);
+    const writes = positionWrites(images, next);
+    if (!writes.length) return;
+
+    // Optimistic, then reconciled: the arrows must feel like arrows. On failure the list
+    // is put back exactly as it was, because a row that stays where it was dragged while
+    // the database disagrees is the worst of both.
+    const previous = images;
+    setImages(next);
+    runImageWrite(async () => {
+      for (const write of writes) {
+        const res = await imageActions.update(write.id, { position: write.position });
+        if (!res.ok) {
+          setImages(previous);
+          return res.error;
+        }
+      }
+      return null;
+    });
+  };
 
   const dirty = isDirty(values, baseline);
 
@@ -156,6 +244,17 @@ export function ProductEditor({
         )}
         {tab === "content" && (
           <ContentPanel values={values} errors={errors} onChange={onChange} />
+        )}
+        {tab === "images" && (
+          <ImagesPanel
+            images={images}
+            busy={imageBusy}
+            error={imageError}
+            onUpload={onUpload}
+            onAlt={onAlt}
+            onMove={onMove}
+            onDelete={onDelete}
+          />
         )}
         {tab === "seo" && (
           <SeoPanel values={values} errors={errors} onChange={onChange} siteUrl={siteUrl} />
