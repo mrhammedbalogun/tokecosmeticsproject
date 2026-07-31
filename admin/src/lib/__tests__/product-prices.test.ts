@@ -18,6 +18,7 @@ const variant = (id: number, sku = `SKU-${id}`): VariantRow => ({
   weight_grams: 250,
   is_active: true,
   position: 0,
+  option_values: {},
 });
 
 const price = (overrides: Partial<PriceRow> & { variant: number }): PriceRow => ({

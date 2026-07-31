@@ -80,13 +80,19 @@ interface PriceInput {
 
 const CURRENCIES = ["NGN", "GBP", "USD", "CAD"];
 
-const variantRow = (id: number, sku = `SKU-${id}`, weight: number | null = 250) => ({
+const variantRow = (
+  id: number,
+  sku = `SKU-${id}`,
+  weight: number | null = 250,
+  option_values: Record<string, string> = {},
+) => ({
   id,
   sku,
   name: `${id}ml`,
   weight_grams: weight,
   is_active: true,
   position: 0,
+  option_values,
 });
 
 const stockRow = (variant: number, warehouse: number, quantity: number, name = "Lagos HQ") => ({

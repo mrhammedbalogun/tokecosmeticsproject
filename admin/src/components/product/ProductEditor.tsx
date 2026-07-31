@@ -29,6 +29,7 @@ import { AvailabilityPanel } from "@/components/product/AvailabilityPanel";
 import { ContentPanel } from "@/components/product/ContentPanel";
 import { DetailsPanel } from "@/components/product/DetailsPanel";
 import { ImagesPanel } from "@/components/product/ImagesPanel";
+import { OptionEditor } from "@/components/product/OptionEditor";
 import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
 import { StockAdjustModal } from "@/components/product/StockAdjustModal";
@@ -47,6 +48,7 @@ import {
   type VariantRow,
 } from "@/lib/product-prices";
 import { warehouseColumns, type StockRow } from "@/lib/product-stock";
+import { deriveAxes, validateAxes, type Axis } from "@/lib/variant-matrix";
 import {
   isDirty,
   toFormValues,
@@ -184,6 +186,14 @@ export function ProductEditor({
       return null;
     });
   };
+
+  // --- the option matrix (17b) ---------------------------------------------------------
+  //
+  // Seeded from the variants the product already has, then held here rather than in the
+  // panel: the Variants tab unmounts on every tab switch, and a half-defined matrix must
+  // not evaporate on the way to Details and back. Nothing here is written until Apply.
+  const [axes, setAxes] = useState<Axis[]>(() => deriveAxes(variants));
+  const axisErrors = useMemo(() => validateAxes(axes), [axes]);
 
   // --- stock -------------------------------------------------------------------------
   //
@@ -395,12 +405,20 @@ export function ProductEditor({
           />
         )}
         {tab === "variants" && (
-          <VariantsPanel
-            variants={variants}
-            stock={stockRows}
-            warehouses={warehouseColumns(stockRows)}
-            onAdjust={openAdjust}
-          />
+          <div className="space-y-6">
+            <OptionEditor
+              axes={axes}
+              errors={axisErrors}
+              onChange={setAxes}
+              hasVariants={variants.length > 0}
+            />
+            <VariantsPanel
+              variants={variants}
+              stock={stockRows}
+              warehouses={warehouseColumns(stockRows)}
+              onAdjust={openAdjust}
+            />
+          </div>
         )}
         {tab === "prices" && (
           <PricesPanel
