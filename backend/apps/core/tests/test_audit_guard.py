@@ -61,6 +61,8 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     "AdminOrderListView": "the order queue: customer email and address on every row, and the search term is the record",
     "AdminOrderDetailView": "one order in full: name, email, phone, both addresses, payment history",
     "AdminRefundsOwedView": "a list of orders, each with the customer on it",
+    "AdminOrderCSVExportView": "bulk egress — every customer's email, country and totals in one file",
+    "AdminOrderInvoiceView": "an invoice carries the customer's name, home address and billing details",
     "ProductCSVExportView": "bulk egress — the whole catalogue and every price, in one file",
     "StockCSVExportView": "bulk egress — the whole stock position in one file",
     "AuditLogListView": "returns other people's data in `changes`, and reading it is what precedes editing it",

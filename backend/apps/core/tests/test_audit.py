@@ -455,6 +455,10 @@ READ_ONLY_VIEWS = frozenset(
         "AdminRefundsOwedView",
         "StockMovementListView",
         "ProductCSVExportView",
+        # Both GET-only. Their read rows are driven in
+        # apps/orders/tests/test_admin_order_export_and_invoice.py.
+        "AdminOrderCSVExportView",
+        "AdminOrderInvoiceView",
         "StockCSVExportView",
         "AuditLogListView",
         "AdminMeView",

@@ -169,6 +169,13 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "StockCSVImportView": "products.manage",
     # --- orders: read ------------------------------------------------------------
     "AdminOrderListView": "orders.view",
+    # An invoice carries the customer's name and home address, so this is read-audited.
+    # It exists because the customer-surface route staff could already use sits where
+    # neither this guard nor the audit mixin reaches (Plan-18a Task 2).
+    "AdminOrderInvoiceView": "orders.view",
+    # A scope ABOVE the list: one file with every customer's email is bulk egress,
+    # which is a different act from working the order desk.
+    "AdminOrderCSVExportView": "orders.manage",
     "AdminOrderDetailView": "orders.view",
     # --- orders: operational writes, no money ------------------------------------
     # The transition endpoint declares the FLOOR. Cancelling additionally requires
