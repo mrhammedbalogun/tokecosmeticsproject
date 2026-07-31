@@ -469,6 +469,34 @@ could disagree with the database.
 
 **Verify:** create a product end to end; force a slug collision and read a useful message.
 
+**DONE 2026-07-30.** No backend change.
+
+- **Two fields, and nothing else.** Name and slug. Everything else is editable a second
+  later on a page built for exactly that, and a create form asking for seven tabs' worth of
+  detail is one nobody can put down half-finished.
+- **Created as a DRAFT by omission**, not by sending `status`. The model defaults to
+  `draft`, and a product created straight to `active` would be one with no price, no image
+  and no copy. A test asserts the payload carries no `status` at all.
+- **No client-side uniqueness check, per the spec.** Only the database knows whether a slug
+  is free; a browser-side check that disagreed would refuse available slugs and admit taken
+  ones. The backend's own sentence — "product with this slug already exists." — is rendered
+  verbatim against the field.
+- **The redirect follows the slug the backend RETURNED**, not the one submitted, since it
+  may normalise it and the record has to be where we send the person.
+- **The slug auto-fills from the name until it is edited by hand, then stops for good.**
+  Silently rewriting a deliberate slug is noticed only after the product is live and the
+  URL is wrong. Clearing the field resumes the link — an empty slug means "you choose".
+- An empty slug is filled from the name rather than refused; a name of only punctuation
+  slugifies to `""`, which is reachable and asks for a slug instead of failing obscurely.
+
+`/products/new` resolves ahead of `/products/[slug]` — Next matches static segments before
+dynamic ones — so no product may ever occupy the slug `new`. Left as-is: the collision is
+harmless (that product would be unreachable, not misrendered) and guarding it would add a
+rule the backend does not have.
+
+Verified: admin vitest **422 passed** (34 files, 34 new), `tsc --noEmit` clean, `eslint`
+clean, `next build` succeeds with all three product routes present.
+
 ### Task 9 — live walkthrough, then CHECKPOINT
 
 A real browser pass against a real login, as Plan-16 Task 8. That pass found the RSC payload
