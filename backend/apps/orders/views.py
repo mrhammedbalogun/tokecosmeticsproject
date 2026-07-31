@@ -11,7 +11,7 @@ Access rules, and why:
   address and billing details, strictly more than the redacted tracking view.
 """
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from rest_framework import exceptions, generics, permissions, status
 from rest_framework.response import Response
@@ -31,6 +31,7 @@ from apps.orders.serializers import (
     OrderTrackingSerializer,
     RefundOwedSerializer,
 )
+from apps.orders.csv_io import export_orders_csv
 from apps.orders.state import (
     ELEVATED_STATUSES,
     IllegalTransition,
@@ -395,3 +396,57 @@ class AdminResolveReviewView(AdminAuditMixin, APIView):
         resolve_review(order.pk, actor=request.user, message=request.data.get("message", ""))
         order.refresh_from_db()
         return Response(AdminOrderSerializer(order).data)
+
+
+class AdminOrderCSVExportView(AdminAuditMixin, APIView):
+    """GET /api/v1/admin/orders/export.csv — every order, as a file.
+
+    `orders.manage`, a scope ABOVE the order list's `orders.view`. Support works the order
+    desk all day and must read orders one at a time; a single file carrying every
+    customer's email, country and totals is a different act. Same reasoning the catalogue
+    export records: a whole-table dump is bulk egress whatever it contains, and this one
+    contains personal data outright.
+
+    Read-audited for the same reason.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
+    audit_reads = True
+    audit_action = "export_csv"
+    audit_model_label = "orders.order"
+
+    def get(self, request):
+        resp = StreamingHttpResponse(iter([export_orders_csv()]), content_type="text/csv")
+        resp["Content-Disposition"] = "attachment; filename=orders.csv"
+        return resp
+
+
+class AdminOrderInvoiceView(AdminAuditMixin, APIView):
+    """GET /api/v1/admin/orders/{number}/invoice.pdf — staff, and RECORDED.
+
+    THIS ROUTE IS NOT ABOUT ACCESS. `OrderInvoiceView` on the customer surface already has
+    a staff bypass, and `CustomerJWTAuthentication` deliberately accepts admin tokens — so
+    the admin app could always fetch any customer's invoice. What it could not do is leave
+    a trace: that route sits outside the admin prefix, where neither the surface guard nor
+    the audit mixin reaches.
+
+    An invoice carries the customer's name, home address and billing details. Plan-16's
+    ruling audits PII-bearing reads, so the version staff actually use is the audited one.
+
+    `orders.view`, not `.manage`: an invoice goes in the parcel, and packing is Support's
+    job. One order at a time, and written down.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.view")]
+    audit_reads = True
+    audit_action = "read_invoice"
+    audit_model_label = "orders.order"
+
+    def get(self, request, number: str):
+        order = get_object_or_404(_ORDER_QS, number=number)
+        pdf = render_invoice_pdf(order)
+        resp = HttpResponse(pdf, content_type="application/pdf")
+        resp["Content-Disposition"] = f'inline; filename="{order.number}.pdf"'
+        return resp

@@ -1,6 +1,8 @@
 from django.urls import path
 
 from apps.orders.views import (
+    AdminOrderCSVExportView,
+    AdminOrderInvoiceView,
     AdminOrderDetailView,
     AdminOrderListView,
     AdminOrderNoteView,
@@ -14,6 +16,12 @@ urlpatterns = [
     # Distinct top-level path (not under orders/<number>/) so the number converter can't
     # swallow it. The refunds-owed queue reads across orders + shipping + payments.
     path("refunds-owed/", AdminRefundsOwedView.as_view(), name="admin-refunds-owed"),
+    # Explicit paths BEFORE `orders/<str:number>/`, exactly as the catalogue urls do:
+    # a `<str:number>` segment happily matches "export.csv" and the export would 404
+    # as an order number nobody has.
+    path("orders/export.csv", AdminOrderCSVExportView.as_view(), name="admin-order-export"),
+    path("orders/<str:number>/invoice.pdf", AdminOrderInvoiceView.as_view(),
+         name="admin-order-invoice"),
     path("orders/", AdminOrderListView.as_view(), name="admin-order-list"),
     path("orders/<str:number>/", AdminOrderDetailView.as_view(), name="admin-order-detail"),
     path("orders/<str:number>/transition/", AdminOrderTransitionView.as_view(),

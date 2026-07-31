@@ -92,6 +92,10 @@ MATRIX: list[Row] = [
     # --- orders: the queue and one order. Support lives here all day -------------
     Row("AdminOrderListView", "get", "/api/v1/admin/orders/", _DESK),
     Row("AdminOrderDetailView", "get", f"{_ORDER}/", _DESK),
+    # Support packs parcels, and the invoice goes in the box.
+    Row("AdminOrderInvoiceView", "get", f"{_ORDER}/invoice.pdf", _DESK),
+    # But a dump of every customer is not Support's to take.
+    Row("AdminOrderCSVExportView", "get", "/api/v1/admin/orders/export.csv", _MANAGERS),
     # --- orders: operational writes. Support ships, tracks and annotates ---------
     Row("AdminOrderTransitionView", "post", f"{_ORDER}/transition/", _DESK,
         body={"to_status": "shipped"}),
