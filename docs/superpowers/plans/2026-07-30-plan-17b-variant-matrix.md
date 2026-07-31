@@ -159,3 +159,44 @@ Option A has nowhere to record.
   to be remodelled, doing it before this ships is much cheaper than after.
 - **Plan-17a's checkpoint is still outstanding.** 17b builds on the editor that nobody has
   walked. If 17a's Variants tab has a defect, 17b sits on top of it.
+
+---
+
+## Task 5 — live walkthrough record (2026-07-31)
+
+Same real stack as the 17a record (that file has the environment details). Walked on a
+fresh draft product created through the 17a flow (`walkthrough-whip-butter`), i.e. the
+zero-variant case the fixtures never covered.
+
+**What passed:**
+
+- Built Size (30ml, 50ml) × Shade (Light, Deep) from nothing: axis naming, value chips,
+  add/remove, "4 combinations" counter live the whole time.
+- Generate → the matrix diff listed 4 to create with editable SKUs → apply created
+  exactly 4 variants. **DB verified**: option-derived names (`30ml · Light`), slugged
+  SKUs, correct `option_values` — the Task 1 arithmetic holds against the real API.
+- **The Task 4 rename, end to end.** Renaming the Shade axis to Tone surfaced the
+  RenamePanel ("Rename on 4 variants" — the button that says its blast radius), and
+  applying it rewrote **every** variant's `option_values` key from `Shade` to `Tone`
+  and touched nothing else. DB verified, exactly the plan's own verify clause.
+- The added-option guard: generating while the axes no longer match existing variants
+  produced the explicit refusal-to-guess banner ("None of the existing variants fit
+  this matrix… Nothing is deleted either way") instead of a silent create.
+
+**One real bug:**
+
+- **After "Create N variants" the variant list doubles client-side.** The created
+  variants are appended to state that is then also refreshed from the server, so every
+  row appears twice, React logs duplicate-key warnings (the keys are the new variant
+  ids), and — worse — the *next* Generate counts the doubled list: it reported "8
+  outside this matrix" and "would leave you with 12 variants where you probably want
+  4" when the true numbers are 4 and 8. Reload fixes it (server state was always
+  right: 4 rows). Harmless to data, actively misleading to the person deciding
+  whether to apply — fix before the checkpoint if possible, otherwise tell the walker
+  to reload after applying.
+
+**Not exercised live:** the 50-combination ceiling (unit-tested only); the storefront
+PDP rendering of the new labels.
+
+**CHECKPOINT — still Hammed's to perform:** build a two-axis product's variants from
+scratch, himself. The path is verified working end to end.

@@ -597,3 +597,61 @@ brands/collections CRUD, bulk actions (dropped).
 - **The 8 weightless variants** are not this plan's job to fix, but the Variants tab is
   where they become visible. Showing weight as an empty cell rather than `0` matters —
   `0 g` is a claim, blank is an absence.
+
+---
+
+## Task 9 — live walkthrough record (2026-07-31)
+
+Real Django + Postgres + admin `next dev`, nothing mocked. Cloudflare **test** keys per
+`turnstile-admin-setup.md` §6 (the real pair that was sitting in local `.env` files is
+backed up as `.env*.bak-walkthrough-17ab`; the test pair is the documented dev posture).
+A fresh `owner-walk@tokecosmetics.local` Owner account was taken through the full
+ceremony — password → TOTP enrol (setup key read off the screen) → TOTP confirm — and
+landed on the dashboard with the Owner nav.
+
+**What passed, against real DRF responses:**
+
+- `/products`: 28 real products, search (`?search=curl` → 1), status filter, page 2.
+- The editor, all seven tabs, on `radiance-glow-serum` — Details, Availability (market
+  tick-list with the "sold in every market" explainer), Variants (options + stock with
+  "Adjust"), Prices (per-currency grid, country-override lockouts pointing at 17c),
+  Content (ingredients/directions/warnings/specs/FAQs), Images (ordered, alt text),
+  SEO (SERP preview with the "| Toke Cosmetics" suffix counted).
+- A real PATCH: Details edit → "Saved." → survives reload → **DB verified** → audit row
+  `partial_update Product #radiance-glow-serum` with actor, IP, timestamp.
+- `/categories`: tree renders 11 with product counts; reparent Men → Body saved and
+  **DB verified**, then reverted the same way. Cycle guard holds at the UI: Face's
+  parent select excludes Face and all its descendants.
+- Create flow: name-only form → draft created → redirected straight into the editor
+  (`walkthrough-whip-butter`, left in place as a fixture for the checkpoint walk).
+- Backend log: **zero 5xx across the whole session.**
+
+**Findings, none blocking the checkpoint:**
+
+1. **Category edit panel goes stale right after save.** Save "Men → parent Body"
+   succeeds (DB confirms), but the panel then shows *No parent (top level)* while the
+   tree shows the truth. A trusting second Save would silently move the category back
+   to top level. Re-selecting the category shows the correct parent, so the bug is
+   only the post-save form state — but this surface writes catalogue structure, so it
+   should be fixed before heavy use.
+2. **Audit `changes` never records the copy fields.** `ProductAdminSerializer.
+   audit_allowlist` omits `short_description`, `description` and every Content-tab
+   field, so an edit that changes *only* the description writes an audit row whose
+   FIELDS list names nine *other* (unchanged, merely submitted) keys. The allowlist
+   design is right; these keys just need adding (MAX_CHANGES_BYTES already caps size)
+   — or the omission needs writing down where an auditor will read it.
+3. **Sidebar links to unbuilt sections are bare 404s.** `/inventory`, `/customers`,
+   `/reviews`, `/coupons`, `/content`, `/reports` all render the naked Next 404 with
+   no shell. The dashboard tiles say "Coming in a later plan"; the nav should degrade
+   the same way (placeholder page, or don't link).
+4. **Product images cannot render anywhere in local dev.** The list requests relative
+   `/media/...` against the *admin* origin (404); the Images tab requests
+   `http://localhost:8000/media/...` and the admin CSP blocks it (`img-src 'self'
+   data: blob: https://dk4ivng9pnc2t.cloudfront.net`). Production is presumably fine
+   via CloudFront URLs; dev needs either an env-aware `img-src` or a media rewrite.
+5. **Stale empty-state copy:** a zero-variant product's Variants tab still says
+   creating variants "arrives in a later slice (17b)" — directly beneath the shipped
+   17b builder.
+
+**CHECKPOINT — still Hammed's to perform:** create one product end to end, himself.
+The path is verified working; the account, servers and a worked example are in place.
