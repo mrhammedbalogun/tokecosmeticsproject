@@ -253,3 +253,94 @@ export function validateAxes(axes: Axis[]): string[] {
 
   return errors;
 }
+
+// ── Renaming ────────────────────────────────────────────────────────────────────────
+//
+// The migration-debris fix. `Product Size` (55 production variants) and `Size` (12) are the
+// same axis under two WooCommerce labels, and under Option A the only way to correct that is
+// to rewrite `option_values` on every variant of the product.
+//
+// That makes renaming a BULK WRITE, not a form edit, which is why it is detected explicitly
+// and confirmed with a count rather than happening as a side effect of typing.
+
+export interface RenameSummary {
+  /** `[from, to]` for each axis whose name changed. */
+  axes: [string, string][];
+  /** `[from, to]` for each value that changed, within an unchanged axis. */
+  values: [string, string][];
+}
+
+/**
+ * Whether two axis lists describe the same SHAPE — same axis count, same value count per
+ * axis — so that position can be trusted to identify what was renamed.
+ *
+ * If somebody has added an axis or removed a value, they are restructuring rather than
+ * renaming, and position no longer means anything. Renames are simply not offered then.
+ */
+export function structuresMatch(a: Axis[], b: Axis[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((axis, i) => axis.values.length === b[i].values.length);
+}
+
+/** What changed in name only, between the axes as stored and the axes as edited. */
+export function renameSummary(derived: Axis[], current: Axis[]): RenameSummary {
+  const summary: RenameSummary = { axes: [], values: [] };
+  if (!structuresMatch(derived, current)) return summary;
+
+  derived.forEach((axis, i) => {
+    const now = current[i];
+    if (axis.name !== now.name) summary.axes.push([axis.name, now.name]);
+    axis.values.forEach((value, j) => {
+      if (value !== now.values[j]) summary.values.push([value, now.values[j]]);
+    });
+  });
+
+  return summary;
+}
+
+/**
+ * One variant's `option_values`, rewritten through a rename.
+ *
+ * Keyed by POSITION in the axis list rather than by matching old names to new ones: a swap
+ * (`Size` → `Shade`, `Shade` → `Size`) would be ambiguous by name and is unambiguous by
+ * index. Anything the variant carries that the axes do not describe is left untouched
+ * rather than dropped — this rewrites what it recognises and preserves what it does not.
+ */
+export function remapOptions(
+  options: Record<string, string>,
+  derived: Axis[],
+  current: Axis[],
+): Record<string, string> {
+  if (!structuresMatch(derived, current)) return { ...options };
+
+  const out: Record<string, string> = {};
+  const handled = new Set<string>();
+
+  derived.forEach((axis, i) => {
+    if (!(axis.name in options)) return;
+    handled.add(axis.name);
+    const value = options[axis.name];
+    const valueIndex = axis.values.indexOf(value);
+    out[current[i].name] = valueIndex >= 0 ? current[i].values[valueIndex] : value;
+  });
+
+  for (const [key, value] of Object.entries(options)) {
+    if (!handled.has(key)) out[key] = value;
+  }
+  return out;
+}
+
+/**
+ * Variants whose stored `name` is not what their options say it should be.
+ *
+ * On the 8 two-axis production products every variant is named after the PRODUCT — which is
+ * the defect `storefront/src/lib/variant-label.ts` had to work around. Fixing the stored
+ * names is offered explicitly and never done as a side effect: it is a bulk write, and
+ * `name` is what appears on order lines already placed.
+ */
+export function nameMismatches(variants: MatrixVariant[]): MatrixVariant[] {
+  return variants.filter((variant) => {
+    const expected = variantName(variant.option_values ?? {});
+    return expected !== "" && expected !== variant.name;
+  });
+}

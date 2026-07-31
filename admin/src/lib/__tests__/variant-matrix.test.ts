@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
+  nameMismatches,
+  remapOptions,
+  renameSummary,
+  structuresMatch,
   cartesian,
   deriveAxes,
   diffMatrix,
@@ -319,5 +323,136 @@ describe("validateAxes", () => {
 
   it("passes the real production matrix comfortably", () => {
     expect(validateAxes(deriveAxes(COCO))).toEqual([]);
+  });
+});
+
+describe("structuresMatch", () => {
+  const base: Axis[] = [{ name: "Size", values: ["S", "M"] }];
+
+  it("is true when only names differ", () => {
+    expect(structuresMatch(base, [{ name: "Product Size", values: ["Small", "Medium"] }])).toBe(
+      true,
+    );
+  });
+
+  it("is false once an axis is added or a value removed", () => {
+    // Restructuring, not renaming — position stops meaning anything, so renames are not
+    // offered.
+    expect(structuresMatch(base, [...base, { name: "Shade", values: ["A"] }])).toBe(false);
+    expect(structuresMatch(base, [{ name: "Size", values: ["S"] }])).toBe(false);
+  });
+});
+
+describe("renameSummary", () => {
+  it("names the axis rename that fixes the WooCommerce debris", () => {
+    // "Product Size" on 55 production variants and "Size" on 12 are the same axis.
+    const derived: Axis[] = [{ name: "Product Size", values: ["175g"] }];
+    const current: Axis[] = [{ name: "Size", values: ["175g"] }];
+
+    expect(renameSummary(derived, current)).toEqual({
+      axes: [["Product Size", "Size"]],
+      values: [],
+    });
+  });
+
+  it("names a value rename", () => {
+    const derived: Axis[] = [{ name: "Size", values: ["35g (sample)"] }];
+    const current: Axis[] = [{ name: "Size", values: ["35g"] }];
+
+    expect(renameSummary(derived, current).values).toEqual([["35g (sample)", "35g"]]);
+  });
+
+  it("is empty when nothing changed", () => {
+    const axes: Axis[] = [{ name: "Size", values: ["S"] }];
+
+    expect(renameSummary(axes, axes)).toEqual({ axes: [], values: [] });
+  });
+
+  it("offers nothing once the structure changed", () => {
+    const derived: Axis[] = [{ name: "Size", values: ["S"] }];
+    const current: Axis[] = [{ name: "Size", values: ["S", "M"] }];
+
+    expect(renameSummary(derived, current)).toEqual({ axes: [], values: [] });
+  });
+});
+
+describe("remapOptions", () => {
+  const derived: Axis[] = [
+    { name: "Product Size", values: ["175g", "275g"] },
+    { name: "Price Options", values: ["Pieces", "Pack Price"] },
+  ];
+
+  it("rewrites the axis key and leaves the value alone", () => {
+    const current: Axis[] = [
+      { name: "Size", values: ["175g", "275g"] },
+      { name: "Price Options", values: ["Pieces", "Pack Price"] },
+    ];
+
+    expect(remapOptions({ "Product Size": "175g", "Price Options": "Pieces" }, derived, current))
+      .toEqual({ Size: "175g", "Price Options": "Pieces" });
+  });
+
+  it("rewrites a value", () => {
+    const current: Axis[] = [
+      { name: "Product Size", values: ["175 g", "275g"] },
+      { name: "Price Options", values: ["Pieces", "Pack Price"] },
+    ];
+
+    expect(remapOptions({ "Product Size": "175g" }, derived, current)).toEqual({
+      "Product Size": "175 g",
+    });
+  });
+
+  it("HANDLES A SWAP, which matching by name could not", () => {
+    // Renaming A→B and B→A at once is ambiguous by name and unambiguous by position.
+    const swapped: Axis[] = [
+      { name: "Price Options", values: ["175g", "275g"] },
+      { name: "Product Size", values: ["Pieces", "Pack Price"] },
+    ];
+
+    expect(remapOptions({ "Product Size": "175g", "Price Options": "Pieces" }, derived, swapped))
+      .toEqual({ "Price Options": "175g", "Product Size": "Pieces" });
+  });
+
+  it("keeps a key the axes do not describe rather than dropping it", () => {
+    const current: Axis[] = [
+      { name: "Size", values: ["175g", "275g"] },
+      { name: "Price Options", values: ["Pieces", "Pack Price"] },
+    ];
+
+    expect(remapOptions({ "Product Size": "175g", Mystery: "x" }, derived, current)).toEqual({
+      Size: "175g",
+      Mystery: "x",
+    });
+  });
+
+  it("changes nothing when the structure moved", () => {
+    const restructured: Axis[] = [{ name: "Size", values: ["175g"] }];
+    const options = { "Product Size": "175g" };
+
+    expect(remapOptions(options, derived, restructured)).toEqual(options);
+  });
+});
+
+describe("nameMismatches", () => {
+  it("finds the variants named after their product", () => {
+    // Every variant of the 8 two-axis products is named "Toke coco shea butter".
+    const mismatched = nameMismatches(COCO);
+
+    expect(mismatched).toHaveLength(7);
+  });
+
+  it("ignores a variant already named from its options", () => {
+    const tidy: MatrixVariant[] = [
+      { id: 1, sku: "a", name: "175g · Pieces", option_values: { A: "175g", B: "Pieces" } },
+    ];
+
+    expect(nameMismatches(tidy)).toEqual([]);
+  });
+
+  it("ignores variants with no options, which have nothing to be named from", () => {
+    expect(nameMismatches([{ id: 1, sku: "a", name: "Kids Shampoo", option_values: {} }])).toEqual(
+      [],
+    );
   });
 });
