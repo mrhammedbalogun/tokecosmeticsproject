@@ -195,6 +195,22 @@ class AdminOrderDetailView(AdminAuditMixin, generics.RetrieveAPIView):
     queryset = _ORDER_QS.prefetch_related("events", "events__actor")
 
 
+def _refund_owned_by_the_ledger(order) -> bool:
+    """Whether this order still holds money that a real refund would have to move.
+
+    True when any payment is `succeeded` (captured, untouched) or `partially_refunded`
+    (some returned, the rest still held). In both cases marking the order `refunded` by
+    hand would end it while the customer is still owed money — so the refund machinery
+    owns that move and this endpoint must refuse it.
+
+    False when there are no payments at all, or every payment is already `refunded`,
+    `failed`, `cancelled`, `initiated` or `pending`. That covers the legacy-triage case
+    Plan-23 needs — an order refunded in WooCommerce has no captured payment here — and
+    the tidy-up case where the ledger settled but the lifecycle never caught up.
+    """
+    return order.payments.filter(status__in=("succeeded", "partially_refunded")).exists()
+
+
 class AdminOrderTransitionView(AdminAuditMixin, APIView):
     """POST /api/v1/admin/orders/{number}/transition/ — body: {to_status, message?}.
 
@@ -231,7 +247,16 @@ class AdminOrderTransitionView(AdminAuditMixin, APIView):
     audit_allowlist = ("to_status", "message")
 
     # Statuses that cost money to enter, and the scope each demands on top of the floor.
-    ELEVATED_STATUSES = {"cancelled": "orders.manage"}
+    # `refunded` joined `cancelled` here after a Plan-18 review found it reachable by
+    # anyone holding `orders.operate`: it is a legal destination from `processing`,
+    # `shipped`, `delivered` and `completed` (state.py), and every one of those fell
+    # through to `transition_by_id` — a bare status flip with no Refund row, no money
+    # moved and no restock, leaving the order terminal and out of the pipeline. Audited,
+    # so the trail recorded a refund that never happened.
+    #
+    # Scope alone is NOT the fix, because a Manager clicking it would do the same damage
+    # with better credentials. See `_refund_owned_by_the_ledger` below.
+    ELEVATED_STATUSES = {"cancelled": "orders.manage", "refunded": "orders.manage"}
 
     def post(self, request, number: str):
         to_status = request.data.get("to_status")
@@ -245,6 +270,22 @@ class AdminOrderTransitionView(AdminAuditMixin, APIView):
         order = get_object_or_404(Order, number=number)
         if not to_status:
             return Response({"error": "to_status_required"}, status=400)
+        if to_status == "refunded" and _refund_owned_by_the_ledger(order):
+            # Deliberately NOT a blanket refusal. `on_hold` is the triage state for the 879
+            # legacy orders Plan-23 migrates, and one refunded in WooCommerce years ago has
+            # no captured payment here and no money to move — recording it is history. The
+            # line is drawn by the LEDGER, not by the status.
+            return Response(
+                {
+                    "error": "refund_required",
+                    "detail": (
+                        "This order still holds captured payment, so it cannot be marked "
+                        "refunded by hand — that would end the order without moving any "
+                        "money or restocking. Use the refund endpoint instead."
+                    ),
+                },
+                status=400,
+            )
         # Cancelling is NOT a bare status flip: it must free the reservation atomically
         # with the move, and cancel_order is the only thing that does. Routing it through
         # transition_by_id would cancel the order and hold its stock forever —

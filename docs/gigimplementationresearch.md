@@ -132,18 +132,40 @@ engineer identified it in one sentence.
 **What the coordinate flow costs instead**, and it is not small:
 
 1. `Address` gains `latitude` / `longitude` — a migration.
-2. **Checkout must geocode.** We collect country → state → LGA → street text and no
-   coordinates. Either Places autocomplete on the form or server-side geocoding at quote
-   time; both cost per lookup and both change Plan-14's deployed checkout.
+2. **Checkout may have to geocode** — and may not; see the withdrawn timing argument below.
+   We collect country → state → LGA → street text and no coordinates. If door-level accuracy
+   is required this means Places autocomplete or server-side geocoding, both billed per
+   lookup and both changing Plan-14's deployed checkout. If LGA-level accuracy suffices it
+   means a static lookup table and no checkout change at all. **GIG's answer decides which,
+   so nothing here is built yet.**
 3. Pricing becomes **distance-based between two points** rather than flat per LGA — more
    accurate, less predictable.
 4. `VehicleType` becomes required, so somebody must choose a default for a cosmetics parcel.
 
-**The timing argument, and it is the strongest thing in this document.** Measured
-2026-07-31: production holds **2 users, 1 address, 1 order.** Adding coordinate columns now
-is adding them to an empty table. After Plan-22 imports the legacy customers it is thousands
-of addresses with no coordinates and no way to obtain them but bulk geocoding. **If this is
-going to happen, it is cheapest today and gets worse monotonically.**
+**~~The timing argument, and it is the strongest thing in this document.~~ WITHDRAWN
+2026-07-31 after a Fable review, which was right.** The original ran: production holds 2
+users, 1 address and 1 order, so adding coordinate columns now is free and doing it after
+Plan-22 imports thousands of legacy addresses is expensive — "cheapest today and gets worse
+monotonically."
+
+**It conflates two different costs, and neither behaves that way.**
+
+- **Adding two nullable columns costs the same at 1 row or 10,000.** A nullable column with
+  no default does not rewrite a Postgres table. There is no monotonic anything.
+- **Backfilling coordinates is the expensive half, and that cost is identical whenever the
+  columns land.** Worse, it may not be owed at all: Plan-22's legacy addresses are
+  *historical*. Only an address used at a FUTURE checkout needs coordinates, and that one can
+  be geocoded when it is used.
+
+**And it may collapse entirely.** Question 3 of `docs/gig-reply-capture-preshipment.md` asks
+what precision GIG needs. If an LGA-level centre point prices correctly, the whole thing is a
+**static 774-row LGA → centroid table computed once** — no Places autocomplete, no per-lookup
+billing, no checkout change. Building geocoding before that answer arrives would be building
+plumbing for a requirement that may resolve to a lookup table.
+
+**Revised position:** add the nullable `latitude`/`longitude` columns whenever convenient —
+a five-minute migration, harmless either way — and build **no geocoding at all** until GIG
+answers questions 2 and 3.
 
 **Still open, and it decides the size of the build:** whether a shipment can be priced and
 created from a structured address — `ReceiverStationId` plus `DestinationServiceCenterId`,
