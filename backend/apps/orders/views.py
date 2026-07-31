@@ -31,7 +31,13 @@ from apps.orders.serializers import (
     OrderTrackingSerializer,
     RefundOwedSerializer,
 )
-from apps.orders.state import IllegalTransition, record_event, resolve_review, transition_by_id
+from apps.orders.state import (
+    ELEVATED_STATUSES,
+    IllegalTransition,
+    record_event,
+    resolve_review,
+    transition_by_id,
+)
 from apps.orders.tokens import TrackingTokenError, read_tracking_token
 
 _ORDER_QS = Order.objects.select_related("currency", "country").prefetch_related("items")
@@ -256,7 +262,10 @@ class AdminOrderTransitionView(AdminAuditMixin, APIView):
     #
     # Scope alone is NOT the fix, because a Manager clicking it would do the same damage
     # with better credentials. See `_refund_owned_by_the_ledger` below.
-    ELEVATED_STATUSES = {"cancelled": "orders.manage", "refunded": "orders.manage"}
+    # Imported from `state` so the admin serializer can publish the same rule this
+    # enforces (Plan-18a). Kept as a class attribute because that is what the
+    # elevation is read off in tests and in the guard walkers.
+    ELEVATED_STATUSES = ELEVATED_STATUSES
 
     def post(self, request, number: str):
         to_status = request.data.get("to_status")

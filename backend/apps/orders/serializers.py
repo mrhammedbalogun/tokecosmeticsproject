@@ -14,7 +14,14 @@ from decimal import Decimal
 from rest_framework import serializers
 
 from apps.orders.models import Order, OrderEvent, OrderItem
+from apps.orders.state import (
+    ALLOWED_TRANSITIONS,
+    ELEVATED_STATUSES,
+    MACHINE_OWNED_STATUSES,
+)
+from apps.payments.models import Payment, Refund
 from apps.payments.money import format_money
+from apps.payments.refunds import refundable_amount
 
 # A refund can only be taken against money we actually collected; mirrors
 # refunds._REFUNDABLE_PAYMENT_STATES.
@@ -112,9 +119,52 @@ class OrderTrackingSerializer(_BaseOrderSerializer):
                   "tracking_carrier", "tracking_number", "items")
 
 
+class AdminRefundSerializer(serializers.ModelSerializer):
+    """One refund against one payment, for the admin payment panel."""
+
+    created_by_email = serializers.CharField(
+        source="created_by.email", read_only=True, default=""
+    )
+
+    class Meta:
+        model = Refund
+        fields = ("id", "amount", "status", "reason", "gateway_reference",
+                  "created_by_email", "created_at")
+
+
+class AdminPaymentSerializer(serializers.ModelSerializer):
+    """One payment, its refunds, and what is left to refund against it.
+
+    ADDED IN PLAN-18a because `AdminOrderSerializer` carried no money detail at all — no
+    gateway, no payment status, no refunds — and all three payments admin routes are
+    POST-only. The payment panel had nothing to render, and the refund modal could only
+    learn the remaining balance from the RESPONSE to a refund, i.e. after moving money.
+    """
+
+    refunds = AdminRefundSerializer(many=True, read_only=True)
+    refundable = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payment
+        fields = ("id", "gateway", "purpose", "amount", "currency", "status",
+                  "gateway_reference", "created_at", "refunds", "refundable")
+
+    def get_refundable(self, payment) -> str:
+        """Delegated to `refunds.refundable_amount`, never recomputed here.
+
+        That function is what the refund endpoint enforces against, and it counts PENDING
+        refunds as already spent. A second implementation would eventually disagree with
+        it, and the direction it would disagree in is offering an operator more headroom
+        than the endpoint will allow.
+        """
+        return str(refundable_amount(payment))
+
+
 class AdminOrderSerializer(_BaseOrderSerializer):
     events = OrderEventSerializer(many=True, read_only=True)
     user_email = serializers.CharField(source="user.email", read_only=True, default="")
+    payments = AdminPaymentSerializer(many=True, read_only=True)
+    allowed_transitions = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -123,7 +173,30 @@ class AdminOrderSerializer(_BaseOrderSerializer):
                   "shipping_total", "tax_total", "grand_total", "grand_total_display",
                   "delivery_option_name", "shipping_address", "billing_address",
                   "customer_note", "admin_note", "tracking_carrier", "tracking_number",
-                  "source", "legacy_number", "items", "events")
+                  "source", "legacy_number", "items", "events",
+                  "payments", "allowed_transitions")
+
+    def get_allowed_transitions(self, order) -> list[dict]:
+        """The moves a PERSON may make from here, each with the scope it needs.
+
+        NOT `ALLOWED_TRANSITIONS[order.status]`, which is a superset of what this endpoint
+        accepts. Publishing the raw constant would have a UI render:
+
+          * `refunded` — refused since backend-v0.5.2 for any order still holding captured
+            money, and never a bare status flip in any case (the refund machinery owns it);
+          * `expired` — the sweep's move, not an operator's;
+          * `cancelled` — legal in the machine, but gated on `orders.manage` inside the
+            view, so Support would get a button that 403s.
+
+        The scope travels WITH each entry rather than the UI keeping its own copy of the
+        rule. A client-side table of who-may-do-what is a second source of truth, and this
+        one guards money.
+        """
+        return [
+            {"status": status, "requires_scope": ELEVATED_STATUSES.get(status)}
+            for status in sorted(ALLOWED_TRANSITIONS.get(order.status, set()))
+            if status not in MACHINE_OWNED_STATUSES
+        ]
 
 
 class AdminOrderListSerializer(_BaseOrderSerializer):

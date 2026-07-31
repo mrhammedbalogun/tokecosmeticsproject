@@ -48,6 +48,24 @@ ALLOWED_TRANSITIONS: dict[str, set[str]] = {
 
 STATUSES = frozenset(ALLOWED_TRANSITIONS)
 
+# Destinations a PERSON may not reach through the transition endpoint, however legal the
+# state machine says they are. Both are owned by machinery that does more than move a
+# status, so offering either as a button is offering a lie:
+#
+#   refunded — the refund machinery sets it, after moving money and writing a Refund row.
+#              A bare flip ends the order while the customer is still owed. Refused
+#              outright since backend-v0.5.2 for any order holding captured payment.
+#   expired  — the reservation sweep's move. Nothing an operator decides.
+#
+# Lives here rather than in the view so `AdminOrderSerializer` can publish the same rule
+# it is enforced by; a second copy in TypeScript is exactly what this prevents.
+MACHINE_OWNED_STATUSES = frozenset({"refunded", "expired"})
+
+# Destinations that need more than `orders.operate`. Checked in the view (which must run
+# it before the order lookup, so an unauthorised caller cannot probe for existence) and
+# published by the admin serializer so the UI can grey out rather than guess.
+ELEVATED_STATUSES = {"cancelled": "orders.manage", "refunded": "orders.manage"}
+
 
 def _effects_for(to_status: str):
     """Deferred effects, keyed on the DESTINATION status — never on the (from, to) pair.
