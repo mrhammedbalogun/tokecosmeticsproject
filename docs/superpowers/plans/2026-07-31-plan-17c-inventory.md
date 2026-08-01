@@ -205,3 +205,89 @@ Reordered: the NG operations tooling first, the GB/US/CA framing dropped.
   tell anybody a decision is owed.
 - **Three checkpoints are now outstanding** — Plan-17a's, 17b's, and this one. Nothing in any
   of the three has been walked in a browser.
+
+---
+
+## Task 8 — walkthrough record and CHECKPOINT (2026-07-31)
+
+Unlike 17a and 17b, this plan was not walked at the end. **Every task was walked in a
+browser as it was built**, against a real Django + Postgres + admin `next dev` stack with
+nothing mocked, which is why this record is a summary of eight verifications rather than
+one. What follows is what I saw; the checkpoint below is Hammed's and is recorded as his.
+
+### Verified, task by task
+
+1. **Warehouse API** — CRUD minus delete. DELETE answers 405 by declaration, not omission.
+   The four guard declarations were all caught by the guards before I added them, exactly
+   as the plan warned; `countries_left_unserved` computes server-side, counting only
+   ACTIVE warehouses as cover.
+2. **CSV dry-run + unpriced endpoint** — `?dry_run=1` through the browser reported
+   `updated 1` and one bad row, left the quantity at 132, and audited itself as
+   `import_csv_dry_run`. `prices/unpriced/?currency=GBP` returned 4.
+3. **The inventory grid** — 39 variants over 4 warehouse columns; `low_stock=1` returned
+   **the 5 rows this plan's own grounding measured in production**; search narrowed to 2;
+   an adjustment wrote 132 → 130 with a −2 movement naming reason, note and actor.
+4. **Start stocking** — "Not stocked" on Aloe Rescue Gel in Lagos HQ created the row with a
+   +40 restock movement and **two separate audit rows** (`create`, then `adjust`). The
+   reason and note fields correctly stayed hidden at an opening count of 0.
+5. **Warehouse manager** — the duplicate-priority warning named all three warehouses
+   sharing priority 1. A rename saved with no confirmation. Unticking Nigeria produced the
+   ruling 1b gate ("Nigeria will have no warehouse. Checkout will fail there…"), and
+   **Cancel sent nothing** — Lagos HQ still serves NG. All warehouse state was restored.
+6. **Import wizard** — a spreadsheet-headed file mapped correctly; the dry-run reported
+   "2 would be updated, 1 skipped" with *Line 4* (their line, not the backend's row index)
+   and left the counts at 90/180; the apply reported the identical numbers and wrote
+   88/175. Audited `import_csv_dry_run`, then `import_csv`.
+7. **Unpriced checklist + retractions** — 4 variants with no GBP price; the Prices tab now
+   reads "Country-specific prices cannot be edited here" with **no "17c" anywhere on the
+   page**; the variants empty state no longer promises 17b.
+
+Backend 1534 passed / 3 skipped · admin 687 passed · tsc, eslint and ruff clean.
+
+### Three real defects, found by walking and fixed
+
+None of these were visible to the test suites, and two of them were in the proxy every
+admin request passes through:
+
+1. **`orders/export.csv` and `invoice.pdf` 404'd through the BFF.** It appended a trailing
+   slash to every upstream path on a premise Plan-18a had already falsified, so both
+   download routes matched the order-detail route as an order numbered "export.csv".
+2. **The BFF could not carry a file at all.** `req.json()` on a multipart body fell into
+   its own catch and became `{}`, so **uploads were silently discarded** and Django
+   answered 415 for a request that plainly had a file. That is every upload this admin
+   will ever make — including Task 6, whose only client this is.
+3. **A refused duplicate bank reference left no trace** (Plan-18a). The discrepancy path
+   recorded an event; the duplicate path did not, and the audit mixin writes on success
+   only — so the one moment the system catches goods being released against money already
+   spent was invisible. Now symmetrical.
+
+### Decisions this plan made, for the record
+
+- **Ruling 4 answered: country-override editing was NOT built.** All four markets are
+  NGN-only and two are blocked on stock as well. The three promises were retracted rather
+  than moved, and say nothing about editing the database directly.
+- **Warehouse deletion is refused, not unimplemented** — `StockItem.warehouse` is CASCADE.
+- **An absent stock cell is not low stock.** An absence is a different problem with a
+  different fix, and folding them together makes the low-stock queue unworkable.
+
+### Not done, and why
+
+- **Task 0 — the 8 weightless variants — is NOT done and is not mine to do.** It needs the
+  real physical weights of eight products, which only Hammed has, and every GIG quote is
+  computed from weight: inventing them would set what customers are charged. The list was
+  read out of production and is in the session record. **`Toke carrot shea butter` has the
+  SKU `0.266`**, which looks like a weight that landed in the SKU column during the Plan-21
+  migration — worth checking before the weights are entered.
+- The **UK Warehouse still holds no stock**. This plan gave it the tooling; only a physical
+  count can give it rows.
+
+### A dev-environment note worth keeping
+
+This repo lives on `/mnt/c` under WSL, and three separate things serve stale results there:
+Next's HMR does not see edits, Django's autoreloader picks up a module but not always its
+imports (which produced a confusing `NameError` mid-walk), and the FIRST page load after a
+fresh Turbopack compile can render with default query params. **Restart after editing, and
+reload once before believing a filtered page.**
+
+**CHECKPOINT SIGNED OFF — Hammed, 2026-07-31.** He walked the inventory surfaces himself
+against the local stack. Plan-17c is closed.
