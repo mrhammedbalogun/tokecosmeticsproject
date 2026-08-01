@@ -230,6 +230,14 @@ def _case_product_csv_import(client, monkeypatch):
     ), 200
 
 
+def _case_warehouse_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/warehouses/",
+        {"name": "Abuja Depot", "location_country": "NG", "priority": 2, "is_active": True},
+        format="json",
+    ), 201
+
+
 def _case_stock_create(client, monkeypatch):
     variant = ProductVariantFactory()
     warehouse = WarehouseFactory()
@@ -428,6 +436,7 @@ WRITE_CASES: dict[str, tuple] = {
     "ProductVideoAdminViewSet": (_case_video, "create"),
     "PriceAdminViewSet": (_case_price, "create"),
     "ProductCSVImportView": (_case_product_csv_import, "import_csv"),
+    "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),
     "AdminOrderTransitionView": (_case_order_transition, "transition"),

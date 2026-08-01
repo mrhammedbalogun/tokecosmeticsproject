@@ -85,6 +85,7 @@ MATRIX: list[Row] = [
     Row("ProductCSVExportView", "get", "/api/v1/admin/products/export.csv", _MANAGERS),
     Row("ProductCSVImportView", "post", "/api/v1/admin/products/import.csv", _MANAGERS),
     # --- inventory ---------------------------------------------------------------
+    Row("WarehouseAdminViewSet", "get", "/api/v1/admin/warehouses/", _MANAGERS),
     Row("StockItemAdminViewSet", "get", "/api/v1/admin/stock/", _MANAGERS),
     Row("StockMovementListView", "get", "/api/v1/admin/stock/movements/", _MANAGERS),
     Row("StockCSVExportView", "get", "/api/v1/admin/stock/export.csv", _MANAGERS),

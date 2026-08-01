@@ -26,11 +26,38 @@ from apps.inventory.admin_serializers import (
     StockAdjustSerializer,
     StockItemSerializer,
     StockMovementSerializer,
+    WarehouseAdminSerializer,
 )
 from apps.inventory.csv_io import export_stock_csv
-from apps.inventory.models import StockItem, StockMovement
+from apps.inventory.models import StockItem, StockMovement, Warehouse
 from apps.inventory.services import adjust
 from apps.inventory.tasks import import_stock_csv_task
+
+
+class WarehouseAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """Plan-17c Task 1. `products.manage`, consistent with the rest of inventory.
+
+    ── DELETE IS NOT OFFERED, AND THAT IS THE POINT ────────────────────────────────
+
+    `StockItem.warehouse` is `on_delete=CASCADE`. Deleting a warehouse would silently
+    destroy every stock row it holds and strip the context from every movement those rows
+    ever recorded — the ledger that says who wrote off what would start pointing at
+    nothing. Deactivating (`is_active=False`) takes the warehouse out of `reserve()`
+    without touching a single row of history, which is what "remove this warehouse"
+    actually means when somebody asks for it.
+
+    So `http_method_names` omits `delete` and the route answers 405. That is a deliberate
+    refusal rather than an unimplemented feature.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
+    serializer_class = WarehouseAdminSerializer
+    audit_serializers = (WarehouseAdminSerializer,)
+    queryset = Warehouse.objects.prefetch_related("serves_countries").all()
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["is_active", "location_country"]
+    http_method_names = ["get", "post", "put", "patch", "head", "options"]
 
 
 class StockItemAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):

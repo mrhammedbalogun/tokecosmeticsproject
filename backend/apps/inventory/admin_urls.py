@@ -9,10 +9,12 @@ from apps.inventory.admin_views import (
     StockCSVImportView,
     StockItemAdminViewSet,
     StockMovementListView,
+    WarehouseAdminViewSet,
 )
 
 router = SimpleRouter()
 router.register("stock", StockItemAdminViewSet, basename="admin-stock")
+router.register("warehouses", WarehouseAdminViewSet, basename="admin-warehouse")
 
 # Plain paths BEFORE the router so `stock/export.csv` / `stock/movements/` aren't
 # captured as a stock pk detail route.

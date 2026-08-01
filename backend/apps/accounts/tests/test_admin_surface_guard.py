@@ -163,6 +163,9 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "ProductCSVExportView": "products.manage",
     "ProductCSVImportView": "products.manage",
     # --- inventory ---------------------------------------------------------------
+    # Warehouses are where stock physically is, and `serves_countries` on one of them
+    # decides whether a market can be sold to at all. Same scope as the stock it holds.
+    "WarehouseAdminViewSet": "products.manage",
     "StockItemAdminViewSet": "products.manage",
     "StockMovementListView": "products.manage",
     "StockCSVExportView": "products.manage",
