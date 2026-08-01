@@ -145,6 +145,76 @@ describe("the happy path", () => {
     expect(calls[0]).toBe("http://backend:8000/api/v1/admin/customers/a.b%40c.example/");
   });
 
+  it("READS A MULTIPART REQUEST AS MULTIPART, NEVER AS JSON", async () => {
+    // The bug: req.json() on a file upload fell into its own catch and became `{}`, so
+    // the file never left the proxy and Django answered 415 for a request that plainly
+    // had one. Here the body is deliberately malformed multipart, which proves the branch
+    // by its answer: the multipart path rejects it, where the JSON path would have
+    // shrugged and forwarded `{}` upstream. (The happy path is verified against the real
+    // stack — jsdom will not round-trip a FormData through a Request faithfully.)
+    store.set("admin_access", "ACCESS");
+    const calls: string[] = [];
+    global.fetch = vi.fn((url: string) => {
+      calls.push(url);
+      return Promise.resolve(ok());
+    }) as unknown as typeof fetch;
+
+    const res = await POST(
+      new Request("http://admin.test/api/admin/stock/import.csv?dry_run=1", {
+        method: "POST",
+        body: "sku,warehouse,quantity\n",
+        headers: { "content-type": "multipart/form-data; boundary=----x" },
+      }),
+      ctx(["admin", "stock", "import.csv"]),
+    );
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      detail: "Request body is not valid multipart form data.",
+    });
+    expect(calls).toEqual([]); // and nothing was forwarded as `{}`
+  });
+
+  it("refuses an unparseable JSON body instead of silently sending {}", async () => {
+    store.set("admin_access", "ACCESS");
+    const calls: string[] = [];
+    global.fetch = vi.fn((url: string) => {
+      calls.push(url);
+      return Promise.resolve(ok());
+    }) as unknown as typeof fetch;
+
+    const res = await POST(
+      new Request("http://admin.test/api/admin/orders/", {
+        method: "POST",
+        body: "not json at all",
+        headers: { "content-type": "application/json" },
+      }),
+      ctx(["admin", "orders"]),
+    );
+
+    expect(res.status).toBe(400);
+    expect(calls).toEqual([]); // nothing reached the backend
+  });
+
+  it("still sends an empty object for a genuinely empty body", async () => {
+    store.set("admin_access", "ACCESS");
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      calls.push([url, init]);
+      return Promise.resolve(ok());
+    }) as unknown as typeof fetch;
+
+    const res = await POST(
+      new Request("http://admin.test/api/admin/orders/TC-1/resolve-review/", {
+        method: "POST",
+      }),
+      ctx(["admin", "orders", "TC-1", "resolve-review"]),
+    );
+
+    expect(res.status).toBe(200);
+    expect(calls[0][1]?.body).toBe(JSON.stringify({}));
+  });
+
   it("marks every response no-store", async () => {
     store.set("admin_access", "ACCESS");
     global.fetch = vi.fn(() => Promise.resolve(ok())) as unknown as typeof fetch;

@@ -7,13 +7,13 @@ from apps.notifications.send import send_email
 
 
 @shared_task
-def import_stock_csv_task(raw_bytes: bytes, user_id=None) -> dict:
+def import_stock_csv_task(raw_bytes: bytes, user_id=None, dry_run: bool = False) -> dict:
     user = None
     if user_id:
         from django.contrib.auth import get_user_model
 
         user = get_user_model().objects.filter(pk=user_id).first()
-    return import_stock_csv(parse_csv_bytes(raw_bytes), user=user)
+    return import_stock_csv(parse_csv_bytes(raw_bytes), user=user, dry_run=dry_run)
 
 
 @shared_task

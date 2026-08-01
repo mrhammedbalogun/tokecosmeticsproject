@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import io
 
+from django.db import transaction
+
 from apps.catalog.models import ProductVariant
 from apps.inventory.models import StockItem, Warehouse
 from apps.inventory.services import adjust
@@ -42,13 +44,56 @@ def _apply_row(row: dict, user) -> str:
     return "created" if created else "updated"
 
 
-def import_stock_csv(rows, user=None) -> dict:
-    report = {"created": 0, "updated": 0, "errors": []}
-    for i, row in enumerate(rows, start=1):
-        try:
-            report[_apply_row(row, user)] += 1
-        except Exception as exc:  # noqa: BLE001 — collect, don't abort the batch
-            report["errors"].append({"row": i, "error": str(exc)})
+class _DryRunRollback(Exception):
+    """Raised to unwind the dry-run's transaction. Never escapes `import_stock_csv`."""
+
+
+def import_stock_csv(rows, user=None, dry_run: bool = False) -> dict:
+    """Apply a stock CSV, or report what applying it WOULD do.
+
+    ── THE DRY-RUN IS THE REAL IMPORT, ROLLED BACK ────────────────────────────────────
+
+    Plan-17c ruling 2 asks for one code path with a flag and forbids a parallel
+    implementation, because "a dry-run that can disagree with the real thing is worse than
+    none" — the operator trusts the preview and then applies something else. A separate
+    `simulate()` would have to re-derive every rule in `_apply_row` (unknown SKU, unknown
+    warehouse, non-integer quantity, create-vs-update) and would drift the first time one
+    of them changed.
+
+    So the dry-run runs `_apply_row` for real, inside a transaction it then throws away.
+    The preview cannot disagree with the apply because it IS the apply. `adjust()` writes
+    only to the database — no mail, no Celery, no cache — so rolling it back leaves nothing
+    behind. If it ever gains a non-transactional side effect, this stops being safe and
+    the note in `services.adjust` should say so.
+
+    Each row additionally gets its OWN savepoint. Under one enclosing transaction a failed
+    row would abort every statement after it in Postgres, so the batch would collapse at
+    the first bad line instead of collecting per-row errors as it promises. That
+    savepoint benefits the real import identically — a row that half-applied and raised
+    no longer leaves its fragment behind.
+    """
+    report = {"created": 0, "updated": 0, "errors": [], "dry_run": dry_run}
+
+    def _run() -> None:
+        for i, row in enumerate(rows, start=1):
+            try:
+                with transaction.atomic():  # savepoint: one bad row must not end the batch
+                    outcome = _apply_row(row, user)
+            except Exception as exc:  # noqa: BLE001 — collect, don't abort the batch
+                report["errors"].append({"row": i, "error": str(exc)})
+            else:
+                report[outcome] += 1
+
+    if not dry_run:
+        _run()
+        return report
+
+    try:
+        with transaction.atomic():
+            _run()
+            raise _DryRunRollback
+    except _DryRunRollback:
+        pass
     return report
 
 

@@ -220,6 +220,49 @@ class PriceAdminViewSet(AdminBaseViewSet):
     filterset_fields = ["variant", "variant__product", "currency", "country"]
     queryset = Price.objects.select_related("variant", "currency", "country")
 
+    @action(detail=False, methods=["get"])
+    def unpriced(self, request):
+        """`GET /admin/prices/unpriced/?currency=GBP` — active variants with no price in
+        that currency. Plan-17c Task 2.
+
+        The products list answers "what is this product missing?"; this answers the
+        question somebody actually has on the day a market opens: "what is not sellable
+        HERE yet?" A market needs a price in its currency before the product appears in it
+        at all, and all 121 production prices are NGN — so a naive "does it have a price"
+        check would report the whole catalogue ready for the UK.
+
+        An action on this viewset rather than a new view: it is the same resource and the
+        same `products.manage` scope, and a new class would owe the four guard
+        declarations for a read that this one already carries.
+
+        ACTIVE products only. A draft or archived product with no GBP price is not a gap
+        in the catalogue, and listing it would pad a checklist that exists to be finished.
+        """
+        code = (request.query_params.get("currency") or "").strip().upper()
+        if not code:
+            return Response(
+                {"detail": "currency is required, e.g. ?currency=GBP."}, status=400
+            )
+
+        variants = (
+            ProductVariant.objects.filter(product__status="active")
+            .exclude(prices__currency_id=code)
+            .select_related("product")
+            .order_by("product__name", "sku")
+        )
+        page = self.paginate_queryset(variants)
+        rows = [
+            {
+                "variant_id": v.id,
+                "sku": v.sku,
+                "variant_name": v.name,
+                "product_name": v.product.name,
+                "product_slug": v.product.slug,
+            }
+            for v in (page if page is not None else variants)
+        ]
+        return self.get_paginated_response(rows) if page is not None else Response(rows)
+
 
 class ProductCSVExportView(AdminAuditMixin, APIView):
     # Read-only, and still `.manage`: see the module docstring. A bulk dump of the

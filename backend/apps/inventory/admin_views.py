@@ -128,16 +128,34 @@ class StockCSVExportView(AdminAuditMixin, APIView):
 
 
 class StockCSVImportView(AdminAuditMixin, APIView):
+    """POST a stock CSV. `?dry_run=1` reports what the file WOULD do and writes nothing —
+    see `csv_io.import_stock_csv` for why that is the same code path rolled back.
+
+    The audit ACTION distinguishes the two, because "who changed the stock levels" must
+    not be answered with a row for somebody who only previewed a file. A dry-run is still
+    audited: uploading a customer's spreadsheet is worth recording either way, and the
+    row's action says plainly which it was.
+    """
+
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("products.manage")]
     parser_classes = [MultiPartParser, FormParser]
     audit_action = "import_csv"
     audit_model_label = "inventory.stockitem"
 
+    def _is_dry_run(self, request) -> bool:
+        raw = request.query_params.get("dry_run", request.data.get("dry_run", ""))
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+    def resolve_action(self) -> str:
+        return "import_csv_dry_run" if self._is_dry_run(self.request) else "import_csv"
+
     def post(self, request):
         upload = request.data.get("file")
         if upload is None:
             return Response({"detail": "No file provided."}, status=400)
         # Eager inline in dev/tests (PLAN-05c-async note applies for a real broker).
-        result = import_stock_csv_task.delay(upload.read(), user_id=request.user.id)
+        result = import_stock_csv_task.delay(
+            upload.read(), user_id=request.user.id, dry_run=self._is_dry_run(request)
+        )
         return Response(result.get(), status=200)

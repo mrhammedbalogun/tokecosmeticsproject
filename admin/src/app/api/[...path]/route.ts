@@ -107,10 +107,42 @@ async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> 
     return json({ detail: "Not authenticated." }, 401);
   }
 
-  const body =
-    req.method === "GET" || req.method === "DELETE" || req.method === "HEAD"
-      ? undefined
-      : await req.json().catch(() => ({}));
+  // MULTIPART IS READ AS MULTIPART. `req.json()` on a file upload does not merely fail —
+  // it fails into `{}` via the catch below, so the request reached Django as an empty JSON
+  // body and the FILE WAS SILENTLY DISCARDED. Django answered 415, which reads like a
+  // client mistake rather than the proxy having thrown the payload away. Every upload the
+  // admin will ever do goes through here: the stock CSV import and its Plan-17c dry-run,
+  // the product CSV import, and image uploads. `apiFetchRaw` already forwards a FormData
+  // untouched so fetch can generate the boundary — it was simply never handed one.
+  //
+  // Replay on the 401-retry below stays safe: a FormData's Blob parts are re-readable, so
+  // the second attempt sends the same file rather than an exhausted stream.
+  const contentType = req.headers.get("content-type") ?? "";
+  let body: FormData | Record<string, unknown> | undefined;
+  if (!(req.method === "GET" || req.method === "DELETE" || req.method === "HEAD")) {
+    if (contentType.startsWith("multipart/form-data")) {
+      try {
+        body = await req.formData();
+      } catch {
+        // A malformed upload is the caller's problem to see, not a 500 from the proxy.
+        return json({ detail: "Request body is not valid multipart form data." }, 400);
+      }
+    } else {
+      // An unparseable NON-EMPTY body is an error, not an empty object. The old
+      // `.catch(() => ({}))` covered both cases at once, which is how a discarded file
+      // became a confusing 415 from Django instead of a complaint from here.
+      const raw = await req.text();
+      if (!raw) {
+        body = {};
+      } else {
+        try {
+          body = JSON.parse(raw);
+        } catch {
+          return json({ detail: "Request body is not valid JSON." }, 400);
+        }
+      }
+    }
+  }
 
   let token: string;
   try {
