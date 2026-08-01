@@ -348,9 +348,21 @@ def test_the_customers_section_is_the_only_underived_one_and_it_is_pinned():
     declares one.
 
     The direction that can hurt is a future customers endpoint choosing a DIFFERENT scope,
-    leaving search as the looser of the two. This asserts they cannot diverge: every routed
-    admin view whose declared scope is in the `customers.` family must hold exactly the
-    scope this section gates on.
+    leaving search as the looser of the two.
+
+    ── THIS TEST USED TO CLAIM MORE THAN IT CHECKED (fixed 2026-08-01) ──────────────
+
+    `admin_search.py` says this "also fails the day a customers list view IS routed, which
+    is the day this exception should be deleted". It did not. The second assertion only
+    compared SCOPES, so routing an `AdminCustomerListView` gated on `customers.view` — the
+    same scope search declares — passed in silence, and the exception would have quietly
+    outlived the condition that justified it.
+
+    Found by a Fable review during Plan-20 planning, and worth stating plainly because it
+    is the fourth time this project has found a comment describing a control nobody built.
+    The assertion below is now `not others`: any routed view in the `customers.` family
+    fails this test, whatever scope it holds, which is what the docstring always promised.
+    Today it is vacuously true — there are no such views.
     """
     from apps.accounts.tests.test_admin_surface_guard import ADMIN_SURFACE
 
@@ -364,9 +376,12 @@ def test_the_customers_section_is_the_only_underived_one_and_it_is_pinned():
         for name, scope in ADMIN_SURFACE.items()
         if (scope or "").startswith("customers.") and name != "AdminSearchView"
     }
-    assert all(scope == customers.declared_scope for scope in others.values()), (
-        f"these customer endpoints gate on a different scope than search does "
-        f"({customers.declared_scope}): {others}"
+    assert not others, (
+        f"a customers endpoint is now routed ({others}) — this exception should be "
+        f"deleted: point the search source's `list_view_path` at it, drop "
+        f"`declared_scope`, and let the derivation cover this section like every other. "
+        f"Add the queryset-parity test too; `_customers_base` was always meant to be "
+        f"shared with the list endpoint."
     )
 
 

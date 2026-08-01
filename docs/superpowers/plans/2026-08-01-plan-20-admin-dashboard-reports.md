@@ -176,19 +176,52 @@ The seed command must be impossible to run against production; this database is 
 
 ## Risks and riders
 
-- **18b's deferral expires at Plan-22, and it collides with this stage.** 18a deferred
-  customers because "production holds 1 customer"; Plan-22 imports hundreds, with WP
-  password compatibility and **no admin surface to spot-check them on** — Customers and
-  Reviews 404 exactly as Reports does today. 18b's spec also wants per-customer "orders
-  count, lifetime value", which is the same aggregate family as this stage's top-customers
-  report. **Ruling needed from Hammed:** either 18b lands with Plan-22, or Plan-20's
-  customer aggregates are explicitly the shared layer 18b consumes. Two independent LTV
-  implementations will disagree.
-- **A tripwire test guards the customers scope.**
-  `test_admin_search.py::test_the_customers_section_is_the_only_underived_one_and_it_is_pinned`
-  is designed to fail the day a customers endpoint is routed. If a top-customers report
-  routes one, that test must be rewired to derive from it — it is a tripwire, not a
-  regression.
+- **18b: SETTLED after a second Fable review, and my framing was wrong twice.** I posed it
+  as "18b with Plan-22, or Plan-20 owns the shared aggregate" — but those answer different
+  questions (*when* the surface ships vs *where* the aggregate lives) and are not
+  exclusive. And Plan-22 was the wrong anchor: that plan carries its own verification
+  surface (a reconciliation report, per-store counts, an unusable-password CSV, a live
+  old-password login checkpoint at `master-tokerebuild.md:1155-1207`), which spot-checks an
+  import far better than eyeballing rows in an admin table. Worse, 18b built between 22 and
+  23 shows every migrated customer with **zero orders**, so its "orders count / lifetime
+  value" columns would validate nothing — which is what the 18a design spec already said:
+  *"18b, after Plan-22. Backend + UI, built against 1 row, is building blind."*
+
+  **The real deadline is Plan-25, not Plan-22.** 18b is the densest PII surface in the
+  system and its detail page is the most IDOR-shaped thing not yet built; shipping it after
+  the Plan-25 IDOR/PII pass and Plan-26 UAT would put it into production untested against
+  the class of bug those stages exist to catch.
+
+  **Decision: both, on a schedule.** The per-customer aggregate lands in
+  `apps/analytics/queries.py` in 20a (per-currency LTV and orders count, sharing one
+  `REVENUE_STATUSES`), and **18b is scheduled after Plan-23 and before Plan-25**, consuming
+  those functions. LTV must be **per currency from day one** — Plan-23 imports
+  multi-currency history and this plan bans FX mixing, so a single-number signature would
+  have to be broken later.
+
+  **20a routes nothing in the `customers.*` scope family.** Top customers gates on
+  `reports.view`, which keeps it out of the tripwire's blast radius below.
+
+- **The customers tripwire did not trip, and now does (fixed 2026-08-01).**
+  `admin_search.py:47` claimed the pinning test "also fails the day a customers list view
+  IS routed". It did not: the assertion compared scopes, so a customers endpoint gated on
+  `customers.view` — the same scope search declares — passed in silence. **The fourth
+  comment in this project found describing a control nobody built.** The assertion is now
+  `assert not others`, verified by routing a probe view that previously passed and now
+  fails with instructions. 18b's task list inherits: point `list_view_path` at the new
+  view, drop `declared_scope`, rewrite the test in the derived form, and add the
+  queryset-parity check — `_customers_base` was always documented as "meant to share".
+
+- **18c (reviews) is dropped from this conversation entirely.** It never travelled with
+  customers: production WP holds **0 product reviews**, no migration imports any, so 18c's
+  justification does not expire at migration at all — only when organic reviews exist after
+  cutover. The Reviews nav 404 is cosmetic and the item could simply be removed until then.
+
+- **An export-scope question deferred to 18b, deliberately.** Ruling 2 gates
+  customer-naming exports on `orders.manage`. When 18b adds a *customers* CSV export,
+  borrowing `orders.manage` is the wrong family — decide then whether the precedent
+  generalises or whether customers need their own `.manage` tier. Not solved in 20a.
+
 - **`low_stock_digest` becomes hourly spam after Plan-21.** It runs every 3600s with no
   change detection (`base.py:456-458`). Today it finds nothing; with real stock and 30
   chronically low SKUs it emails the identical list 24 times a day and trains staff to
