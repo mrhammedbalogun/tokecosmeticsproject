@@ -78,6 +78,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
           >
             Warehouses
           </Link>
+          <Link
+            href="/inventory/import"
+            className="rounded border border-line px-3 py-1.5 text-sm hover:border-accent"
+          >
+            Import CSV
+          </Link>
           {/* A download is a navigation, not a fetch — and it goes through the BFF, which
               attaches the admin token server-side. */}
           <a
