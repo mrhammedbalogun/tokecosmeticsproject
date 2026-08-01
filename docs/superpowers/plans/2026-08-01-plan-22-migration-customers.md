@@ -3,52 +3,50 @@
 Master spec: `master-tokerebuild.md` §Plan-22-migration-customers. Branch off `main`
 (`4a7a369`).
 
-> **DRAFT — blocked on a decision only Hammed can make, and a Fable review is running.**
+> **Blocked on one decision only Hammed can make.** Revised after a Fable review that
+> corrected my database topology, found a live registration flood, and verified the spec's
+> hasher against server-generated hashes. What changed is recorded at the bottom.
 
 ---
 
-## Grounding (measured 2026-08-01 — do not re-derive)
+## Grounding (measured on the live host 2026-08-01)
+
+> **CORRECTED after a Fable review.** My first pass put NG-old in `tokecosm_wp788` — it
+> is not a store at all. Grants drafted from that table would have targeted an empty
+> database. Verified topology:
+
+| Store | Database | Prefix | Users | Customers with ≥1 order |
+|---|---|---|---|---|
+| NG current | `tokecosm_wp481` | `wp_` | 4,639 | ~695 |
+| NG old | `tokecosm_wp481` | **`wp8n_`** | 300 | 285 |
+| Intl | `tokecosm_usawp100` | `wp8n_` | 3,269 | 13 |
+
+**Two databases, three stores** — NG current and NG old share `tokecosm_wp481` under
+different prefixes. `tokecosm_wp788` holds 15 tables and no WooCommerce. `tokecosm_usawp100`
+also carries a `wpstg0_` WP-Staging copy that must never be migrated from.
+
+Cross-store overlap is small: **977 distinct emails** from ~993 rows — ng∩old 13, ng∩intl 1,
+old∩intl 3. The audit's guess that "many old-NG customers likely re-registered" is wrong;
+collision handling is a **17-row** problem, not a hundreds-row one.
+
+## THE OTHER FINDING: a registration flood is running on the live stores, right now
+
+Not part of this plan, and more urgent than it.
 
 | | |
 |---|---|
-| Legacy stores | **THREE**, all on one MariaDB host |
-| `tokecosm_wp481` | NG current — **639** registered customers with ≥1 order |
-| `tokecosm_wp788` | NG old — **285** |
-| `tokecosm_usawp100` | Intl — **13** |
-| Total before dedup | **937** (the audit expects the deduped figure to be lower) |
-| Guest-order emails | **~2,042** — these get NO account, by Decision 7 |
-| `User` legacy fields | `legacy_source`, `legacy_wp_id`, `legacy_wp_id_intl` already exist |
+| Intl store | 3,269 users — **3,218 registered since 14 July**, all role `subscriber`, **zero with any order** |
+| NG current | 4,639 users — 3,423 since 14 July, of which only 58 have an order |
 
-## THE BLOCKER: the migration credential deliberately cannot read customers
+The newest intl registrations are seconds apart (`21:48:42`, `21:48:43`, `21:48:45` on
+2026-08-01) with random-looking Gmail addresses. The audit measured 1,218 NG and 51 intl
+users on 14 July. **This is automated signup abuse, still in progress**, on a host that has
+already had one malware incident (audit §12).
 
-`wp_readonly@localhost` holds exactly this, verified on the live host today:
-
-```
-GRANT SELECT ON tokecosm_wp481.wp_posts             TO wp_readonly@localhost
-GRANT SELECT ON tokecosm_wp481.wp_postmeta          TO wp_readonly@localhost
-GRANT SELECT ON tokecosm_wp481.wp_terms             TO wp_readonly@localhost
-GRANT SELECT ON tokecosm_wp481.wp_term_taxonomy     TO wp_readonly@localhost
-GRANT SELECT ON tokecosm_wp481.wp_term_relationships TO wp_readonly@localhost
-```
-
-Five tables, **one** database. `wp_reader.py`'s own docstring says why, in as many words:
-
-> "The MariaDB user this runs as is granted SELECT on those five and nothing else, so a
-> compromise here cannot reach `wp_users` or any order table."
-
-That is a control somebody built on purpose in Plan-21, and Plan-22 cannot proceed without
-widening it: this stage needs `wp_users` (which holds **the password hash of every
-customer**) and `wp_usermeta`, plus the order tables to apply the "≥1 order" filter — in
-**three** schemas, not one.
-
-**This is a security decision, not an implementation detail, so it is Hammed's.** It is
-also the first time in this project that a service credential would be able to read
-password material. The plan will state the exact minimum grant and the alternative
-(a filtered dump prepared by hand, so the service account never holds hash access at all)
-once the review returns.
-
-Until it is decided, **nothing in this plan may write a row**, and no import can even be
-dry-run against real data.
+It does not corrupt this migration — the "≥1 order" filter excludes every one of them, and
+that filter is now doing real security work. But open registration being farmed on a live
+store is worth acting on independently: it is a spam/abuse surface and it bloats every
+table this plan reads.
 
 ## What is NOT blocked
 
@@ -58,9 +56,105 @@ and verified against, which is exactly how the spec says to test it. It is also 
 that decides whether 937 people can keep their passwords, so it deserves the most scrutiny
 in the stage.
 
-## Open questions the review is being asked
+## Design rulings (settled by the review)
 
-- The spec pastes a full hasher implementation. It should be scrutinised, not copied.
-- **Three stores, two ID columns.** The spec says "collision across the two stores" and
-  provides `legacy_wp_id_intl` only; NG-old has nowhere to be recorded.
-- What Plan-23 will need that this stage should prepare for.
+### 1. A dedicated, short-lived credential — not a widened `wp_readonly`, not a dump
+
+Widening `wp_readonly` would falsify the load-bearing docstring at `wp_reader.py:1-7` and
+give the recurring **catalogue** import permanent access to password hashes. Instead:
+**`wp_migration@localhost`**, created for this stage and **dropped after Plan-27's delta
+sync**.
+
+A one-shot dump was considered and rejected: Plan-27 step 3 needs
+`migrate_customers --since` against live data at cutover, which a dump cannot do — and a
+file of ~977 password hashes sitting on a laptop is *more* exposure than a localhost-only
+database user, not less.
+
+**The grant to approve (18 tables, covering Plan-23 too, so this is one approval not two):**
+SELECT on `{users, usermeta, wc_orders, wc_order_addresses, woocommerce_order_items,
+woocommerce_order_itemmeta}` across `tokecosm_wp481.wp_*`, `tokecosm_wp481.wp8n_*` and
+`tokecosm_usawp100.wp8n_*`.
+
+**Two exposures to close regardless:** `wp_usermeta` contains **`session_tokens` — live
+session material for the running store** — so the extractor allow-lists meta keys exactly
+as `wp_reader.fetch_meta` already does (`wp_reader.py:24-52`); and the extract artifact
+holds real hashes, so it is chmod 600, never committed (fixtures use synthetic hashes) and
+deleted after import.
+
+### 2. Implement the spec's hasher as pasted — its *settings note* is what is wrong
+
+The review tested the spec's code against material generated by the **VPS's own PHP**
+(`password_hash(base64_encode(hash_hmac('sha384', pw, 'wp-sha384', true)))`) and WordPress's
+own `class-phpass.php`, plus `$2y$` on two bcrypt versions, unicode passwords, and the
+`!locked` hashes that actually exist in these tables. It verifies correctly and integrates
+with Django 5.2: `identify_hasher` resolves, `check_password` fires the upgrade setter on
+success and not on failure.
+
+Corrections to the spec's surrounding prose:
+
+- It says to prepend "Argon2… (default list)". **This repo defines no `PASSWORD_HASHERS` at
+  all**, so the effective default is PBKDF2-first, and Argon2 would need `argon2-cffi`,
+  which is not a dependency. **Do not smuggle a default-hasher change into a migration
+  plan** — define the list explicitly as Django's default plus `wordpress` appended; Argon2
+  is its own decision.
+- `bcrypt` and `passlib` are both new dependencies. **`passlib` is unmaintained** (1.7.4,
+  2020) and serves exactly **86 users** — 84 NG-old plus 2 intl on `$P$`; NG current is
+  100% `$wp$`. Pin it with a comment, or vendor a short phpass verify. Silent adoption is
+  the option that is not acceptable.
+- Add a system check that `PASSWORD_HASHERS[0]` is never `wordpress` — the hasher's
+  `encode()` raises, and it is only reachable if a future settings edit puts it first.
+
+### 3. `LegacyIdentity`, and delete `legacy_wp_id_intl` before it holds data
+
+Three stores against two columns is already the wrong shape, and the columns are **empty
+today** — the last cheap moment to fix it.
+
+```
+LegacyIdentity(user, store, wp_user_id)   # unique (store, wp_user_id)
+```
+
+It is the idempotency key for `--since` re-runs, and it is exactly the
+`(store, customer_id) → user` map **Plan-23 needs to link orders**. Collision precedence:
+`legacy_ng > legacy_intl > legacy_ng_old` — the two live stores beat the one dead since
+November 2025. It decides 17 cases.
+
+### 4. Three rules that prevent data loss at cutover
+
+- **Password and legacy fields are set on CREATE only, never on update.** A customer who
+  migrates at staging and then resets their password on the new site must not have it
+  reverted by the cutover delta run.
+- **Never touch a pre-existing account.** By cutover the Django database holds staff —
+  including Hammed's own — and possibly organic signups whose emails collide. The importer
+  attaches a `LegacyIdentity` and refuses to write password, names or `is_staff`. Silently
+  replacing a staff account's hash with a customer's WP hash is the worst outcome available
+  here.
+- **Route creation through `UserManager._create_user`** (`managers.py:10-29`), which already
+  lowercases email and retries `toke_id` collisions, then assign the WP hash separately.
+
+### 5. What Plan-23 inherits
+
+Link orders by `LegacyIdentity(store, wp_user_id)` **first**, `billing_email` only as the
+guest fallback — the spec's email-only linkage is lossy, because ordering on someone else's
+behalf makes billing email ≠ login email. Also: NG `billing_state` is a WooCommerce code
+("LA") and `Address` wants `core.Region` FKs, so a code→Region map is needed; an incomplete
+address skips the address, never the user.
+
+**PII stays out of git.** The spec puts a campaign CSV under `docs/migration/` — 977 names
+and emails would enter git history. Counts-only report in the repo; the CSV goes where
+Plan-21's artifacts go.
+
+**Loyalty balances** (audit §345) are a flagged checkpoint decision that this stage is the
+natural moment to snapshot. Surfaced, not silently dropped.
+
+## What the review changed
+
+- **My topology was wrong.** NG-old is `tokecosm_wp481.wp8n_*`, not `tokecosm_wp788` —
+  which is not a store at all. Grants drafted from my table would have targeted an empty
+  database. I had inferred it from a table-name count instead of measuring.
+- **"Blocked" was too broad.** Plan-21's extract → artifact → import shape means everything
+  here is buildable and testable against fixtures *now*; only the first real extract needs
+  the grant. Sequencing the whole stage behind Hammed's decision was my error.
+- **The audit's counts are three weeks stale**, and the reason is a live registration flood.
+- **The spec's hasher is correct**; I had assumed the risk was in the code. It is in the
+  settings note around it.
+- **The dedup problem is 17 rows**, not the hundreds the audit implied.
