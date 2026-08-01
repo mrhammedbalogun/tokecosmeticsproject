@@ -23,7 +23,8 @@ WARNING, not ERROR, following payments.W001: an ERROR would abort `migrate`, and
 one moment this is guaranteed to be "wrong" is the fresh database that has not run
 the seed migration yet — which is exactly when `migrate` most needs to work.
 """
-from django.core.checks import Warning, register
+from django.conf import settings
+from django.core.checks import Error, Warning, register
 from django.db.utils import OperationalError, ProgrammingError
 
 from apps.accounts.rbac import ROLES
@@ -59,5 +60,41 @@ def admin_role_groups_check(app_configs, **kwargs):
                 "re-run the accounts.0003 seed if it was deleted, then re-attach members."
             ),
             id="accounts.W001",
+        )
+    ]
+
+
+@register()
+def wordpress_hasher_is_not_first(app_configs, **kwargs):
+    """`PASSWORD_HASHERS[0]` must never be the WordPress hasher (Plan-22 ruling 2).
+
+    ERROR, not WARNING — the opposite call to accounts.W001 above, and deliberately.
+    W001 is a WARNING because the condition it detects is legitimately true on a fresh
+    database that has not run its seed migration, so aborting `migrate` would break the
+    one case that most needs to work. This condition is never legitimately true: it is a
+    settings typo, and every second it survives, `set_password()` raises
+    NotImplementedError for every user, staff member and `createsuperuser` run in the
+    project. Failing the deploy is the cheap outcome.
+
+    Position 0 is the hasher that WRITES. `WordPressPasswordHasher` cannot write — it
+    exists to read hashes migrated out of WooCommerce and to hand them to the real hasher
+    on first successful login. Appended it is a migration aid; promoted it is an outage.
+    """
+    hashers = getattr(settings, "PASSWORD_HASHERS", None)
+    if not hashers or not hashers[0].endswith("WordPressPasswordHasher"):
+        return []
+    return [
+        Error(
+            "PASSWORD_HASHERS[0] is the verify-only WordPress hasher.",
+            hint=(
+                "apps.accounts.hashers.WordPressPasswordHasher.encode() raises by design: "
+                "it reads hashes migrated from WooCommerce and never writes one. First in "
+                "the list makes it the hasher used for every NEW password, so "
+                "set_password(), registration, password reset and createsuperuser would "
+                "all raise NotImplementedError. Move it to the END of the list; the entry "
+                "before it should be the hasher you actually want new passwords written "
+                "with (currently PBKDF2)."
+            ),
+            id="accounts.E001",
         )
     ]

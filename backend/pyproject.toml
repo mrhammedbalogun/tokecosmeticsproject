@@ -49,6 +49,12 @@ dependencies = [
     # no homegrown crypto anywhere in this feature.
     "cryptography==49.0.*",
     "nh3>=0.3.6",
+    # --- WordPress password migration (Plan-22) ---
+    # Verifies BOTH modern WP hashes ($wp$ — bcrypt over an HMAC-SHA384 pre-hash) and the
+    # plain $2y$ rows. pyca/bcrypt is actively maintained; passlib, which the spec reached
+    # for, is not (1.7.4, 2020) and would serve exactly 86 users. phpass is ~25 lines and
+    # is vendored in apps/accounts/hashers.py instead, so that dependency buys nothing.
+    "bcrypt>=4.2.0",
 ]
 
 [dependency-groups]

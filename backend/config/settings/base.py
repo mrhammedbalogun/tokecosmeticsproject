@@ -114,6 +114,30 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
+# --- Password hashing (Plan-22) ---
+# Django's default list, VERBATIM AND IN ORDER, plus the verify-only WordPress hasher
+# appended for migrated customers. Position 0 is what every new password is written with;
+# every later entry only reads existing hashes and triggers a rehash on next login.
+#
+# THE ORDER IS THE SECURITY PROPERTY. `WordPressPasswordHasher.encode()` raises, so
+# promoting it would break `set_password()` everywhere including `createsuperuser` — and
+# a WordPress hash must never be *written* by this project regardless.
+# `apps.accounts.checks.check_wordpress_hasher_is_not_first` fails the system check if a
+# future edit reorders this, because `migrate` runs checks and would catch it at deploy
+# rather than at the first password change.
+#
+# This list was previously undefined, so the effective default was Django's. It is spelled
+# out here only so that appending does not silently change anything else. Argon2 is a
+# separate decision needing `argon2-cffi`, and deliberately is NOT smuggled in here.
+PASSWORD_HASHERS = [
+    "django.contrib.auth.hashers.PBKDF2PasswordHasher",
+    "django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher",
+    "django.contrib.auth.hashers.Argon2PasswordHasher",
+    "django.contrib.auth.hashers.BCryptSHA256PasswordHasher",
+    "django.contrib.auth.hashers.ScryptPasswordHasher",
+    "apps.accounts.hashers.WordPressPasswordHasher",
+]
+
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
 USE_I18N = True
