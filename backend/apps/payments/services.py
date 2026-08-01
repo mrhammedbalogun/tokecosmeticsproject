@@ -395,6 +395,21 @@ def confirm_manual_receipt(
     if not allow_duplicate_reference:
         other = _find_duplicate_reference(payment, bank_reference)
         if other is not None:
+            # RECORDED BEFORE RAISING, exactly as the amount-discrepancy refusal above is.
+            # It was not, and the asymmetry was the wrong way round: a refused discrepancy
+            # is usually a typo, while a refused duplicate is the one moment this system
+            # says "somebody tried to release goods against money already spent". That
+            # attempt left no trace on either order and none in the audit log (the mixin
+            # writes on success), so reference-probing was invisible. Found by the Plan-18a
+            # exit-gate walk. No review flag, for the same reason as above: nothing
+            # happened, and a flag would outlive the corrected confirm that follows.
+            record_event(
+                payment.order, "manual_receipt_refused", actor=staff_user,
+                message=(
+                    f"refused: bank reference {bank_reference} already confirmed "
+                    f"order {other.order.number}"
+                ),
+            )
             raise DuplicateBankReference(
                 f"bank reference {bank_reference} already confirmed order {other.order.number}"
             )

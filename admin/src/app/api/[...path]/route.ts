@@ -46,10 +46,27 @@ function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), { status, headers: NO_STORE });
 }
 
+/** A final segment that names a file — `export.csv`, `invoice.pdf`. See `upstreamPath`. */
+const FILENAME_SEGMENT = /\.[a-z0-9]{2,4}$/i;
+
 /**
  * `/api/a/b/` -> Django `/a/b/`. Rejects traversal segments outright rather than trusting
  * URL normalisation to have already removed them: this string is concatenated into a URL
  * that carries an administrator's bearer token.
+ *
+ * ── THE TRAILING SLASH IS NOT UNCONDITIONAL ────────────────────────────────────────
+ *
+ * It used to be, on the stated ground that "Django's URLconf ends every endpoint in a
+ * slash". That stopped being true the moment Plan-18a added the two download routes, which
+ * are registered WITHOUT one (`orders/export.csv`, `orders/<number>/invoice.pdf`) so that
+ * `orders/<str:number>/` cannot swallow them. Appending a slash to those turned
+ * `orders/export.csv` into `orders/export.csv/`, which then matched
+ * `orders/<str:number>/` with `number="export.csv"` — so the export button and the invoice
+ * link both answered 404 "No Order matches the given query", the exact failure the
+ * URLconf's own comment set out to prevent. Every unit test passed throughout: they mock
+ * `fetch`, so none of them traverses this function.
+ *
+ * So: a final segment that names a file is sent as-is, everything else keeps its slash.
  */
 function upstreamPath(rawSegments: string[], search: string): string | null {
   // Next redirects `/api/x/` to `/api/x` (308, method and body preserved) before this
@@ -59,8 +76,9 @@ function upstreamPath(rawSegments: string[], search: string): string | null {
   if (segments.some((s) => s === "." || s === ".." || s.includes("/") || s.includes("\\"))) {
     return null;
   }
-  // Django's URLconf ends every endpoint in a slash.
-  return `/${segments.map(encodeURIComponent).join("/")}/${search}`;
+  const path = segments.map(encodeURIComponent).join("/");
+  const slash = FILENAME_SEGMENT.test(segments[segments.length - 1]) ? "" : "/";
+  return `/${path}${slash}${search}`;
 }
 
 async function handle(req: Request, ctx: { params: Promise<{ path?: string[] }> }) {

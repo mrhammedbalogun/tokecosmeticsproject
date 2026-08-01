@@ -104,6 +104,47 @@ describe("the happy path", () => {
     expect(calls[0][1]?.body).toBe(JSON.stringify({ email: "a@b.com" }));
   });
 
+  it("SENDS A FILE-EXTENSION ENDPOINT WITHOUT A TRAILING SLASH", async () => {
+    // `orders/export.csv` and `orders/<number>/invoice.pdf` are registered in Django
+    // without a trailing slash, so `orders/<str:number>/` cannot swallow them. Appending
+    // one made both match the detail route as an order literally numbered "export.csv"
+    // and 404 in the browser, while every mocked test here passed.
+    store.set("admin_access", "ACCESS");
+    const calls: string[] = [];
+    global.fetch = vi.fn((url: string) => {
+      calls.push(url);
+      return Promise.resolve(ok());
+    }) as unknown as typeof fetch;
+
+    await GET(
+      new Request("http://admin.test/api/admin/orders/export.csv"),
+      ctx(["admin", "orders", "export.csv"]),
+    );
+    await GET(
+      new Request("http://admin.test/api/admin/orders/TC-100044/invoice.pdf"),
+      ctx(["admin", "orders", "TC-100044", "invoice.pdf"]),
+    );
+
+    expect(calls[0]).toBe("http://backend:8000/api/v1/admin/orders/export.csv");
+    expect(calls[1]).toBe("http://backend:8000/api/v1/admin/orders/TC-100044/invoice.pdf");
+  });
+
+  it("still slashes an ordinary segment that merely contains a dot", async () => {
+    store.set("admin_access", "ACCESS");
+    const calls: string[] = [];
+    global.fetch = vi.fn((url: string) => {
+      calls.push(url);
+      return Promise.resolve(ok());
+    }) as unknown as typeof fetch;
+
+    await GET(
+      new Request("http://admin.test/api/admin/customers/a.b@c.example"),
+      ctx(["admin", "customers", "a.b@c.example"]),
+    );
+
+    expect(calls[0]).toBe("http://backend:8000/api/v1/admin/customers/a.b%40c.example/");
+  });
+
   it("marks every response no-store", async () => {
     store.set("admin_access", "ACCESS");
     global.fetch = vi.fn(() => Promise.resolve(ok())) as unknown as typeof fetch;

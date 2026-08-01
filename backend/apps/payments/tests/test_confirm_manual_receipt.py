@@ -209,6 +209,14 @@ def test_one_statement_line_cannot_release_two_orders(staff):
 
     second.refresh_from_db()
     assert second.status == "pending_payment"
+    # The refusal is ON THE RECORD. The mixin audits successful writes only, so without
+    # this event a refused duplicate — the one moment the system catches goods being
+    # released against money already spent — left no trace anywhere.
+    refusal = second.events.filter(type="manual_receipt_refused").first()
+    assert refusal is not None
+    assert "FT-DUP" in refusal.message and "TC-300007" in refusal.message
+    # And nothing was flagged for refund: nothing happened.
+    assert second.review_reason == ""
 
 
 def test_confirming_twice_is_a_benign_noop_not_a_double_payment_flag(staff):
