@@ -38,7 +38,8 @@ Not part of this plan, and more urgent than it.
 | Intl store | 3,269 users — **3,218 registered since 14 July**, all role `subscriber`, **zero with any order** |
 | NG current | 4,639 users — 3,423 since 14 July, of which only 58 have an order |
 
-The newest intl registrations are seconds apart (`21:48:42`, `21:48:43`, `21:48:45` on
+**It is still growing:** intl went from 3,269 to **3,284 users during the two reviews that
+produced this plan.** The newest registrations are seconds apart (`21:48:42`, `21:48:43`, `21:48:45` on
 2026-08-01) with random-looking Gmail addresses. The audit measured 1,218 NG and 51 intl
 users on 14 July. **This is automated signup abuse, still in progress**, on a host that has
 already had one malware incident (audit §12).
@@ -70,10 +71,44 @@ A one-shot dump was considered and rejected: Plan-27 step 3 needs
 file of ~977 password hashes sitting on a laptop is *more* exposure than a localhost-only
 database user, not less.
 
-**The grant to approve (18 tables, covering Plan-23 too, so this is one approval not two):**
-SELECT on `{users, usermeta, wc_orders, wc_order_addresses, woocommerce_order_items,
-woocommerce_order_itemmeta}` across `tokecosm_wp481.wp_*`, `tokecosm_wp481.wp8n_*` and
-`tokecosm_usawp100.wp8n_*`.
+**The grant to approve — 23 tables, one approval covering Plan-23 too.** A second review
+pass corrected its own first answer here, and the correction is measured:
+
+- **`wc_order_operational_data` was missing, and Plan-23 would have failed without it.**
+  All three stores run HPOS, and in HPOS `wc_orders` has **no `date_paid_gmt` column** —
+  verified. `date_paid_gmt`, `date_completed_gmt`, `shipping_total_amount` and
+  `discount_total_amount` all live in the operational-data table. An 18-table grant would
+  have hit `ERROR 1142` partway through the order import.
+- **Intl has 13 orders HPOS never backfilled** — `tokecosm_usawp100.wp8n_posts` holds 13
+  `shop_order` rows (2023) alongside 125 in `wc_orders`. They need `posts` + `postmeta` on
+  that one prefix, or Plan-23 silently loses them. Their `_customer_user` values point at
+  deleted users, so Plan-22's customer set is unaffected.
+- **Deliberately excluded:** `wc_orders_meta` (attribution/analytics noise),
+  `wc_customer_lookup`, `wc_order_stats` and the `*_lookup` derived tables. Refunds need
+  nothing extra — they are `wc_orders` rows of type `shop_order_refund`. Coupon lines are
+  `woocommerce_order_items` rows.
+
+So: `{users, usermeta, wc_orders, wc_order_addresses, wc_order_operational_data,
+woocommerce_order_items, woocommerce_order_itemmeta}` × three store prefixes, **plus**
+`posts` and `postmeta` on `tokecosm_usawp100.wp8n_`.
+
+**`@localhost` is correct, and now proven rather than assumed.** MariaDB binds
+`127.0.0.1` only, so no container can reach it over TCP; the extract runs as a one-off
+`docker compose run --rm` with the unix socket bind-mounted read-only
+(`docs/runbooks/migration.md:107-118`), and a socket connection authenticates as
+`localhost`. The long-lived `web`/`worker`/`beat` containers deliberately do not mount it.
+
+**The credential does NOT go in `.env.prod`** — verified: that file contains no `WP_DB_*`
+lines, matching `base.py:486-489`. It follows the proven Plan-21 pattern: a root-only
+`0600` file (`/root/wp-migration.env`, mirroring the existing `/root/wp-readonly.env`),
+sourced and forwarded valuelessly so it never enters shell history or `docker inspect`.
+
+**Create it at extract time, not on approval.** Every day it exists unused is exposure on
+a box that is being actively probed right now.
+
+**Verification must include two NEGATIVE checks** that have to fail with `ERROR 1142`:
+`tokecosm_usawp100.wpstg0_users` (the WP-Staging copy shares that database and must be
+provably out of scope) and `tokecosm_wp481.wp_options`.
 
 **Two exposures to close regardless:** `wp_usermeta` contains **`session_tokens` — live
 session material for the running store** — so the extractor allow-lists meta keys exactly
