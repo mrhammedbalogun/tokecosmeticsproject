@@ -22,6 +22,41 @@ TOKE_ID_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 ANONYMISED_EMAIL_DOMAIN = "@deleted.invalid"
 
 
+class LegacyStore(models.TextChoices):
+    """The three WooCommerce stores Plan-22 migrates from.
+
+    Two DATABASES, three STORES: NG current and NG old share `tokecosm_wp481` under
+    different table prefixes (`wp_` and `wp8n_`), and intl is `tokecosm_usawp100.wp8n_`.
+    The values are the strings already written in `User.legacy_source`.
+    """
+
+    NG = "legacy_ng", "Nigeria — current store"
+    NG_OLD = "legacy_ng_old", "Nigeria — old store (dead since Nov 2025)"
+    INTL = "legacy_intl", "International (US/UK/CA)"
+
+
+#: Which store wins when the same person exists on more than one, most-authoritative
+#: first. The two LIVE stores beat the one dead since November 2025, because a customer
+#: who used both most recently proved their password on a store that still takes orders.
+#: NG current outranks intl on volume: 695 customers with orders against 13.
+#:
+#: This decides 17 rows — measured, not estimated: ng∩old 13, ng∩intl 1, old∩intl 3. The
+#: audit's guess that "many old-NG customers likely re-registered" is wrong, which is why
+#: a deterministic precedence list is enough and no manual reconciliation step is needed.
+STORE_PRECEDENCE = (LegacyStore.NG, LegacyStore.INTL, LegacyStore.NG_OLD)
+
+
+def best_store(stores) -> str:
+    """The winning store from an iterable, by STORE_PRECEDENCE. Unknown values lose.
+
+    Deterministic on purpose: the cutover delta run in Plan-27 re-imports the same people
+    and must reach the same answer it reached at staging, or a customer's name and
+    password would flip between two stores' versions of them.
+    """
+    ranked = [s for s in STORE_PRECEDENCE if s in set(stores)]
+    return ranked[0] if ranked else ""
+
+
 def generate_toke_id() -> str:
     """'TK-' + 6 random chars from TOKE_ID_ALPHABET (~1.5e9 combinations)."""
     return "TK-" + "".join(secrets.choice(TOKE_ID_ALPHABET) for _ in range(6))
@@ -48,10 +83,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     # password reset). Gates legacy guest-order claiming — see apps.accounts.claims.
     email_verified_at = models.DateTimeField(null=True, blank=True)
 
-    # Migration provenance (populated in Plan-22).
-    legacy_source = models.CharField(max_length=20, blank=True)  # "", "legacy_ng", "legacy_ng_old", "legacy_intl"
-    legacy_wp_id = models.IntegerField(null=True, blank=True)
-    legacy_wp_id_intl = models.IntegerField(null=True, blank=True)
+    # Which store this account's NAME AND PASSWORD came from, when it was migrated.
+    # The WordPress ids themselves are NOT here — see LegacyIdentity below, which is a
+    # row per store because one person can exist on all three.
+    legacy_source = models.CharField(max_length=20, blank=True, choices=LegacyStore.choices)
 
     objects = UserManager()
 
@@ -83,6 +118,54 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     def get_full_name(self) -> str:
         return f"{self.first_name} {self.last_name}".strip()
+
+
+class LegacyIdentity(TimeStampedModel):
+    """One row per (store, WordPress user id) this account was migrated from.
+
+    WHY A TABLE AND NOT COLUMNS. This replaced `User.legacy_wp_id` and
+    `User.legacy_wp_id_intl` — two columns for three stores, which is the wrong shape and
+    was caught while both were still empty, the last moment it was free to change. A third
+    column would have been the obvious patch and would have been wrong again the moment a
+    fourth store appeared, or the moment anyone asked "which stores was this customer on?"
+    and got an answer assembled from column names.
+
+    WHAT IT IS FOR, beyond provenance — two things that are not optional:
+
+    * **The idempotency key.** Plan-27's cutover runs `migrate_customers --since` against
+      live data, hours after the staging run. `(store, wp_user_id)` is what tells the
+      second run "this is the same person", so it updates instead of creating a duplicate.
+      Email cannot do this job: a customer who changes their email in WordPress between
+      the two runs would import twice.
+    * **What Plan-23 links orders with.** An order carries a WordPress customer id. Order
+      linkage goes through this table FIRST and falls back to `billing_email` only for
+      genuine guests — the spec's email-only linkage is lossy, because ordering on someone
+      else's behalf makes billing email ≠ login email, and matching on it would attach a
+      stranger's order to the wrong account.
+
+    The unique constraint is on `(store, wp_user_id)` and NOT on `user`: one Django user
+    legitimately holds up to three of these, which is exactly the 17 merged customers.
+    """
+
+    user = models.ForeignKey(
+        "accounts.User", on_delete=models.CASCADE, related_name="legacy_identities"
+    )
+    store = models.CharField(max_length=20, choices=LegacyStore.choices)
+    wp_user_id = models.IntegerField()
+
+    class Meta:
+        constraints = [
+            # A WordPress user id is unique WITHIN a store, never across them: NG user 42
+            # and intl user 42 are different people. Store-scoped uniqueness is what makes
+            # a re-run safe; a bare unique on wp_user_id would collide constantly.
+            models.UniqueConstraint(
+                fields=["store", "wp_user_id"], name="uniq_legacy_identity_store_wp_id"
+            ),
+        ]
+        verbose_name_plural = "legacy identities"
+
+    def __str__(self) -> str:
+        return f"{self.store}#{self.wp_user_id} → {self.user_id}"
 
 
 class StaffInvite(TimeStampedModel):
