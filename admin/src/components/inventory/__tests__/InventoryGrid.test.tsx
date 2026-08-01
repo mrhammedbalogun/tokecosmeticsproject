@@ -4,8 +4,12 @@ import { InventoryGrid } from "@/components/inventory/InventoryGrid";
 import type { GridCell, GridRow } from "@/lib/inventory";
 
 const adjust = vi.fn<(input: unknown) => Promise<{ ok: boolean }>>(async () => ({ ok: true }));
+const startStocking = vi.fn<
+  (input: unknown) => Promise<{ ok?: boolean; partial?: boolean; message?: string | null }>
+>(async () => ({ ok: true }));
 vi.mock("@/app/(shell)/inventory/actions", () => ({
   adjustStockAction: (input: unknown) => adjust(input),
+  startStockingAction: (input: unknown) => startStocking(input),
 }));
 
 const cell = (over: Partial<GridCell> = {}): GridCell => ({
@@ -32,7 +36,11 @@ const row = (over: Partial<GridRow> = {}): GridRow => ({
 
 const WAREHOUSES = [{ id: 1, name: "Lagos HQ" }];
 
-beforeEach(() => adjust.mockClear());
+beforeEach(() => {
+  adjust.mockClear();
+  startStocking.mockClear();
+  startStocking.mockResolvedValue({ ok: true });
+});
 
 describe("InventoryGrid", () => {
   it("RENDERS AN ABSENT CELL AS AN ABSENCE, not as a blank or a zero", () => {
@@ -49,7 +57,9 @@ describe("InventoryGrid", () => {
     expect(screen.queryByText("0")).not.toBeInTheDocument();
   });
 
-  it("offers no adjust control on a cell that has no row to adjust", () => {
+  it("makes the absence ACTIONABLE — it opens the start-stocking form", () => {
+    // 17a Task 7 recorded that there was no admin path to start stocking a variant in a
+    // second warehouse at all. This click is that path.
     render(
       <InventoryGrid
         rows={[row({ cells: [cell({ stock_item_id: null, quantity: null })] })]}
@@ -57,7 +67,69 @@ describe("InventoryGrid", () => {
       />,
     );
 
-    expect(screen.queryByRole("button", { name: /adjust/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Not stocked" }));
+
+    expect(screen.getByText("Start stocking here")).toBeInTheDocument();
+  });
+
+  it("creates the row with the opening count, the threshold and the reason", () => {
+    render(
+      <InventoryGrid
+        rows={[row({ cells: [cell({ stock_item_id: null, quantity: null })] })]}
+        warehouses={WAREHOUSES}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Not stocked" }));
+
+    fireEvent.change(screen.getByLabelText(/opening count/i), { target: { value: "40" } });
+    fireEvent.change(screen.getByLabelText(/low-stock threshold/i), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText(/note/i), { target: { value: "opening the UK shelf" } });
+    fireEvent.click(screen.getByRole("button", { name: /start stocking/i }));
+
+    expect(startStocking).toHaveBeenCalledWith({
+      variantId: 1,
+      warehouseId: 1,
+      quantity: 40,
+      threshold: 8,
+      reason: "restock",
+      note: "opening the UK shelf",
+    });
+  });
+
+  it("ASKS FOR NO REASON WHEN THE OPENING COUNT IS ZERO", () => {
+    // Nothing moved, so there is no movement to explain — and demanding a note for a 0
+    // would train people to type "n/a" into the field the ledger depends on.
+    render(
+      <InventoryGrid
+        rows={[row({ cells: [cell({ stock_item_id: null, quantity: null })] })]}
+        warehouses={WAREHOUSES}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Not stocked" }));
+
+    expect(screen.queryByLabelText(/note/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/reason/i)).not.toBeInTheDocument();
+  });
+
+  it("closes and reports on the grid when the row was created but the count was not", async () => {
+    // The row EXISTS now, so reopening the form would meet a duplicate error.
+    startStocking.mockResolvedValue({
+      partial: true,
+      message: "The row was created but the opening count was not recorded.",
+    });
+    render(
+      <InventoryGrid
+        rows={[row({ cells: [cell({ stock_item_id: null, quantity: null })] })]}
+        warehouses={WAREHOUSES}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Not stocked" }));
+    fireEvent.change(screen.getByLabelText(/opening count/i), { target: { value: "5" } });
+    fireEvent.change(screen.getByLabelText(/note/i), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: /start stocking/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("was created but");
+    expect(screen.queryByText("Start stocking here")).not.toBeInTheDocument();
   });
 
   it("marks a low cell and still shows its real count", () => {

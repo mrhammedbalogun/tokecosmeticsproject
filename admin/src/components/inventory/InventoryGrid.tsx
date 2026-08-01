@@ -11,15 +11,17 @@
  * with no `StockItem` renders as a legible "not stocked", never as a blank and never as
  * `0`. Zero means somebody counted and found none; absent means nobody has ever counted.
  *
- * Creating the missing row is Plan-17c Task 4. Until then the absence is visible and
- * honest about being unfixable from here, which is better than being invisible.
+ * An absent cell is therefore ACTIONABLE, not merely legible: clicking it opens
+ * `StartStockingModal` (Task 4), which closes the gap 17a Task 7 recorded — there was no
+ * admin path to start stocking a variant in a second warehouse at all.
  *
  * The Adjust modal is 17a Task 7's, reused unchanged — it already knows that the quantity
  * is an absolute count rather than a delta, and that a reason and a note are required.
  */
 import { useState, useTransition } from "react";
 import { StockAdjustModal } from "@/components/product/StockAdjustModal";
-import { adjustStockAction } from "@/app/(shell)/inventory/actions";
+import { StartStockingModal, type StartStockingValues } from "@/components/inventory/StartStockingModal";
+import { adjustStockAction, startStockingAction } from "@/app/(shell)/inventory/actions";
 import { cellState, rowTotal, type GridCell, type GridRow, type WarehouseColumn } from "@/lib/inventory";
 import type { AdjustErrors } from "@/lib/stock-adjust";
 
@@ -36,7 +38,8 @@ export function InventoryGrid({
   warehouses: WarehouseColumn[];
 }) {
   const [open, setOpen] = useState<OpenCell | null>(null);
-  const [errors, setErrors] = useState<AdjustErrors>({});
+  const [starting, setStarting] = useState<OpenCell | null>(null);
+  const [errors, setErrors] = useState<AdjustErrors & { threshold?: string }>({});
   const [message, setMessage] = useState<string | null>(null);
   const [busy, startTransition] = useTransition();
 
@@ -50,8 +53,32 @@ export function InventoryGrid({
 
   const close = () => {
     setOpen(null);
+    setStarting(null);
     setErrors({});
     setMessage(null);
+  };
+
+  const startStocking = (values: StartStockingValues) => {
+    if (!starting) return;
+    setErrors({});
+    setMessage(null);
+    startTransition(async () => {
+      const state = await startStockingAction({
+        variantId: starting.row.variant_id,
+        warehouseId: starting.cell.warehouse_id,
+        ...values,
+      });
+      // `partial` means the row now EXISTS at zero, so the modal closes and the message
+      // stays on the grid: sending somebody back into this form would meet a duplicate.
+      if (state.ok || state.partial) {
+        setStarting(null);
+        setMessage(state.partial ? (state.message ?? null) : null);
+        setErrors({});
+      } else {
+        setErrors(state.errors ?? {});
+        setMessage(state.message ?? null);
+      }
+    });
   };
 
   const submit = (values: { quantity: number; reason: string; note: string }) => {
@@ -107,6 +134,11 @@ export function InventoryGrid({
                           setMessage(null);
                           setOpen({ row, cell });
                         }}
+                        onStartStocking={() => {
+                          setErrors({});
+                          setMessage(null);
+                          setStarting({ row, cell });
+                        }}
                       />
                     </td>
                   ))}
@@ -121,6 +153,27 @@ export function InventoryGrid({
           </tbody>
         </table>
       </div>
+
+      {/* Shown on the grid, not in a modal: after a partial create the row already
+          exists, so the next step is a click on the cell behind this message. */}
+      {!starting && !open && message && (
+        <p className="mt-3 rounded border border-warn/30 bg-warn/5 p-2 text-sm text-warn" role="alert">
+          {message}
+        </p>
+      )}
+
+      {starting && (
+        <StartStockingModal
+          sku={starting.row.sku}
+          productName={starting.row.product_name}
+          warehouseName={starting.cell.warehouse_name}
+          busy={busy}
+          errors={errors}
+          message={message}
+          onSubmit={startStocking}
+          onClose={close}
+        />
+      )}
 
       {open?.cell.stock_item_id != null && (
         <StockAdjustModal
@@ -139,17 +192,27 @@ export function InventoryGrid({
   );
 }
 
-function Cell({ cell, onAdjust }: { cell: GridCell; onAdjust: () => void }) {
+function Cell({
+  cell,
+  onAdjust,
+  onStartStocking,
+}: {
+  cell: GridCell;
+  onAdjust: () => void;
+  onStartStocking: () => void;
+}) {
   const state = cellState(cell);
 
   if (state === "absent") {
     return (
-      <span
-        className="inline-flex items-center gap-1 rounded border border-dashed border-line px-1.5 py-0.5 text-xs text-muted"
-        title="No stock row here. Nobody has counted this variant in this warehouse."
+      <button
+        type="button"
+        onClick={onStartStocking}
+        className="inline-flex items-center gap-1 rounded border border-dashed border-line px-1.5 py-0.5 text-xs text-muted hover:border-accent hover:text-fg"
+        title="No stock row here. Nobody has counted this variant in this warehouse — click to start stocking it."
       >
         Not stocked
-      </span>
+      </button>
     );
   }
 
