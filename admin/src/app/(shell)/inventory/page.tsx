@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { InventoryFilterForm } from "@/components/inventory/InventoryFilterForm";
 import { InventoryGrid } from "@/components/inventory/InventoryGrid";
 import { Pagination } from "@/components/Pagination";
@@ -70,14 +71,22 @@ export default async function InventoryPage({ searchParams }: { searchParams: Se
             What is on the shelf, per warehouse. Click a count to adjust it.
           </p>
         </div>
-        {/* A download is a navigation, not a fetch — and it goes through the BFF, which
-            attaches the admin token server-side. */}
-        <a
-          href="/api/admin/stock/export.csv"
-          className="shrink-0 rounded border border-line px-3 py-1.5 text-sm hover:border-accent"
-        >
-          Export CSV
-        </a>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/inventory/warehouses"
+            className="rounded border border-line px-3 py-1.5 text-sm hover:border-accent"
+          >
+            Warehouses
+          </Link>
+          {/* A download is a navigation, not a fetch — and it goes through the BFF, which
+              attaches the admin token server-side. */}
+          <a
+            href="/api/admin/stock/export.csv"
+            className="rounded border border-line px-3 py-1.5 text-sm hover:border-accent"
+          >
+            Export CSV
+          </a>
+        </div>
       </div>
 
       <div className="mt-6">
