@@ -73,6 +73,7 @@ _DESK = {"Owner", "Manager", "Support"}  # everyone who works the order desk
 # The Content editor's whole surface. Manager runs the shop and Support works the desk;
 # neither writes marketing copy, and `cms.manage` is not theirs (rbac.py:94).
 _CONTENT = {"Owner", "Content"}
+_OWNER = {"Owner"}  # settings.manage: the payout account and the gateway switches
 
 MATRIX: list[Row] = [
     # --- catalog: writing the catalogue is Owner + Manager -----------------------
@@ -95,6 +96,12 @@ MATRIX: list[Row] = [
     Row("StockMovementListView", "get", "/api/v1/admin/stock/movements/", _MANAGERS),
     Row("StockCSVExportView", "get", "/api/v1/admin/stock/export.csv", _MANAGERS),
     Row("StockCSVImportView", "post", "/api/v1/admin/stock/import.csv", _MANAGERS),
+    # --- money config: Owner alone. A Manager runs the shop; only the Owner moves
+    # where the money lands.
+    Row("BankAccountAdminViewSet", "get", "/api/v1/admin/bank-accounts/", _OWNER),
+    Row("CountryPaymentGatewayAdminViewSet", "get", "/api/v1/admin/payment-gateways/", _OWNER),
+    Row("CouponAdminViewSet", "get", "/api/v1/admin/coupons/", _MANAGERS),
+    Row("DeliveryOptionAdminViewSet", "get", "/api/v1/admin/delivery-options/", _MANAGERS),
     # --- orders: the queue and one order. Support lives here all day -------------
     Row("AdminOrderListView", "get", "/api/v1/admin/orders/", _DESK),
     Row("AdminOrderDetailView", "get", f"{_ORDER}/", _DESK),

@@ -173,6 +173,15 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "StockMovementListView": "products.manage",
     "StockCSVExportView": "products.manage",
     "StockCSVImportView": "products.manage",
+    # --- money config (Plan-19b). Owner-only: rbac.py reasoned this out before the
+    # screens existed — "settings covers the payout bank account, which is the single
+    # highest-value target in the system".
+    "BankAccountAdminViewSet": "settings.manage",
+    "CountryPaymentGatewayAdminViewSet": "settings.manage",
+    # --- marketing ---------------------------------------------------------------
+    "CouponAdminViewSet": "marketing.manage",
+    # --- delivery: an operational number a Manager adjusts, not money routing ------
+    "DeliveryOptionAdminViewSet": "products.manage",
     # --- orders: read ------------------------------------------------------------
     "AdminOrderListView": "orders.view",
     # An invoice carries the customer's name and home address, so this is read-audited.

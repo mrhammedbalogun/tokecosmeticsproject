@@ -1,5 +1,11 @@
 from django.urls import path
 
+from rest_framework.routers import SimpleRouter
+
+from apps.payments.admin_config_views import (
+    BankAccountAdminViewSet,
+    CountryPaymentGatewayAdminViewSet,
+)
 from apps.payments.views import ConfirmManualReceiptView, ManualRefundView, OrderRefundView
 
 urlpatterns = [
@@ -12,3 +18,12 @@ urlpatterns = [
     path("orders/<str:number>/confirm-payment/", ConfirmManualReceiptView.as_view(),
          name="admin-confirm-manual-receipt"),
 ]
+
+# Money config (Plan-19b). A router rather than hand-written paths: these are ordinary
+# CRUD resources, unlike the action-shaped routes above.
+_router = SimpleRouter()
+_router.register("bank-accounts", BankAccountAdminViewSet, basename="admin-bank-account")
+_router.register(
+    "payment-gateways", CountryPaymentGatewayAdminViewSet, basename="admin-payment-gateway"
+)
+urlpatterns += _router.urls

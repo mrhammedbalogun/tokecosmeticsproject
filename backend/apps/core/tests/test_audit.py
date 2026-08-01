@@ -230,6 +230,49 @@ def _case_product_csv_import(client, monkeypatch):
     ), 200
 
 
+def _case_bank_account_create(client, monkeypatch):
+    from apps.core.models import Country
+
+    country = Country.objects.exclude(bank_account__isnull=False).first()
+    return client.post(
+        "/api/v1/admin/bank-accounts/",
+        {"country": country.code, "currency": country.currency_id, "bank_name": "GTBank",
+         "account_name": "Toke", "account_number": "0123456789"},
+        format="json",
+    ), 201
+
+
+def _case_payment_gateway_create(client, monkeypatch):
+    from apps.core.models import Country
+
+    # A gateway name nothing seeds, so `unique_together (country, gateway)` cannot
+    # collide with the migration's rows however the fixtures change.
+    return client.post(
+        "/api/v1/admin/payment-gateways/",
+        {"country": Country.objects.first().code, "gateway": "audit-probe", "is_active": False},
+        format="json",
+    ), 201
+
+
+def _case_coupon_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/coupons/",
+        {"code": "WELCOME10", "type": "percent", "value": "10"},
+        format="json",
+    ), 201
+
+
+def _case_delivery_option_create(client, monkeypatch):
+    from apps.core.models import Currency
+
+    return client.post(
+        "/api/v1/admin/delivery-options/",
+        {"name": "Express", "price": "2500", "currency": Currency.objects.first().code,
+         "min_days": 1, "max_days": 2},
+        format="json",
+    ), 201
+
+
 def _case_page_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/pages/",
@@ -445,6 +488,10 @@ WRITE_CASES: dict[str, tuple] = {
     "PriceAdminViewSet": (_case_price, "create"),
     "ProductCSVImportView": (_case_product_csv_import, "import_csv"),
     "PageAdminViewSet": (_case_page_create, "create"),
+    "BankAccountAdminViewSet": (_case_bank_account_create, "create"),
+    "CountryPaymentGatewayAdminViewSet": (_case_payment_gateway_create, "create"),
+    "CouponAdminViewSet": (_case_coupon_create, "create"),
+    "DeliveryOptionAdminViewSet": (_case_delivery_option_create, "create"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),

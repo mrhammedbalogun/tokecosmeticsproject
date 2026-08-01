@@ -16,6 +16,16 @@ export const metadata: Metadata = { title: "Settings" };
  */
 const SECTIONS = [
   {
+    href: "/settings/payments",
+    title: "Payments",
+    blurb: "The bank account customers pay into, and which methods each market offers.",
+  },
+  {
+    href: "/settings/delivery",
+    title: "Delivery",
+    blurb: "Delivery options, their prices and how long they take.",
+  },
+  {
     href: "/settings/audit",
     title: "Audit log",
     blurb: "Every write on the admin surface, and the reads that touch personal data.",
