@@ -255,3 +255,56 @@ The seed command must be impossible to run against production; this database is 
   column, which "abandoned" is meant, and the dashboard's scope-less landing page.
 - **It found the adjacent gap I had not looked for**: 18b's justification expiring at
   Plan-22, and its LTV aggregates colliding with this stage's.
+
+---
+
+## Completion record (2026-08-01)
+
+Both slices built and walked in a browser.
+
+**20a — Reports.** `apps/analytics/queries.py` as the single aggregate seam, six reports,
+read-audited CSV export, `/reports`. Hand-checked against SQL as the spec's verification
+asks: NGN 5 orders / 35,100 and USD 1 / 40, matching the page exactly. The category report
+returned an **Unattributed row carrying 5,000 NGN and 40 USD** — real revenue that ruling 4
+kept visible instead of silently dropping.
+
+**20b — Dashboard.** KPI cards per currency with vs-previous deltas, one SVG revenue chart
+per currency, a status strip, and three count-and-link widgets. The "Coming in a later
+plan" copy is retired.
+
+### One real defect, found by walking it
+
+**The needs-attention card read 14 on a shop with 3.** I fetched
+`/admin/orders/?needs_review=1`; `AdminOrderListView` tests for the literal string
+`needs_attention=true` and its own comment says "there is no needs_review". The wrong
+parameter is not rejected — it is **ignored**, the filter never applies, and the endpoint
+returns every order. So the card showed the total order count under the label "orders
+needing a decision".
+
+Nothing failed: 733 admin tests passed, the page rendered, the number was plausible. Only
+comparing it against the database caught it. The filter is now one exported constant used
+by both the fetch and the link so they cannot drift, with a test pinning the literal.
+Verified live afterwards: 3, 5 and 7, matching SQL.
+
+### Rulings that held up in practice
+
+- **Per-currency, never summed** — the local data happened to hold NGN and USD, so the
+  side-by-side rule was exercised for real rather than only in tests.
+- **Deltas against a zero previous period render "—"** — every card showed it, because
+  there is no prior history. No `NaN`, no `∞`.
+- **No donut.** The status strip carries six statuses in lifecycle order and links each to
+  its filtered queue, which a pie could not do.
+- **No chart library.** One rectangle per day, per currency. `recharts` remains the answer
+  the moment tooltips or shared axes are wanted — ruling 3 stands unspent.
+- **Counts and links, never re-derived**: low stock comes from 17c's grid endpoint and
+  needs-attention from 18a's queue.
+
+### Still open
+
+- **18b** is scheduled after Plan-23 and before Plan-25, consuming
+  `queries.top_customers` for per-currency LTV. 20a routed nothing in the `customers.*`
+  family, so the tripwire stays unarmed.
+- **`low_stock_digest` still runs hourly** with no change detection. Harmless today;
+  after Plan-21's real stock it emails the same list 24 times a day.
+- The seeder refuses to run where real orders exist — it is for a clean environment, and
+  the migration shapes it produces are covered by unit tests meanwhile.
