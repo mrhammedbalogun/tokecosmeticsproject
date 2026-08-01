@@ -11,6 +11,7 @@ trail for every adjustment — the record that shows who wrote off what. Read ac
 it is not more sensitive than the numbers themselves, so it is not elevated above the
 rest; it is simply not lowered either.
 """
+from django.db.models import F, Q
 from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, viewsets
@@ -29,9 +30,27 @@ from apps.inventory.admin_serializers import (
     WarehouseAdminSerializer,
 )
 from apps.inventory.csv_io import export_stock_csv
+from apps.catalog.models import ProductVariant
 from apps.inventory.models import StockItem, StockMovement, Warehouse
 from apps.inventory.services import adjust
 from apps.inventory.tasks import import_stock_csv_task
+
+
+def _grid_cell(warehouse, item) -> dict:
+    """One variant × warehouse cell. `stock_item_id: None` means no row exists — an
+    absence the screen offers to fix, not a zero."""
+    if item is None:
+        return {
+            "warehouse_id": warehouse.pk, "warehouse_name": warehouse.name,
+            "stock_item_id": None, "quantity": None, "reserved": None,
+            "available": None, "low_stock_threshold": None, "is_low": False,
+        }
+    return {
+        "warehouse_id": warehouse.pk, "warehouse_name": warehouse.name,
+        "stock_item_id": item.pk, "quantity": item.quantity, "reserved": item.reserved,
+        "available": item.available, "low_stock_threshold": item.low_stock_threshold,
+        "is_low": item.quantity <= item.low_stock_threshold,
+    }
 
 
 class WarehouseAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
@@ -77,6 +96,83 @@ class StockItemAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     # without it the page would issue one request per variant.
     filterset_fields = ["warehouse", "variant", "variant__product"]
     http_method_names = ["get", "post", "head", "options"]  # no direct PUT/PATCH of numbers
+
+    @action(detail=False, methods=["get"])
+    def grid(self, request):
+        """`GET /admin/stock/grid/` — the inventory screen's data. Plan-17c Task 3.
+
+        Variant per row, active warehouse per column, and **a cell with no `StockItem` is
+        the point**: 122 of the 244 possible cells are empty in production and every empty
+        one is the UK Warehouse. `stock_item_id: null` is what the screen renders as an
+        actionable absence rather than a blank.
+
+        It cannot be assembled from the ordinary stock list in the browser. That endpoint
+        pages `StockItem` rows, so a variant with no row ANYWHERE never appears in it — and
+        that is exactly the variant somebody is looking for when they open this screen.
+        Paginating by variant is therefore a server-side job.
+
+        An action on this viewset, not a new view: same resource, same `products.manage`,
+        and a new class would owe the four guard declarations that this one already carries.
+
+        `?low_stock=1` keeps rows holding a cell at or below its own threshold. An ABSENT
+        cell is deliberately not low stock — an absence is a different problem with a
+        different fix, and folding the two together makes the low-stock queue unworkable.
+        """
+        warehouses = list(
+            Warehouse.objects.filter(is_active=True).order_by("priority", "name", "pk")
+        )
+        variants = ProductVariant.objects.select_related("product")
+
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            variants = variants.filter(
+                Q(sku__icontains=search) | Q(product__name__icontains=search)
+            )
+        if request.query_params.get("warehouse"):
+            # Narrowing the COLUMNS, not the rows: "show me what the UK holds" is still a
+            # question about every variant, including the ones it holds nothing of.
+            warehouses = [w for w in warehouses if str(w.pk) == request.query_params["warehouse"]]
+
+        if str(request.query_params.get("low_stock", "")).lower() in {"1", "true", "yes"}:
+            variants = variants.filter(
+                stock_items__quantity__lte=F("stock_items__low_stock_threshold"),
+                stock_items__warehouse__in=warehouses,
+            ).distinct()
+
+        variants = variants.order_by("product__name", "sku")
+        page = self.paginate_queryset(variants)
+        rows_source = page if page is not None else list(variants)
+
+        items = {
+            (item.variant_id, item.warehouse_id): item
+            for item in StockItem.objects.filter(
+                variant__in=[v.pk for v in rows_source],
+                warehouse__in=[w.pk for w in warehouses],
+            )
+        }
+        rows = [
+            {
+                "variant_id": variant.pk,
+                "sku": variant.sku,
+                "variant_name": variant.name,
+                "product_name": variant.product.name,
+                "product_slug": variant.product.slug,
+                "cells": [
+                    _grid_cell(warehouse, items.get((variant.pk, warehouse.pk)))
+                    for warehouse in warehouses
+                ],
+            }
+            for variant in rows_source
+        ]
+        columns = [{"id": w.pk, "name": w.name} for w in warehouses]
+
+        if page is None:
+            return Response({"results": rows, "warehouses": columns})
+        response = self.get_paginated_response(rows)
+        # The header must not be derived from the rows currently on screen, or the table
+        # would reshuffle its columns as somebody pages through it.
+        response.data["warehouses"] = columns
+        return response
 
     @action(detail=True, methods=["post"])
     def adjust(self, request, pk=None):
