@@ -8,6 +8,11 @@ backend app (four models, public endpoints, admin CRUD), seven admin surfaces, a
 storefront rewiring, in one line each. Plans 17 and 18 were both sliced after proving too
 big; this one is bigger than either and is sliced here before a line is written.
 
+> **REVISED after a Fable review**, which found an orphaned model with higher stakes than
+> anything I had ranked first, and named one of my two headline arguments as a
+> rationalisation. The original draft and what changed are recorded at the bottom rather
+> than quietly overwritten.
+
 ---
 
 ## Grounding (measured in production 2026-07-31 — do not re-derive)
@@ -17,135 +22,213 @@ big; this one is bigger than either and is sliced here before a line is written.
 | `apps/cms/` | **does not exist**, in any form |
 | Coupons | model exists (`checkout/models.py:8`) + redemption ledger · **0 coupons, 0 redemptions** |
 | Coupon admin API | **none** — `checkout` has no `admin_urls.py` |
+| `BankAccount` | exists (`payments/models.py:118`) · **no admin API, no admin UI, anywhere** |
+| `CountryPaymentGateway` | 15 rows, 6 active · **no admin API** |
 | Delivery options | 6, all active · **0 `DeliveryOptionRate` rows** (no weight tiers in use) |
 | Regions | **811** — 37 `state`, 774 `area` |
 | Delivery/region admin API | **none** |
-| `CountryPaymentGateway` | 15 rows, 6 active · **no admin API** |
 | `SiteSetting` | 0 rows · `Redirect` 0 rows |
-| Storefront homepage | 11 hardcoded components, fed by `storefront/src/lib/home-content.ts` (89 lines) |
+| Storefront homepage | 11 hardcoded components, fed by `lib/home-content.ts` (89 lines) |
 | Storefront `/page/{slug}` | a 3-line stub |
+| Storefront revalidation | **already built** — `app/api/revalidate/route.ts`, secret + tags + tests |
+| Backend revalidation caller | **none** |
+| WP page migration | **no owner** — `migration_wp/management/commands/` has no `migrate_pages` |
 
-**Four facts shape the slicing, and they are not opinions:**
+**Five facts shape the slicing, and they are not opinions:**
 
-1. **The live storefront's footer has ELEVEN links into a stub.**
-   `storefront/src/components/layout/Footer.tsx` links `/page/` for about, affiliates,
-   blog, community, contact, faqs, privacy, returns, shipping, terms and wholesale. Every
-   one of them renders
-   `storefront/src/app/(shop)/page/[slug]/page.tsx`, whose entire body is the sentence
-   **"CMS content arrives in Plan-19."** A shopper who clicks *Privacy policy* on a store
-   taking real money is shown the name of an unbuilt internal plan. That is the single
-   most embarrassing thing left in this codebase.
+1. **`BankAccount` is orphaned, and it is the row customers wire money to.** Its own
+   docstring says it plainly: *"Bank transfer is the only live payment method at launch, so
+   this row IS the payment page for that country."* Plan-09b deferred its CRUD screen on
+   the grounds that "Django admin covers launch" — but **`/django-admin/` is denied
+   outright at the Apache vhost**, which `config/urls.py:3-9` documents as verified from
+   the public internet on 2026-07-28. So the fallback named in the deferral does not exist,
+   Plan-18a shipped without the screen, and changing the account number today is a raw SQL
+   UPDATE against a live production table. This outranks everything else in the stage.
 
-2. **A role exists whose whole job is this stage.** `cms.manage` is declared in
-   `accounts/rbac.py:94` and held by `Owner` and `Content`; **no endpoint anywhere
-   declares it** (only `core/admin_search.py` mentions it, to explain why a Content editor
-   gets an empty result). `admin/src/lib/nav.ts:42` shows that person a "Content" link that
-   404s. We shipped a role that can log in and do nothing.
+2. **The live storefront's footer has ELEVEN links into a stub.**
+   `components/layout/Footer.tsx:24-45` links `/page/` for about, affiliates, blog,
+   community, contact, faqs, privacy, returns, shipping, terms and wholesale. Every one
+   renders `app/(shop)/page/[slug]/page.tsx`, whose entire body is the sentence **"CMS
+   content arrives in Plan-19."** It is also a soft 200 for *any* slug, so `/page/asdf`
+   is indexable.
 
-3. **Turning card payments on currently needs a developer.** Plan-09's gateways are
-   code-complete and deactivated; `CountryPaymentGateway` has no admin API, so the switch
-   that makes Paystack live is a row edit in production Postgres.
+3. **A role exists whose whole job is this stage.** `cms.manage` is declared in
+   `accounts/rbac.py:94` and held by `Owner` and `Content`; **no endpoint anywhere declares
+   it**. `admin/src/lib/nav.ts:42` shows that person a "Content" link that 404s.
 
 4. **The homepage seam already exists.** `home-content.ts:1-4` says in its own docstring
    that it "IS the CMS until Plan-19 ships real content models — keep it typed and boring
    so Plan-19 can swap each export for an API call without touching the section
-   components." Replacing fixtures with API calls is therefore cheap. **Building the
-   builder UI that edits them is not**, and the two must not be conflated.
+   components." Replacing fixtures with API calls is cheap. **Building the builder UI that
+   edits them is not**, and the two must not be conflated.
+
+5. **The homepage is a DYNAMIC route.** `app/(shop)/page.tsx:26` calls `cookies()` for the
+   country, so the master spec's "ISR `revalidate: 300`" does not apply to the route — all
+   caching lives in the fetch data cache. Any CMS fetch written `cache: "no-store"` (the
+   lazy default once cookies are in scope) sends every homepage view to the Django VPS.
 
 ---
 
 ## Design rulings
 
-### 1. Rich text: NO TipTap. The same textarea the product editor already ships
+### 1. Rich text: NO TipTap in 19a. Revisit it in 19c, where it earns its place
 
-The master spec says "rich text — use TipTap". Declined, on three grounds:
+The master spec says "rich text — use TipTap". Declined for the pages editor:
 
-- **The corpus is about eleven pages of policy prose**, written once and edited rarely.
-  A block editor is a large client dependency and a new content format to store, migrate
-  and render, bought for a job a textarea does.
-- **The product editor already made this decision**, and this surface should not disagree
-  with it: `DetailsPanel` ships a plain HTML textarea under the words "HTML is allowed and
-  is rendered as-is". Two different authoring models for two kinds of stored HTML is a
-  worse outcome than one plain one.
-- **TipTap would not reduce the real risk, which is XSS.** Its output is still HTML, still
-  stored, still rendered by the storefront.
+- **The corpus is eleven pages of policy prose**, written once and edited rarely. A block
+  editor is a large client dependency and a second content format to store and render.
+- **The product editor already made this decision** and this surface should not disagree
+  with it: `DetailsPanel.tsx:119` ships a plain HTML textarea labelled "HTML is allowed and
+  is rendered as-is".
+- **The editor is not the XSS decision** (see ruling 2) — TipTap's output is also stored
+  HTML.
 
-If Hammed wants a WYSIWYG later, it can be added over the same field.
+**But the counterargument is recorded rather than dismissed:** the `Content` role exists
+for non-technical staff, and "write the Returns policy in raw HTML" is a poor answer for
+them. So TipTap is not refused outright — it arrives in **19c**, where editorial homepage
+blocks want it anyway, and the pages editor swaps onto it then. 19a ships the textarea.
 
 ### 2. Sanitise on write, in THIS plan, not in Plan-25
 
-Plan-25 lists "product descriptions/CMS bodies sanitized server-side with a `bleach`
-allowlist — this is stored HTML rendered by the storefront!" among its hardening tasks.
-Deferring it is wrong here for one specific reason: **Plan-19 is the stage that invalidates
+Plan-25 lists CMS bodies among its hardening tasks, flagging "this is stored HTML rendered
+by the storefront!". Deferring is wrong here for a specific reason: **Plan-19 invalidates
 the assumption the current code is written on.** The storefront renders stored HTML through
-`dangerouslySetInnerHTML` at `components/product/PdpAccordions.tsx:23`, and the comment
-four lines above it states the premise out loud: *"`description` is backend-authored rich
-HTML (trusted admin content)."*
+`dangerouslySetInnerHTML` at `components/product/PdpAccordions.tsx:23`, and the comment four
+lines above states the premise out loud: *"`description` is backend-authored rich HTML
+(trusted admin content)."*
 
 That is true today, when the only author is Hammed. This stage adds page bodies authored by
-a `Content` role that is deliberately **not** trusted with orders or products — so the
-sentence stops being true in the same release that adds the field. A lower-privileged
-editor would gain script execution on the storefront's origin, which is where customers
-type card details.
+a `Content` role deliberately **not** trusted with orders or products — so the sentence
+stops being true in the same release that adds the field. A lower-privileged editor would
+gain script execution on the storefront's origin, which is where customers type card
+details.
 
-So the sanitiser lands with the model, applied on save, and the existing product
-descriptions are backfilled through it. No new dependency is added blindly: `nh3`
-(Rust `ammonia` bindings, maintained) is preferred over `bleach`, which the Python
-community has deprecated.
+So the sanitiser lands with the model, applied on write, and existing product descriptions
+are backfilled through it. **Deviation from the spec, recorded:** it names `bleach`, which
+has been unmaintained since 2023; `nh3` (maintained Rust `ammonia` bindings) is used
+instead.
 
-### 3. A page is CONTENT, not a route
+### 3. A page is CONTENT, not a route — and an empty page is worse than none
 
-`Page.slug` addresses `/page/{slug}` on the storefront, and the eleven footer links are
-already written. So the admin must not be able to orphan them: deleting or unpublishing a
-page that a menu or the footer links to is a 404 on a live store. Publishing state is a
-field, deletion is not offered in 19a, and the storefront renders a missing page as a
-proper 404 rather than the current stub.
+`Page.slug` addresses `/page/{slug}`, and eleven footer links are already written. So:
 
-### 4. The gateway switch is not a CMS feature, and it is in this plan anyway
+- Unknown slugs must `notFound()`, not render a soft 200.
+- Page SEO fields must emit real metadata, and the pages list must join `app/sitemap.ts`
+  (specced at master line 934, currently absent).
+- **Deletion is not offered in 19a**; publishing state is a field.
+- **An empty "Privacy policy" is legally worse than a missing one.** 19a therefore carries
+  an explicit content task — the eleven slugs reconciled against the footer one by one,
+  each either authored with Hammed or removed from the footer. Seeding eleven blank drafts
+  and calling the stub fixed is not a completion.
+- **`/page/blog` is a lie waiting to happen.** The blog is post-launch (`apps/blog`, master
+  line 1350). 19a decides explicitly: drop the footer link, or ship a real placeholder.
 
-`CountryPaymentGateway` CRUD is in the master spec's Plan-19 list, which is where the
-oddity comes from. It stays, because it is four fields and a toggle over an existing model,
-it removes a production-Postgres edit from the launch runbook, and there is no other plan
-that would claim it. It is NOT behind `cms.manage` — it is `orders.manage`, because
-turning a payment method on is a money decision, not a content one.
+This slice is also the de facto owner of a decision nobody holds: **Plan-24's redirect map
+branches on which legacy WP pages are migrated or dropped** (master line 1267), and no
+migration command exists for pages. With eleven pages, an Elementor-soup importer is not
+worth writing — re-authoring is cheaper — but the *decision and its list* must be recorded
+here for Plan-24 to point at.
+
+### 4. Bank accounts and gateways are money config, not content
+
+Both are CRUD over existing payments models with no storefront work. They are **not**
+behind `cms.manage` — they are `orders.manage`, because changing the account number
+customers pay into, or turning a payment method on, is a money decision.
+
+The honest argument for pulling them in is **not** "it needs a developer" — Hammed is the
+developer, and Paystack activation is a one-time event he will be present for. It is that
+`/django-admin/` is denied at the vhost, so **no UI path exists for any of this config**,
+and these are one-ViewSet riders on a stage that is already touching admin CRUD.
+
+### 5. Revalidation: the storefront half exists; do not rebuild it
+
+`app/api/revalidate/route.ts` already validates a secret header, takes a tag array and
+calls Next 16's two-arg `revalidateTag`, with tests. **What is missing is a Django-side
+caller** — there are none.
+
+The honest minimum for the checkpoint's "live within a minute" is **tagged CMS fetches with
+`next: { revalidate: 60 }`** and no backend→Vercel coupling at all. If the webhook is built
+anyway, it is a Celery task, fire-and-forget with a small retry, per-environment secret and
+URL — **never inline in the save path**, or a Vercel wobble degrades admin saves.
 
 ---
 
 ## Sequencing
 
-**19a — Pages, and the gateway switch.** The CMS app with `Page` only; sanitise-on-write;
-public `GET /cms/pages/{slug}/`; admin CRUD behind `cms.manage`; the storefront route
-wired and a real 404; the eleven footer slugs seeded as drafts so nothing 404s on cutover.
-Plus `CountryPaymentGateway` CRUD behind `orders.manage`. **This is the slice with launch
-consequences**: it clears the eleven stub links and gives the `Content` role its first
-reason to exist.
+**19a — CMS pages, end to end.** The `cms` app with `Page` only; write-time sanitisation
+(nh3, product descriptions backfilled); public `GET /cms/pages/{slug}/`; admin CRUD behind
+`cms.manage`; storefront route with `notFound()` and real SEO metadata; sitemap wiring; the
+eleven-slug reconciliation and the blog decision; the Plan-24 dropped/migrated list
+recorded. Tagged, cached fetches per ruling 5.
 
-**19b — Coupons.** Admin CRUD and usage stats over the existing model and its ledger. The
-launch marketing lever; cheap, because the backend is done and only the API and UI are
-missing.
+**19b — Commerce config.** One coherent slice of admin CRUD over models that already exist,
+with zero storefront work and zero new apps: **`BankAccount`** (the orphan, and the reason
+this slice is not last), `CountryPaymentGateway`, coupons + usage stats, and **plain
+`DeliveryOption` field CRUD** — price, `free_over`, `min_days`/`max_days`, `is_active`,
+`sort`. Weight tiers are **out of v1**: zero `DeliveryOptionRate` rows exist and a tier
+editor for an unpopulated table is speculative.
 
-**19c — Homepage, banners and menus.** `Banner`, `HomepageSection`, `MenuItem`, their
-public endpoints, the builder UI, and the storefront swap at `home-content.ts`. Deliberately
-after 19b: the homepage already looks right, so this buys editability rather than
-capability.
+**19c — Homepage, banners, menus — and the CHECKPOINT.** `Banner`, `HomepageSection`,
+`MenuItem`, public endpoints, the builder UI, TipTap, the `home-content.ts` swap and the
+revalidation story. **Plan-19's own checkpoint lives here** — the master spec verifies this
+stage by "Hammed's team changes the hero banner and sees it live" (line 1071), so the stage
+is NOT substantially done after 19b, however much of its value has shipped by then.
 
-**19d — Delivery manager and the regions browser.** Delivery options CRUD, weight tiers,
-the 811-region coverage tree and the "test an address" widget. Last because the six options
-work today and this is the largest single UI in the stage.
+**19d — Regions browser and coverage.** The 811-region tree, mixed-granularity coverage
+picker and the "test an address" widget. Last because the six options work today, and this
+is the largest single UI in the stage.
 
-**Storefront revalidation** belongs with whichever slice first serves live content (19a),
-and is scoped there rather than as a separate task.
+**Deadline note:** UAT (master line 1310) exercises "CMS edit" and "delivery-option setup",
+so 19c and 19d may trail launch prep but cannot slip past Plan-26.
 
 ---
 
 ## Risks
 
-- **811 regions in one tree control** is the hardest UI in the plan and it is in the last
-  slice. If 19d is ever cut for time, NG delivery still works — that is the point of
-  putting it there.
-- **Seeded draft pages are a promise.** Creating eleven empty pages so the footer resolves
-  is only an improvement if somebody writes them; an empty "Privacy policy" is worse than a
-  missing one, legally. 19a must ship them as real drafts with Hammed's text, or leave the
-  links out of the footer.
-- **`Content` is a role nobody has held yet.** Its first real use is this stage, and the
-  role matrix test asserts a nav shape that will change.
+- **811 regions in one tree control** is the hardest UI here and it is last. If 19d is cut
+  for time, NG delivery still works — that is why it sits there.
+- **`Content` is a role nobody has held.** Its first real use is 19a, and the role-matrix
+  test asserts a nav shape that will change.
+- **Eleven pages of policy text is Hammed's writing time, not build time**, and 19a cannot
+  close without it. It is the same shape of dependency as Plan-17c Task 0's weights.
+- **The webhook is optional and looks mandatory.** The spec asks for it; ruling 5 says a
+  60-second TTL meets the stated bar. Building it is a choice, not a requirement.
+
+---
+
+## What the Fable review changed, and what it did not
+
+Recorded rather than folded in, per the standing second-opinion practice.
+
+**It found a model I had missed entirely.** `BankAccount` has no admin path, Plan-09b
+deferred it to a Django admin that is denied at the vhost, and it holds the account number
+every Nigerian customer wires money to. I had ranked `CountryPaymentGateway` first among
+the payments riders; the review was right that this one has strictly higher stakes and
+belongs in the same slice.
+
+**It named one of my two headline arguments as a rationalisation, correctly.** I wrote that
+the gateway switch mattered because "turning card payments on requires a developer with DB
+access". Hammed *is* the developer. The argument that survives is the vhost denial — there
+is no UI path for *any* of this config — and ruling 4 now says that instead.
+
+**It corrected the justification for prioritising pages, while agreeing with the priority.**
+"The stub is embarrassing" argues for an afternoon of static MDX, not a Django app. What
+justifies building `cms.Page` now is the dependency chain: Plan-24's redirect map and the
+sitemap both need the model and its slugs.
+
+**It caught work I would have duplicated.** The storefront's revalidation endpoint is
+already built and tested; I had it down as unbuilt. Only the Django-side caller is missing.
+
+**It improved the delivery slicing.** I had bundled trivial flat-field edits (which a Lagos
+store may want monthly as fuel and logistics costs move) behind the homepage builder,
+because I treated "delivery manager" as one thing. Split: field CRUD to 19b, the region
+tree to 19d.
+
+**It caught four smaller drops:** the sitemap wiring, `notFound()` for unknown slugs, the
+`/page/blog` landmine, and that the stage's own checkpoint lives in 19c rather than
+anywhere earlier.
+
+**Where I did not follow it:** it proposed 19a be CMS-only with the payments riders moving
+to 19b — which I adopted — but suggested TipTap might simply move to 19c. I have kept that
+as an explicit swap-later ruling rather than a vague deferral, because "19c will add
+TipTap" is exactly the kind of promise Plan-17c had to retract three of.
