@@ -112,7 +112,12 @@ instead.
 
 `Page.slug` addresses `/page/{slug}`, and eleven footer links are already written. So:
 
-- Unknown slugs must `notFound()`, not render a soft 200.
+- Unknown slugs must `notFound()`. **Corrected during 19a after measuring:** that renders
+  the not-found UI but still answers **HTTP 200**, because `app/loading.tsx` is a root
+  Suspense boundary and Next commits the status before the body streams. It injects
+  `<meta name="robots" content="noindex">` instead, which its own guide says prevents
+  indexation. A nonexistent PRODUCT does the same, so this is app-wide and predates this
+  plan. A truthful status needs a pre-stream existence check and belongs with Plan-25.
 - Page SEO fields must emit real metadata, and the pages list must join `app/sitemap.ts`
   (specced at master line 934, currently absent).
 - **Deletion is not offered in 19a**; publishing state is a field.

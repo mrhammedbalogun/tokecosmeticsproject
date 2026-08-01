@@ -230,6 +230,14 @@ def _case_product_csv_import(client, monkeypatch):
     ), 200
 
 
+def _case_page_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/pages/",
+        {"title": "Returns policy", "slug": "returns", "body_source": "<p>Hi</p>"},
+        format="json",
+    ), 201
+
+
 def _case_warehouse_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/warehouses/",
@@ -436,6 +444,7 @@ WRITE_CASES: dict[str, tuple] = {
     "ProductVideoAdminViewSet": (_case_video, "create"),
     "PriceAdminViewSet": (_case_price, "create"),
     "ProductCSVImportView": (_case_product_csv_import, "import_csv"),
+    "PageAdminViewSet": (_case_page_create, "create"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),

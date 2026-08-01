@@ -48,6 +48,7 @@ dependencies = [
     # backup never contains the env. Fernet is the boring, most-vetted choice; there is
     # no homegrown crypto anywhere in this feature.
     "cryptography==49.0.*",
+    "nh3>=0.3.6",
 ]
 
 [dependency-groups]

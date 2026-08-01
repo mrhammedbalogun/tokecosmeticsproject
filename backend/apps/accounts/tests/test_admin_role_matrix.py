@@ -70,6 +70,9 @@ _ORDER = f"/api/v1/admin/orders/{NO_SUCH_ORDER}"
 _OWNER = {"Owner"}
 _MANAGERS = {"Owner", "Manager"}
 _DESK = {"Owner", "Manager", "Support"}  # everyone who works the order desk
+# The Content editor's whole surface. Manager runs the shop and Support works the desk;
+# neither writes marketing copy, and `cms.manage` is not theirs (rbac.py:94).
+_CONTENT = {"Owner", "Content"}
 
 MATRIX: list[Row] = [
     # --- catalog: writing the catalogue is Owner + Manager -----------------------
@@ -84,6 +87,8 @@ MATRIX: list[Row] = [
     Row("PriceAdminViewSet", "get", "/api/v1/admin/prices/", _MANAGERS),
     Row("ProductCSVExportView", "get", "/api/v1/admin/products/export.csv", _MANAGERS),
     Row("ProductCSVImportView", "post", "/api/v1/admin/products/import.csv", _MANAGERS),
+    # --- cms: Content holds this and nothing else; Manager and Support do not.
+    Row("PageAdminViewSet", "get", "/api/v1/admin/pages/", _CONTENT),
     # --- inventory ---------------------------------------------------------------
     Row("WarehouseAdminViewSet", "get", "/api/v1/admin/warehouses/", _MANAGERS),
     Row("StockItemAdminViewSet", "get", "/api/v1/admin/stock/", _MANAGERS),
