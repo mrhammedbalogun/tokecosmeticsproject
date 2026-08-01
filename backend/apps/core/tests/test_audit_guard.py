@@ -67,6 +67,10 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     "StockCSVExportView": "bulk egress — the whole stock position in one file",
     "AuditLogListView": "returns other people's data in `changes`, and reading it is what precedes editing it",
     "AdminSearchView": "one parameter reaching customers, orders and products at once — the highest-yield PII read on the surface",
+    # Plan-20a. Aggregates are not personal data, but a REPORT EXPORT is bulk egress by
+    # the same argument as the order export: top-customers names people, and any range
+    # can be dumped in one call. The on-screen report is deliberately NOT audited.
+    "ReportExportView": "bulk egress — a whole reporting range in one file, and one report names customers",
 }
 
 

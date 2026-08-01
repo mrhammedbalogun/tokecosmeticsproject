@@ -107,6 +107,9 @@ MATRIX: list[Row] = [
     Row("CouponAdminViewSet", "get", "/api/v1/admin/coupons/", _MANAGERS),
     Row("DeliveryOptionAdminViewSet", "get", "/api/v1/admin/delivery-options/", _MANAGERS),
     Row("RegionAdminViewSet", "get", "/api/v1/admin/regions/?country_code=NG", _MANAGERS),
+    # --- reports: Owner and Manager. Support works the desk and does not see the books.
+    Row("ReportView", "get", "/api/v1/admin/reports/revenue/", _MANAGERS),
+    Row("ReportExportView", "get", "/api/v1/admin/reports/revenue/export.csv", _MANAGERS),
     # --- orders: the queue and one order. Support lives here all day -------------
     Row("AdminOrderListView", "get", "/api/v1/admin/orders/", _DESK),
     Row("AdminOrderDetailView", "get", f"{_ORDER}/", _DESK),

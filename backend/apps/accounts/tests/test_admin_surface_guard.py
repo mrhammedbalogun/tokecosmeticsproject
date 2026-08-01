@@ -192,6 +192,13 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "DeliveryOptionAdminViewSet": "products.manage",
     # Reference data: read plus is_active. Same scope as the options that reference it.
     "RegionAdminViewSet": "products.manage",
+    # --- reports (Plan-20a). The third scope this project declared before anything used
+    # it, after cms.manage and settings.manage.
+    "ReportView": "reports.view",
+    # The EXPORT declares the same floor, and additionally refuses a customer-naming
+    # report without orders.manage — checked in the view, because one route serves every
+    # report. `test_report_exports.py` proves it.
+    "ReportExportView": "reports.view",
     # --- orders: read ------------------------------------------------------------
     "AdminOrderListView": "orders.view",
     # An invoice carries the customer's name and home address, so this is read-audited.

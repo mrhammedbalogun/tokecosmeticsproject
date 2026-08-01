@@ -556,6 +556,11 @@ WRITE_CASES: dict[str, tuple] = {
 # one) shows up as a change here.
 READ_ONLY_VIEWS = frozenset(
     {
+        # Plan-20a: both report routes are GET-only aggregate reads. The export is
+        # additionally read-audited (declared in test_audit_guard.READ_AUDITED_VIEWS);
+        # neither writes anything, so neither has a write case.
+        "ReportView",
+        "ReportExportView",
         "AdminOrderListView",
         "AdminOrderDetailView",
         "AdminRefundsOwedView",
