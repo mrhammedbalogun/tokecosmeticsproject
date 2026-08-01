@@ -752,7 +752,9 @@ row is created in the same transaction — nothing needs re-stamping at initiate
 
 `expire_pending_orders` derives its set of manual gateway codes **once, from the registry**
 (`_manual_gateway_codes`), never `get_gateway()` per order. An order carrying a gateway code
-the registry never heard of — and **879 migrated legacy NG orders arrive in Plan-21/23** —
+the registry never heard of — and **4,096 migrated legacy orders arrive in Plan-23**
+(measured 2026-08-01: 3,093 NG-current + 879 NG-old + 124 intl; the long-quoted "879" was
+only the dead NG-old store) —
 would raise `UnknownGateway` inside the loop, kill the task run, and **starve every due
 order behind it, every 5 minutes, forever**. Stock nobody can buy, silently, on a beat.
 

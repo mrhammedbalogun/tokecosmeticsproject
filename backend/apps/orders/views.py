@@ -281,10 +281,9 @@ class AdminOrderTransitionView(AdminAuditMixin, APIView):
         if not to_status:
             return Response({"error": "to_status_required"}, status=400)
         if to_status == "refunded" and _refund_owned_by_the_ledger(order):
-            # Deliberately NOT a blanket refusal. `on_hold` is the triage state for the 879
-            # legacy orders Plan-23 migrates, and one refunded in WooCommerce years ago has
-            # no captured payment here and no money to move — recording it is history. The
-            # line is drawn by the LEDGER, not by the status.
+            # Deliberately NOT a blanket refusal. A legacy order refunded in WooCommerce
+            # years ago has no captured payment here and no money to move — recording it
+            # is history. The line is drawn by the LEDGER, not by the status.
             return Response(
                 {
                     "error": "refund_required",
