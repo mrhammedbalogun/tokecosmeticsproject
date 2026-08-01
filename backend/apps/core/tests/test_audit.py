@@ -273,6 +273,30 @@ def _case_delivery_option_create(client, monkeypatch):
     ), 201
 
 
+def _case_banner_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/banners/",
+        {"title": "Summer sale", "placement": "strip"},
+        format="json",
+    ), 201
+
+
+def _case_homepage_section_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/homepage-sections/",
+        {"type": "editorial", "sort": 1, "config": {}},
+        format="json",
+    ), 201
+
+
+def _case_menu_item_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/menu-items/",
+        {"label": "About", "url": "/page/about", "menu": "footer"},
+        format="json",
+    ), 201
+
+
 def _case_page_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/pages/",
@@ -488,6 +512,9 @@ WRITE_CASES: dict[str, tuple] = {
     "PriceAdminViewSet": (_case_price, "create"),
     "ProductCSVImportView": (_case_product_csv_import, "import_csv"),
     "PageAdminViewSet": (_case_page_create, "create"),
+    "BannerAdminViewSet": (_case_banner_create, "create"),
+    "HomepageSectionAdminViewSet": (_case_homepage_section_create, "create"),
+    "MenuItemAdminViewSet": (_case_menu_item_create, "create"),
     "BankAccountAdminViewSet": (_case_bank_account_create, "create"),
     "CountryPaymentGatewayAdminViewSet": (_case_payment_gateway_create, "create"),
     "CouponAdminViewSet": (_case_coupon_create, "create"),

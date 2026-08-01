@@ -2,8 +2,17 @@
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
 
-from apps.cms.models import Page
-from apps.cms.serializers import PublicPageSerializer
+from django.utils import timezone
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from apps.cms.models import Banner, HomepageSection, MenuItem, Page
+from apps.cms.serializers import (
+    PublicBannerSerializer,
+    PublicHomepageSectionSerializer,
+    PublicMenuItemSerializer,
+    PublicPageSerializer,
+)
 
 
 class PublicPageDetailView(generics.RetrieveAPIView):
@@ -31,3 +40,54 @@ class PublicPageListView(generics.ListAPIView):
     serializer_class = PublicPageSerializer
     pagination_class = None
     queryset = Page.objects.filter(status=Page.PUBLISHED)
+
+
+class PublicHomepageView(APIView):
+    """`GET /api/v1/cms/homepage/` — the ordered sections plus the banners that are live
+    right now.
+
+    ONE REQUEST, not three. The homepage is the most-hit page on the site and every extra
+    round trip to the VPS is paid on a Nigerian mobile connection.
+
+    SCHEDULING IS APPLIED HERE, not in the client: a banner outside its window must never
+    reach the browser, or "scheduled" would mean "hidden by CSS" and a campaign would leak
+    early to anyone reading the payload.
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    def get(self, request):
+        now = timezone.now()
+        country = (request.headers.get("X-Country") or "").upper()
+
+        banners = Banner.objects.filter(is_active=True).prefetch_related("countries")
+        live = [b for b in banners if b.is_live(now)]
+        if country:
+            # An empty country list means EVERYWHERE, matching `Product.available_countries`.
+            live = [
+                b for b in live
+                if not b.countries.exists()
+                or country in {c.code for c in b.countries.all()}
+            ]
+
+        sections = HomepageSection.objects.filter(is_active=True)
+        return Response({
+            "sections": PublicHomepageSectionSerializer(sections, many=True).data,
+            "banners": PublicBannerSerializer(live, many=True, context={"request": request}).data,
+        })
+
+
+class PublicMenuView(APIView):
+    """`GET /api/v1/cms/menus/` — header and footer links, grouped."""
+
+    permission_classes = [AllowAny]
+    authentication_classes: list = []
+
+    def get(self, request):
+        items = MenuItem.objects.filter(is_active=True)
+        data = PublicMenuItemSerializer(items, many=True).data
+        return Response({
+            "header": [i for i in data if i["menu"] == "header"],
+            "footer": [i for i in data if i["menu"] == "footer"],
+        })

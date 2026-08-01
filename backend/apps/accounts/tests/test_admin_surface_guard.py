@@ -165,6 +165,14 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # --- cms: the first endpoint to declare `cms.manage`, which Plan-16 seeded and
     # nothing used until Plan-19a. A Content editor's entire surface.
     "PageAdminViewSet": "cms.manage",
+    # Navigation is site structure, and the footer's policy links are what cms.manage
+    # protects.
+    "MenuItemAdminViewSet": "cms.manage",
+    # Banners and the homepage running order are CAMPAIGN material, not legally
+    # load-bearing copy — rbac.py argues the split. A content editor must not be able to
+    # override a live campaign's placement.
+    "BannerAdminViewSet": "marketing.manage",
+    "HomepageSectionAdminViewSet": "marketing.manage",
     # --- inventory ---------------------------------------------------------------
     # Warehouses are where stock physically is, and `serves_countries` on one of them
     # decides whether a market can be sold to at all. Same scope as the stock it holds.

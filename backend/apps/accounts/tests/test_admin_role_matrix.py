@@ -90,6 +90,10 @@ MATRIX: list[Row] = [
     Row("ProductCSVImportView", "post", "/api/v1/admin/products/import.csv", _MANAGERS),
     # --- cms: Content holds this and nothing else; Manager and Support do not.
     Row("PageAdminViewSet", "get", "/api/v1/admin/pages/", _CONTENT),
+    Row("MenuItemAdminViewSet", "get", "/api/v1/admin/menu-items/", _CONTENT),
+    # Campaign material: Manager can run a promotion, a copywriter cannot.
+    Row("BannerAdminViewSet", "get", "/api/v1/admin/banners/", _MANAGERS),
+    Row("HomepageSectionAdminViewSet", "get", "/api/v1/admin/homepage-sections/", _MANAGERS),
     # --- inventory ---------------------------------------------------------------
     Row("WarehouseAdminViewSet", "get", "/api/v1/admin/warehouses/", _MANAGERS),
     Row("StockItemAdminViewSet", "get", "/api/v1/admin/stock/", _MANAGERS),

@@ -87,6 +87,12 @@ export function PagesList({ pages }: { pages: PageRow[] }) {
         </ul>
       </section>
 
+      <p className="text-sm">
+        <Link href="/content/banners" className="underline underline-offset-2 hover:text-accent">
+          Banners and the homepage hero →
+        </Link>
+      </p>
+
       <section className="rounded-[var(--radius-card)] border border-line p-4">
         <h2 className="text-sm font-semibold">New page</h2>
         <form onSubmit={create} className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">

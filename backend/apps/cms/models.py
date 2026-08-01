@@ -63,3 +63,114 @@ class Page(TimeStampedModel):
         # through this line.
         self.body = clean_html(self.body_source)
         super().save(*args, **kwargs)
+
+
+class Banner(TimeStampedModel):
+    """A promotional strip or hero card.
+
+    `marketing.manage`, NOT `cms.manage` — `rbac.py` argues this out: a banner announces a
+    promotion, so a campaign that cannot be announced cannot run, and the promo rail is
+    campaign material rather than the legally load-bearing pages `cms.manage` protects.
+
+    NO HTML ANYWHERE. Every field here is plain text that React escapes on render, so this
+    model adds no new XSS surface — unlike `Page.body`, which needs the sanitiser. Keep it
+    that way: a `body`-style rich field on a banner would need the same treatment.
+    """
+
+    HERO = "hero"
+    STRIP = "strip"
+    CATEGORY = "category"
+    PLACEMENT_CHOICES = [(HERO, "Hero"), (STRIP, "Announcement strip"), (CATEGORY, "Category")]
+
+    title = models.CharField(max_length=200)
+    subtitle = models.CharField(max_length=300, blank=True)
+    image = models.ImageField(upload_to="cms/banners/", blank=True)
+    mobile_image = models.ImageField(upload_to="cms/banners/", blank=True)
+    cta_text = models.CharField(max_length=60, blank=True)
+    cta_url = models.CharField(max_length=300, blank=True)
+    placement = models.CharField(max_length=20, choices=PLACEMENT_CHOICES, default=STRIP)
+    sort = models.PositiveSmallIntegerField(default=0)
+    starts_at = models.DateTimeField(null=True, blank=True)
+    ends_at = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    # BLANK MEANS EVERYWHERE, matching `Product.available_countries`. An empty M2M reading
+    # as "no markets" would make every banner invisible until somebody ticked five boxes.
+    countries = models.ManyToManyField("core.Country", blank=True, related_name="banners")
+
+    class Meta:
+        ordering = ["sort", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.title} ({self.placement})"
+
+    def is_live(self, now=None) -> bool:
+        """Active AND inside its window. The schedule is the whole point of the model —
+        a campaign that needs somebody awake at midnight to switch it on is not scheduled."""
+        from django.utils import timezone
+
+        now = now or timezone.now()
+        if not self.is_active:
+            return False
+        if self.starts_at and self.starts_at > now:
+            return False
+        if self.ends_at and self.ends_at < now:
+            return False
+        return True
+
+
+class HomepageSection(TimeStampedModel):
+    """One block on the homepage, in order.
+
+    `config` is STRUCTURED JSON, never markup: a heading, a collection slug, a list of
+    ids. That is deliberate — the storefront renders these through the same typed section
+    components Plan-13 built, so a section cannot introduce HTML the sanitiser never saw.
+
+    The storefront falls back to its own fixtures when this table is empty, so an empty
+    CMS is a homepage that looks exactly as it does today rather than a blank page.
+    """
+
+    TYPE_CHOICES = [
+        ("hero", "Hero"),
+        ("collection_carousel", "Collection carousel"),
+        ("banner_grid", "Banner grid"),
+        ("editorial", "Editorial"),
+        ("brand_strip", "Brand strip"),
+    ]
+
+    type = models.CharField(max_length=30, choices=TYPE_CHOICES)
+    sort = models.PositiveSmallIntegerField(default=0)
+    config = models.JSONField(default=dict, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.sort}. {self.type}"
+
+
+class MenuItem(TimeStampedModel):
+    """A link in the header or footer.
+
+    `cms.manage`: navigation is site structure, and the footer's policy links are exactly
+    the legally load-bearing content that scope exists to protect.
+    """
+
+    HEADER = "header"
+    FOOTER = "footer"
+    MENU_CHOICES = [(HEADER, "Header"), (FOOTER, "Footer")]
+
+    label = models.CharField(max_length=80)
+    url = models.CharField(max_length=300)
+    menu = models.CharField(max_length=10, choices=MENU_CHOICES, default=FOOTER)
+    parent = models.ForeignKey(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="children"
+    )
+    sort = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["menu", "sort", "id"]
+
+    def __str__(self) -> str:
+        return f"{self.menu}: {self.label}"

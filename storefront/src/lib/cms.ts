@@ -40,3 +40,62 @@ export async function getPage(slug: string): Promise<CmsPage | null> {
 export async function getPages(): Promise<CmsPage[]> {
   return apiFetch<CmsPage[]>("/cms/pages/", CMS_CACHE);
 }
+
+export interface HomepageSection {
+  id: number;
+  type: string;
+  sort: number;
+  config: Record<string, unknown>;
+}
+
+export interface CmsBanner {
+  id: number;
+  title: string;
+  subtitle: string;
+  image: string | null;
+  mobile_image: string | null;
+  cta_text: string;
+  cta_url: string;
+  placement: "hero" | "strip" | "category";
+  sort: number;
+}
+
+export interface HomepagePayload {
+  sections: HomepageSection[];
+  banners: CmsBanner[];
+}
+
+/**
+ * The homepage's CMS content, or nulls when the CMS has nothing to say.
+ *
+ * ── AN EMPTY CMS MUST NOT BLANK THE HOMEPAGE ────────────────────────────────────────
+ *
+ * This is a live shop's front door. If the table is empty, the API is down, or somebody
+ * deactivates every section, the page falls back to `lib/home-content.ts` — the fixtures
+ * Plan-13 shipped, which are what the homepage looks like today. A CMS is a way to change
+ * the homepage, not a new way to lose it.
+ *
+ * Country-aware because banner targeting is: the backend filters on X-Country, so the
+ * cache key must vary with it.
+ */
+export async function getHomepage(country: string): Promise<HomepagePayload | null> {
+  try {
+    const data = await apiFetch<HomepagePayload>("/cms/homepage/", {
+      ...CMS_CACHE,
+      country,
+    });
+    if (!data?.sections?.length && !data?.banners?.length) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/** The announcement strip's messages, falling back to the Plan-13 fixtures. */
+export function announcementsFrom(payload: HomepagePayload | null, fallback: string[]): string[] {
+  const strips = (payload?.banners ?? [])
+    .filter((b) => b.placement === "strip")
+    .sort((a, b) => a.sort - b.sort)
+    .map((b) => b.title);
+  return strips.length ? strips : fallback;
+}

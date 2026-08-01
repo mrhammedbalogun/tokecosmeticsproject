@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { getCategoryTree, getProducts } from "@/lib/catalog";
+import { getHomepage } from "@/lib/cms";
 import { pageMetadata, organizationJsonLd, webSiteJsonLd, DEFAULT_DESCRIPTION } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { Hero } from "@/components/home/Hero";
@@ -24,6 +25,9 @@ export const metadata: Metadata = pageMetadata({
 
 export default async function HomePage() {
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
+  // Plan-19c: a scheduled, country-targeted hero from the CMS, or the Plan-13 fixture.
+  const homepage = await getHomepage(country);
+  const heroBanner = (homepage?.banners ?? []).find((b) => b.placement === "hero") ?? null;
   const [categories, bestSellers, newArrivals] = await Promise.all([
     getCategoryTree(country).catch(() => []),
     getProducts({ collection: "best-sellers" }, country).then((p) => p.results).catch(() => []),
@@ -35,7 +39,7 @@ export default async function HomePage() {
     <>
       <JsonLd data={organizationJsonLd()} />
       <JsonLd data={webSiteJsonLd()} />
-      <Hero />
+      <Hero banner={heroBanner} />
       <FeaturedCategories categories={categories} />
       <SkinConcerns />
       <BrandStory />
