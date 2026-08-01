@@ -106,9 +106,48 @@ sourced and forwarded valuelessly so it never enters shell history or `docker in
 **Create it at extract time, not on approval.** Every day it exists unused is exposure on
 a box that is being actively probed right now.
 
+**The SQL, to run at extract time and not before:**
+
+```sql
+-- 1. CREATE. Password generated on the box, never typed into a chat or a file in the repo:
+--    pwgen -s 40 1  >>  /root/wp-migration.env  (chmod 600), then paste here.
+CREATE USER 'wp_readonly'@'localhost' IDENTIFIED BY '<generated>';
+
+-- 2. GRANT. Seven tables per store prefix, plus the two legacy tables intl still needs.
+--    NG (current)          tokecosm_wp481.wp_
+--    NG (second store)     tokecosm_wp481.wp8n_
+--    Intl                  tokecosm_usawp100.wp8n_
+GRANT SELECT ON `tokecosm_wp481`.`wp_users`                      TO 'wp_readonly'@'localhost';
+GRANT SELECT ON `tokecosm_wp481`.`wp_usermeta`                   TO 'wp_readonly'@'localhost';
+GRANT SELECT ON `tokecosm_wp481`.`wp_wc_orders`                  TO 'wp_readonly'@'localhost';
+GRANT SELECT ON `tokecosm_wp481`.`wp_wc_order_addresses`         TO 'wp_readonly'@'localhost';
+GRANT SELECT ON `tokecosm_wp481`.`wp_wc_order_operational_data`  TO 'wp_readonly'@'localhost';
+GRANT SELECT ON `tokecosm_wp481`.`wp_woocommerce_order_items`    TO 'wp_readonly'@'localhost';
+GRANT SELECT ON `tokecosm_wp481`.`wp_woocommerce_order_itemmeta` TO 'wp_readonly'@'localhost';
+-- ...the same seven for `tokecosm_wp481`.`wp8n_*` and `tokecosm_usawp100`.`wp8n_*`...
+-- ...plus, for the 13 orders HPOS never backfilled, ONLY on the intl prefix:
+GRANT SELECT ON `tokecosm_usawp100`.`wp8n_posts`                 TO 'wp_readonly'@'localhost';
+GRANT SELECT ON `tokecosm_usawp100`.`wp8n_postmeta`              TO 'wp_readonly'@'localhost';
+FLUSH PRIVILEGES;
+
+-- 3. REVOKE, after Plan-27 cutover. Not "later" - the same change window.
+DROP USER 'wp_readonly'@'localhost';
+```
+
 **Verification must include two NEGATIVE checks** that have to fail with `ERROR 1142`:
 `tokecosm_usawp100.wpstg0_users` (the WP-Staging copy shares that database and must be
-provably out of scope) and `tokecosm_wp481.wp_options`.
+provably out of scope) and `tokecosm_wp481.wp_options`. Both must fail with `ERROR 1142`:
+
+```sql
+-- must SUCCEED (23 of these):
+SELECT COUNT(*) FROM `tokecosm_wp481`.`wp_wc_order_operational_data`;
+-- must FAIL with ERROR 1142 - if either returns rows, the grant is wider than approved:
+SELECT COUNT(*) FROM `tokecosm_usawp100`.`wpstg0_users`;
+SELECT COUNT(*) FROM `tokecosm_wp481`.`wp_options`;
+```
+
+A grant nobody checked the edges of is a grant nobody knows the shape of. The negative
+checks are the only part of this that proves the positive list was exhaustive.
 
 **Two exposures to close regardless:** `wp_usermeta` contains **`session_tokens` — live
 session material for the running store** — so the extractor allow-lists meta keys exactly
