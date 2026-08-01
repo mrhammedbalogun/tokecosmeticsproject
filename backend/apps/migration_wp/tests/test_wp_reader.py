@@ -181,3 +181,81 @@ def test_acf_values_are_readable():
         ids = [p["ID"] for p in products[:5]]
         meta = wp_reader.fetch_meta(conn, ids)
     assert any(m.get("Benefits") for m in meta.values()), "ACF Benefits should be present"
+
+
+# ── customers (Plan-22) ──────────────────────────────────────────────────────────────────
+
+
+class _RecordingCursor(_FakeCursor):
+    """Captures the SQL so the filter itself can be asserted, not just its output."""
+
+    def __init__(self, rows, sink):
+        super().__init__(rows)
+        self._sink = sink
+
+    def execute(self, sql, params=None):
+        self._sink.append(sql)
+
+
+class _RecordingConn(_FakeConn):
+    def __init__(self, rows):
+        super().__init__(rows)
+        self.sql = []
+
+    def cursor(self):
+        return _RecordingCursor(self._rows, self.sql)
+
+
+def test_FETCH_CUSTOMERS_REQUIRES_AN_ORDER_which_is_what_excludes_the_signup_flood():
+    """These stores are under an automated signup flood — the intl store went from 51
+    users on 14 July to 3,284 on 1 August, none of whom ever ordered, and it was still
+    climbing while this was written. `EXISTS (an order)` is the only thing standing
+    between that and several thousand imported spam accounts, so the predicate is
+    asserted here rather than trusted to survive a future edit."""
+    conn = _RecordingConn([])
+    wp_reader.fetch_customers(conn)
+
+    sql = " ".join(conn.sql[0].split())
+    assert "EXISTS" in sql
+    assert "wc_orders" in sql
+    assert "customer_id > 0" in sql  # guests have no user row to migrate
+
+
+def test_SESSION_TOKENS_NEVER_LEAVE_THE_SERVER():
+    """wp_usermeta holds `session_tokens` — LIVE session material for the running store.
+    An artifact containing it would be a file that grants login to the WordPress site it
+    was extracted from. The allow-list is the control; this is the test that it holds."""
+    rows = [
+        {"user_id": 1, "meta_key": "first_name", "meta_value": "Ada"},
+        {"user_id": 1, "meta_key": "billing_phone", "meta_value": "+2348012345678"},
+        {"user_id": 1, "meta_key": "session_tokens", "meta_value": "a:1:{s:64:\"deadbeef\";}"},
+        {"user_id": 1, "meta_key": "wp_capabilities", "meta_value": "a:1:{s:8:\"customer\";b:1;}"},
+        {"user_id": 1, "meta_key": "_woocommerce_persistent_cart", "meta_value": "{}"},
+    ]
+    out = wp_reader.fetch_user_meta(_FakeConn(rows), [1])
+
+    assert out[1] == {"first_name": "Ada", "billing_phone": "+2348012345678"}
+    assert "session_tokens" not in out[1]
+    assert "wp_capabilities" not in out[1]
+
+
+def test_the_usermeta_allowlist_has_no_prefix_rules():
+    # fetch_meta (catalogue) matches on prefixes; this one must not. A prefix rule here is
+    # how `session_tokens` or a future `_secret_*` key gets in by accident.
+    assert all(not k.endswith("_") for k in wp_reader._USER_META_KEYS)
+    for key in wp_reader._USER_META_KEYS:
+        assert key in {"first_name", "last_name", "billing_first_name",
+                       "billing_last_name", "billing_phone"}
+
+
+def test_fetch_user_meta_logs_what_it_dropped(caplog):
+    rows = [{"user_id": 1, "meta_key": "session_tokens", "meta_value": "x"}]
+    with caplog.at_level(logging.INFO, logger="apps.migration_wp.wp_reader"):
+        wp_reader.fetch_user_meta(_FakeConn(rows), [1])
+    assert "session_tokens" in caplog.text
+
+
+def test_fetch_user_meta_of_nothing_queries_nothing():
+    conn = _RecordingConn([])
+    assert wp_reader.fetch_user_meta(conn, []) == {}
+    assert conn.sql == []

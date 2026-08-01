@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "store": "legacy_ng_old",
+  "table_prefix": "wp_",
+  "customers": [
+    {
+      "ID": 201,
+      "user_email": "cara@example.com",
+      "user_pass": "$wp$2b$04$E1ExnE.4QKDqYjQj/pWHve7twWhyXGCSc.CsknaGd9B2vdKwOfxYO",
+      "user_login": "u201",
+      "display_name": "user 201",
+      "user_registered": "2025-04-01 10:00:00"
+    },
+    {
+      "ID": 202,
+      "user_email": "shared@example.com",
+      "user_pass": "$P$Bsynth123fbw385uqgZtfNbfuflmNG/",
+      "user_login": "u202",
+      "display_name": "user 202",
+      "user_registered": "2025-05-01 10:00:00"
+    }
+  ],
+  "meta": {
+    "201": {
+      "first_name": "Cara",
+      "last_name": "Eze"
+    },
+    "202": {
+      "first_name": "Shared",
+      "last_name": "FromOLD"
+    }
+  }
+}

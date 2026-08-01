@@ -1,9 +1,22 @@
 """Read-only SQL layer over the live WooCommerce database.
 
-Touches exactly five tables: posts, postmeta, terms, term_taxonomy,
-term_relationships. The MariaDB user this runs as is granted SELECT on those
-five and nothing else, so a compromise here cannot reach wp_users or any order
-table. Returns plain dicts — no Django models, no transformation.
+TWO CREDENTIALS, TWO REACHES — the distinction is the security property, so read this
+before adding a query.
+
+* **Catalogue** (`fetch_products`/`fetch_variations`/`fetch_meta`/`fetch_terms`/
+  `fetch_term_links`/`fetch_attachment_paths`) runs as **`wp_readonly`**, which holds
+  SELECT on exactly five tables: posts, postmeta, terms, term_taxonomy,
+  term_relationships. This is the RECURRING import. It cannot reach `wp_users`, and it
+  must stay that way: a permanently-installed job with access to password hashes is a
+  standing liability, not a convenience.
+
+* **Customers** (`fetch_customers`, Plan-22) runs as **`wp_migration`** — a separate,
+  short-lived user created at extract time and DROPped after the Plan-27 cutover. It adds
+  users, usermeta and the order tables. Nothing in this module chooses which credential it
+  gets; that is the caller's environment, and the whole reason the two are separate users
+  rather than one widened one.
+
+Returns plain dicts — no Django models, no transformation.
 """
 from __future__ import annotations
 
@@ -231,3 +244,83 @@ def fetch_attachment_paths(conn, attachment_ids: list[int]) -> dict[int, str]:
             missing,
         )
     return found
+
+
+# ── customers (Plan-22) ──────────────────────────────────────────────────────────────────
+
+#: The ONLY usermeta keys that leave the server. An allow-list, not a deny-list, and the
+#: reason is one key: `session_tokens` holds LIVE SESSION MATERIAL for the running store.
+#: A deny-list would carry it the first time a plugin renamed something, and the extract
+#: artifact would then be a file that grants login to the WordPress site it came from.
+#: Everything here is a name or a phone number, all of which the customer already gave us.
+_USER_META_KEYS = frozenset(
+    {
+        "first_name",
+        "last_name",
+        "billing_first_name",
+        "billing_last_name",
+        "billing_phone",
+    }
+)
+
+
+def fetch_customers(conn) -> list[dict]:
+    """Users with AT LEAST ONE ORDER. Never every user.
+
+    THE FILTER IS DOING SECURITY WORK, not tidiness. These stores are under an automated
+    signup flood — the intl store went from 51 users on 14 July to 3,284 on 1 August, of
+    which ZERO have ever placed an order, and it was still climbing while this was being
+    written. Migrating "all users" would import several thousand accounts created by
+    whoever is running that, hand them password hashes on the new platform, and make the
+    abuse permanent. `EXISTS (an order)` is the cheapest possible statement of "this is a
+    real customer" and it excludes every one of them.
+
+    `customer_id > 0` because WooCommerce writes 0 for guest checkouts, which have no user
+    row to migrate — they become Plan-23's guest orders instead.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT u.ID, u.user_email, u.user_pass, u.user_login,
+                       u.display_name, u.user_registered
+                FROM {_p('users')} u
+                WHERE EXISTS (
+                    SELECT 1 FROM {_p('wc_orders')} o
+                    WHERE o.customer_id = u.ID AND o.customer_id > 0
+                )
+                ORDER BY u.ID"""
+        )
+        return list(cur.fetchall())
+
+
+def fetch_user_meta(conn, user_ids: list[int]) -> dict[int, dict[str, str]]:
+    """Allow-listed usermeta for the given users, pivoted to {user_id: {key: value}}.
+
+    Mirrors `fetch_meta`, including logging the distinct dropped keys once at INFO, so a
+    plugin that starts storing something we need does not vanish silently. Unlike
+    `fetch_meta` this list has no prefix rules — every key is spelled out, because the
+    cost of an over-broad match here is exporting session tokens.
+    """
+    if not user_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(user_ids))
+    out: dict[int, dict[str, str]] = {uid: {} for uid in user_ids}
+    dropped_keys: set[str] = set()
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT user_id, meta_key, meta_value FROM {_p('usermeta')}
+                WHERE user_id IN ({placeholders})""",
+            user_ids,
+        )
+        for row in cur.fetchall():
+            key = row["meta_key"]
+            if key in _USER_META_KEYS:
+                out[row["user_id"]][key] = row["meta_value"]
+            else:
+                dropped_keys.add(key)
+    if dropped_keys:
+        logger.info(
+            "Dropped %d usermeta keys not on the allow-list: %s",
+            len(dropped_keys),
+            ", ".join(sorted(dropped_keys)),
+        )
+    return out

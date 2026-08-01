@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "store": "legacy_ng",
+  "table_prefix": "wp_",
+  "customers": [
+    {
+      "ID": 101,
+      "user_email": "ada@example.com",
+      "user_pass": "$2b$04$MQm07wSrZdkh5iiPs51G0unr0Nkqzo1zCLUUHCkyAoiXNK0FiwOBS",
+      "user_login": "u101",
+      "display_name": "user 101",
+      "user_registered": "2025-03-01 10:00:00"
+    },
+    {
+      "ID": 102,
+      "user_email": "ben@example.com",
+      "user_pass": "$wp$2b$04$WEdlIzHKoEu/8uZ/yinQA.PaYLCfvu.mlBC8EIT9x.eS.RY7k3PsS",
+      "user_login": "u102",
+      "display_name": "user 102",
+      "user_registered": "2025-04-01 10:00:00"
+    },
+    {
+      "ID": 103,
+      "user_email": "shared@example.com",
+      "user_pass": "$P$Bsynth123jjSdE..RlUH0mbDM.YWIP1",
+      "user_login": "u103",
+      "display_name": "user 103",
+      "user_registered": "2025-05-01 10:00:00"
+    },
+    {
+      "ID": 104,
+      "user_email": "",
+      "user_pass": "$2b$04$keOqZMI7YPkZfrByPtlcjO5qhabb88OJ8Ho0Fg5zmgR96DUpr2lAi",
+      "user_login": "u104",
+      "display_name": "user 104",
+      "user_registered": "2025-06-01 10:00:00"
+    }
+  ],
+  "meta": {
+    "101": {
+      "first_name": "Ada",
+      "last_name": "Okafor",
+      "billing_phone": "+2348012345678"
+    },
+    "102": {
+      "billing_first_name": "Ben",
+      "billing_last_name": "Ibrahim"
+    },
+    "103": {
+      "first_name": "Shared",
+      "last_name": "FromNG"
+    },
+    "104": {}
+  }
+}

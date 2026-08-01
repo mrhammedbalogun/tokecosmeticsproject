@@ -195,3 +195,160 @@ shred -u /root/wp-readonly.env
 
 Then remove the two migration-only mounts (`/mnt/wp-uploads-ng`, `/mnt/exports`)
 from `infra/docker-compose.prod.yml`.
+
+---
+
+# Runbook — customer migration (Plan-22)
+
+Same box, same socket, same forwarding discipline as the catalogue above. Read §0 first if
+you have not; nothing about how the container reaches MariaDB changes here.
+
+**What is different, and why it deserves its own runbook:** the catalogue artifact is
+product data. This one is ~977 real password hashes, names, emails and phone numbers, and
+it is read by a credential that can see every user row on three stores. Everything below
+that looks like ceremony is about that difference.
+
+## 1. Create the migration credential — AT EXTRACT TIME, NOT BEFORE
+
+`wp_migration`, **not** `wp_readonly`. Granting these tables to `wp_readonly` would hand
+the recurring catalogue import permanent access to every password hash on the estate. The
+two users exist precisely so that one of them can be short-lived.
+
+Every day this credential exists unused is exposure on a box that is being actively
+probed. Create it when you are about to extract; drop it in §6.
+
+```bash
+PW=$(openssl rand -base64 30)
+umask 077 && printf 'WP_DB_PASSWORD=%s\n' "$PW" > /root/wp-migration.env
+mysql -e "
+CREATE USER IF NOT EXISTS 'wp_migration'@'localhost' IDENTIFIED BY '$PW';
+$(for db_prefix in 'tokecosm_wp481 wp_' 'tokecosm_wp481 wp8n_' 'tokecosm_usawp100 wp8n_'; do
+    set -- $db_prefix
+    for t in users usermeta wc_orders wc_order_addresses wc_order_operational_data \
+             woocommerce_order_items woocommerce_order_itemmeta; do
+      echo "GRANT SELECT ON $1.$2$t TO 'wp_migration'@'localhost';"
+    done
+  done)
+GRANT SELECT ON tokecosm_usawp100.wp8n_posts TO 'wp_migration'@'localhost';
+GRANT SELECT ON tokecosm_usawp100.wp8n_postmeta TO 'wp_migration'@'localhost';
+FLUSH PRIVILEGES;"
+unset PW
+```
+
+23 tables: seven per store prefix, plus `posts`/`postmeta` on the intl prefix only — the
+intl store has 13 orders from 2023 that HPOS never backfilled into `wc_orders`, and Plan-23
+loses them silently without those two. `wc_order_operational_data` is in the list because
+in HPOS `wc_orders` has **no `date_paid_gmt` column**; leaving it out fails Plan-23
+partway through with `ERROR 1142`, not at approval time.
+
+### Prove the grant is limited — run all three
+
+The negative checks are the only part that proves the positive list was exhaustive. The
+first must print numbers; the second and third **must** fail with `ERROR 1142`.
+
+```bash
+set -a; . /root/wp-migration.env; set +a
+mysql -u wp_migration -p"$WP_DB_PASSWORD" -e \
+  "SELECT COUNT(*) FROM tokecosm_wp481.wp_wc_order_operational_data;"
+mysql -u wp_migration -p"$WP_DB_PASSWORD" -e \
+  "SELECT COUNT(*) FROM tokecosm_usawp100.wpstg0_users;"   # MUST fail — WP-Staging copy
+mysql -u wp_migration -p"$WP_DB_PASSWORD" -e \
+  "SELECT COUNT(*) FROM tokecosm_wp481.wp_options;"        # MUST fail
+```
+
+`wpstg0_users` matters most: the WP-Staging copy shares the intl database, so "the grant
+does not reach it" is an assumption until a query proves otherwise.
+
+## 2. Extract — once per store
+
+Three stores, three runs, three artifacts. `--store` labels the artifact and must match
+the prefix being read; getting them out of step writes `LegacyIdentity` rows that point at
+the wrong store and mislinks order history in Plan-23.
+
+| `--store` | `WP_DB_NAME` | `WP_TABLE_PREFIX` |
+|---|---|---|
+| `legacy_ng` | `tokecosm_wp481` | `wp_` |
+| `legacy_ng_old` | `tokecosm_wp481` | `wp8n_` |
+| `legacy_intl` | `tokecosm_usawp100` | `wp8n_` |
+
+```bash
+cd /opt/tokecosmetics/repo
+set -a; . /root/wp-migration.env; set +a
+docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod \
+  -f infra/docker-compose.prod.yml run --rm \
+  -v /var/lib/mysql/mysql.sock:/run/wp-mysql/mysql.sock:ro \
+  -e WP_DB_HOST=/run/wp-mysql/mysql.sock \
+  -e WP_DB_NAME=tokecosm_wp481 \
+  -e WP_TABLE_PREFIX=wp_ \
+  -e WP_DB_USER=wp_migration \
+  -e WP_DB_PASSWORD \
+  web python manage.py extract_wp_customers --store legacy_ng \
+      --out /mnt/exports/customers-legacy_ng.json
+```
+
+`-e WP_DB_PASSWORD` with **no value** again — never `-e WP_DB_PASSWORD=<secret>`.
+
+The command writes the file `0600` before any content enters it and prints a warning
+saying so. Expect roughly 695 / 285 / 13 customers. It reads only users with **at least
+one order**: the stores are under an automated signup flood (intl went 51 → 3,284 users
+between 14 July and 1 August, none of whom ever ordered), and that filter is what keeps
+several thousand spam accounts out of the new platform.
+
+## 3. Dry run, then import
+
+Import order does not matter — cross-store precedence is decided by
+`accounts.best_store`, not by which artifact ran first. Do all three dry runs before any
+real one.
+
+```bash
+docker compose ... run --rm web python manage.py import_customers \
+  /mnt/exports/customers-legacy_ng.json --dry-run
+```
+
+Read the counts. `attached_to_pre_existing` above zero is expected and correct — those are
+staff or organic signups whose email matched a customer; they get a `LegacyIdentity` and
+nothing else is touched. `skipped_no_usable_email` above a handful is worth investigating
+before proceeding.
+
+Then drop `--dry-run`, one store at a time, checking counts between each.
+
+## 4. Verify
+
+```bash
+docker compose ... run --rm web python manage.py shell -c "
+from django.db.models import Count
+from apps.accounts.models import User, LegacyIdentity
+print('customers:', User.objects.exclude(legacy_source='').count())
+for row in LegacyIdentity.objects.values('store').annotate(n=Count('id')).order_by('store'):
+    print(' ', row['store'], row['n'])
+print('cross-store people:', User.objects.annotate(n=Count('legacy_identities')).filter(n__gt=1).count())
+print('still on a WordPress hash:', User.objects.filter(password__startswith='wordpress').count())
+"
+```
+
+Then log in as a real customer with a known password on staging. That is the only check
+that matters; every count above can be right while the passwords are wrong.
+
+## 5. DELETE THE ARTIFACTS
+
+```bash
+shred -u /mnt/exports/customers-legacy_*.json
+```
+
+A file of ~977 password hashes that outlives its purpose is a breach waiting for an
+unrelated mistake. Do this even if you expect to re-run — extracting again is cheap.
+
+## 6. After the Plan-27 cutover — DROP the credential
+
+Not "later". The same change window.
+
+```bash
+mysql -e "DROP USER 'wp_migration'@'localhost';"
+shred -u /root/wp-migration.env
+```
+
+The cutover delta run (`import_customers --since <rehearsal date>`) happens **before**
+this step. `--since` filters on registration date, so it catches customers who signed up
+after the rehearsal; customers who already existed are handled by the importer's
+idempotency, which deliberately leaves an imported account alone rather than reverting a
+password the customer has since changed.

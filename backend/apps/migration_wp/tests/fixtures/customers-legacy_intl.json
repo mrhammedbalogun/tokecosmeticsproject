@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "store": "legacy_intl",
+  "table_prefix": "wp_",
+  "customers": [
+    {
+      "ID": 301,
+      "user_email": "dee@example.com",
+      "user_pass": "$P$Bsynth123lLUXLRXWTJKFHYTT01WKM.",
+      "user_login": "u301",
+      "display_name": "user 301",
+      "user_registered": "2025-05-01 10:00:00"
+    },
+    {
+      "ID": 302,
+      "user_email": "shared@example.com",
+      "user_pass": "$2b$04$4UZrdiRXHpi3K3oJzT9Zy.Tm8S2y6acDmZKl9j7r0KH7C2oVxpc3q",
+      "user_login": "u302",
+      "display_name": "user 302",
+      "user_registered": "2025-06-01 10:00:00"
+    }
+  ],
+  "meta": {
+    "301": {
+      "first_name": "Dee",
+      "last_name": "Smith"
+    },
+    "302": {
+      "first_name": "Shared",
+      "last_name": "FromINTL"
+    }
+  }
+}

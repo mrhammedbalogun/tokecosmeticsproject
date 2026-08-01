@@ -235,3 +235,69 @@ natural moment to snapshot. Surfaced, not silently dropped.
 - **The spec's hasher is correct**; I had assumed the risk was in the code. It is in the
   settings note around it.
 - **The dedup problem is 17 rows**, not the hundreds the audit implied.
+
+---
+
+## Build record (2026-08-01)
+
+Approval for the 23-table grant was given. The credential is **not** created yet — that is
+deliberate and was the recommendation: it goes in at extract time (runbook §1), because
+every idle day is exposure. Everything below was built and tested against fixtures without
+touching the live database.
+
+### The hasher
+
+Implemented as specified, with the corrections the review called for: `passlib` was
+**not** taken — phpass is ~25 lines and vendored, so the unmaintained dependency buys
+nothing for the 86 users it would serve. `bcrypt` (pyca) is a real dependency. Argon2 was
+not smuggled in; `PASSWORD_HASHERS` is now spelled out as Django's default list verbatim
+plus `wordpress` appended, and `accounts.E001` fails the system check if it is ever
+promoted to position 0.
+
+**The test vectors came from the VPS's own PHP 8.1.34 and WordPress's own
+`class-phpass.php`, not from the implementation.** That is what caught the one real bug:
+
+> **pyca/bcrypt 4.0+ RAISES on a secret longer than 72 bytes; PHP silently truncates.**
+> Any customer on a plain `$2y$` row who had chosen a long password would have been
+> permanently locked out, and the symptom — one specific customer's correct password
+> being rejected — is close to undiagnosable from the outside. `_bcrypt_check` now
+> truncates exactly as PHP does. A self-consistent test would have passed happily.
+
+Storage is `wordpress$` + the raw hash byte for byte, so `stored[10:]` is exactly
+`wp_users.user_pass` and the import can be verified by comparison rather than re-derivation.
+
+### LegacyIdentity
+
+Built as ruled, and both replaced columns are **dropped** — verified NULL across the board
+first (0 of 28 rows locally; the writer has never run in production). The migration
+carries a docstring saying it is safe today and only today.
+
+Precedence is asserted **order-independent**, which turned out to matter more than
+expected: the three stores are three separate artifacts and three separate runs, so
+"first import wins" would have made the staging and cutover runs disagree about the same
+17 people.
+
+### Extract / import
+
+`extract_wp_customers --store --out` and `import_customers [--dry-run] [--since]`, mirroring
+Plan-21's extract → artifact → import shape.
+
+Three things worth flagging beyond the plan:
+
+- **The artifact is created 0600 via `os.open`, not chmod-ed afterwards.** A chmod after
+  writing leaves a window in which ~977 password hashes are world-readable on a box that
+  has already had one malware incident.
+- **Rule 1 was implemented as "never overwrite a password a human has chosen", not "on
+  create only".** The hasher gives the test for free: if the stored hash still starts with
+  `wordpress$`, nobody has logged in or reset since import, because a successful login
+  rehashes. This covers the case the plan named AND one it did not — a customer who
+  merely *logs in* between rehearsal and cutover has their hash silently upgraded by
+  Django, and "on create only" would have re-imported over it.
+- **`.gitignore` now blocks `customers-legacy_*.json`** with the synthetic fixtures
+  re-included explicitly. Both directions verified with `git check-ignore`.
+
+### Not done here
+
+The first real extract, which needs the credential from runbook §1. Addresses stay with
+Plan-23 as ruled. Loyalty balances remain a flagged checkpoint decision, not silently
+dropped.

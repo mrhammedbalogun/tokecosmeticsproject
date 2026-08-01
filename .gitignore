@@ -35,3 +35,10 @@ Thumbs.db
 
 # Local dev media (seeded placeholder images)
 backend/media/
+
+# Plan-22 customer artifacts — REAL PASSWORD HASHES, NAMES, EMAILS, PHONES.
+# extract_wp_customers writes these 0600 and the runbook deletes them after import; this
+# is the backstop for the run where somebody extracts into the repo by mistake. The test
+# fixtures share the filename and are synthetic, so they are re-included explicitly.
+customers-legacy_*.json
+!backend/apps/migration_wp/tests/fixtures/customers-legacy_*.json
