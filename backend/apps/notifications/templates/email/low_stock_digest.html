@@ -1,4 +1,10 @@
-<h2>Low stock digest</h2>
+{% if newly_low and not is_first %}<h2>{{ newly_low|length }} newly low</h2>
+<ul>
+{% for r in newly_low %}<li><strong>{{ r.sku }}</strong> @ {{ r.warehouse }} — {{ r.available }} available</li>
+{% endfor %}</ul>
+{% endif %}
+<h2>{% if is_first %}Low stock{% else %}Everything currently low{% endif %}</h2>
 <ul>
 {% for r in rows %}<li><strong>{{ r.sku }}</strong> @ {{ r.warehouse }} — {{ r.available }} available</li>
 {% endfor %}</ul>
+<p style="color:#777;font-size:13px;">You are only sent this when the list changes — no news means no message.</p>

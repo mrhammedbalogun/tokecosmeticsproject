@@ -453,9 +453,13 @@ CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_BEAT_SCHEDULE = {
+    # Hourly, but the task only SENDS when the low-stock list changes — see
+    # `low_stock_digest`. An hourly check that stays quiet tells you a bestseller ran out
+    # within the hour; a daily digest cannot, and demoting it would have traded away
+    # responsiveness to fix a problem that was repetition rather than frequency.
     "low-stock-digest-hourly": {
         "task": "apps.inventory.tasks.low_stock_digest",
-        "schedule": 3600.0,  # every hour
+        "schedule": 3600.0,  # every hour; sends only on change
     },
     "abandon-stale-carts": {
         "task": "apps.carts.tasks.abandon_stale_carts",

@@ -1,1 +1,1 @@
-Low stock alert — {{ rows|length }} item(s) need restocking
+{% if newly_low and not is_first %}{{ newly_low|length }} newly low — {% endif %}{{ rows|length }} item(s) need restocking

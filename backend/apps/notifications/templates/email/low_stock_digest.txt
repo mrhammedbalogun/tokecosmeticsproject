@@ -1,3 +1,8 @@
-Low stock digest:
+{% if newly_low and not is_first %}Newly low since the last alert:
+{% for r in newly_low %}- {{ r.sku }} @ {{ r.warehouse }}: {{ r.available }} available
+{% endfor %}
+{% endif %}
+{% if is_first %}Low stock:{% else %}Everything currently low:{% endif %}
 {% for r in rows %}- {{ r.sku }} @ {{ r.warehouse }}: {{ r.available }} available
 {% endfor %}
+You are only sent this when the list changes — no news means no message.
