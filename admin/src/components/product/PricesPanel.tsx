@@ -130,7 +130,7 @@ export function PricesPanel({
 
       <p className="mt-3 text-xs text-muted">
         A market needs a price in its currency before the product appears there at all.
-        Country-specific and scheduled prices arrive in a later slice (17c).
+        Country-specific and scheduled prices cannot be edited here.
       </p>
     </div>
   );

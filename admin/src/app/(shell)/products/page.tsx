@@ -20,8 +20,10 @@ const PATH = "/products";
  * Hardcoded, and that is a decision rather than laziness. These are the four seeded by
  * `core/migrations/0003_seed_countries_currencies.py` and they are the four the pricing
  * model is built around; there is no admin endpoint listing configured currencies, and
- * inventing one to avoid four literals would be the larger sin. When 17c adds the
- * unpriced-per-market endpoint this moves server-side, where it belongs.
+ * inventing one to avoid four literals would be the larger sin. 17c added
+ * `/admin/prices/unpriced/?currency=…`, which answers the per-market question
+ * server-side; this list stays hardcoded because it is the set of COLUMNS to show, not a
+ * question about any one product.
  */
 const CURRENCIES = ["NGN", "GBP", "USD", "CAD"] as const;
 
@@ -80,12 +82,20 @@ export default async function ProductsPage({ searchParams }: { searchParams: Sea
             The catalogue. Search by product name or by the SKU printed on the jar.
           </p>
         </div>
-        <Link
-          href="/products/new"
-          className="shrink-0 rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
-        >
-          New product
-        </Link>
+        <div className="flex shrink-0 gap-2">
+          <Link
+            href="/products/unpriced"
+            className="rounded border border-line px-3 py-1.5 text-sm hover:border-accent"
+          >
+            Unpriced
+          </Link>
+          <Link
+            href="/products/new"
+            className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90"
+          >
+            New product
+          </Link>
+        </div>
       </div>
 
       <div className="mt-6">

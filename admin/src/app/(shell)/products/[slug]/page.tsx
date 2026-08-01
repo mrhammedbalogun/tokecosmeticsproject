@@ -25,8 +25,9 @@ import { adjustStockAction } from "./stock-actions";
 import type { PriceRow, VariantRow } from "@/lib/product-prices";
 import type { StockRow } from "@/lib/product-stock";
 
-/** The configured currencies, as on the products list. There is no endpoint listing them
- *  until 17c; `core/migrations/0003_seed_countries_currencies.py` is the source. */
+/** The configured currencies, as on the products list. There is still no endpoint listing
+ *  configured currencies; `core/migrations/0003_seed_countries_currencies.py` is the
+ *  source. */
 const CURRENCIES = ["NGN", "GBP", "USD", "CAD"] as const;
 
 export const metadata: Metadata = { title: "Edit product" };

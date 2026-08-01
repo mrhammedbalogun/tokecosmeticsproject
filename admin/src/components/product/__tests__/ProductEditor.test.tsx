@@ -718,12 +718,15 @@ describe("ProductEditor", () => {
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 
-  it("says variant creation is a later slice when there are none", () => {
+  it("points a variant-less product at the builder above, not at a future slice", () => {
+    // The builder shipped in 17b, so the old "arrives in a later slice (17b)" copy sat
+    // directly beneath the thing it said was coming.
     withCatalogue({ variants: [] });
 
     fireEvent.click(tab("Variants"));
 
-    expect(screen.getByText(/17b/)).toBeInTheDocument();
+    expect(screen.getByText(/Add an option above to generate them/)).toBeInTheDocument();
+    expect(screen.queryByText(/17b/)).not.toBeInTheDocument();
   });
 
   // --- Prices tab (task 6) ----------------------------------------------------------

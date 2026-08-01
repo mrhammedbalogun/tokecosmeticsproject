@@ -81,12 +81,20 @@ function lockReason(rows: PriceRow[]): string | null {
   const overrides = rows.filter((p) => p.country !== null);
   const scheduled = rows.filter((p) => p.country === null && p.starts_at !== null);
 
+  // THE PROMISE IS RETRACTED, NOT MOVED. Both messages used to say these arrive in 17c;
+  // 17c decided against building override editing (its ruling 4) — all four markets are
+  // NGN-only and two are blocked on stock as well, so a per-country price is a refinement
+  // for a business selling in several currencies, which this one is not yet. A message
+  // pointing at a slice nobody intends to build is worse than one that stops.
+  //
+  // It deliberately does NOT say "managed in the database" either: that reads as an
+  // invitation to hand-edit production SQL.
   if (overrides.length) {
     const countries = [...new Set(overrides.map((p) => p.country))].sort().join(", ");
-    return `A country-specific price is set for ${countries}, so editing here would not change what those customers pay. Country prices arrive in 17c.`;
+    return `A country-specific price is set for ${countries}, so editing here would not change what those customers pay. Country-specific prices cannot be edited here.`;
   }
   if (scheduled.length) {
-    return "A scheduled price exists for this currency, so editing here may not be what customers see. Scheduled prices arrive in 17c.";
+    return "A scheduled price exists for this currency, so editing here may not be what customers see. Scheduled prices cannot be edited here.";
   }
   return null;
 }

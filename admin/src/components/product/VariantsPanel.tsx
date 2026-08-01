@@ -1,11 +1,11 @@
 /**
  * The Variants tab: the variants this product already has.
  *
- * READ-MOSTLY BY DESIGN. 17a edits existing variants' stock through the adjust modal
- * (task 7) and nothing else here; GENERATING variants from an option matrix is 17b. That
- * split exists because 26% of the production catalogue is multi-variant — an editor that
- * could not show existing variants would be unusable on a quarter of the range, while one
- * that could not create them is merely incomplete.
+ * READ-MOSTLY BY DESIGN. This panel edits existing variants' stock through the adjust
+ * modal and nothing else; GENERATING variants from an option matrix is the builder above
+ * it, which shipped in 17b. That split exists because 26% of the production catalogue is
+ * multi-variant — an editor that could not show existing variants would be unusable on a
+ * quarter of the range.
  *
  * STOCK IS SHOWN, NEVER TYPED. `StockItemAdminViewSet` sets
  * `http_method_names = ["get", "post", "head", "options"]` — it refuses PUT and PATCH
@@ -28,14 +28,13 @@ export function VariantsPanel({
   stock: StockRow[];
   /** Every warehouse that appears in `stock`, in a stable order. */
   warehouses: { id: number; name: string }[];
-  /** Opens the adjust modal. Wired in task 7; the button exists now because the column
-   *  is meaningless without it. */
+  /** Opens the adjust modal. */
   onAdjust?: (stockItemId: number) => void;
 }) {
   if (!variants.length) {
     return (
       <p className="rounded-[var(--radius-card)] border border-dashed border-line p-6 text-center text-sm text-muted">
-        This product has no variants yet. Creating them arrives in a later slice (17b).
+        This product has no variants yet. Add an option above to generate them.
       </p>
     );
   }

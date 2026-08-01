@@ -81,7 +81,11 @@ describe("buildPriceGrid", () => {
     const cell = grid[0].cells.NGN;
     expect(cell.state).toBe("locked");
     expect(cell.state === "locked" && cell.reason).toContain("GB");
-    expect(cell.state === "locked" && cell.reason).toContain("17c");
+    // The message must STOP rather than promise a slice nobody intends to build (17c
+    // ruling 4), and must not hint at hand-editing the database either.
+    expect(cell.state === "locked" && cell.reason).toContain("cannot be edited here");
+    expect(cell.state === "locked" && cell.reason).not.toContain("17c");
+    expect(cell.state === "locked" && cell.reason).not.toMatch(/database/i);
   });
 
   it("names every country when more than one override exists", () => {
