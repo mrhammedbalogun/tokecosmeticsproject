@@ -63,3 +63,27 @@ export async function saveDeliveryOptionAction(input: {
   revalidatePath("/settings/delivery");
   return { savedAt: Date.now() };
 }
+
+/** Coverage is a REPLACE through its own endpoint (Plan-19d).
+ *
+ * Kept off the price PATCH deliberately: coverage is mixed granularity, and folding it in
+ * would let a client that omitted the key silently clear every region — the exact class
+ * of accident that makes "why did Lagos stop being served?" unanswerable. */
+export async function saveCoverageAction(input: {
+  id: number;
+  country_codes: string[];
+  region_ids: number[];
+}): Promise<DeliveryState> {
+  try {
+    await fetchWithAuth(`/admin/delivery-options/${input.id}/coverage/`, {
+      method: "PUT",
+      body: { country_codes: input.country_codes, region_ids: input.region_ids },
+    });
+  } catch (e) {
+    if (!(e instanceof ApiError)) return { message: "The API is not responding." };
+    return { message: "That coverage could not be saved." };
+  }
+  revalidatePath("/settings/delivery");
+  revalidatePath(`/settings/delivery/${input.id}`);
+  return { savedAt: Date.now() };
+}

@@ -9,6 +9,7 @@
  * editable here — that is 19d's tree, and a half-answer would be worse than none.
  */
 import { startTransition, useState } from "react";
+import Link from "next/link";
 import { saveDeliveryOptionAction } from "@/app/(shell)/settings/delivery/actions";
 import type { DeliveryOptionRow } from "@/lib/money-config";
 
@@ -163,8 +164,12 @@ function OptionCard({ option }: { option: DeliveryOptionRow }) {
         {pending ? "Saving…" : "Save option"}
       </button>
       <p className="mt-2 text-xs text-muted">
-        Which places this option covers is set in a later slice; it is shown above so you
-        can tell the options apart.
+        <Link
+          href={`/settings/delivery/${option.id}`}
+          className="underline underline-offset-2 hover:text-accent"
+        >
+          Where it is offered →
+        </Link>
       </p>
     </form>
   );

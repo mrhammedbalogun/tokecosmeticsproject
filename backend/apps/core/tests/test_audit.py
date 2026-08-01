@@ -262,6 +262,19 @@ def _case_coupon_create(client, monkeypatch):
     ), 201
 
 
+def _case_region_patch(client, monkeypatch):
+    from apps.core.models import Region
+
+    region = Region.objects.first()
+    if region is None:
+        region = Region.objects.create(
+            country_code="NG", name="Testland", level="state", is_active=True
+        )
+    return client.patch(
+        f"/api/v1/admin/regions/{region.pk}/", {"is_active": True}, format="json"
+    ), 200
+
+
 def _case_delivery_option_create(client, monkeypatch):
     from apps.core.models import Currency
 
@@ -519,6 +532,7 @@ WRITE_CASES: dict[str, tuple] = {
     "CountryPaymentGatewayAdminViewSet": (_case_payment_gateway_create, "create"),
     "CouponAdminViewSet": (_case_coupon_create, "create"),
     "DeliveryOptionAdminViewSet": (_case_delivery_option_create, "create"),
+    "RegionAdminViewSet": (_case_region_patch, "partial_update"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),

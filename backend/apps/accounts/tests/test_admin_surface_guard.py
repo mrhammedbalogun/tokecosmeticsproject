@@ -190,6 +190,8 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "CouponAdminViewSet": "marketing.manage",
     # --- delivery: an operational number a Manager adjusts, not money routing ------
     "DeliveryOptionAdminViewSet": "products.manage",
+    # Reference data: read plus is_active. Same scope as the options that reference it.
+    "RegionAdminViewSet": "products.manage",
     # --- orders: read ------------------------------------------------------------
     "AdminOrderListView": "orders.view",
     # An invoice carries the customer's name and home address, so this is read-audited.

@@ -237,3 +237,54 @@ anywhere earlier.
 to 19b — which I adopted — but suggested TipTap might simply move to 19c. I have kept that
 as an explicit swap-later ruling rather than a vague deferral, because "19c will add
 TipTap" is exactly the kind of promise Plan-17c had to retract three of.
+
+---
+
+## Completion record (2026-08-01)
+
+All four slices built and each walked in a browser as it was built.
+
+**19a — CMS pages.** `cms.Page`, write-time sanitisation, public endpoints, admin CRUD,
+storefront route, sitemap. Live: a body containing `<script>`, `<iframe>` and `onclick`
+reached the shop as allow-listed HTML with `rel="noopener noreferrer"` added.
+
+**19b — Commerce config.** `BankAccount` (the orphan), `CountryPaymentGateway`, coupons and
+flat `DeliveryOption` fields. Live: the `payments.W002` gap surfaced as "CA, US offer bank
+transfer with no active account"; the account-number confirmation showed
+`0123456789 → 2233445566` and Cancel left it untouched; `launch15` normalised to
+`LAUNCH15`; the Lagos price saved at 1800.
+
+**19c — Banners, sections, menus.** Live: an empty CMS fell back to the Plan-13 fixtures,
+then a strip banner and a hero created in the admin both appeared within the 60-second
+TTL — headline and eyebrow from the banner, sub-headline still the fixture because the
+banner left it blank. **The stage's own checkpoint behaviour therefore passes**; the
+CHECKPOINT itself is Hammed's to perform.
+
+**19d — Coverage.** The 811-region tree, mixed granularity and the address tester. Live:
+37 states collapsed with area counts; unticking Lagos and ticking Ikeja + Apapa produced
+the "part" tri-state; the tester answered *offered* for Ikeja and *not offered* for Agege
+in the same state; the save persisted exactly those two areas, and the original coverage
+was restored afterwards.
+
+backend 1679 passed / 3 skipped · admin 710 · storefront 734 · tsc, eslint, ruff clean.
+
+### Two rulings changed while building
+
+- **Ruling 4 was wrong about scope.** I had put bank accounts and gateways behind
+  `orders.manage`. `rbac.py` had already filed the payout account under `settings.manage`
+  (Owner-only), naming it "the single highest-value target in the system". The code's
+  existing reasoning won.
+- **Ruling 1's TipTap promise is RETRACTED, not carried.** 19a said the pages editor would
+  swap onto TipTap in 19c. It has not, and the promise is withdrawn rather than deferred
+  again: a large client dependency and a second stored content format, for eleven policy
+  pages authored by one person. The textarea and the sanitiser stay. Adding TipTap later
+  is a contained change and should be a decision, not a debt — which is exactly what
+  Plan-17c had to retract three of.
+
+### Still open, and not mine to close
+
+- **Ten of the eleven pages have no content.** The machinery is done; an empty "Privacy
+  policy" is legally worse than a missing one, so the text is Hammed's.
+- **`/page/blog`** still needs the decision ruling 3 named: placeholder, or drop the link.
+- **Plan-24's migrated/dropped page list** has an owner now (this plan) but no entries.
+- **CA and US offer bank transfer with no account** — visible on `/settings/payments`.

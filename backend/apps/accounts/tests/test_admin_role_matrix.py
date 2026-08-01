@@ -106,6 +106,7 @@ MATRIX: list[Row] = [
     Row("CountryPaymentGatewayAdminViewSet", "get", "/api/v1/admin/payment-gateways/", _OWNER),
     Row("CouponAdminViewSet", "get", "/api/v1/admin/coupons/", _MANAGERS),
     Row("DeliveryOptionAdminViewSet", "get", "/api/v1/admin/delivery-options/", _MANAGERS),
+    Row("RegionAdminViewSet", "get", "/api/v1/admin/regions/?country_code=NG", _MANAGERS),
     # --- orders: the queue and one order. Support lives here all day -------------
     Row("AdminOrderListView", "get", "/api/v1/admin/orders/", _DESK),
     Row("AdminOrderDetailView", "get", f"{_ORDER}/", _DESK),

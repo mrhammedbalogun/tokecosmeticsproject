@@ -10,7 +10,15 @@ from rest_framework import viewsets
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
 from apps.core.audit import AdminAuditMixin
-from apps.delivery.admin_serializers import DeliveryOptionAdminSerializer
+from rest_framework.decorators import action
+from rest_framework.response import Response
+
+from apps.core.models import Country, Region
+from apps.delivery.admin_serializers import (
+    DeliveryCoverageSerializer,
+    DeliveryOptionAdminSerializer,
+    RegionAdminSerializer,
+)
 from apps.delivery.models import DeliveryOption
 
 
@@ -32,3 +40,47 @@ class DeliveryOptionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["is_active", "kind", "countries"]
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
+
+    @action(detail=True, methods=["put"])
+    def coverage(self, request, pk=None):
+        """`PUT /admin/delivery-options/{id}/coverage/` — Plan-19d.
+
+        A REPLACE, not a merge, and its own endpoint rather than a field on the flat
+        serializer. Coverage is mixed granularity (whole countries, whole states,
+        individual areas), and folding it into the price PATCH would let a client that
+        omitted the key silently clear every region.
+        """
+        option = self.get_object()
+        serializer = DeliveryCoverageSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        codes = serializer.validated_data.get("country_codes")
+        if codes is not None:
+            option.countries.set(Country.objects.filter(code__in=codes))
+        region_ids = serializer.validated_data.get("region_ids")
+        if region_ids is not None:
+            option.regions.set(Region.objects.filter(id__in=region_ids))
+
+        option.refresh_from_db()
+        return Response(DeliveryOptionAdminSerializer(option).data, status=200)
+
+
+class RegionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """The regions browser (Plan-19d). Read plus `is_active`, nothing else.
+
+    NO CREATE OR DELETE. The 811 rows are reference data seeded by migration — Nigeria's
+    37 states and 774 LGAs are not a thing an operator invents, and a typo'd extra "Lagos"
+    would silently never match an address. Deactivating is how a place stops being
+    offered.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
+    serializer_class = RegionAdminSerializer
+    audit_serializers = (RegionAdminSerializer,)
+    audit_model_label = "core.region"
+    queryset = Region.objects.all().order_by("country_code", "level", "name")
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["country_code", "level", "is_active", "parent"]
+    pagination_class = None  # 811 rows is one response; the client builds the tree
+    http_method_names = ["get", "patch", "head", "options"]

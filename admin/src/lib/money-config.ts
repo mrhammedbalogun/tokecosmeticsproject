@@ -54,6 +54,7 @@ export interface DeliveryOptionRow {
   sort: number;
   country_codes: string[];
   region_count: number;
+  region_ids: number[];
 }
 
 /** Markets whose bank transfer is switched on but that have no ACTIVE bank account.
