@@ -1,0 +1,20 @@
+{% comment %}
+ONE renderer for an address snapshot, included by every mail and the invoice.
+
+It exists because four templates and the invoice each wrote their own version against
+`city` and `region` — keys `_address_snapshot` (checkout/services/checkout.py:47) does not
+produce. It writes `area` and `state`. So every one of them printed the street line, a
+blank line, and nothing else: no recipient, no city, no state, no phone. A courier could
+not have delivered from the shipped email, and the invoice carried the same hole.
+
+Takes `address` (a snapshot dict). Every line is conditional, because the snapshot is a
+frozen copy of whatever the customer typed and international addresses legitimately skip
+postcodes and states.
+{% endcomment %}{% if address.first_name or address.last_name %}  {{ address.first_name }} {{ address.last_name }}
+{% endif %}  {{ address.line1 }}{% if address.line2 %}
+  {{ address.line2 }}{% endif %}{% if address.area %}
+  {{ address.area }}{% endif %}{% if address.state %}
+  {{ address.state }}{% endif %}{% if address.postcode %}
+  {{ address.postcode }}{% endif %}{% if address.country_code %}
+  {{ address.country_code }}{% endif %}{% if address.phone %}
+  {{ address.phone }}{% endif %}

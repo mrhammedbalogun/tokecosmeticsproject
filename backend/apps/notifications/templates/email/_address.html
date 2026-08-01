@@ -1,0 +1,11 @@
+{% comment %}
+The HTML twin of `_address.txt` — see that file for why this is shared rather than
+written out per template. Takes `address` (a snapshot dict).
+{% endcomment %}{% if address.first_name or address.last_name %}{{ address.first_name }} {{ address.last_name }}<br>
+{% endif %}{{ address.line1 }}<br>
+{% if address.line2 %}{{ address.line2 }}<br>
+{% endif %}{% if address.area %}{{ address.area }}<br>
+{% endif %}{% if address.state %}{{ address.state }}<br>
+{% endif %}{% if address.postcode %}{{ address.postcode }}<br>
+{% endif %}{% if address.country_code %}{{ address.country_code }}<br>
+{% endif %}{% if address.phone %}{{ address.phone }}{% endif %}
