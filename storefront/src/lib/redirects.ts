@@ -33,7 +33,13 @@ export async function getRedirect(path: string): Promise<RedirectRule | null> {
       { next: { revalidate: 3600, tags: ["redirects"] } },
     );
   } catch (e) {
+    // A 404 is the ordinary "no such redirect" answer, not a problem.
     if (e instanceof ApiError && e.status === 404) return null;
+    // ANYTHING ELSE IS LOGGED. Swallowing every error identically is what turned a
+    // one-line bug into a long debugging session: the page rendered a plausible 404 and
+    // nothing anywhere said the lookup had failed. The visitor still gets the 404 page —
+    // they were heading there anyway — but the operator gets told.
+    console.error("[redirects] lookup failed for", path, e);
     return null;
   }
 }

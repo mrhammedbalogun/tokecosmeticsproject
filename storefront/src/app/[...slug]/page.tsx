@@ -15,15 +15,27 @@ import { getRedirect } from "@/lib/redirects";
  * their own account page to an article about accounts the first time somebody forgot to
  * update it. Here the precedence is a property of the framework.
  *
+ * ── THIS ONLY WORKS BECAUSE THERE IS NO ROOT `app/loading.tsx` ──────────────────────
+ *
+ * A `loading.tsx` at the app root wraps everything in a Suspense boundary, which makes
+ * Next commit the HTTP status before the body streams. Measured 2026-08-02: with one
+ * present, `permanentRedirect()` here produced **200 with no Location header** — the
+ * browser still followed the streamed client-side navigation, so it looked fine to a
+ * human, while every crawler saw a 200. For a redirect layer whose entire purpose is
+ * telling search engines a URL moved, that is a silent total failure. `notFound()` was
+ * equally affected app-wide.
+ *
+ * The root loading.tsx was removed in Plan-25. The three routes that actually wanted a
+ * skeleton keep their own. DO NOT ADD ONE BACK AT THE ROOT — `__tests__/no-root-loading`
+ * fails if anybody does.
+ *
  * ── ON 410 ──────────────────────────────────────────────────────────────────────────
  *
- * The table stores `410` for pages that were abandoned rather than moved. This route
- * cannot honour it: a Server Component cannot set an arbitrary HTTP status, and a Route
- * Handler that could would have to return a bare response instead of the styled 404 page.
- * So a 410 row renders the ordinary not-found page and answers 404. The rows are still
- * worth keeping — they record the decision, and stop somebody later "fixing" those URLs
- * with a redirect to the homepage — but they are documentation, not behaviour. Search
- * engines de-index a 404 slightly slower than a 410 and otherwise treat them alike.
+ * The table stores `410` for pages that were abandoned rather than moved. A Server
+ * Component still cannot set an arbitrary status, so a 410 row renders the not-found page
+ * and answers 404 — which it now genuinely does. The rows record the decision and stop
+ * somebody later "fixing" those URLs with a redirect to the homepage. Search engines
+ * de-index a 404 slightly slower than a 410 and otherwise treat them alike.
  */
 export default async function LegacyUrlCatchAll({
   params,
