@@ -473,6 +473,13 @@ GIG_PASSWORD = env("GIG_PASSWORD", default="")
 # Wallet is prepaid and debited at waybill creation; below this NGN balance the
 # monitor task (slice 6) emails admins before fulfilment starts failing.
 GIG_WALLET_ALERT_THRESHOLD = env.int("GIG_WALLET_ALERT_THRESHOLD", default=50_000)
+# Where GIG's rider collects parcels — distance from here drives every quote. The
+# defaults are the SANDBOX test company's address (Gbagada); the go-live runbook
+# replaces them with the real warehouse coordinates.
+GIG_SENDER_LATITUDE = env.float("GIG_SENDER_LATITUDE", default=6.5560)
+GIG_SENDER_LONGITUDE = env.float("GIG_SENDER_LONGITUDE", default=3.3888)
+# 0=Car 1=Bike 2=Van 3=Truck (measured enum). Bike is the small-parcel default.
+GIG_VEHICLE_TYPE = env.int("GIG_VEHICLE_TYPE", default=1)
 
 # Storefront origin, used ONLY to build the gateway return URL (Flutterwave redirect).
 # Never derived from a request — a client-supplied return URL is an open-redirect vector.

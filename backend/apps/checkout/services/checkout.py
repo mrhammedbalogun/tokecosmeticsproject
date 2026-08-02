@@ -18,7 +18,7 @@ from apps.carts.models import Cart
 from apps.catalog.services import sellable_in
 from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
-from apps.delivery.services import options_for_address
+from apps.delivery.carriers import priced_options_for_address
 from apps.inventory.services import InsufficientStock, reserve
 from apps.orders.emails import enqueue_order_received
 from apps.orders.models import Order, OrderItem
@@ -90,7 +90,7 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
 
         # Server-side delivery re-match — never trust the client's option list.
         subtotal_preview = compute_totals(lines, country).subtotal
-        options = options_for_address(address, lines, subtotal_preview, country)
+        options = priced_options_for_address(address, lines, subtotal_preview, country)
         chosen = next((o for o in options if o["id"] == delivery_option_id), None)
         if chosen is None:
             raise CheckoutError("delivery_option_invalid", "Delivery option not valid for this address.")

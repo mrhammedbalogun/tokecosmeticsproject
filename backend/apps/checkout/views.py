@@ -25,7 +25,7 @@ from apps.checkout.services.quote import quote as quote_service
 from apps.payments.gateways.base import GatewayError, GatewayNotConfigured
 from apps.checkout.services.totals import compute_totals
 from apps.core.country_context import resolve_country
-from apps.delivery.services import options_for_address
+from apps.delivery.carriers import priced_options_for_address
 from apps.payments.gateways.registry import active_gateways_for
 
 
@@ -54,7 +54,7 @@ class DeliveryOptionsView(APIView):
         if not lines:
             raise ValidationError("Cart is empty.")
         totals = compute_totals(lines, request.country)
-        return Response(options_for_address(address, lines, totals.subtotal, request.country))
+        return Response(priced_options_for_address(address, lines, totals.subtotal, request.country))
 
 
 class QuoteView(APIView):
@@ -72,7 +72,7 @@ class QuoteView(APIView):
             address = get_object_or_404(Address, pk=v["address_id"], user=request.user)
             lines = _cart_lines(cart)
             totals = compute_totals(lines, request.country)
-            opts = options_for_address(address, lines, totals.subtotal, request.country)
+            opts = priced_options_for_address(address, lines, totals.subtotal, request.country)
             chosen = next((o for o in opts if o["id"] == v["delivery_option_id"] and o["price"] is not None), None)
             # Intentional silent fallback: an option id that doesn't match this address
             # (or is quote_required) just leaves delivery at 0.00 rather than erroring —
