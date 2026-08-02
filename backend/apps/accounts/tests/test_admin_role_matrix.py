@@ -129,6 +129,11 @@ MATRIX: list[Row] = [
         body={"tracking_carrier": "DHL", "tracking_number": "123"}),
     Row("AdminOrderNoteView", "patch", f"{_ORDER}/note/", _DESK,
         body={"admin_note": "rang the customer"}),
+    # --- orders: GIG fulfilment (Plan-32a). The panel and the label are desk work;
+    # capture debits the wallet irrevocably, so Support is out with the other money.
+    Row("AdminGigShipmentView", "get", f"{_ORDER}/gig/", _DESK),
+    Row("AdminGigLabelView", "post", f"{_ORDER}/gig/label/", _DESK),
+    Row("AdminGigCaptureView", "post", f"{_ORDER}/gig/capture/", _MANAGERS),
     # --- orders: money. Support is deliberately out ------------------------------
     Row("AdminRefundsOwedView", "get", "/api/v1/admin/refunds-owed/", _MANAGERS),
     Row("AdminResolveReviewView", "post", f"{_ORDER}/resolve-review/", _MANAGERS),

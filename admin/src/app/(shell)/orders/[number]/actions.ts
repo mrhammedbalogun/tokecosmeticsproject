@@ -266,3 +266,45 @@ export async function manualRefundAction(input: {
   // move any.
   return { success: "Refund recorded. No money was moved by this — you sent it." };
 }
+
+// --- GIG fulfilment (Plan-32a slice 5) -----------------------------------------------
+
+export async function gigCaptureAction(input: { number: string }): Promise<WriteState> {
+  const bad = guard(input.number);
+  if (bad) return bad;
+
+  try {
+    const result = await write<{ waybill: string; cost: string }>(input.number, "/gig/capture/", {
+      method: "POST",
+    });
+    revalidatePath(`/orders/${input.number}`);
+    // The success sentence carries the two facts that matter: the waybill that now
+    // exists, and the money that just left the wallet. A rider is already on the way.
+    return { success: `Waybill ${result.waybill} created — ₦${result.cost} debited from the GIG wallet. A rider has been dispatched.` };
+  } catch (e) {
+    // capture_unconfirmed is the one answer that must never look like a plain error:
+    // the wallet MAY have been debited and a rider MAY be coming. fail() preserves the
+    // backend's sentence and code; the panel renders it as a warning that forbids retry.
+    return fail(e, "The waybill could not be created.");
+  }
+}
+
+export async function gigLabelAction(input: { number: string }): Promise<WriteState> {
+  const bad = guard(input.number);
+  if (bad) return bad;
+
+  try {
+    const result = await write<{ ready: boolean; label_url?: string; detail?: string }>(
+      input.number, "/gig/label/", { method: "POST" },
+    );
+    if (!result.ready) {
+      // A sentence, not an error: GIG generates the label only after the parcel passes
+      // through their station.
+      return { error: result.detail ?? "Label not generated yet — try again after GIG processes the parcel.", code: "label_not_ready" };
+    }
+    revalidatePath(`/orders/${input.number}`);
+    return { success: "Label ready.", code: "label_ready" };
+  } catch (e) {
+    return fail(e, "The label could not be fetched.");
+  }
+}

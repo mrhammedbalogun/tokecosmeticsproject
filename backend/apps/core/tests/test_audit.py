@@ -517,7 +517,43 @@ def _case_staff_invite_revoke(client, monkeypatch):
 # view class name -> (case, expected action). One entry per admin view that can WRITE.
 # The completeness test below asserts this covers every such view, so a new write
 # endpoint fails here rather than joining the surface unexercised.
+def _case_gig_capture(client, monkeypatch):
+    from decimal import Decimal
+
+    from apps.delivery.models import GigShipment
+
+    order, _ = _order("TC-900030")
+    shipment = GigShipment.objects.create(order=order, status="quoted", charged=Decimal("4175.20"))
+
+    def fake_capture(o, *, actor):
+        shipment.status, shipment.waybill, shipment.cost = "created", "WB-AUDIT", Decimal("4175.20")
+        shipment.save()
+        return shipment
+
+    # The service is faked: this file tests THE AUDIT WRAPPER, not GIG. The capture
+    # service's own behaviour (wallet refusal, timeout limbo) is test_gig_capture.py.
+    monkeypatch.setattr("apps.delivery.gig.capture.capture_shipment", fake_capture)
+    return client.post(f"/api/v1/admin/orders/{order.number}/gig/capture/"), 200
+
+
+def _case_gig_label(client, monkeypatch):
+    from decimal import Decimal
+
+    from apps.delivery.models import GigShipment
+
+    order, _ = _order("TC-900031")
+    GigShipment.objects.create(
+        order=order, status="created", waybill="WB-AUDIT2", charged=Decimal("4175.20")
+    )
+    monkeypatch.setattr(
+        "apps.delivery.gig.capture.fetch_label", lambda s: "https://s3.example/label.pdf"
+    )
+    return client.post(f"/api/v1/admin/orders/{order.number}/gig/label/"), 200
+
+
 WRITE_CASES: dict[str, tuple] = {
+    "AdminGigCaptureView": (_case_gig_capture, "gig_capture"),
+    "AdminGigLabelView": (_case_gig_label, "gig_label"),
     "ProductAdminViewSet": (_case_product, "create"),
     "CategoryAdminViewSet": (_case_category, "create"),
     "BrandAdminViewSet": (_case_brand, "create"),
@@ -574,6 +610,9 @@ READ_ONLY_VIEWS = frozenset(
         # docstring argues why editing a customer does not belong here), so there is no
         # write case. Read-audited — declared in test_audit_guard.READ_AUDITED_VIEWS.
         "CustomerAdminViewSet",
+        # Plan-32a: the fulfilment panel is GET-only; its writes are the two views
+        # above. Read-audited — declared in test_audit_guard.READ_AUDITED_VIEWS.
+        "AdminGigShipmentView",
         "AdminOrderListView",
         "AdminOrderDetailView",
         "AdminRefundsOwedView",

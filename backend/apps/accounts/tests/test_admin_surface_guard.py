@@ -224,6 +224,12 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # apps/orders/views.py explains why, and test_admin_role_matrix.py proves it.
     "AdminOrderTransitionView": "orders.operate",
     "AdminOrderTrackingView": "orders.operate",
+    # --- GIG fulfilment (Plan-32a slice 5). Capture is orders.manage because it MOVES
+    # MONEY: the wallet is debited the full GrandTotal, irrevocably, and a rider is
+    # dispatched. The panel read and the label are day-job surfaces.
+    "AdminGigShipmentView": "orders.view",
+    "AdminGigCaptureView": "orders.manage",
+    "AdminGigLabelView": "orders.operate",
     "AdminOrderNoteView": "orders.operate",
     # --- orders: money -----------------------------------------------------------
     "AdminRefundsOwedView": "orders.manage",

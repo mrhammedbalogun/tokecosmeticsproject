@@ -58,6 +58,7 @@ PII_SCOPE_PREFIXES = ("orders.", "customers.")
 # Each entry says why, because "why is this one audited and that one not" is the only
 # interesting question about this list.
 READ_AUDITED_VIEWS: dict[str, str] = {
+    "AdminGigShipmentView": "the fulfilment panel sits on an order and names its receiver linkage",
     "AdminOrderListView": "the order queue: customer email and address on every row, and the search term is the record",
     "AdminOrderDetailView": "one order in full: name, email, phone, both addresses, payment history",
     "AdminRefundsOwedView": "a list of orders, each with the customer on it",

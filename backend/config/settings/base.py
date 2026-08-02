@@ -478,6 +478,11 @@ GIG_WALLET_ALERT_THRESHOLD = env.int("GIG_WALLET_ALERT_THRESHOLD", default=50_00
 # replaces them with the real warehouse coordinates.
 GIG_SENDER_LATITUDE = env.float("GIG_SENDER_LATITUDE", default=6.5560)
 GIG_SENDER_LONGITUDE = env.float("GIG_SENDER_LONGITUDE", default=3.3888)
+# Printed on the waybill and read to the rider — go-live sets the real office values.
+GIG_SENDER_NAME = env("GIG_SENDER_NAME", default="Toke Cosmetics")
+GIG_SENDER_PHONE = env("GIG_SENDER_PHONE", default="")
+GIG_SENDER_ADDRESS = env("GIG_SENDER_ADDRESS", default="Gbagada, Lagos")
+GIG_SENDER_LOCALITY = env("GIG_SENDER_LOCALITY", default="Gbagada")
 # 0=Car 1=Bike 2=Van 3=Truck (measured enum). Bike is the small-parcel default.
 GIG_VEHICLE_TYPE = env.int("GIG_VEHICLE_TYPE", default=1)
 
@@ -523,6 +528,14 @@ CELERY_BEAT_SCHEDULE = {
     "sync-gig-coverage": {
         "task": "apps.delivery.tasks.sync_gig_coverage_task",
         "schedule": 86400.0,  # daily — GIG's network changes on human timescales
+    },
+    "poll-gig-tracking": {
+        "task": "apps.delivery.tasks.poll_gig_tracking",
+        "schedule": 7200.0,  # every 2h — pull until GIG's webhook exists, fallback after
+    },
+    "monitor-gig-wallet": {
+        "task": "apps.delivery.tasks.monitor_gig_wallet",
+        "schedule": 21600.0,  # every 6h — the wallet drains at fulfilment speed, not checkout speed
     },
 }
 

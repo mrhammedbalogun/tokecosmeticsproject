@@ -12,6 +12,8 @@ from apps.accounts.rbac import HasAdminScope
 from apps.core.audit import AdminAuditMixin
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.shortcuts import get_object_or_404
 
 from apps.core.models import Country, Region
 from apps.delivery.admin_serializers import (
@@ -84,3 +86,131 @@ class RegionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     filterset_fields = ["country_code", "level", "is_active", "parent"]
     pagination_class = None  # 811 rows is one response; the client builds the tree
     http_method_names = ["get", "patch", "head", "options"]
+
+
+class AdminGigShipmentView(AdminAuditMixin, APIView):
+    """GET /api/v1/admin/orders/{number}/gig/ — the fulfilment panel's data: the
+    shipment, the cached wallet balance, and whether capture is currently legal
+    (with the reason when it isn't, so the UI renders a sentence, not a grey box).
+
+    `orders.view` and read-audited: the payload carries the receiver snapshot's
+    order linkage — same PII posture as the order detail it sits beside.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.view")]
+    audit_reads = True
+    audit_action = "read"
+    audit_model_label = "delivery.gigshipment"
+
+    def get(self, request, number: str):
+        from django.core.cache import cache as django_cache
+
+        from apps.delivery.gig.capture import WALLET_CACHE_KEY
+        from apps.delivery.models import GigShipment
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+        shipment = GigShipment.objects.filter(order=order).first()
+        if shipment is None:
+            return Response({"shipment": None})
+
+        can_capture, reason = True, ""
+        if shipment.status != "quoted":
+            can_capture, reason = False, f"shipment is {shipment.status}"
+        elif order.status != "processing":
+            can_capture, reason = False, f"order is {order.status} — capture after payment"
+
+        raw_balance = django_cache.get(WALLET_CACHE_KEY)
+        return Response({
+            "shipment": {
+                "status": shipment.status,
+                "waybill": shipment.waybill,
+                "cost": str(shipment.cost) if shipment.cost is not None else None,
+                "charged": str(shipment.charged),
+                "quote": shipment.quote,
+                "label_url": shipment.label_url,
+                "capture_api_id": shipment.capture_api_id,
+                "last_scan": shipment.last_scan,
+                "last_tracked_at": shipment.last_tracked_at,
+            },
+            # "unknown" is honest: the sandbox account has no wallet record, and a
+            # stale/absent cache is not a zero.
+            "wallet_balance": None if raw_balance in (None, "unknown") else raw_balance,
+            "can_capture": can_capture,
+            "capture_blocked_reason": reason,
+        })
+
+
+class AdminGigCaptureView(AdminAuditMixin, APIView):
+    """POST /api/v1/admin/orders/{number}/gig/capture/ — create the waybill.
+
+    `orders.manage`, the money-touching scope: this call debits the GIG wallet
+    the full GrandTotal and dispatches a rider, irrevocably. The service refuses
+    ineligible states and insufficient balance BEFORE calling GIG; a timeout
+    parks the shipment in `create_unconfirmed` and this endpoint answers 502
+    with the instruction to check with GIG — never an automatic retry.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
+    audit_action = "gig_capture"
+    audit_model_label = "delivery.gigshipment"
+
+    def post(self, request, number: str):
+        from apps.delivery.gig.capture import CaptureRefused, CaptureUnconfirmed, capture_shipment
+        from apps.delivery.gig.client import GigError
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+        try:
+            shipment = capture_shipment(order, actor=request.user)
+        except CaptureRefused as exc:
+            return Response({"error": exc.code, "detail": exc.detail}, status=409)
+        except CaptureUnconfirmed:
+            return Response(
+                {"error": "capture_unconfirmed",
+                 "detail": "The capture timed out — GIG may have created a waybill and "
+                           "debited the wallet. Check with GIG (WhatsApp) before ANY retry."},
+                status=502,
+            )
+        except GigError as exc:
+            return Response(
+                {"error": "gig_rejected", "detail": str(exc), "api_id": exc.api_id}, status=502
+            )
+        return Response({"waybill": shipment.waybill, "cost": str(shipment.cost)})
+
+
+class AdminGigLabelView(AdminAuditMixin, APIView):
+    """POST /api/v1/admin/orders/{number}/gig/label/ — fetch the waybill label PDF.
+
+    `orders.operate`: printing a label is packing-bench work. "Not ready yet" is a
+    NORMAL answer (GIG generates the label only after the parcel passes through
+    their station), rendered as 200 + ready:false so the UI shows a sentence and
+    a retry button rather than an error state.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.operate")]
+    audit_action = "gig_label"
+    audit_model_label = "delivery.gigshipment"
+
+    def post(self, request, number: str):
+        from apps.delivery.gig.capture import CaptureRefused, fetch_label
+        from apps.delivery.gig.client import GigUnavailable
+        from apps.delivery.models import GigShipment
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+        shipment = get_object_or_404(GigShipment, order=order)
+        try:
+            url = fetch_label(shipment)
+        except CaptureRefused as exc:
+            return Response({"error": exc.code, "detail": exc.detail}, status=409)
+        except GigUnavailable as exc:
+            return Response({"error": "gig_unreachable", "detail": str(exc)}, status=502)
+        if url is None:
+            return Response({"ready": False,
+                             "detail": "Label not generated yet — GIG produces it after the "
+                                       "parcel is processed at their station."})
+        return Response({"ready": True, "label_url": url})
