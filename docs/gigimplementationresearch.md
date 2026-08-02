@@ -209,6 +209,31 @@ withdrawn. New question in its place: **how is pickup triggered** — does a cap
 preshipment automatically queue for collection at our registered address (`IsBatchPickUp`?),
 and is that also why the sandbox resolved a Lagos sender to departure centre "NSUKKA"?
 
+**ANSWERED 2026-08-02 (GIG developer, second reply):**
+
+1. **Pickup is automatic and immediate.** The moment a waybill is created, the closest
+   rider is notified on their phone; on acceptance the shipment goes to `Assigned` and
+   progresses through their network statuses to delivery. No batch flag, no schedule.
+   **This hardens the waybill-at-fulfilment rule into something operational:** creating a
+   waybill summons a rider — it must happen only when the parcel is packed and ready, and
+   only during hours someone can hand it over.
+2. **The label appears only after the shipment is processed at a GIG station** (and may not
+   appear at all in the test environment). Admin must treat "label not ready yet" as a
+   normal state with a retry, not an error.
+3. **The wallet is debited at waybill creation, for the full amount including the
+   surcharge** — i.e. the quoted `GrandTotal` (₦3,691.11 in our test), not the tracked
+   `Amount`. Quote-time `GrandTotal` is the cost figure we store; the wallet must cover it
+   *before* fulfilment creates the waybill.
+4. **In LGAs without home delivery, customers can only collect from a service centre** —
+   confirmed. But the developer questioned our 103 figure ("is that the totality of
+   Nigeria?"), which suggests the sandbox coverage list may be stale or unrepresentative
+   of production. The production coverage list is now the open item.
+
+Still open after this reply: production home-delivery coverage (their own question back to
+us), insufficient-balance behaviour (what error `capture/preshipment` returns — they did not
+address funding the sandbox wallet), and the Bike vehicle-type default (assumed, trivial to
+confirm in passing).
+
 Run against `dev-thirdpartynode.theagilitysystems.com` with the credentials GIG issued
 (`GIG_EMAIL`/`GIG_PASSWORD` in `backend/.env`). Account: `ECO038082`, role
 `ThirdPartyCustomers`, designation Ecommerce. Coverage snapshots saved to
