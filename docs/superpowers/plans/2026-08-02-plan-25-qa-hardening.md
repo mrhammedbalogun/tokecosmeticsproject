@@ -128,3 +128,74 @@ comment stays true. This stage does the former and deletes the caveat.
 
 Tasks 1–3 are this stage's substance. 6 and 7 touch live infrastructure and are gated on
 Hammed the same way the migration credential is.
+
+
+---
+
+## Progress (2026-08-02)
+
+### Task 1 — dependency CVEs ✅
+
+`next` 16.2.10 → **16.2.12** in both apps; `sharp` and `postcss` pinned via npm
+`overrides` because both are bundled inside next. **Both apps audit clean** (was 6 high /
+4 high).
+
+> ⚠️ **Never run `npm audit fix --force` in these repos.** npm's proposed remediation is
+> `next@9.3.3` — a six-year downgrade — because it cannot see that the advisories are in
+> next's own bundled dependencies.
+
+**Verifying by running the apps found a far worse bug than the CVEs.** See the commit, and
+the note added to the catch-all route: the root `src/app/loading.tsx` made Next commit the
+HTTP status before the body streamed, so **Plan-24's entire redirect layer answered 200
+with no `Location` header** and every 404 in the app answered 200. Browsers followed the
+streamed client-side navigation, so it looked perfect to a human. Removing that one file
+fixed both, and cost nothing — the three routes heavy enough to want a skeleton already
+have their own. A structural test now fails if it comes back.
+
+### Task 2 — CSP ✅
+
+Storefront **report-only**, admin **enforced**. The asymmetry is the ruling: the storefront
+renders CMS bodies authored as Elementor markup and loads three payment SDKs that inject
+scripts and iframes, so it reports first; the admin has four dependencies, no third-party
+content, and is the higher-value target.
+
+Origins were found by reading the code rather than copying a starter policy —
+`@paystack/inline-js` and `@paypal/react-paypal-js` both inject scripts and render frames,
+while Flutterwave and Stripe hand off by top-level redirect and need no allowance at all.
+Verified live: both headers ship, and the admin renders under the enforced policy.
+
+`unsafe-eval` is dev-only and asserted absent from production in both apps.
+
+**Still open on CSP:** somebody has to read real reports before `REPORT_ONLY` flips on the
+storefront, and per-request nonces would remove `'unsafe-inline'` from `script-src` — the
+natural next step once the policy has proven itself.
+
+### Task 3 — IDOR / per-object authorisation ✅
+
+**The pass found no holes.** All 14 object-addressed routes outside `/api/v1/admin/` are
+either scoped to the requesting user or public by design, checked one at a time. The two
+that were not already covered by tests — `orders/<number>/pay/` and
+`payments/<reference>/verify/` — both filter on the user, verified in
+`retry_payment` and `PaymentStatusView`.
+
+Since "we looked and it was fine" protects nothing, the deliverable is
+`apps/core/tests/test_object_ownership.py`: a guard in the same shape as `ADMIN_SURFACE`
+that **fails when a new route takes an object id without declaring how it is scoped**,
+plus cross-account tests for the address action routes and the payment-verify endpoint.
+
+### Noted, not fixed
+
+- **`src/lib/__tests__/session-boundary.test.ts` is flaky on `/mnt/c`** — it walks the
+  source tree under a 5-second timeout and times out when a dev server is competing for
+  I/O. It passes alone in ~2.4s. It will fail intermittently in CI on a slow filesystem;
+  the fix is a longer timeout on that test, not a change to the walk.
+- **`/product/[slug]` and `/category/[slug]` still soft-404**, because they keep their own
+  `loading.tsx`. A discontinued product therefore answers 200. That is a real trade-off —
+  a skeleton on the heaviest pages versus a truthful status — and it is Hammed's call, not
+  one to make silently while fixing something else.
+
+### Remaining
+
+4 (404 truthfulness — now only the two routes above), 5 (least-privilege Postgres role),
+6 (VPS patching), 7 (S3 versioning then the orphan sweep), 8 (analytics tags). 6 and 7
+touch live infrastructure and are gated the same way the migration credential is.

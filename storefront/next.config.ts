@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { CSP_HEADER_NAME, buildCsp } from "./src/lib/csp";
 
 const nextConfig: NextConfig = {
   images: {
@@ -41,5 +42,29 @@ const nextConfig: NextConfig = {
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 };
+
+/**
+ * Security headers (Plan-25 task 2).
+ *
+ * CSP is REPORT-ONLY on the storefront — see `src/lib/csp.ts` for why, and for the list
+ * of third-party payment origins it had to be built around. The API's own headers
+ * (HSTS, nosniff, X-Frame-Options) are set by Django on `api.` and are not duplicated
+ * here; these apply to the pages the browser actually renders.
+ */
+nextConfig.headers = async () => [
+  {
+    source: "/:path*",
+    headers: [
+      { key: CSP_HEADER_NAME, value: buildCsp({ dev: process.env.NODE_ENV !== "production" }) },
+      // Belt and braces with frame-ancestors above, for anything that predates CSP.
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+      // The storefront needs none of these. Naming them is what stops a future dependency
+      // quietly asking the customer for their camera on a checkout page.
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+    ],
+  },
+];
 
 export default nextConfig;

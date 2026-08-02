@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { CSP_HEADER_NAME, buildCsp } from "./src/lib/csp";
 
 /**
  * ── ADMIN ORIGIN HARDENING (Plan-16 Amendment 4) ───────────────────────────────────
@@ -110,5 +111,27 @@ const nextConfig: NextConfig = {
     ];
   },
 };
+
+/**
+ * Security headers (Plan-25 task 2). CSP is ENFORCED here, unlike the storefront —
+ * see `src/lib/csp.ts` for why the two differ.
+ */
+nextConfig.headers = async () => [
+  {
+    source: "/:path*",
+    headers: [
+      { key: CSP_HEADER_NAME, value: buildCsp({ dev: process.env.NODE_ENV !== "production" }) },
+      { key: "X-Frame-Options", value: "DENY" },
+      { key: "X-Content-Type-Options", value: "nosniff" },
+      // The admin must never leak a customer's Toke ID or an order number into a
+      // third-party referer header.
+      { key: "Referrer-Policy", value: "no-referrer" },
+      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+      // The admin has no business being indexed, and the staff login page is the one URL
+      // an attacker would look for first.
+      { key: "X-Robots-Tag", value: "noindex, nofollow" },
+    ],
+  },
+];
 
 export default nextConfig;
