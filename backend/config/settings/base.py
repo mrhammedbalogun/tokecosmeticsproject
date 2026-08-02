@@ -466,6 +466,14 @@ PAYPAL_CLIENT_SECRET = env("PAYPAL_CLIENT_SECRET", default="")
 PAYPAL_WEBHOOK_ID = env("PAYPAL_WEBHOOK_ID", default="")
 PAYPAL_API_BASE = env("PAYPAL_API_BASE", default="https://api-m.sandbox.paypal.com")
 
+# --- GIG Logistics (Plan-32a; sandbox base by default, production at go-live) ---
+GIG_BASE_URL = env("GIG_BASE_URL", default="https://dev-thirdpartynode.theagilitysystems.com")
+GIG_EMAIL = env("GIG_EMAIL", default="")
+GIG_PASSWORD = env("GIG_PASSWORD", default="")
+# Wallet is prepaid and debited at waybill creation; below this NGN balance the
+# monitor task (slice 6) emails admins before fulfilment starts failing.
+GIG_WALLET_ALERT_THRESHOLD = env.int("GIG_WALLET_ALERT_THRESHOLD", default=50_000)
+
 # Storefront origin, used ONLY to build the gateway return URL (Flutterwave redirect).
 # Never derived from a request — a client-supplied return URL is an open-redirect vector.
 STOREFRONT_BASE_URL = env("STOREFRONT_BASE_URL", default="http://localhost:3000")

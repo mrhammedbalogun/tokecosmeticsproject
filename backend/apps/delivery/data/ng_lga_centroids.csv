@@ -1,0 +1,786 @@
+state,lga,latitude,longitude,geonameid
+Abia State,Aba North,5.09386,7.39479,7701336
+Abia State,Aba South,5.1,7.35,7701374
+Abia State,Arochukwu,5.48569,7.7658,8638389
+Abia State,Bende,5.64971,7.58999,8638388
+Abia State,Ikwuano,5.43333,7.56667,7701376
+Abia State,Isiala Ngwa North Local Government Area,5.40305,7.41986,9485480
+Abia State,Isiala Ngwa South Local Government Area,5.32707,7.39233,9485481
+Abia State,Isiala-Ngwa North,5.26783,7.39057,7932087
+Abia State,Isiala-Ngwa South,5.36241,7.39998,7730382
+Abia State,Isuikwuato,5.76185,7.46446,7873936
+Abia State,Obi Nwga,5.12713,7.45578,7932088
+Abia State,Ohafia,5.65835,7.76939,7729963
+Abia State,Osisioma Ngwa,5.19934,7.33067,8638391
+Abia State,Ugwunagbo,5.00628,7.33943,7730384
+Abia State,Ukwa East,4.9,7.36667,7701380
+Abia State,Ukwa West,4.95401,7.23927,7730386
+Abia State,Umu-Nneochi,5.93998,7.41034,7932084
+Abia State,Umuahia North,5.558,7.46869,7932085
+Abia State,Umuahia South,5.46234,7.43997,7730388
+Adamawa State,Demsa,9.35639,12.07802,8659809
+Adamawa State,Fufore,9.20243,12.79358,7729966
+Adamawa State,Ganye,8.36758,11.94566,8659815
+Adamawa State,Girei,9.42646,12.48094,8659810
+Adamawa State,Gombi,10.18948,12.52765,8659803
+Adamawa State,Guyuk,9.82348,11.92048,8659806
+Adamawa State,Hong,10.31016,12.92473,8659801
+Adamawa State,Jada,8.68875,12.31743,8659814
+Adamawa State,Larmurde,9.5705,11.71792,8659807
+Adamawa State,Madagali,10.85219,13.54889,7729973
+Adamawa State,Maiha,9.86975,13.2048,8659802
+Adamawa State,Mayo-Belwa,8.97099,11.9768,8659813
+Adamawa State,Michika,10.58072,13.39772,8659798
+Adamawa State,Mubi North,10.3498,13.40646,8659799
+Adamawa State,Mubi South,10.1874,13.39576,8659800
+Adamawa State,Numan,9.45371,11.83665,8659808
+Adamawa State,Shelleng,9.94811,12.12668,8659805
+Adamawa State,Song,9.85468,12.62692,8659804
+Adamawa State,Teungo,7.9958,11.84249,8659816
+Adamawa State,Yola North,9.26628,12.25113,8659811
+Adamawa State,Yola South,9.25286,12.43618,8659812
+Akwa Ibom State,Abak,5.02095,7.78738,8638458
+Akwa Ibom State,Eastern Obolo,4.53389,7.76694,7730390
+Akwa Ibom State,Eket,4.63664,7.95365,8638472
+Akwa Ibom State,Esit Eket,4.63086,8.07058,7701381
+Akwa Ibom State,Essien Udim,5.10684,7.64533,8638452
+Akwa Ibom State,Etim Ekpo,4.978,7.59247,8638454
+Akwa Ibom State,Etinan,4.81943,7.84464,8638463
+Akwa Ibom State,Ibeno,4.56506,8.07258,8638468
+Akwa Ibom State,Ibesikpo Asutan,4.92735,7.95806,8638457
+Akwa Ibom State,Ibiono Ibom,5.20704,7.89309,8638450
+Akwa Ibom State,Ika,5.00553,7.53411,8638453
+Akwa Ibom State,Ikono,5.21035,7.79398,8638448
+Akwa Ibom State,Ikot Abasi,4.60581,7.6244,8638465
+Akwa Ibom State,Ikot Ekpene,5.19383,7.70369,8638449
+Akwa Ibom State,Ini,5.40415,7.74884,8638394
+Akwa Ibom State,Itu,5.14318,7.97788,8638451
+Akwa Ibom State,Mbo,4.64325,8.25537,8638469
+Akwa Ibom State,Mkpat Enin,4.73361,7.74861,7701382
+Akwa Ibom State,Nsit Atai,4.8177,8.02593,7730394
+Akwa Ibom State,Nsit Ibom,4.90092,7.89309,8638460
+Akwa Ibom State,Nsit Ubium,4.74274,7.94876,7730396
+Akwa Ibom State,Obot Akara,5.24669,7.60458,8638447
+Akwa Ibom State,Okobo,4.82714,8.13204,8638478
+Akwa Ibom State,Onna,4.61597,7.84869,7730397
+Akwa Ibom State,Oron,4.80291,8.23005,8638479
+Akwa Ibom State,Oruk Anam,4.9,7.71667,7701383
+Akwa Ibom State,Udung Uko,4.75226,8.26529,8638474
+Akwa Ibom State,Ukanafun,4.89651,7.59687,8638459
+Akwa Ibom State,Uruan,5.01104,8.06597,8638456
+Akwa Ibom State,Urue Offong/Oruko,4.71702,8.16948,8638475
+Akwa Ibom State,Uyo,5.01874,7.903,8638455
+Anambra State,Aguata,5.99081,7.08124,8638035
+Anambra State,Anambra East,6.26667,6.81667,7701409
+Anambra State,Anambra West,6.35931,6.74968,7701530
+Anambra State,Anaocha,6.06824,6.9963,7701411
+Anambra State,Awka North,6.33333,7,7701412
+Anambra State,Awka South,6.20694,7.06778,7701413
+Anambra State,Ayamelum,6.55355,6.98694,8638032
+Anambra State,Dunukofia,6.2738,6.978,7932064
+Anambra State,Ekwusigo,5.98067,6.83992,8638042
+Anambra State,Idemili North,6.1285,6.93342,7701531
+Anambra State,Idemili South,6.04769,6.94992,7701532
+Anambra State,Ihiala,5.84683,6.85918,8638036
+Anambra State,Njikoka,6.1842,6.97655,7701533
+Anambra State,Nnewi North,5.99994,6.90177,8638038
+Anambra State,Nnewi South,5.93321,6.92306,7701534
+Anambra State,Ogbaru,6.01577,6.74459,7701535
+Anambra State,Onitsha North,6.16081,6.79968,7873887
+Anambra State,Onitsha South,6.1267,6.77736,8638046
+Anambra State,Orumba North,6.06667,7.08333,7701536
+Anambra State,Orumba South,5.96667,7.21667,7701537
+Anambra State,Oyi,6.1767,6.86187,7701538
+Bauchi State,Alkaleri,9.88979,10.48004,8634313
+Bauchi State,Bauchi,10.31583,9.84417,7729984
+Bauchi State,Bogoro,9.65,9.61667,7729988
+Bauchi State,Damban,11.62592,10.78622,8634291
+Bauchi State,Darazo,11.16762,10.65399,7729992
+Bauchi State,Dass,10.01852,9.47803,8634267
+Bauchi State,Gamawa,12.073,10.58616,8634305
+Bauchi State,Ganjuwa,10.74916,9.99991,8634288
+Bauchi State,Giade,11.40646,10.28336,8634289
+Bauchi State,Itas/Gadau,11.89382,10.04862,8634303
+Bauchi State,Jama'Are,11.7216,9.91293,8634293
+Bauchi State,Katagum,11.7042,10.32696,8634300
+Bauchi State,Kirfi,10.39427,10.53223,8634310
+Bauchi State,Misau,11.3163,10.4703,7729993
+Bauchi State,Ningi,11.06228,9.20491,8634264
+Bauchi State,Shira,11.50415,10.01731,8634290
+Bauchi State,Tafawa-Balewa,9.82542,9.5824,8634314
+Bauchi State,Toro,10.44646,9.22056,8634266
+Bauchi State,Warji,11.15796,9.73897,8634265
+Bauchi State,Zaki,12.29919,10.30889,8634304
+Bayelsa State,Brass,4.36648,6.45462,8638097
+Bayelsa State,Ekeremor,4.92212,5.71647,8638070
+Bayelsa State,Kolokuma/Opokuma,5.09855,6.264,8638091
+Bayelsa State,Nembe,4.52466,6.29442,8638095
+Bayelsa State,Ogbia,4.77409,6.32686,8638092
+Bayelsa State,Sagbama,5.14722,6.21127,8638073
+Bayelsa State,Southern Ijaw,4.67675,5.94156,8638072
+Bayelsa State,Yenegoa,5.03163,6.35931,8638087
+Benue State,Ado,6.79934,8.00541,8659760
+Benue State,Agatu,7.9061,7.85487,7730398
+Benue State,Apa,7.62962,7.87107,8659758
+Benue State,Bukuru,7.46667,9.2,7729994
+Benue State,Buruku Local Government Area,7.36534,9.26074,9485483
+Benue State,Gboko,7.31616,8.90167,7729995
+Benue State,Guma,7.96667,8.76667,7729904
+Benue State,Gwer East,7.3,8.48333,7729905
+Benue State,Gwer West,7.63211,8.21656,7730399
+Benue State,Katsina-Ala,7.2896,9.5533,7932511
+Benue State,Konshisha,7.02993,8.66037,7730400
+Benue State,Kwande,6.80099,9.47021,7730000
+Benue State,Logo,7.68922,9.25049,7729906
+Benue State,Makurdi Local Government Area,7.73753,8.52296,9485482
+Benue State,Markurdi,7.7042,8.53588,7932059
+Benue State,Obi,7.02177,8.29392,8659761
+Benue State,Ogbadibo,7.08921,7.64989,7729907
+Benue State,Ohimini,7.20744,7.94989,7932061
+Benue State,Oju,6.8588,8.38201,8659762
+Benue State,Okpokwu,7.01094,7.85102,7932062
+Benue State,Oturkpo,7.30736,8.07494,7932060
+Benue State,Tarka,7.62081,8.88194,8659759
+Benue State,Ukum,7.64393,9.56356,8659763
+Benue State,Ushongo,7.04411,9.08871,7730401
+Benue State,Vandeikya,6.82814,9.05904,7729908
+Borno State,Abadam,13.43162,13.31319,8659822
+Borno State,Askira-Uba,10.63582,12.8782,8659842
+Borno State,Bama,11.52059,14.09661,8659838
+Borno State,Bayo,10.42254,11.70624,8659845
+Borno State,Biu,10.81742,12.08845,8659843
+Borno State,Chibok,10.83642,12.7705,8659841
+Borno State,Damboa,11.09826,12.76417,8659840
+Borno State,Dikwa,11.90069,14.02693,8659834
+Borno State,Gubio,12.67777,12.75361,8659826
+Borno State,Guzamala,12.91849,13.21395,8659825
+Borno State,Gwoza,11.17639,13.57926,8659839
+Borno State,Hawul,10.4331,12.24682,8659844
+Borno State,Jere,11.89912,13.29155,8659835
+Borno State,Kaga,11.64518,12.45165,8659837
+Borno State,Kala-Balge,12.04639,14.48093,8659832
+Borno State,Konduga,11.58605,13.00278,8659836
+Borno State,Kukawa,13.13073,13.73811,8659824
+Borno State,Kwaya Kusar,10.44317,11.99089,8659847
+Borno State,Mafa,12.00204,13.53703,8659833
+Borno State,Magumeri,12.17309,12.63114,8659829
+Borno State,Maiduguri,11.83537,13.15166,8659860
+Borno State,Marte,12.40959,13.87278,8659830
+Borno State,Mobbar,13.09165,12.6966,8659823
+Borno State,Monguno,12.57852,13.61727,8659828
+Borno State,Ngala,12.21532,14.18319,8659831
+Borno State,Nganzai,12.50884,13.10414,8659827
+Borno State,Shani,10.18393,11.96386,8659846
+Cross River State,Abi,5.90661,8.03799,7932502
+Cross River State,Akamkpa,5.42728,8.51855,8638548
+Cross River State,Akpabuyo,4.90092,8.48111,8638552
+Cross River State,Bakassi,4.81714,8.60212,9172954
+Cross River State,Bekwarra,6.69583,8.91057,8638542
+Cross River State,Biase,5.55942,8.07809,8638547
+Cross River State,Boki,6.25,9.03333,7730003
+Cross River State,Calabar Municipal,4.99088,8.30343,8638550
+Cross River State,Calabar South,4.86413,8.33635,8638551
+Cross River State,Etung,5.85894,8.79164,8638545
+Cross River State,Ikom,6.08333,8.61667,7932499
+Cross River State,Obanliku,6.53726,9.30699,8638544
+Cross River State,Obubra,5.9429,8.37883,7932501
+Cross River State,Obudu,6.5433,9.04543,7932505
+Cross River State,Odukpani,5.18502,8.13314,8638549
+Cross River State,Ogoja,6.59671,8.80258,7932500
+Cross River State,Yakurr,5.80608,8.17499,8638546
+Cross River State,Yala,6.65398,8.54939,8638513
+Delta State,Aniocha North,6.35447,6.48737,7873883
+Delta State,Aniocha South,6.12829,6.48334,7729915
+Delta State,Bomadi,5.16914,5.90424,8638006
+Delta State,Burutu,5.21173,5.60285,8638005
+Delta State,Ethiope East,5.68799,5.98414,7729918
+Delta State,Ethiope West,5.91996,5.72939,7729917
+Delta State,Ika North East,6.22865,6.28963,7729919
+Delta State,Ika South,6.17084,6.12881,7729921
+Delta State,Isoko North,5.52493,6.23414,7729922
+Delta State,Isoko South,5.38209,6.21417,7729923
+Delta State,Ndokwa East,5.67029,6.50771,7729925
+Delta State,Ndokwa West,5.77323,6.39223,7729927
+Delta State,Okpe,5.68625,5.78333,8637984
+Delta State,Oshimili North,6.32273,6.64445,7729931
+Delta State,Oshimili South,6.09213,6.68172,7729934
+Delta State,Patani,5.17928,6.09765,8638007
+Delta State,Sapele,5.82618,5.65354,8637981
+Delta State,Udu,5.47222,5.82203,7729936
+Delta State,Ughelli North,5.51122,6.04821,7729938
+Delta State,Ughelli South,5.3435,5.95108,7729939
+Delta State,Ukwuani,5.84481,6.23741,7729940
+Delta State,Uvwie,5.57157,5.77602,7729945
+Delta State,Warri North,5.88243,5.27687,7729942
+Delta State,Warri South,5.61326,5.61063,7729943
+Delta State,Warri South-West,5.49686,5.37418,7729946
+Ebonyi State,Abakaliki,6.25646,8.21133,8659714
+Ebonyi State,Afikpo North,5.89312,7.93735,7730004
+Ebonyi State,Afikpo South,5.8493,7.7987,8643695
+Ebonyi State,Ebonyi,6.52184,8.12984,8659712
+Ebonyi State,Ezza North,6.27078,7.97127,8659713
+Ebonyi State,Ezza South,6.11661,8.001,8659716
+Ebonyi State,Ikwo,6.05316,8.16284,7730005
+Ebonyi State,Ishielu,6.42714,7.83583,8659710
+Ebonyi State,Ivo,5.88426,7.6233,8659718
+Ebonyi State,Izzi,6.48453,8.29468,7730006
+Ebonyi State,Ohaozara,6.0109,7.77747,8659717
+Ebonyi State,Ohaukwu,6.53285,8.02303,8659711
+Ebonyi State,Onicha,6.09899,7.84133,8659715
+Edo,Akoko-Edo,7.34506,6.11489,8636772
+Edo,Egor,6.35748,5.57547,8636763
+Edo,Esan Central,6.70969,6.19313,8636767
+Edo,Esan North-East,6.75495,6.39676,8636768
+Edo,Esan South-East,6.58663,6.47585,8636769
+Edo,Esan West,6.66166,6.12908,8636766
+Edo,Etsako Central,6.97193,6.51235,8636775
+Edo,Etsako East,7.20919,6.49613,8636773
+Edo,Etsako West,6.99829,6.30145,8636774
+Edo,Iguegben,6.52782,6.24264,8636765
+Edo,Ikpoba-Okha,6.16445,5.62284,7932077
+Edo,Oredo,6.23581,5.55114,8636764
+Edo,Orhionmwon,6.25354,5.98405,7873880
+Edo,Ovia North-East,6.64465,5.57989,7873878
+Edo,Ovia South-West,6.396,5.272,7873877
+Edo,Owan East,7.03162,6.07942,8636771
+Edo,Owan West,6.92934,5.89385,8636770
+Edo,Uhunmwonde,6.49222,5.88452,7932071
+Ekiti State,Ado-Ekiti,7.61261,5.27384,8636740
+Ekiti State,Efon,7.69576,4.93721,8636730
+Ekiti State,Ekiti East,7.7353,5.66928,8636738
+Ekiti State,Ekiti South-West,7.51325,5.05179,8636745
+Ekiti State,Ekiti West,7.68663,5.02847,8636731
+Ekiti State,Emure,7.43213,5.51617,8636742
+Ekiti State,Gbonyin,7.60653,5.49894,8636741
+Ekiti State,Ido-Osi,7.86204,5.18867,8636734
+Ekiti State,Ijero,7.84582,5.05686,8636732
+Ekiti State,Ikere,7.50209,5.21807,8636744
+Ekiti State,Ikole,7.89347,5.5111,8636737
+Ekiti State,Ilejemeje,7.95837,5.23734,8636735
+Ekiti State,Irepodun/Ifelodun,7.71603,5.22923,8636739
+Ekiti State,Ise/Orun,7.44531,5.3945,8636743
+Ekiti State,Moba,8.00095,5.13189,8636733
+Ekiti State,Oye,7.88942,5.34482,8636736
+Enugu State,Aninri,6.06155,7.59137,8659742
+Enugu State,Awgu,6.14311,7.43658,7873937
+Enugu State,Enugu East,6.53333,7.53333,7730007
+Enugu State,Enugu North,6.44476,7.53521,8659740
+Enugu State,Enugu South,6.39173,7.51096,7873926
+Enugu State,Ezeagu,6.41062,7.21477,8659741
+Enugu State,Igbo-Etiti,6.68151,7.41959,8659739
+Enugu State,Igbo-Eze-North,6.98333,7.45,7730008
+Enugu State,Igbo-Eze-South,6.93368,7.36673,8659737
+Enugu State,Isi-Uzo,6.73066,7.69294,7932063
+Enugu State,Nkanu East,6.31519,7.62422,7873938
+Enugu State,Nkanu West,6.31098,7.50902,7932082
+Enugu State,Nsukka,6.85329,7.34801,8659738
+Enugu State,Oji-River,6.17032,7.27723,7873925
+Enugu State,Udenu,6.87201,7.56714,8659719
+Enugu State,Udi,6.51181,7.35535,7730010
+Enugu State,Uzo-Uwani,6.74135,7.13794,7932491
+Federal Capital Territory,Abaji,8.89212,6.81816,8634966
+Federal Capital Territory,Bwari,9.218,7.408,7871247
+Federal Capital Territory,Gwagwalada,9.07639,6.9854,8634962
+Federal Capital Territory,Kuje,8.65901,7.27046,8634971
+Federal Capital Territory,Kwali,8.73555,6.96777,8634970
+Federal Capital Territory,Municipal Area Council,8.99997,7.37831,8635054
+Gombe State,Akko,10.09994,11.04833,8659791
+Gombe State,Balanga,9.8096,11.78623,8659789
+Gombe State,Billiri,9.81575,11.12424,8659788
+Gombe State,Dukku,10.80261,10.82838,8659795
+Gombe State,Funakaye,10.74227,11.40843,8659796
+Gombe State,Gombe,10.28263,11.16674,8659793
+Gombe State,Kaltungo,9.82354,11.42205,8659790
+Gombe State,Kwami,10.49313,11.20989,8659794
+Gombe State,Nafada,11.09069,11.21573,8659797
+Gombe State,Shomgom,9.67366,11.2566,8659787
+Gombe State,Yamaltu/Deba,10.23814,11.44152,8659792
+Imo State,Aboh-Mbaise,5.42549,7.2518,7729947
+Imo State,Ahiazu-Mbaise,5.54639,7.27135,7729948
+Imo State,Ehime -Mbano,5.66491,7.30304,7729949
+Imo State,Ezinihitte,5.47876,7.32626,8638291
+Imo State,Ideato North,5.88537,7.13136,8638293
+Imo State,Ideato South,5.80608,7.13906,8638294
+Imo State,Ihitte/Uboma,5.62182,7.36525,7729951
+Imo State,Ikeduru,5.56795,7.15338,8638290
+Imo State,Isiala Mbano,5.66767,7.20338,7729952
+Imo State,Isu,5.68826,7.05648,8638327
+Imo State,Mbaitoli Local Government Area,5.58998,7.02124,9485478
+Imo State,Mbatoli,5.58953,7.03938,7729953
+Imo State,Ngor-Okpala,5.32019,7.15888,8638163
+Imo State,Njaba,5.70587,7.00821,7729955
+Imo State,Nkwerre,5.75322,7.10603,8638328
+Imo State,Nwangele,5.71028,7.12585,8638329
+Imo State,Obowo,5.54927,7.3601,7729956
+Imo State,Oguta,5.66926,6.7999,8638162
+Imo State,Ohaji/Egbema,5.40237,6.82451,7729957
+Imo State,Okigwe,5.81088,7.32559,7729958
+Imo State,Orlu,5.80718,7.03886,8638292
+Imo State,Orsu,5.86149,6.99759,7729959
+Imo State,Oru East,5.70557,6.96015,7729960
+Imo State,Oru West,5.74224,6.91093,7729961
+Imo State,Owerri Municipal,5.47656,7.01683,8638164
+Imo State,Owerri North,5.45674,7.10273,8638331
+Imo State,Owerri West,5.43226,6.98041,7729962
+Imo State,Unuimo,5.77363,7.2411,7729964
+Jigawa State,Auyo,12.37743,9.98773,8634255
+Jigawa State,Babura,12.61402,8.85872,8634241
+Jigawa State,Biriniwa,12.83321,10.07471,8634259
+Jigawa State,Birnin Kudu,11.49023,9.49368,8634261
+Jigawa State,Buji,11.57914,9.72012,8634262
+Jigawa State,Dutse,11.80331,9.30708,8634252
+Jigawa State,Gagarawa,12.51138,9.53717,8634246
+Jigawa State,Garki,12.42962,9.06052,8634242
+Jigawa State,Gumel,12.63837,9.40148,8634244
+Jigawa State,Guri,12.65751,10.46961,8634257
+Jigawa State,Gwaram,11.1858,9.9686,8634263
+Jigawa State,Gwiwa,12.75406,8.28117,8634237
+Jigawa State,Hadejia,12.43487,10.05266,8634256
+Jigawa State,Jahun,12.07996,9.55457,8634251
+Jigawa State,Kafin Hausa,12.14958,10.00247,8634254
+Jigawa State,Kaugama,12.50268,9.7668,8634249
+Jigawa State,Kazaure,12.59681,8.51353,8634240
+Jigawa State,Kiri Kasama,12.56531,10.25216,8634258
+Jigawa State,Kiyawa,11.84147,9.53697,8634253
+Jigawa State,Maigatari,12.72535,9.58588,8634245
+Jigawa State,Malam Maduri,12.56009,9.98599,8634260
+Jigawa State,Miga,12.2313,9.69026,8634250
+Jigawa State,Ringim,12.18607,9.10401,8634247
+Jigawa State,Roni,12.54925,8.33144,8634239
+Jigawa State,Sule Tankakar,12.65577,9.18751,8634243
+Jigawa State,Taura,12.25566,9.38409,8634248
+Jigawa State,Yankwashi,12.76971,8.5369,8634238
+Kaduna State,Birnin Gwari,10.82612,6.65505,7910313
+Kaduna State,Chikun,10.315,7.274,7871251
+Kaduna State,Giwa,11.12077,7.40565,7932490
+Kaduna State,Igabi,10.781,7.504,7871252
+Kaduna State,Ikara,11.24755,8.20028,8634546
+Kaduna State,Jaba,9.48185,8.04372,8634602
+Kaduna State,Jema'A,9.38269,8.26813,8634542
+Kaduna State,Kachia,9.85,7.56,7871250
+Kaduna State,Kaduna North,10.568,7.452,7871255
+Kaduna State,Kaduna South,10.468,7.421,7871253
+Kaduna State,Kagarko,9.437,7.577,7871249
+Kaduna State,Kajuru,10.27704,7.85783,8634545
+Kaduna State,Kaura,9.61232,8.46992,8634541
+Kaduna State,Kauru,10.22988,8.29422,8634544
+Kaduna State,Kuban,10.87876,8.38294,8634565
+Kaduna State,Kudan,11.273,7.799,7871259
+Kaduna State,Lere,10.34643,8.56734,8634543
+Kaduna State,Makarfi,11.29795,7.96917,7871254
+Kaduna State,Sabon Gari,11.164,7.697,7871258
+Kaduna State,Sanga,9.25,8.45,7910314
+Kaduna State,Soba,10.87005,7.96443,7910322
+Kaduna State,Zangon Kataf,9.841,8.25491,8634540
+Kaduna State,Zaria,10.98854,7.69622,7871257
+Kano State,Ajingi,11.95905,9.06748,8633718
+Kano State,Albasu,11.66237,9.10294,8633720
+Kano State,Bagwai,12.09996,8.14374,8633696
+Kano State,Bebeji,11.53146,8.20353,7871263
+Kano State,Bichi,12.23391,8.27943,8633694
+Kano State,Bunkure,11.66716,8.59687,7910343
+Kano State,Dala,12.01397,8.50719,8633819
+Kano State,Dambatta,12.42005,8.63432,8633692
+Kano State,Dawakin Kudu,11.83228,8.69164,7871266
+Kano State,Dawakin Tofa,12.12606,8.3986,8633699
+Kano State,Doguwa,10.87963,8.66389,8633727
+Kano State,Fagge,12.02704,8.53363,7871270
+Kano State,Gabasawa,12.14519,8.8622,8633693
+Kano State,Garko,11.57286,8.83524,8633724
+Kano State,Garum Mallam,11.651,8.377,7871264
+Kano State,Gaya,11.78161,9.02854,8633719
+Kano State,Gezawa,12.05125,8.73739,8633700
+Kano State,Gwale,11.98211,8.49819,8633820
+Kano State,Gwarzo,11.88425,7.95587,8633697
+Kano State,Kabo,11.87903,8.19419,8633698
+Kano State,Kano Municipal,11.98157,8.51898,8633821
+Kano State,Karaye,11.76248,8.00979,8633721
+Kano State,Kibiya,11.49719,8.68563,8633723
+Kano State,Kiru,11.543,8.149,7871261
+Kano State,Kumbotso,11.90063,8.51633,7871268
+Kano State,Kunchi,12.5,8.27,7910326
+Kano State,Kura,11.78775,8.48684,7871265
+Kano State,Madobi,11.82423,8.38468,8633717
+Kano State,Makoda,12.419,8.433,7910325
+Kano State,Minjibir,12.18027,8.61247,7910323
+Kano State,Nassarawa,12.00507,8.55492,8633818
+Kano State,Rano,11.47892,8.51689,8633722
+Kano State,Rimin Gado,11.93232,8.27648,7910327
+Kano State,Rogo,11.55,7.83,7910328
+Kano State,Shanono,12.04615,7.95148,7910340
+Kano State,Sumaila,11.32671,8.91439,8633725
+Kano State,Takai,11.46187,9.17562,7910341
+Kano State,Tarauni,11.95862,8.54429,8633817
+Kano State,Tofa,12.05,8.26667,7701428
+Kano State,Tsanyawa,12.26175,8.00806,8633695
+Kano State,Tudun Wada,11.28272,8.59928,8633726
+Kano State,Ungogo,12.04201,8.44341,7910324
+Kano State,Warawa,11.90808,8.77148,7729909
+Kano State,Wudil,11.72959,8.81859,7910329
+Katsina State,Bakori,11.63984,7.42876,8633656
+Katsina State,Batagarawa,12.89377,7.60653,8633554
+Katsina State,Batsari,12.77931,7.2345,8633551
+Katsina State,Baure,12.78885,8.78914,8633564
+Katsina State,Bindawa,12.7108,7.83199,8633557
+Katsina State,Charanchi,12.60153,7.6837,8633644
+Katsina State,Dan Musa,12.23217,7.32961,8633647
+Katsina State,Dandume,11.41282,7.19044,8633670
+Katsina State,Danja,11.39542,7.5488,8633691
+Katsina State,Daura,12.98195,8.2516,8633560
+Katsina State,Dutsi,12.91285,8.14852,8633561
+Katsina State,Dutsin Ma,12.45411,7.52241,8633645
+Katsina State,Faskari,11.6755,7.08606,8633658
+Katsina State,Funtua,11.47196,7.30699,8633671
+Katsina State,Ingawa,12.62408,8.05139,8633642
+Katsina State,Jibia,13.04033,7.28913,8633550
+Katsina State,Kafur,11.67376,7.68971,8633654
+Katsina State,Kaita,13.17156,7.72798,8633553
+Katsina State,Kankara,11.97384,7.36266,8633652
+Katsina State,Kankia,12.46667,7.8,7729910
+Katsina State,Katsina,13.00564,7.61433,8633552
+Katsina State,Kurfi,12.70993,7.46257,8633556
+Katsina State,Kusada,12.45758,7.97855,8633643
+Katsina State,Mai'Adua,13.19056,8.21167,7729911
+Katsina State,Malumfashi,11.85922,7.65595,8633653
+Katsina State,Mani,12.87816,7.92565,8633558
+Katsina State,Mashi,13.13225,7.99329,8633559
+Katsina State,Matazu,12.25899,7.6178,8633649
+Katsina State,Musawa,12.08469,7.68891,8633651
+Katsina State,Rimi,12.8393,7.69318,8633555
+Katsina State,Sabuwa,11.3,7.11667,7729912
+Katsina State,Safana,12.49487,7.25271,8633646
+Katsina State,Sandamu,12.89724,8.36358,8633562
+Katsina State,Zango,12.93106,8.53268,8633563
+Kebbi State,Aleiro,12.29654,4.42793,8632705
+Kebbi State,Arewa Dandi,12.69839,4.0313,8632709
+Kebbi State,Argungu,12.68795,4.40358,8632707
+Kebbi State,Augie,12.91932,4.56362,8632708
+Kebbi State,Bagudo,11.34757,3.95674,7873914
+Kebbi State,Birnin Kebbi,12.45832,4.26267,8632706
+Kebbi State,Bunza,12.16781,3.91475,8631811
+Kebbi State,Dandi,11.84424,3.80863,8631809
+Kebbi State,Fakai,11.52227,4.88239,8631813
+Kebbi State,Gwandu,12.51695,4.66493,7873919
+Kebbi State,Jega,12.16397,4.48643,7873918
+Kebbi State,Kalgo,12.28349,4.10088,8631812
+Kebbi State,Koko-Besse,11.45855,4.43782,7873915
+Kebbi State,Koko/Besse Local Government Area,11.48762,4.42445,9485472
+Kebbi State,Maiyama,11.99054,4.35394,7873917
+Kebbi State,Ngaski,10.40709,4.71781,7730012
+Kebbi State,Sakaba,11.16231,5.54128,8631814
+Kebbi State,Shanga,11.21165,4.60951,8631808
+Kebbi State,Suru,11.82999,4.09665,8631810
+Kebbi State,Wasagu-Danko,11.42938,5.6749,8632704
+Kebbi State,Yauri,10.77643,4.74197,7730013
+Kebbi State,Yauri Local Government Area,11.0214,4.51491,9492098
+Kebbi State,Zuru,11.44638,5.28717,7730014
+Kogi State,Adavi,7.64141,6.4337,7729965
+Kogi State,Ajaokuta,7.52351,6.5813,8637964
+Kogi State,Ankpa,7.44848,7.63174,8637967
+Kogi State,Bassa,7.77095,7.0244,7729967
+Kogi State,Dekina,7.58435,7.17344,8637965
+Kogi State,Ibaji,6.79931,6.76303,7729968
+Kogi State,Idah,7.08144,6.71514,8637969
+Kogi State,Igalamela-Odolu,7.05731,7.01874,7729969
+Kogi State,Ijumu,7.84878,5.95614,7729971
+Kogi State,Kabba/Bunu,8.06278,6.20336,7729972
+Kogi State,Kogi,8.14607,6.85709,8637555
+Kogi State,Lokoja,8.20488,6.56305,8637590
+Kogi State,Mopa-Muro,8.10332,5.87847,7729974
+Kogi State,Ofu,7.30283,7.03817,7729975
+Kogi State,Ogori/Magongo,7.46673,6.16355,8637963
+Kogi State,Okehi,7.68192,6.28543,7729976
+Kogi State,Okene,7.48333,6.21667,7701431
+Kogi State,Olamaboro,7.18689,7.52832,8637975
+Kogi State,Omala,7.79962,7.54098,7729979
+Kogi State,Yagba East,8.16411,5.76131,7729980
+Kogi State,Yagba West,8.29641,5.52748,7729981
+Kwara State,Asa,8.43005,4.426,7910330
+Kwara State,Baruten,9.26039,3.31607,7910331
+Kwara State,Edu,8.89181,5.21012,8635168
+Kwara State,Ekiti,8.11799,5.32035,8635167
+Kwara State,Ifelodun,8.55971,5.01072,7871293
+Kwara State,Ilorin East,8.5712,4.72827,8635064
+Kwara State,Ilorin South,8.44156,4.68018,8635162
+Kwara State,Ilorin West,8.48752,4.5235,7873900
+Kwara State,Irepodun,8.14654,4.91294,8635164
+Kwara State,Isin,8.26747,5.05356,8635165
+Kwara State,Kaiama,9.45342,4.15994,7873912
+Kwara State,Moro,8.84493,4.55671,8635063
+Kwara State,Offa,8.14279,4.68796,8635163
+Kwara State,Oke Ero,8.16997,5.23449,8635166
+Kwara State,Oyun,8.16827,4.65212,7873899
+Kwara State,Pategi,8.73,5.75,7910332
+Lagos State,Agege,6.63937,3.30757,7873904
+Lagos State,Ajeromi/Ifelodun,6.44939,3.3472,7932527
+Lagos State,Alimosho,6.5889,3.24852,7910345
+Lagos State,Amuwo Odofin,6.472,3.263,7871294
+Lagos State,Apapa,6.42926,3.3493,7871290
+Lagos State,Badagry,6.43813,2.90245,7871299
+Lagos State,Epe,6.55727,3.99122,7910347
+Lagos State,Eti Osa,6.44154,3.55015,7932498
+Lagos State,Ibeju Lekki,6.4545,3.94318,7910348
+Lagos State,Ifako-Ijaiye Local Government Area,6.66503,3.30279,9485475
+Lagos State,Ifako/Ijaye,6.65822,3.31231,7910346
+Lagos State,Ikeja,6.61857,3.34259,7910350
+Lagos State,Ikorodu,6.62641,3.55167,7644922
+Lagos State,Kosofe,6.601,3.409,7871279
+Lagos State,Lagos Island Local Government Area,6.46113,3.39037,9485476
+Lagos State,Lagos Mainland Local Government Area,6.47941,3.37292,9485474
+Lagos State,Mushin,6.52641,3.36305,7910351
+Lagos State,Ojo,6.46508,3.14827,7871297
+Lagos State,Oshodi-Isolo Local Government Area,6.56068,3.33531,9485473
+Lagos State,Oshodi/Isolo,6.55923,3.30242,7910352
+Lagos State,Shomolu,6.55606,3.3695,7871280
+Lagos State,Surulere,6.49167,3.34893,7932526
+Nasarawa State,Akwanga,8.99386,8.32701,7932036
+Nasarawa State,Awe,8.27456,9.1849,8635062
+Nasarawa State,Doma,8.20323,8.30466,8635061
+Nasarawa State,Karu,9.04694,7.76364,8635057
+Nasarawa State,Keana,8.16746,8.76829,7932058
+Nasarawa State,Keffi,8.83795,7.82725,8635056
+Nasarawa State,Kokona,8.85559,8.06111,8635058
+Nasarawa State,Lafia,8.64007,8.69959,7932056
+Nasarawa State,Nasarawa,8.26937,7.59744,7871272
+Nasarawa State,Nasarawa Egon,8.74947,8.44035,8635059
+Nasarawa State,Obi,8.34738,8.72769,7932057
+Nasarawa State,Toto,8.2502,7.19827,8635055
+Nasarawa State,Wamba,8.98214,8.69459,8635060
+Niger State,Agaie,8.93056,6.40817,7729982
+Niger State,Agwara,10.77476,4.53977,7729983
+Niger State,Bida,9.08269,5.98473,7729985
+Niger State,Borgu,10.37844,4.1626,7729987
+Niger State,Bosso,9.61463,6.36587,8634919
+Niger State,Chanchaga,9.60547,6.51419,7729989
+Niger State,Edati,9.0275,5.61823,7729991
+Niger State,Gbako,9.28456,5.98614,7730015
+Niger State,Gurara,9.32203,7.02318,7730017
+Niger State,Katcha,9.15,6.23333,7701432
+Niger State,Kontagora,10.45225,5.4795,8634913
+Niger State,Lapai,8.79818,6.67551,8634957
+Niger State,Lavun,9.27348,5.6833,7730021
+Niger State,Magama,10.46667,5.05,7701433
+Niger State,Mariga,10.69917,5.84038,8634912
+Niger State,Mashegu,9.92993,5.23385,8634916
+Niger State,Mokwa,9.2,5.33333,7701434
+Niger State,Muya,9.80982,7.01732,7730026
+Niger State,Paikoro,9.4681,6.85565,7730027
+Niger State,Rafi,10.18444,6.25333,7701464
+Niger State,Rijau,11.0993,5.18826,8634809
+Niger State,Shiroro,10.11543,6.68307,8634914
+Niger State,Suleja,9.21446,7.18864,8634915
+Niger State,Tafa,9.232,7.23,7871248
+Niger State,Wushishi,9.702,5.93662,8634918
+Ogun State,Abeokuta North,7.23079,3.16845,8636329
+Ogun State,Abeokuta South,7.15425,3.35459,8636330
+Ogun State,Ado Odo/Ota,6.62366,3.08626,8636326
+Ogun State,Egbado North,7.14729,2.91795,8636323
+Ogun State,Egbado South,6.79763,2.96144,8636324
+Ogun State,Ewekoro,6.96115,3.19455,8636331
+Ogun State,Ifo,6.78197,3.25195,8636327
+Ogun State,Ijebu East,6.805,4.258,7873873
+Ogun State,Ijebu North,6.99551,3.97085,8636333
+Ogun State,Ijebu North East,6.88809,4.0226,8636334
+Ogun State,Ijebu Ode,6.82065,3.92899,7871321
+Ogun State,Ikenne,6.919,3.676,7871303
+Ogun State,Imeko Afon,7.66221,2.86402,8636322
+Ogun State,Ipokia,6.61801,2.81053,8636325
+Ogun State,Obafemi Owode,6.96907,3.48404,7873905
+Ogun State,Odeda,7.29646,3.52029,8636328
+Ogun State,Odogbolu,6.78597,3.80511,7871304
+Ogun State,Ogun Waterside,6.48449,4.38618,8636335
+Ogun State,Remo North,7.0029,3.72861,8636332
+Ogun State,Shagamu,6.79905,3.56833,7871278
+Ondo State,Akoko North East,7.52744,5.81022,8636760
+Ondo State,Akoko North West,7.641,5.79399,8636761
+Ondo State,Akoko South East,7.41794,5.91161,8636759
+Ondo State,Akoko South West,7.39766,5.69463,8636758
+Ondo State,Akure North,7.26382,5.31136,8636755
+Ondo State,Akure South,7.20501,5.18766,8636754
+Ondo State,Ese Odo,6.21743,4.96459,8636747
+Ondo State,Idanre,6.986,5.209,7873876
+Ondo State,Ifedore,7.36318,5.08829,8636753
+Ondo State,Ilaje,6.20323,4.76788,8636746
+Ondo State,Ile Oluji/Okeigbo,7.27801,4.88753,8636752
+Ondo State,Irele,6.53479,5.0092,8636749
+Ondo State,Odigbo,6.765,4.727,7873875
+Ondo State,Okitipupa,6.54797,4.69894,8636748
+Ondo State,Ondo East,7.09145,4.96053,8636751
+Ondo State,Ondo West,7.01642,4.74558,8636750
+Ondo State,Ose,7.05495,5.7433,8636757
+Ondo State,Owo,7.16648,5.58005,8636756
+Osun State,Aiyedade,7.33378,4.34913,8636369
+Osun State,Aiyedire,7.58118,4.23455,8636368
+Osun State,Atakunmosa East,7.45916,4.77562,7730030
+Osun State,Atakunmosa West,7.49206,4.67521,7730042
+Osun State,Boluwaduro,7.91891,4.81303,7730051
+Osun State,Boripe,7.85585,4.66946,7730052
+Osun State,Ede North,7.7069,4.50922,7701466
+Osun State,Ede South,7.65824,4.45762,8636370
+Osun State,Egbedore,7.81667,4.43333,7701468
+Osun State,Ejigbo,7.86711,4.28626,8636366
+Osun State,Ife Central,7.47442,4.55933,7701469
+Osun State,Ife East,7.36534,4.60147,7701471
+Osun State,Ife North,7.26686,4.44748,8636377
+Osun State,Ife South,7.2,4.6,7701472
+Osun State,Ifedayo,7.97763,4.98892,8636373
+Osun State,Ifelodun,7.91667,4.66667,7701474
+Osun State,Ila,8.01667,4.9,7701475
+Osun State,Ilesha East,7.60146,4.7618,8636376
+Osun State,Ilesha West,7.64202,4.71922,8636375
+Osun State,Irepodun,7.83333,4.48333,7701476
+Osun State,Irewole,7.41667,4.21667,7701477
+Osun State,Isokan,7.3,4.18333,7701478
+Osun State,Iwo,7.67548,4.14127,8636367
+Osun State,Obokun,7.78701,4.76281,8636374
+Osun State,Odo Otin,8.01667,4.7,7701479
+Osun State,Ola Oluwa,7.78333,4.21667,7701480
+Osun State,Olorunda,7.86667,4.58333,7701482
+Osun State,Oriade,7.58333,4.86667,7701483
+Osun State,Orolu,7.90159,4.47283,8636372
+Osun State,Osogbo,7.75963,4.57625,8636371
+Oyo State,Afijio,7.73793,3.86417,7873894
+Oyo State,Akinyele,7.56152,3.90609,7873893
+Oyo State,Atiba,8.26629,3.88691,8636067
+Oyo State,Atisbo,8.3698,3.24674,8636066
+Oyo State,Egbeda,7.38692,4.04522,8636320
+Oyo State,Ibadan North,7.40922,3.89011,7873892
+Oyo State,Ibadan North East,7.36919,3.92753,7873910
+Oyo State,Ibadan North West,7.39272,3.87967,8555718
+Oyo State,Ibadan South East,7.33437,3.90359,7873908
+Oyo State,Ibadan South West,7.35069,3.86551,7873907
+Oyo State,Ibarapa Central,7.43737,3.26761,8636319
+Oyo State,Ibarapa East,7.60795,3.49207,7730054
+Oyo State,Ibarapa North,7.64615,3.15918,7730055
+Oyo State,Ido,7.50678,3.71186,7730057
+Oyo State,Irepo,8.90287,3.99445,7873911
+Oyo State,Iseyin,7.87401,3.54943,8636318
+Oyo State,Itesiwaju,8.20715,3.53029,8636070
+Oyo State,Iwajowa,8,3.08333,7701486
+Oyo State,Kajola,8.02639,3.35753,7730058
+Oyo State,Lagelu,7.49485,4.0469,7730059
+Oyo State,Ogbomosho North,8.1567,4.26441,8636068
+Oyo State,Ogbomosho South,8.0732,4.23658,8636321
+Oyo State,Ogo Oluwa,7.99013,4.21483,8636069
+Oyo State,Olorunsogo,8.75,4.13333,7701488
+Oyo State,Oluyole,7.23333,3.86667,7701489
+Oyo State,Ona Ara,7.28333,4.03333,7701491
+Oyo State,Orelope,8.83333,3.75,7701492
+Oyo State,Ori Ire,8.33423,4.14423,7730060
+Oyo State,Oyo East,7.87878,4.02132,7730061
+Oyo State,Oyo West,7.94157,3.8218,7730062
+Oyo State,Saki East,8.70467,3.58944,8636065
+Oyo State,Saki West,8.5698,3.14718,7730066
+Oyo State,Surulere,8.07179,4.4149,7730073
+Plateau State,Barkin Ladi,9.54969,8.9344,8634511
+Plateau State,Bassa,10.08201,8.78479,8634516
+Plateau State,Bokkos,9.22692,8.92677,8634510
+Plateau State,Jos East,9.89109,9.11793,8634515
+Plateau State,Jos North,9.93937,8.90221,8634514
+Plateau State,Jos South,9.75497,8.83524,8634513
+Plateau State,Kanam,9.54882,10.09733,8634505
+Plateau State,Kanke,9.39313,9.63285,8634506
+Plateau State,Langtang North,9.05651,9.82247,8634507
+Plateau State,Langtang South,8.60247,9.81029,8634539
+Plateau State,Mangu,9.39052,9.17968,8634509
+Plateau State,Mikang,9.00693,9.6085,8634517
+Plateau State,Pankshin,9.21598,9.3988,7730022
+Plateau State,Qua'An Pan,8.76078,9.16142,8634518
+Plateau State,Riyom,9.56796,8.68476,8634512
+Plateau State,Shendam,8.71667,9.5,7730025
+Plateau State,Wase,9.08261,10.20519,8634508
+Rivers State,Abua/Odual,4.82977,6.56739,8638118
+Rivers State,Ahoada East,5.07027,6.64302,8638107
+Rivers State,Ahoada West,5.0858,6.47089,7701495
+Rivers State,Akuku Toru,4.56152,6.752,7701497
+Rivers State,Andoni,4.47272,7.38264,7701499
+Rivers State,Asari-Toru,4.74808,6.83966,8638159
+Rivers State,Bonny,4.43963,7.23287,8638157
+Rivers State,Degema,4.57414,6.93798,8638156
+Rivers State,Eleme,4.78741,7.14369,8638158
+Rivers State,Emuoha,5.00674,6.74739,8638120
+Rivers State,Etche,4.99083,7.05444,7701519
+Rivers State,Gokana,4.66049,7.28347,7730086
+Rivers State,Ikwerre,5.02676,6.88406,7730104
+Rivers State,Khana,4.69962,7.42264,7874704
+Rivers State,Obio/Akpor,4.83153,6.98906,7873930
+Rivers State,Ogba/Egbema/Ndoni,5.34167,6.65556,7701521
+Rivers State,Ogu Bolo,4.64774,7.18648,7730136
+Rivers State,Ogu/Bolo Local Government Area,4.66943,7.20268,9485477
+Rivers State,Okrika,4.63826,7.08162,8638160
+Rivers State,Omumma,5.09072,7.23485,7701522
+Rivers State,Opobo/Nkoro,4.56141,7.44396,8638161
+Rivers State,Oyigbo,4.87806,7.12833,7701523
+Rivers State,Port-Harcourt,4.77763,7.02165,7873928
+Rivers State,Tai,4.71667,7.3,7701524
+Sokoto State,Binji,13.20872,4.83289,8632711
+Sokoto State,Bodinga,12.88333,5.16667,7701525
+Sokoto State,Dange-Shuni,12.84626,5.41777,8633493
+Sokoto State,Gada,13.74739,5.65521,8632714
+Sokoto State,Goronyo,13.39076,5.80049,8632716
+Sokoto State,Gudu,13.43162,4.49535,8632710
+Sokoto State,Gwadabawa,13.44757,5.3106,8632713
+Sokoto State,Illela,13.69519,5.36123,9180446
+Sokoto State,Isa,13.22201,6.33803,8632717
+Sokoto State,Kebbe,11.93616,4.75328,8633497
+Sokoto State,Kware,13.16982,5.28817,8632719
+Sokoto State,Rabah,13.01326,5.71959,8632720
+Sokoto State,Sabon Birni,13.4847,6.26409,8632715
+Sokoto State,Shagari,12.55983,5.13013,8633495
+Sokoto State,Silame,12.99239,4.81935,8632721
+Sokoto State,Sokoto North,13.0656,5.26804,7701527
+Sokoto State,Sokoto South,13.04012,5.25937,7701528
+Sokoto State,Tambuwal,12.36609,4.84882,8633496
+Sokoto State,Tangaza,13.49687,4.96286,8632712
+Sokoto State,Tureta,12.48616,5.49432,8633494
+Sokoto State,Wamako,13.03992,5.11946,7873921
+Sokoto State,Wurno,13.25681,5.48649,8632718
+Sokoto State,Yabo,12.78914,4.94955,7873920
+Taraba State,Ardo-Kola,8.80359,11.16707,8659776
+Taraba State,Bali,8.15541,10.96853,8659779
+Taraba State,Donga,7.59094,10.2133,8659781
+Taraba State,Gashaka,7.49945,11.38896,8659786
+Taraba State,Gassol,8.47269,10.5442,8659778
+Taraba State,Ibi,8.35088,9.88731,8659777
+Taraba State,Jalingo,8.9195,11.32642,8659775
+Taraba State,Karim Lamido,9.22208,10.86536,8659771
+Taraba State,Kurmi,7.28534,10.58702,8659784
+Taraba State,Lau,9.18704,11.42011,8659772
+Taraba State,Sardauna,6.87463,11.21184,8659785
+Taraba State,Takum,7.41158,10.04478,8659782
+Taraba State,Ussa,7.0868,10.03811,8659783
+Taraba State,Wukari,7.96327,9.84767,8659780
+Taraba State,Yorro,8.9087,11.48434,8659774
+Taraba State,Zing,8.88339,11.74517,8659773
+Yobe State,Barde,12.71613,10.64338,8659866
+Yobe State,Borsari,12.69929,11.42578,7730050
+Yobe State,Bursari Local Government Area,12.71578,11.41272,9485484
+Yobe State,Damaturu,11.78032,11.97864,8659870
+Yobe State,Fika,11.377,11.23746,8659874
+Yobe State,Fune,11.85212,11.44862,8659871
+Yobe State,Geidam,12.65454,12.06733,8659867
+Yobe State,Gujba,11.38333,11.96667,7730053
+Yobe State,Gulani,11,11.71667,7730056
+Yobe State,Jakusko,12.45605,10.91226,8659868
+Yobe State,Karasuwa,12.96284,10.78345,8659865
+Yobe State,Machina,13.04519,9.98526,8659861
+Yobe State,Nangere,11.82044,10.97139,8659872
+Yobe State,Nguru,12.97973,10.39914,8659862
+Yobe State,Potiskum,11.71064,11.15721,8659873
+Yobe State,Tarmua,12.17837,11.80232,8659869
+Yobe State,Yunusari,13.10432,11.78648,8659864
+Yobe State,Yusufari,13.22046,10.8827,8659863
+Zamfara State,Anka,11.96079,5.98663,8633546
+Zamfara State,Bakura,12.61663,5.85789,8633503
+Zamfara State,Birnin Magaji-Kiyaw,12.42527,6.89122,8633502
+Zamfara State,Bukkuyum,11.97471,5.58651,8633506
+Zamfara State,Bungudu,12.18868,6.48937,8633547
+Zamfara State,Gummi,12.05409,5.1136,7873916
+Zamfara State,Gusau,11.87555,6.61984,8633548
+Zamfara State,Kaura Namoda,12.56195,6.57617,8633501
+Zamfara State,Maradun,12.77787,6.24496,8633499
+Zamfara State,Maru,11.53807,6.27888,8633505
+Zamfara State,Shinkafi,13.03762,6.51199,8633498
+Zamfara State,Talata Mafara,12.38352,6.05447,8633504
+Zamfara State,Tsafe,11.88251,6.8947,8633549
+Zamfara State,Zurmi,12.81147,6.7938,8633500

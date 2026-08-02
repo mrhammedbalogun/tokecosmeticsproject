@@ -67,6 +67,13 @@ class Region(models.Model):
         "self", null=True, blank=True, on_delete=models.CASCADE, related_name="children"
     )
     is_active = models.BooleanField(default=True)
+    # Centre-point of the region, used to satisfy carrier APIs that demand coordinates
+    # (GIG requires them; measured 2026-08-02, an LGA centroid prices within ~3% of the
+    # street address — docs/gigimplementationresearch.md §2d). Null is honest: a region
+    # without a centroid is simply never offered a coordinate-based carrier. Loaded by
+    # `manage.py load_lga_centroids`.
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     class Meta:
         unique_together = [("country_code", "parent", "name")]
