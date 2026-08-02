@@ -42,3 +42,8 @@ backend/media/
 # fixtures share the filename and are synthetic, so they are re-included explicitly.
 customers-legacy_*.json
 !backend/apps/migration_wp/tests/fixtures/customers-legacy_*.json
+# Plan-23 order artifacts + the unpaid-transfer chase list: names, emails, phones,
+# full postal addresses for 4,096 orders. Same rule, same reason.
+orders-legacy_*.json
+!backend/apps/migration_wp/tests/fixtures/orders-legacy_*.json
+chase-*.csv

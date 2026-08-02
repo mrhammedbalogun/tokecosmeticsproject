@@ -324,3 +324,165 @@ def fetch_user_meta(conn, user_ids: list[int]) -> dict[int, dict[str, str]]:
             ", ".join(sorted(dropped_keys)),
         )
     return out
+
+
+# ── orders (Plan-23) ─────────────────────────────────────────────────────────────────────
+
+#: Order-item meta worth carrying. Same allow-list discipline as everywhere else in this
+#: module: WooCommerce order itemmeta accumulates plugin debris, and the artifact is a file
+#: a human is expected to read before it is imported.
+_ITEM_META_KEYS = frozenset(
+    {
+        "_product_id",
+        "_variation_id",
+        "_qty",
+        "_line_total",
+        "_line_subtotal",
+        "_line_tax",
+        "_sku",
+        "discount_amount",   # coupon lines
+        "method_id",         # shipping lines
+    }
+)
+
+
+def fetch_orders(conn) -> list[dict]:
+    """Orders with their operational data, which is where HPOS keeps the payment dates.
+
+    THE JOIN IS NOT OPTIONAL. In HPOS `wc_orders` has no `date_paid_gmt` column at all —
+    it lives in `wc_order_operational_data`, along with the shipping and discount totals.
+    The entire status map turns on `date_paid_gmt`, so an order whose operational row is
+    missing would silently look unpaid; LEFT JOIN is used so that shows up as a row to
+    review rather than a row that vanishes.
+
+    Refunds (`type='shop_order_refund'`) are excluded: there is exactly one in the whole
+    estate and it is reachable from its parent.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT o.id, o.status, o.currency, o.type, o.customer_id,
+                       o.billing_email, o.date_created_gmt, o.date_updated_gmt,
+                       o.payment_method, o.payment_method_title, o.customer_note,
+                       o.total_amount, o.tax_amount,
+                       od.date_paid_gmt, od.date_completed_gmt,
+                       od.shipping_total_amount, od.discount_total_amount
+                FROM {_p('wc_orders')} o
+                LEFT JOIN {_p('wc_order_operational_data')} od ON od.order_id = o.id
+                WHERE o.type = 'shop_order'
+                ORDER BY o.id"""
+        )
+        return list(cur.fetchall())
+
+
+def fetch_order_addresses(conn, order_ids: list[int]) -> dict[int, dict[str, dict]]:
+    """{order_id: {"billing": {...}, "shipping": {...}}}."""
+    if not order_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(order_ids))
+    out: dict[int, dict[str, dict]] = {oid: {} for oid in order_ids}
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT order_id, address_type, first_name, last_name, company,
+                       address_1, address_2, city, state, postcode, country, email, phone
+                FROM {_p('wc_order_addresses')}
+                WHERE order_id IN ({placeholders})""",
+            order_ids,
+        )
+        for row in cur.fetchall():
+            out[row["order_id"]][row.pop("address_type")] = row
+    return out
+
+
+def fetch_order_items(conn, order_ids: list[int]) -> dict[int, list[dict]]:
+    """{order_id: [{order_item_id, order_item_name, order_item_type, meta: {...}}, ...]}.
+
+    Two queries rather than a join, for the same reason `fetch_meta` does it: pivoting
+    itemmeta in SQL means one row per (item, key) and reassembling it in Python anyway.
+    """
+    if not order_ids:
+        return {}
+    placeholders = ",".join(["%s"] * len(order_ids))
+    items: dict[int, list[dict]] = {oid: [] for oid in order_ids}
+    by_item_id: dict[int, dict] = {}
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT order_item_id, order_id, order_item_name, order_item_type
+                FROM {_p('woocommerce_order_items')}
+                WHERE order_id IN ({placeholders})
+                ORDER BY order_id, order_item_id""",
+            order_ids,
+        )
+        for row in cur.fetchall():
+            row["meta"] = {}
+            by_item_id[row["order_item_id"]] = row
+            items[row["order_id"]].append(row)
+
+    if by_item_id:
+        item_placeholders = ",".join(["%s"] * len(by_item_id))
+        with conn.cursor() as cur:
+            cur.execute(
+                f"""SELECT order_item_id, meta_key, meta_value
+                    FROM {_p('woocommerce_order_itemmeta')}
+                    WHERE order_item_id IN ({item_placeholders})""",
+                list(by_item_id),
+            )
+            for row in cur.fetchall():
+                if row["meta_key"] in _ITEM_META_KEYS:
+                    by_item_id[row["order_item_id"]]["meta"][row["meta_key"]] = row["meta_value"]
+    return items
+
+
+def fetch_legacy_post_orders(conn) -> list[dict]:
+    """The orders HPOS never backfilled — intl only, 13 of them, all from 2023.
+
+    They live in `posts`/`postmeta` in the pre-HPOS shape and are absent from `wc_orders`
+    entirely, so `fetch_orders` cannot see them. Without this they are lost silently, which
+    is the worst way to lose an order.
+
+    Returns rows shaped like `fetch_orders` output so the importer has one code path, with
+    the postmeta keys translated to their HPOS column names.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT ID AS id, post_status AS status, post_date_gmt AS date_created_gmt,
+                       post_modified_gmt AS date_updated_gmt, post_excerpt AS customer_note
+                FROM {_p('posts')}
+                WHERE post_type = 'shop_order'
+                ORDER BY ID"""
+        )
+        rows = list(cur.fetchall())
+    if not rows:
+        return []
+
+    ids = [r["id"] for r in rows]
+    placeholders = ",".join(["%s"] * len(ids))
+    # postmeta key -> the HPOS column name the importer already understands.
+    wanted = {
+        "_order_total": "total_amount",
+        "_order_tax": "tax_amount",
+        "_order_shipping": "shipping_total_amount",
+        "_cart_discount": "discount_total_amount",
+        "_order_currency": "currency",
+        "_customer_user": "customer_id",
+        "_billing_email": "billing_email",
+        "_payment_method": "payment_method",
+        "_payment_method_title": "payment_method_title",
+        "_date_paid": "date_paid_gmt",
+        "_date_completed": "date_completed_gmt",
+    }
+    by_id = {r["id"]: r for r in rows}
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT post_id, meta_key, meta_value FROM {_p('postmeta')}
+                WHERE post_id IN ({placeholders})""",
+            ids,
+        )
+        for row in cur.fetchall():
+            column = wanted.get(row["meta_key"])
+            if column:
+                by_id[row["post_id"]][column] = row["meta_value"]
+    for row in rows:
+        row.setdefault("type", "shop_order")
+        for column in wanted.values():
+            row.setdefault(column, None)
+    return rows

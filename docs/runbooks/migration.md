@@ -352,3 +352,97 @@ this step. `--since` filters on registration date, so it catches customers who s
 after the rehearsal; customers who already existed are handled by the importer's
 idempotency, which deliberately leaves an imported account alone rather than reverting a
 password the customer has since changed.
+
+---
+
+# Runbook — order migration (Plan-23)
+
+Same credential as Plan-22 (`wp_migration`, created in that runbook's §1) — the 23-table
+grant already covers the order tables. **Run Plan-22 first**: orders link to customers
+through `LegacyIdentity`, and importing orders into an empty customer table turns every
+registered order into a guest one.
+
+## 1. Extract — once per store
+
+```bash
+cd /opt/tokecosmetics/repo
+set -a; . /root/wp-migration.env; set +a
+docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod \
+  -f infra/docker-compose.prod.yml run --rm \
+  -v /var/lib/mysql/mysql.sock:/run/wp-mysql/mysql.sock:ro \
+  -e WP_DB_HOST=/run/wp-mysql/mysql.sock \
+  -e WP_DB_NAME=tokecosm_wp481 \
+  -e WP_TABLE_PREFIX=wp_ \
+  -e WP_DB_USER=wp_migration \
+  -e WP_DB_PASSWORD \
+  web python manage.py extract_wp_orders --store legacy_ng \
+      --out /mnt/exports/orders-legacy_ng.json
+```
+
+Store/database/prefix table is the same as Plan-22 §2. Expect ~3,093 / 879 / 124 orders.
+
+**`legacy_intl` needs `--include-legacy-posts`.** That store has 13 orders from 2023 that
+HPOS never backfilled — they exist only in `wp8n_posts`/`wp8n_postmeta` and `wc_orders`
+cannot see them. Without the flag the import succeeds, reports 124 orders, and loses 13.
+
+## 2. Dry run and read the reconciliation
+
+```bash
+docker compose ... run --rm web python manage.py import_orders \
+  /mnt/exports/orders-legacy_ng.json --dry-run
+```
+
+The reconciliation block compares the artifact's own totals against what landed, per
+currency. **A `DRIFT` line means money changed shape between WooCommerce and here** — stop
+and find out why before doing a real run.
+
+Counts that are expected and correct:
+
+- `skipped_trashed` — WooCommerce's recycle bin. Somebody deleted these on purpose.
+- `line_items_without_a_variant` — ~106 on NG. The line is kept with its name and price;
+  only the catalogue link is missing.
+- `guest_orders` — ~69% of everything. Guests land `user=None` with their email so they
+  can claim the order after verifying it.
+- `flagged_for_review` — orders where WooCommerce's status and its payment date disagree.
+  Each one gets a `review_reason` and shows in the admin's needs-attention queue.
+
+## 3. Import, plus the chase list
+
+```bash
+docker compose ... run --rm web python manage.py import_orders \
+  /mnt/exports/orders-legacy_ng.json \
+  --chase-csv /mnt/exports/chase-legacy_ng.csv
+```
+
+**About the 2,277 unpaid bank transfers.** They import as `expired`, not `on_hold` and not
+`pending_payment` — decided 2026-08-01. In WooCommerce `wc-on-hold` means *chose bank
+transfer, never paid*; in this platform `on_hold` means *money in hand* and counts toward
+revenue. Mapping the word to the word would have put ₦34.2M of never-collected money on
+the dashboard. `--chase-csv` writes the last 30 days' worth — the ones that might still
+pay — as a short list somebody can actually work.
+
+## 4. Verify
+
+```bash
+docker compose ... run --rm web python manage.py shell -c "
+from django.db.models import Count, Sum
+from apps.orders.models import Order
+for r in Order.objects.exclude(source='web').values('source','status').annotate(n=Count('id')).order_by('source','status'):
+    print(r)
+print('revenue-status orders with no review flag:',
+      Order.objects.filter(status__in=['completed','processing','on_hold','refunded'], review_reason='').count())
+print('needing attention:', Order.objects.exclude(review_reason='').count())
+"
+```
+
+Then open the admin dashboard and check the revenue figure against what you know the
+business actually took. That is the number this whole stage was measured to protect.
+
+## 5. Delete the artifacts
+
+```bash
+shred -u /mnt/exports/orders-legacy_*.json /mnt/exports/chase-*.csv
+```
+
+The chase CSV especially: it is a list of customers who owe you money, with their names,
+emails and phone numbers.

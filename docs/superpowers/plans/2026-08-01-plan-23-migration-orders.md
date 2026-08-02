@@ -4,8 +4,9 @@ Master spec: `master-tokerebuild.md` §Plan-23-migration-orders. Follows Plan-22
 supplies the `LegacyIdentity` map this stage links orders through. The 23-table grant
 approved for Plan-22 already covers everything here — no second approval.
 
-> **One decision needed from Hammed** (§Decision, at the bottom): what to do with 2,277
-> unpaid bank-transfer orders worth ₦34M+. Everything else is settled and buildable.
+> **Decided 2026-08-01:** the 2,277 unpaid bank-transfer orders become **`expired`**, plus
+> a one-off CSV of the last 30 days so anything still live can be chased by hand. See
+> §Decision. Nothing else is blocked.
 
 ---
 
@@ -118,17 +119,35 @@ email stored, per `architecture.md:1003-1010` — never matched to an account by
 Matching a registered order by email would attach an order to whoever holds that address
 today, which is the exact attack `claims.py` was written to refuse.
 
-### 4. A `legacy` gateway code, so 4,096 orders cannot poison the expiry sweep
+### 4. Migrated orders get NO Payment rows, and the gateway is recorded as history
 
-`bacs` and `rave` do not exist in the payment registry, and `expire_pending_orders` raises
-`UnknownGateway` on an unknown code. The per-order `try/except` added in Plan-09b means one
-order no longer starves its siblings — but 4,096 orders raising every five minutes forever
-is a log fire, not a fix.
+I drafted this ruling as "invent a `legacy` gateway code so the expiry sweep cannot be
+poisoned". **Both halves were wrong, and reading the code rather than trusting the plan is
+what caught it.**
 
-Migrated orders therefore carry **`payment_method="legacy"`**, a code the registry knows
-and the sweep skips, with the original WooCommerce gateway preserved verbatim in the
-payment record for history. A migrated order is never a live payment attempt: there is
-nothing to expire, capture or refund through a gateway that this platform never talked to.
+The sweep was never at risk. `checkout/tasks.py:18` derives `_manual_gateway_codes()`
+**once from `_REGISTRY`**, not `get_gateway()` per order, so an unknown code cannot raise
+inside the loop — that was fixed in Plan-09b. And migrated orders land `expired` or
+`completed`, never `pending_payment`, so they do not match the sweep's filter at all. A new
+gateway code would have been ceremony against a threat that no longer exists.
+
+The real constraint is the opposite one, and it is already written down:
+`_refund_owned_by_the_ledger` (`orders/views.py:205-218`) says in as many words that *"an
+order refunded in WooCommerce has no captured payment here"*, and the admin transition
+endpoint depends on that being true to let staff mark legacy orders `refunded` by hand.
+
+**So migrated orders get no `Payment` rows.** Creating `succeeded` payments for 1,185 paid
+legacy orders would hand the refund machinery money it cannot move — every one of them
+would refuse the manual transition and demand a gateway refund against a gateway this
+platform has never talked to.
+
+The original WooCommerce gateway is preserved in an **`OrderEvent`** — `"paid by Direct
+bank transfer (bacs) in WooCommerce"` — which is exactly what that append-only timeline is
+for (`orders/models.py:106-113`). No schema change, and the fact survives where support
+will actually look for it.
+
+For the record, the codes map cleanly if a future stage ever does want them:
+`bacs`→`bank_transfer`, `paystack`→`paystack`, `rave`→`flutterwave`, `stripe`→`stripe`.
 
 ### 5. An incomplete address skips the ADDRESS, never the order
 
@@ -196,9 +215,14 @@ They must not be `on_hold` (ruling 1). The remaining question is a business one:
 - **Split by age** — `pending_payment` if created within N days of cutover, `expired`
   otherwise. More faithful, and the only option that needs a number from you.
 
-My recommendation is **`expired`, with a one-off CSV of the last 30 days' worth** so
-anything genuinely still live can be chased by hand without putting 2,277 rows into a
-working queue. Either way it is not revenue.
+**DECIDED: `expired`, with a one-off CSV of the last 30 days' worth** so anything genuinely
+still live can be chased by hand without putting 2,277 rows into a working queue. The
+admin's Awaiting-payment queue stays a queue somebody can actually work; a 2,277-row
+version of it is one nobody reads, which is worse than not having it.
+
+The CSV is written by `import_orders --chase-csv <path>` and, like every other artifact in
+this migration, carries customer names and emails — so it is 0600, gitignored and deleted
+after use.
 
 Worth knowing separately: **48% of NG orders choose bank transfer and never pay.** That is
 a conversion problem this migration merely surfaces, not one it creates.

@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "store": "legacy_intl",
+  "table_prefix": "wp8n_",
+  "orders": [
+    {
+      "id": 21000,
+      "status": "wc-on-hold",
+      "currency": "GBP",
+      "type": "shop_order",
+      "customer_id": 0,
+      "billing_email": "cust21000@example.com",
+      "date_created_gmt": "2026-07-20 10:00:00",
+      "date_updated_gmt": "2026-07-20 10:00:00",
+      "payment_method": "bacs",
+      "payment_method_title": "Direct bank transfer",
+      "customer_note": "",
+      "total_amount": "64.50",
+      "tax_amount": "0.00",
+      "date_paid_gmt": null,
+      "date_completed_gmt": null,
+      "shipping_total_amount": "5.00",
+      "discount_total_amount": "0.00"
+    },
+    {
+      "id": 21446,
+      "status": "wc-completed",
+      "currency": "USD",
+      "type": "shop_order",
+      "customer_id": 0,
+      "billing_email": "cust21446@example.com",
+      "date_created_gmt": "2026-07-15 10:00:00",
+      "date_updated_gmt": "2026-07-15 10:00:00",
+      "payment_method": "stripe",
+      "payment_method_title": "Credit Card (Stripe)",
+      "customer_note": "",
+      "total_amount": "187.00",
+      "tax_amount": "0.00",
+      "date_paid_gmt": "2026-07-25 10:00:00",
+      "date_completed_gmt": "2026-07-25 10:00:00",
+      "shipping_total_amount": "12.00",
+      "discount_total_amount": "0.00"
+    },
+    {
+      "id": 21447,
+      "status": "wc-refunded",
+      "currency": "USD",
+      "type": "shop_order",
+      "customer_id": 0,
+      "billing_email": "cust21447@example.com",
+      "date_created_gmt": "2026-07-15 10:00:00",
+      "date_updated_gmt": "2026-07-15 10:00:00",
+      "payment_method": "bacs",
+      "payment_method_title": "Direct bank transfer",
+      "customer_note": "",
+      "total_amount": "187.00",
+      "tax_amount": "0.00",
+      "date_paid_gmt": "2026-06-01 10:00:00",
+      "date_completed_gmt": "2026-06-01 10:00:00",
+      "shipping_total_amount": "0.00",
+      "discount_total_amount": "0.00"
+    },
+    {
+      "id": 20999,
+      "status": "wc-failed",
+      "currency": "CAD",
+      "type": "shop_order",
+      "customer_id": 0,
+      "billing_email": "cust20999@example.com",
+      "date_created_gmt": "2026-07-15 10:00:00",
+      "date_updated_gmt": "2026-07-15 10:00:00",
+      "payment_method": "bacs",
+      "payment_method_title": "Direct bank transfer",
+      "customer_note": "",
+      "total_amount": "93.01",
+      "tax_amount": "0.00",
+      "date_paid_gmt": null,
+      "date_completed_gmt": null,
+      "shipping_total_amount": "0.00",
+      "discount_total_amount": "0.00"
+    },
+    {
+      "id": 19039,
+      "status": "wc-completed",
+      "currency": "GBP",
+      "type": "shop_order",
+      "customer_id": 0,
+      "billing_email": "legacy@example.com",
+      "date_created_gmt": "2023-05-01 10:00:00",
+      "date_updated_gmt": "2023-05-01 10:00:00",
+      "payment_method": "rave",
+      "payment_method_title": "Flutterwave",
+      "customer_note": "",
+      "total_amount": "40.00",
+      "tax_amount": "0.00",
+      "date_paid_gmt": "2023-05-01 11:00:00",
+      "date_completed_gmt": null,
+      "shipping_total_amount": "0.00",
+      "discount_total_amount": "0.00"
+    }
+  ],
+  "addresses": {
+    "21000": {
+      "billing": {
+        "first_name": "Ada",
+        "last_name": "Okafor",
+        "company": "",
+        "address_1": "1 Test Road",
+        "address_2": "",
+        "city": "London",
+        "state": "",
+        "postcode": "100001",
+        "country": "GB",
+        "email": "cust21000@example.com",
+        "phone": "+2348012345678"
+      }
+    },
+    "21446": {
+      "billing": {
+        "first_name": "Ada",
+        "last_name": "Okafor",
+        "company": "",
+        "address_1": "1 Test Road",
+        "address_2": "",
+        "city": "London",
+        "state": "",
+        "postcode": "100001",
+        "country": "GB",
+        "email": "cust21446@example.com",
+        "phone": "+2348012345678"
+      }
+    },
+    "21447": {
+      "billing": {
+        "first_name": "Ada",
+        "last_name": "Okafor",
+        "company": "",
+        "address_1": "1 Test Road",
+        "address_2": "",
+        "city": "London",
+        "state": "",
+        "postcode": "100001",
+        "country": "GB",
+        "email": "cust21447@example.com",
+        "phone": "+2348012345678"
+      }
+    },
+    "20999": {
+      "billing": {
+        "first_name": "Ada",
+        "last_name": "Okafor",
+        "company": "",
+        "address_1": "1 Test Road",
+        "address_2": "",
+        "city": "London",
+        "state": "",
+        "postcode": "100001",
+        "country": "GB",
+        "email": "cust20999@example.com",
+        "phone": "+2348012345678"
+      }
+    },
+    "19039": {
+      "billing": {
+        "first_name": "Ada",
+        "last_name": "Okafor",
+        "company": "",
+        "address_1": "1 Test Road",
+        "address_2": "",
+        "city": "London",
+        "state": "",
+        "postcode": "100001",
+        "country": "GB",
+        "email": "cust19039@example.com",
+        "phone": "+2348012345678"
+      }
+    }
+  },
+  "items": {
+    "21000": [
+      {
+        "order_item_id": 210001,
+        "order_id": 21000,
+        "order_item_name": "Shea Butter 250ml",
+        "order_item_type": "line_item",
+        "meta": {
+          "_qty": "2",
+          "_line_total": "6250.00",
+          "_line_subtotal": "6250.00",
+          "_sku": "TOKE-1",
+          "_product_id": "101"
+        }
+      },
+      {
+        "order_item_id": 210002,
+        "order_id": 21000,
+        "order_item_name": "Flat rate",
+        "order_item_type": "shipping",
+        "meta": {
+          "method_id": "flat_rate"
+        }
+      }
+    ],
+    "21446": [
+      {
+        "order_item_id": 214461,
+        "order_id": 21446,
+        "order_item_name": "Shea Butter 250ml",
+        "order_item_type": "line_item",
+        "meta": {
+          "_qty": "2",
+          "_line_total": "6250.00",
+          "_line_subtotal": "6250.00",
+          "_sku": "TOKE-1",
+          "_product_id": "101"
+        }
+      },
+      {
+        "order_item_id": 214462,
+        "order_id": 21446,
+        "order_item_name": "Flat rate",
+        "order_item_type": "shipping",
+        "meta": {
+          "method_id": "flat_rate"
+        }
+      }
+    ],
+    "21447": [
+      {
+        "order_item_id": 214471,
+        "order_id": 21447,
+        "order_item_name": "Shea Butter 250ml",
+        "order_item_type": "line_item",
+        "meta": {
+          "_qty": "2",
+          "_line_total": "6250.00",
+          "_line_subtotal": "6250.00",
+          "_sku": "TOKE-1",
+          "_product_id": "101"
+        }
+      },
+      {
+        "order_item_id": 214472,
+        "order_id": 21447,
+        "order_item_name": "Flat rate",
+        "order_item_type": "shipping",
+        "meta": {
+          "method_id": "flat_rate"
+        }
+      }
+    ],
+    "20999": [
+      {
+        "order_item_id": 209991,
+        "order_id": 20999,
+        "order_item_name": "Shea Butter 250ml",
+        "order_item_type": "line_item",
+        "meta": {
+          "_qty": "2",
+          "_line_total": "6250.00",
+          "_line_subtotal": "6250.00",
+          "_sku": "TOKE-1",
+          "_product_id": "101"
+        }
+      },
+      {
+        "order_item_id": 209992,
+        "order_id": 20999,
+        "order_item_name": "Flat rate",
+        "order_item_type": "shipping",
+        "meta": {
+          "method_id": "flat_rate"
+        }
+      }
+    ],
+    "19039": [
+      {
+        "order_item_id": 190391,
+        "order_id": 19039,
+        "order_item_name": "Shea Butter 250ml",
+        "order_item_type": "line_item",
+        "meta": {
+          "_qty": "2",
+          "_line_total": "6250.00",
+          "_line_subtotal": "6250.00",
+          "_sku": "TOKE-1",
+          "_product_id": "101"
+        }
+      },
+      {
+        "order_item_id": 190392,
+        "order_id": 19039,
+        "order_item_name": "Flat rate",
+        "order_item_type": "shipping",
+        "meta": {
+          "method_id": "flat_rate"
+        }
+      }
+    ]
+  }
+}

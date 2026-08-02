@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "store": "legacy_ng_old",
+  "table_prefix": "wp8n_",
+  "orders": [
+    {
+      "id": 21000,
+      "status": "wc-on-hold",
+      "currency": "NGN",
+      "type": "shop_order",
+      "customer_id": 0,
+      "billing_email": "cust21000@example.com",
+      "date_created_gmt": "2025-03-01 10:00:00",
+      "date_updated_gmt": "2025-03-01 10:00:00",
+      "payment_method": "bacs",
+      "payment_method_title": "Direct bank transfer",
+      "customer_note": "",
+      "total_amount": "10000.00",
+      "tax_amount": "750.00",
+      "date_paid_gmt": null,
+      "date_completed_gmt": null,
+      "shipping_total_amount": "1500.00",
+      "discount_total_amount": "0.00"
+    },
+    {
+      "id": 28734,
+      "status": "wc-completed",
+      "currency": "NGN",
+      "type": "shop_order",
+      "customer_id": 0,
+      "billing_email": "cust28734@example.com",
+      "date_created_gmt": "2025-06-01 09:00:00",
+      "date_updated_gmt": "2025-06-01 09:00:00",
+      "payment_method": "bacs",
+      "payment_method_title": "Direct bank transfer",
+      "customer_note": "",
+      "total_amount": "10000.00",
+      "tax_amount": "750.00",
+      "date_paid_gmt": "2025-06-01 10:00:00",
+      "date_completed_gmt": "2025-06-01 10:00:00",
+      "shipping_total_amount": "1500.00",
+      "discount_total_amount": "0.00"
+    }
+  ],
+  "addresses": {
+    "21000": {
+      "billing": {
+        "first_name": "Ada",
+        "last_name": "Okafor",
+        "company": "",
+        "address_1": "1 Test Road",
+        "address_2": "",
+        "city": "Lagos",
+        "state": "LA",
+        "postcode": "100001",
+        "country": "NG",
+        "email": "cust21000@example.com",
+        "phone": "+2348012345678"
+      }
+    },
+    "28734": {
+      "billing": {
+        "first_name": "Ada",
+        "last_name": "Okafor",
+        "company": "",
+        "address_1": "1 Test Road",
+        "address_2": "",
+        "city": "Lagos",
+        "state": "LA",
+        "postcode": "100001",
+        "country": "NG",
+        "email": "cust28734@example.com",
+        "phone": "+2348012345678"
+      }
+    }
+  },
+  "items": {
+    "21000": [
+      {
+        "order_item_id": 210001,
+        "order_id": 21000,
+        "order_item_name": "Shea Butter 250ml",
+        "order_item_type": "line_item",
+        "meta": {
+          "_qty": "2",
+          "_line_total": "6250.00",
+          "_line_subtotal": "6250.00",
+          "_sku": "TOKE-1",
+          "_product_id": "101"
+        }
+      },
+      {
+        "order_item_id": 210002,
+        "order_id": 21000,
+        "order_item_name": "Flat rate",
+        "order_item_type": "shipping",
+        "meta": {
+          "method_id": "flat_rate"
+        }
+      }
+    ],
+    "28734": [
+      {
+        "order_item_id": 287341,
+        "order_id": 28734,
+        "order_item_name": "Shea Butter 250ml",
+        "order_item_type": "line_item",
+        "meta": {
+          "_qty": "2",
+          "_line_total": "6250.00",
+          "_line_subtotal": "6250.00",
+          "_sku": "TOKE-1",
+          "_product_id": "101"
+        }
+      },
+      {
+        "order_item_id": 287342,
+        "order_id": 28734,
+        "order_item_name": "Flat rate",
+        "order_item_type": "shipping",
+        "meta": {
+          "method_id": "flat_rate"
+        }
+      }
+    ]
+  }
+}
