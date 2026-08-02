@@ -35,6 +35,41 @@ class DeliveryOption(TimeStampedModel):
         return f"{self.name} ({self.currency_id})"
 
 
+class GigLga(TimeStampedModel):
+    """One LGA as GIG's network knows it, synced nightly from `/lga/active` and
+    `/homedelivery/active` (Plan-32a slice 2).
+
+    `region` is the join to OUR world and the only column a human edits: the sync
+    auto-matches by name (exact, then fuzzy — `gig.names`) but ONLY when the FK is
+    null, so a hand-set mapping is never overwritten by a worse guess. An active
+    GigLga with `home_delivery=True` and a mapped region with a centroid is the
+    full precondition for offering GIG home delivery at checkout.
+
+    Rows that vanish from GIG's list are deactivated, never deleted — the mapping
+    work survives GIG toggling an LGA off and on again. Sandbox measured 303
+    active / 103 home-delivery; production numbers replace them at go-live by
+    pointing the same sync at the production base URL.
+    """
+
+    lga_name = models.CharField(max_length=100)      # GIG's spelling, verbatim
+    state_name = models.CharField(max_length=100)    # GIG's spelling, verbatim
+    gig_state_id = models.IntegerField()             # GIG's StateId (their numbering)
+    is_active = models.BooleanField(default=True)
+    home_delivery = models.BooleanField(default=False)
+    region = models.ForeignKey(
+        "core.Region", null=True, blank=True, on_delete=models.SET_NULL, related_name="gig_lgas"
+    )
+    synced_at = models.DateTimeField()
+
+    class Meta:
+        unique_together = [("state_name", "lga_name")]
+        verbose_name = "GIG LGA"
+
+    def __str__(self) -> str:
+        flags = f"{'active' if self.is_active else 'inactive'}, hd={self.home_delivery}"
+        return f"{self.state_name}/{self.lga_name} ({flags})"
+
+
 class DeliveryOptionRate(models.Model):
     """Optional weight tiers. If an option has no rates, its flat `price` applies."""
 

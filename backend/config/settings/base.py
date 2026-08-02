@@ -513,6 +513,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.core.tasks.tombstone_search_terms",
         "schedule": 86400.0,  # daily — the retention window is 90 days
     },
+    "sync-gig-coverage": {
+        "task": "apps.delivery.tasks.sync_gig_coverage_task",
+        "schedule": 86400.0,  # daily — GIG's network changes on human timescales
+    },
 }
 
 # --- WordPress migration source (Plan-21) ---
