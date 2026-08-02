@@ -174,6 +174,32 @@ of `docs/gig-reply-capture-preshipment.md`.
 
 ---
 
+## 2c. ANSWERED 2026-08-01 — GIG's replies, and what each one decides
+
+GIG answered (via the WhatsApp group, relayed by Hammed). Docs re-verified against
+`gig-logistics.readme.io` the same day — the reference matches every answer.
+
+| Question | GIG's answer | Consequence |
+|---|---|---|
+| Structured address instead of coordinates? (Q2, the build-decider) | **No. Lat/long is mandatory — it is what the price is calculated from.** | We geocode. §2b's "may collapse to a lookup table" hope is dead as a way to *avoid* coordinates — but see below: an LGA-centroid table may still be the *source* of the coordinates. |
+| Precision needed? (Q3) | **Not answered.** | Still the open question, but now answerable *by us*: with sandbox access, price the same cart from an LGA centroid vs several street-level points in that LGA and measure the spread. Small spread → static 774-row centroid table, no checkout change, no geocoding bill. Large spread → server-side geocoding at checkout. |
+| Sandbox access | **Email + password provided.** | Goes in `backend/.env` as `GIG_EMAIL` / `GIG_PASSWORD` — never in code or in this doc. Unblocks §8 step 2 (live verification calls). |
+| Billing | **Prepaid wallet. GIG debits delivery cost directly from our wallet; we fund it.** | §0's "manual weekly/biweekly settlement" is superseded. The §7 wallet risk is now a certainty: an unfunded wallet means paid orders that cannot ship. We need a `WalletAmount` monitor (from `GET /companyDetails/get`) with an alert threshold, and per-order cost storage becomes wallet reconciliation, not invoice-checking. |
+| Tracking webhook | **Will be provided when we are ready to go live.** | Build Celery polling anyway — it is needed for sandbox and staging, and remains the fallback when the webhook is quiet. The webhook receiver is a go-live addition, not the foundation. |
+| Cancel / amend a shipment | **Not available.** | The single biggest design consequence: **a waybill is irrevocable and costs wallet money the moment it is created.** So waybill creation must NOT be automatic on payment confirmation (§4 item 3 is amended). It happens at fulfilment time — when the parcel is actually being packed — as an admin action or an order-state transition, so a customer who cancels ten minutes after paying never costs us a non-refundable waybill. |
+
+**Also settled by the docs re-read:** `VehicleType` is `0=Car, 1=Bike, 2=Van, 3=Truck`
+(documented on `/price/v3`; §7's "undocumented enum" entry is stale). Which value a
+sub-1 kg cosmetics parcel should send is still GIG's to answer — or the sandbox's, if
+quoting the same shipment under each vehicle type shows the price difference.
+
+**Still to verify in sandbox before real money moves:** the `GrandTotal` arithmetic (§7),
+the `ShipmentType` mismatch (`/price/v3` documents `2=Ecommerce`; `/capture/preshipment`
+documents `0 | 1 | 4`), token lifetime, and whether the wallet is debited at capture time
+(assumed) or at pickup.
+
+---
+
 ## 3. The two flows — original analysis, superseded by §2b
 
 ### Flow A — PreShipment Mobile (GIG collects from us)
@@ -398,3 +424,19 @@ spec rather than being appended to Plan-17a.
 that makes bank transfer fulfillable — today a Nigerian customer can pay and never be
 shipped. GIG makes delivery cheaper and automated; Plan-18 makes fulfilment possible at all.
 If both are wanted before launch, GIG should still go second.
+
+### Revised sequencing (2026-08-01, after §2c)
+
+Plans 17–20 have since shipped, so the "GIG goes second" caveat is spent. The build is
+unblocked; the order now is:
+
+1. **Sandbox verification pass** (creds in `backend/.env`): login → `companyDetails/get`
+   (wallet, `CustomerCode`) → `price/v3` experiments — centroid-vs-door spread (decides
+   geocoding), vehicle-type spread (decides the default), `GrandTotal` arithmetic,
+   `ShipmentType` value — → one `capture/preshipment` → track it → generate its label.
+2. **Design spec** written against the real response shapes, including: nullable
+   `latitude`/`longitude` on `Address`, quote cache + timeout + flat-rate fallback in
+   `delivery/services.py`, waybill-at-fulfilment (never at payment), wallet monitor with
+   alert threshold, Celery tracking poll, and the 8 weightless variants fixed first.
+3. **Implement**, NG-only, behind the existing `DeliveryOption.kind="carrier"` /
+   `carrier_code="gig"` seam.
