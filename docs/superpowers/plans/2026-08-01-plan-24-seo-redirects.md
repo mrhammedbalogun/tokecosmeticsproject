@@ -3,8 +3,9 @@
 Master spec: `master-tokerebuild.md` §Plan-24-seo-redirects. Independent of Plan-22/23 —
 it needs the catalogue (Plan-21, done), not the customers or orders.
 
-> **One decision needed** (§Decision): where 50 blog and help URLs go. Everything else is
-> settled and buildable.
+> **Decided 2026-08-01:** the 50 blog and help URLs **ship as CMS pages** — the post bodies
+> import into Plan-19's CMS and every one of them redirects to `/page/<slug>`. See
+> §Decision. Nothing is blocked.
 
 ---
 
@@ -181,7 +182,14 @@ decision rather than a technical one:
 - **410 them.** Honest, fastest to implement, and throws away a year of content and
   whatever SEO it earned.
 
-My recommendation is **ship them as CMS pages**, because the blog is live — something
-published yesterday should not 404 on cutover day. But it is the option with real work
-behind it, so it is your call, and it is the last thing standing between this stage and
-being fully specified.
+**DECIDED: ship them as CMS pages.** The blog is live — something published yesterday must
+not 404 on cutover day.
+
+This adds a seventh task: an editorial import pass that reads `post_content` for the 33
+posts, 15 help articles and 2 article-pages, sanitises it through `apps.cms.sanitize`
+(nh3 — the same path Plan-19's CMS already runs its bodies through, so no new trust
+boundary) and writes `cms.Page` rows. The redirects then point at pages that actually
+exist, which is the thing ruling 4 insists on.
+
+`/page/blog` becomes a hand-maintained index. That is a real ongoing cost and it is
+accepted knowingly: the alternative is building a blog engine inside a migration stage.

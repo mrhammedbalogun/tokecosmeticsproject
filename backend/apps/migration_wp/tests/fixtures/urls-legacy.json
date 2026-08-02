@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "pages": [
+    {
+      "ID": 2080,
+      "slug": "our-story",
+      "post_title": "Our Story",
+      "post_content": "<p>We started in Lagos.</p>",
+      "post_status": "publish"
+    },
+    {
+      "ID": 2398,
+      "slug": "my-account",
+      "post_title": "My Account",
+      "post_content": "[woocommerce_my_account]",
+      "post_status": "publish"
+    },
+    {
+      "ID": 9908,
+      "slug": "home-2-duplicate-5203",
+      "post_title": "Home",
+      "post_content": "<p>dupe</p>",
+      "post_status": "publish"
+    },
+    {
+      "ID": 4216,
+      "slug": "why-salicylic-acid-works-for-breakouts",
+      "post_title": "WHY SALICYLIC ACID WORKS",
+      "post_content": "<p>Page version.</p>",
+      "post_status": "publish"
+    },
+    {
+      "ID": 1731,
+      "slug": "blog",
+      "post_title": "Blog",
+      "post_content": "<p>Index</p>",
+      "post_status": "publish"
+    }
+  ],
+  "posts": [
+    {
+      "ID": 9001,
+      "slug": "acne-care-made-easy",
+      "post_title": "Acne care made easy",
+      "post_content": "<p>Wash twice.</p><script>alert(1)</script>",
+      "post_status": "publish"
+    },
+    {
+      "ID": 9002,
+      "slug": "why-salicylic-acid-works-for-breakouts",
+      "post_title": "Post version",
+      "post_content": "<p>Post version.</p>",
+      "post_status": "publish"
+    },
+    {
+      "ID": 9003,
+      "slug": "empty-post",
+      "post_title": "Empty",
+      "post_content": "",
+      "post_status": "publish"
+    }
+  ],
+  "helps": [
+    {
+      "ID": 7001,
+      "slug": "account",
+      "post_title": "Account",
+      "post_content": "<p>Managing your account.</p>",
+      "post_status": "publish"
+    },
+    {
+      "ID": 7002,
+      "slug": "help-with-password",
+      "post_title": "Help with password",
+      "post_content": "<p>Reset it.</p>",
+      "post_status": "publish"
+    }
+  ],
+  "categories": [
+    {
+      "term_id": 21,
+      "slug": "skin-care",
+      "taxonomy": "product_cat",
+      "name": "Skin Care"
+    },
+    {
+      "term_id": 22,
+      "slug": "gone-category",
+      "taxonomy": "product_cat",
+      "name": "Gone"
+    }
+  ],
+  "tags": [
+    {
+      "term_id": 31,
+      "slug": "shea-butter",
+      "taxonomy": "product_tag",
+      "name": "Shea Butter"
+    }
+  ]
+}

@@ -310,6 +310,14 @@ def _case_menu_item_create(client, monkeypatch):
     ), 201
 
 
+def _case_redirect_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/redirects/",
+        {"old_path": "/old-story/", "new_path": "/page/our-story", "status_code": 301},
+        format="json",
+    ), 201
+
+
 def _case_page_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/pages/",
@@ -528,6 +536,7 @@ WRITE_CASES: dict[str, tuple] = {
     "BannerAdminViewSet": (_case_banner_create, "create"),
     "HomepageSectionAdminViewSet": (_case_homepage_section_create, "create"),
     "MenuItemAdminViewSet": (_case_menu_item_create, "create"),
+    "RedirectAdminViewSet": (_case_redirect_create, "create"),
     "BankAccountAdminViewSet": (_case_bank_account_create, "create"),
     "CountryPaymentGatewayAdminViewSet": (_case_payment_gateway_create, "create"),
     "CouponAdminViewSet": (_case_coupon_create, "create"),

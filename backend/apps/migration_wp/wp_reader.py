@@ -486,3 +486,39 @@ def fetch_legacy_post_orders(conn) -> list[dict]:
         for column in wanted.values():
             row.setdefault(column, None)
     return rows
+
+
+# ── the URL space (Plan-24) ──────────────────────────────────────────────────────────────
+
+#: WordPress post types whose rows live at the ROOT of the URL space (`/%postname%/`).
+#: `motta_help_article` is the theme's own type — 15 rows behind /help — and is included
+#: because those URLs are as real as any other.
+_ROOT_POST_TYPES = {"page": "pages", "post": "posts", "motta_help_article": "helps"}
+
+
+def fetch_url_space(conn) -> dict[str, list[dict]]:
+    """Everything that occupies a legacy URL, with its body for the editorial import.
+
+    Returns {"pages": [...], "posts": [...], "helps": [...]}. Products and terms are read
+    by the existing catalogue functions; this is only the root namespace, which is the
+    part that collides with storefront routes and therefore the part that needed measuring.
+
+    `post_content` comes along because the Plan-24 decision was to ship the 33 posts and
+    15 help articles as CMS pages rather than 410 them — the blog was published to the day
+    before the plan was written.
+    """
+    placeholders = ",".join(["%s"] * len(_ROOT_POST_TYPES))
+    out: dict[str, list[dict]] = {name: [] for name in _ROOT_POST_TYPES.values()}
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""SELECT ID, post_type, post_name AS slug, post_title, post_content,
+                       post_excerpt, post_status, post_modified_gmt
+                FROM {_p('posts')}
+                WHERE post_type IN ({placeholders}) AND post_status = 'publish'
+                  AND post_name <> ''
+                ORDER BY post_type, post_name""",
+            list(_ROOT_POST_TYPES),
+        )
+        for row in cur.fetchall():
+            out[_ROOT_POST_TYPES[row.pop("post_type")]].append(row)
+    return out

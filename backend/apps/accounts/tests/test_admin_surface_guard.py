@@ -168,6 +168,11 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # Navigation is site structure, and the footer's policy links are what cms.manage
     # protects.
     "MenuItemAdminViewSet": "cms.manage",
+    # Legacy URL redirects (Plan-24). Same scope as pages and menus, and for the same
+    # reason: a redirect row decides where a real inbound link lands, so editing one is
+    # editing site structure. Wrong here is worse than missing — a bad row silently sends
+    # traffic somewhere it never asked to go.
+    "RedirectAdminViewSet": "cms.manage",
     # Banners and the homepage running order are CAMPAIGN material, not legally
     # load-bearing copy — rbac.py argues the split. A content editor must not be able to
     # override a live campaign's placement.

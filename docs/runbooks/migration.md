@@ -446,3 +446,85 @@ shred -u /mnt/exports/orders-legacy_*.json /mnt/exports/chase-*.csv
 
 The chase CSV especially: it is a list of customers who owe you money, with their names,
 emails and phone numbers.
+
+---
+
+# Runbook — legacy URLs (Plan-24)
+
+Uses the **`wp_readonly`** credential, not `wp_migration` — this reads posts and terms
+only, which the recurring catalogue grant already covers. Run it whenever; it needs no new
+grant and touches no personal data.
+
+## 1. Extract
+
+```bash
+cd /opt/tokecosmetics/repo
+set -a; . /root/wp-readonly.env; set +a
+docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod \
+  -f infra/docker-compose.prod.yml run --rm \
+  -v /var/lib/mysql/mysql.sock:/run/wp-mysql/mysql.sock:ro \
+  -e WP_DB_HOST=/run/wp-mysql/mysql.sock \
+  -e WP_DB_NAME=tokecosm_wp481 \
+  -e WP_TABLE_PREFIX=wp_ \
+  -e WP_DB_USER=wp_readonly \
+  -e WP_DB_PASSWORD \
+  web python manage.py extract_wp_urls --out /mnt/exports/urls-legacy.json
+```
+
+Expect ~23 pages, 33 posts, 15 help articles, 40 categories, 137 tags. This artifact holds
+published marketing copy and public URLs — **no personal data** — so unlike the customer
+and order artifacts it is not 0600 and does not need shredding.
+
+## 2. Dry run and READ THE THREE WARNING BLOCKS
+
+```bash
+docker compose ... run --rm web python manage.py seed_redirects \
+  /mnt/exports/urls-legacy.json --with-content --dry-run
+```
+
+Three blocks matter more than the counts:
+
+- **`duplicate path`** — WordPress had two rows at one URL. Today that is
+  `why-salicylic-acid-works-for-breakouts`, a page and a post. Precedence is page > post >
+  help and is deterministic, so the rehearsal and the cutover agree; the report tells you
+  which one lost so you can check it was the right one.
+- **`never fire`** — old paths that are already real storefront routes. `/account` is the
+  live example: WordPress served a help article there, the storefront serves the
+  customer's account page. The rows are harmless (the App Router reaches the catch-all
+  only when nothing else matched) but they are a lie in the table.
+- **`point at a CMS page that is not published`** — the important one. **A 301 to a blank
+  page is worse than a 404**, because the visitor believes they arrived. This list is also
+  the outstanding "eleven pages of policy text" item, in concrete form: every entry is a
+  page somebody still has to write.
+
+## 3. Seed
+
+```bash
+docker compose ... run --rm web python manage.py seed_redirects \
+  /mnt/exports/urls-legacy.json --with-content
+```
+
+`--with-content` imports the 33 blog posts and 15 help articles as **DRAFT** CMS pages —
+decided 2026-08-01, because the blog was published to the day before and a post from
+yesterday must not 404 on cutover. They are drafts on purpose: the source is Elementor
+markup and WordPress shortcodes, and somebody should look at what survived the sanitiser's
+allow-list before it is public. Add `--publish` only after reviewing them in the admin.
+
+Re-running is safe: idempotent on `old_path`, hit counts survive a target correction, and
+a CMS page a human has since edited is never overwritten.
+
+## 4. Verify against the real thing
+
+```bash
+curl -s "https://tokecosmetics.com/api/v1/meta/redirect/?path=/our-story/" | jq
+```
+
+Then, once the storefront is deployed, walk half a dozen real old URLs in a browser —
+including one with a trailing slash, one category, one tag and one blog post — and confirm
+each lands somewhere that renders. The catch-all only runs when no real route matched, so
+a redirect that "does not work" is usually a route that legitimately exists.
+
+**What has no rows and needs none:** product URLs. Plan-21 preserves `post_name` verbatim
+as the slug and the base is `/product` on both sides, so the only difference is
+WordPress's trailing slash, which Next normalises. 71 URLs, zero rows, nothing to verify
+beyond opening one.
