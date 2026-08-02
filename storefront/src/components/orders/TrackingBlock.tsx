@@ -13,6 +13,16 @@
  * Exported so tests build fixtures against the real contract rather than restating it. */
 export type Trackable = { status: string; tracking_carrier: string; tracking_number: string };
 
+/** The latest GIG scan, exactly as the carrier sent it (`gig_tracking` on the owner
+ * serializer — absent on the guest view, and this component must not care). Verbatim
+ * because GIG's status vocabulary is unpublished: showing their words is truthful even
+ * when our mapping is behind. */
+export type GigTracking = {
+  status: string;
+  last_scan: Record<string, unknown>;
+  last_tracked_at: string | null;
+} | null;
+
 /** Statuses where "no tracking yet" is a fact about TIME — the order is on its way to
  * being shipped and simply has not got there. Everything else gets no tracking section
  * at all, because the hint would be a promise we have not made:
@@ -31,7 +41,21 @@ export type Trackable = { status: string; tracking_carrier: string; tracking_num
  * discipline as StatusChip). */
 const PRE_SHIP = new Set(["pending_payment", "processing"]);
 
-export function TrackingBlock({ order }: { order: Trackable }) {
+const GIG_STATUS_COPY: Record<string, string> = {
+  created: "Waybill created — a rider is collecting your parcel",
+  in_transit: "On its way",
+  delivered: "Delivered",
+};
+
+function scanLine(scan: Record<string, unknown>): string {
+  // The fields GIG's scans actually carry (measured): Status, DateTime, and sometimes
+  // a location/comment. Join what exists; never invent.
+  const parts = [scan["ScanStatusComment"], scan["Location"], scan["Status"], scan["DateTime"]]
+    .filter((v): v is string => typeof v === "string" && v.trim() !== "");
+  return parts.join(" · ");
+}
+
+export function TrackingBlock({ order, gig = null }: { order: Trackable; gig?: GigTracking }) {
   // Blank halves filtered before the join, so a carrier recorded without a consignment
   // number (or the reverse) never renders a dangling " · ".
   const trackingLine = [order.tracking_carrier, order.tracking_number]
@@ -46,6 +70,14 @@ export function TrackingBlock({ order }: { order: Trackable }) {
       <p className="mt-2 text-sm text-muted">
         {trackingLine || "You'll get tracking details when your order ships."}
       </p>
+      {gig && (
+        <div className="mt-3 rounded border border-line p-3 text-sm">
+          <p className="font-medium">{GIG_STATUS_COPY[gig.status] ?? gig.status}</p>
+          {Object.keys(gig.last_scan ?? {}).length > 0 && (
+            <p className="mt-1 text-muted">{scanLine(gig.last_scan)}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

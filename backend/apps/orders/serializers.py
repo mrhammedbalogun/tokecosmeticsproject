@@ -80,6 +80,7 @@ class OrderListSerializer(_BaseOrderSerializer):
 
 class OrderSerializer(_BaseOrderSerializer):
     payment_gateway = serializers.SerializerMethodField()
+    gig_tracking = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -87,7 +88,26 @@ class OrderSerializer(_BaseOrderSerializer):
                   "subtotal", "discount_total", "shipping_total", "tax_total",
                   "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",
-                  "tracking_carrier", "tracking_number", "payment_gateway", "items")
+                  "tracking_carrier", "tracking_number", "payment_gateway",
+                  "gig_tracking", "items")
+
+    def get_gig_tracking(self, order):
+        """The parcel's latest GIG scan, verbatim, for the account order page.
+
+        Verbatim because GIG's status vocabulary is unpublished — rendering the
+        raw scan is truthful even while our status map is behind (Plan-32a
+        ruling 5). None for non-GIG orders and for shipments with no waybill
+        yet, so the page can simply not render the block. Absent from
+        OrderTrackingSerializer on purpose: that is the redacted bearer-token
+        view and adds nothing it doesn't already say via tracking_number."""
+        shipment = getattr(order, "gig_shipment", None)
+        if shipment is None or not shipment.waybill:
+            return None
+        return {
+            "status": shipment.status,
+            "last_scan": shipment.last_scan,
+            "last_tracked_at": shipment.last_tracked_at,
+        }
 
     def get_payment_gateway(self, order) -> str:
         """How this order was paid — the gateway of its most recent payment attempt.

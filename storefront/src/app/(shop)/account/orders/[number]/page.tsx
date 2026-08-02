@@ -88,7 +88,7 @@ export default async function OrderDetailPage({
 
       {/* Shared with the guest tracking page — the PRE_SHIP ruling lives in the
           component now, not here. */}
-      <TrackingBlock order={order} />
+      <TrackingBlock order={order} gig={order.gig_tracking ?? null} />
 
       {showBankDetails && (
         // KNOWN LIMITATION (15c, accepted — on the checkpoint list). This component reads

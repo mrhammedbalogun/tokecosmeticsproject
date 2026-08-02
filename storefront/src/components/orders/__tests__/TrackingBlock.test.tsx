@@ -46,6 +46,34 @@ describe("TrackingBlock", () => {
     },
   );
 
+  it("renders the GIG scan verbatim when the owner view carries one", () => {
+    // Verbatim by ruling: GIG's status vocabulary is unpublished, so their words beat
+    // our mapping. The guest view never passes `gig`, and nothing here renders.
+    render(
+      <TrackingBlock
+        order={order({ status: "shipped", tracking_carrier: "GIG", tracking_number: "1349113107" })}
+        gig={{
+          status: "in_transit",
+          last_scan: { Status: "MAHD", DateTime: "2026-08-02 18:00 WAT", Location: "GBAGADA" },
+          last_tracked_at: "2026-08-02T18:05:00Z",
+        }}
+      />,
+    );
+
+    expect(screen.getByText("On its way")).toBeInTheDocument();
+    expect(screen.getByText(/GBAGADA · MAHD · 2026-08-02 18:00 WAT/)).toBeInTheDocument();
+  });
+
+  it("an unknown GIG status renders as itself, never hidden", () => {
+    render(
+      <TrackingBlock
+        order={order({ status: "shipped", tracking_carrier: "GIG", tracking_number: "X" })}
+        gig={{ status: "create_unconfirmed", last_scan: {}, last_tracked_at: null }}
+      />,
+    );
+    expect(screen.getByText("create_unconfirmed")).toBeInTheDocument();
+  });
+
   it("still shows real tracking on an on_hold order that has some", () => {
     // Omitting the hint must not omit facts: an order held after shipping still has a
     // consignment the customer can chase.

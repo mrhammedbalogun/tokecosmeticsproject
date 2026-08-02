@@ -1,0 +1,9 @@
+The GIG Logistics wallet is down to ₦{{ balance }}, below the ₦{{ threshold }} alert threshold.
+
+Every waybill debits its full delivery cost from this wallet the moment it is created.
+When the balance cannot cover a shipment, PAID orders stop shipping — the customer has
+paid, the parcel is packed, and the create-waybill button will refuse.
+
+Fund the wallet with GIG, then this alert re-arms automatically once the balance is back
+above the threshold. You are only sent this when the balance CROSSES into low — no
+repeat while it stays low.

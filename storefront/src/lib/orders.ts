@@ -28,6 +28,14 @@ export interface OrderDetail {
    * them in — "set" means non-empty, not "not undefined". Either one can be set without
    * the other (a carrier chosen before the consignment number exists). */
   tracking_carrier: string; tracking_number: string;
+  /** The latest GIG scan verbatim, or null for non-GIG orders and pre-waybill shipments
+   * (backend `OrderSerializer.get_gig_tracking`). Owner view only — deliberately absent
+   * from the redacted OrderTracking below. */
+  gig_tracking?: {
+    status: string;
+    last_scan: Record<string, unknown>;
+    last_tracked_at: string | null;
+  } | null;
 }
 
 /**
