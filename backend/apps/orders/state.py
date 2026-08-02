@@ -77,12 +77,19 @@ def _effects_for(to_status: str):
     Statuses absent from this table mail nothing on purpose. `on_hold` and `expired` are
     our words for our problems, not news for a customer.
     """
+    from apps.delivery.gig import shipments as gig_shipments
     from apps.orders import emails
 
     return {
         "processing": (emails.enqueue_order_confirmation,),
         "shipped": (emails.enqueue_shipped,),
         "delivered": (emails.enqueue_delivered,),
+        # Dead orders mail nothing (our words for our problems) but they do release a
+        # merely-quoted GIG shipment; one that reached capture keeps its state — the
+        # waybill and wallet debit are facts the reconciliation trail must keep.
+        "cancelled": (gig_shipments.abandon_quoted_shipment,),
+        "expired": (gig_shipments.abandon_quoted_shipment,),
+        "refunded": (gig_shipments.abandon_quoted_shipment,),
     }.get(to_status, ())
 
 

@@ -103,6 +103,15 @@ def test_checkout_with_gig_charges_the_live_quote(django_user_model):
     assert order.shipping_total == Decimal("4175.20")
     assert order.delivery_option_name == "Door Delivery (GIG)"
 
+    # Slice 4: the shipment is born quoted, in the same transaction, with the
+    # checkout-time snapshot fulfilment and reconciliation will read.
+    shipment = order.gig_shipment
+    assert shipment.status == "quoted"
+    assert shipment.charged == Decimal("4175.20")
+    assert shipment.quote["breakdown"]["GrandTotal"] == 4175.2
+    assert shipment.quote["api_id"] == "q-1"
+    assert shipment.cost is None  # nothing debited until capture
+
 
 @override_settings(**SETTINGS)
 @respx.mock

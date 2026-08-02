@@ -155,6 +155,12 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             from apps.shipping.models import ShippingQuote
 
             ShippingQuote.objects.create(order=order, currency=country.currency)
+        if chosen["kind"] == "carrier" and chosen.get("carrier_code") == "gig":
+            # Same reasoning as ShippingQuote above: the GigShipment row is how
+            # fulfilment learns this order ships via GIG, so it is born with the order.
+            from apps.delivery.gig.shipments import create_quoted_shipment
+
+            create_quoted_shipment(order, chosen, charged=totals.delivery)
         for variant, qty in lines:
             rp = resolve_price(variant, country)
             OrderItem.objects.create(

@@ -70,6 +70,58 @@ class GigLga(TimeStampedModel):
         return f"{self.state_name}/{self.lga_name} ({flags})"
 
 
+class GigShipment(TimeStampedModel):
+    """One order's GIG story, from checkout quote to delivered parcel (Plan-32a
+    slice 4) — and the wallet-reconciliation trail Plan-20 reports aggregate.
+
+    Born at ORDER PLACEMENT (status `quoted`, same transaction as the order —
+    mirror of ShippingQuote's reasoning: created later it would be an absence,
+    and absences are invisible). Enriched at capture with the waybill and the
+    debited cost; advanced by the tracking poll.
+
+    `cost` and `charged` are deliberately separate columns: cost is what GIG
+    debits the wallet (the quote's GrandTotal), charged is what the customer
+    paid us (0.00 under free_over, maybe marked-up someday). At reconciliation
+    time their difference is exactly what we absorbed or earned.
+
+    `create_unconfirmed` is the timeout limbo (plan ruling 1): the capture call
+    timed out, GIG may or may not have created a waybill — and a retry could
+    debit twice and dispatch two riders, so NOTHING retries automatically. A
+    human checks with GIG (quoting `capture_api_id`) and resolves by hand.
+    `abandoned` = the order died before capture; terminal, costs nothing.
+    """
+
+    STATUSES = [
+        ("quoted", "Quoted"),
+        ("created", "Waybill created"),
+        ("in_transit", "In transit"),
+        ("delivered", "Delivered"),
+        ("create_unconfirmed", "Capture unconfirmed — check with GIG"),
+        ("abandoned", "Abandoned"),
+    ]
+    # Nothing moves these forward: no capture may happen from them.
+    TERMINAL = frozenset({"delivered", "abandoned"})
+
+    order = models.OneToOneField(
+        "orders.Order", on_delete=models.PROTECT, related_name="gig_shipment"
+    )
+    status = models.CharField(max_length=20, default="quoted", choices=STATUSES)
+    quote = models.JSONField(default=dict)  # {price, breakdown, api_id} from checkout time
+    cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    charged = models.DecimalField(max_digits=12, decimal_places=2)
+    waybill = models.CharField(max_length=40, blank=True)
+    capture_api_id = models.CharField(max_length=64, blank=True)
+    label_url = models.URLField(blank=True)
+    last_scan = models.JSONField(default=dict)  # newest raw tracking entry, verbatim
+    last_tracked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "GIG shipment"
+
+    def __str__(self) -> str:
+        return f"{self.order_id}: {self.status}" + (f" ({self.waybill})" if self.waybill else "")
+
+
 class DeliveryOptionRate(models.Model):
     """Optional weight tiers. If an option has no rates, its flat `price` applies."""
 
