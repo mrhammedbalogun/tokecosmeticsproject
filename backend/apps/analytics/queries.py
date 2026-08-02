@@ -228,6 +228,45 @@ def top_customers(window: Range, limit: int = 10) -> list[dict]:
     )
 
 
+def customer_totals(user_id: int) -> list[dict]:
+    """One customer's ALL-TIME orders and lifetime value, per currency.
+
+    ── THE OTHER HALF OF THE SHARED LAYER (Plan-18b) ───────────────────────────────
+
+    `top_customers` above answers "who spent most in this window"; this answers "what is
+    this one person worth". Both sit on `REVENUE_STATUSES`, which is the point: a customer
+    detail page whose lifetime value disagreed with the top-customers report would make
+    both numbers untrustworthy, and neither screen would be obviously the wrong one.
+
+    NO WINDOW. Lifetime means lifetime — a windowed LTV is a contradiction, and support
+    asking "is this a good customer" wants the whole history.
+
+    CLAIMED ORDERS ONLY (`user_id`), never a match on the email string. Guest orders
+    sharing an address are surfaced separately and deliberately un-summed: attributing
+    them here would put money against a person who has not proved the address is theirs,
+    which is the same claim `apps/accounts/claims.py` refuses to make.
+    """
+    return list(
+        Order.objects.filter(user_id=user_id, status__in=REVENUE_STATUSES)
+        .values("currency_id")
+        .annotate(orders=Count("id"), lifetime_value=Coalesce(Sum("grand_total"), _ZERO))
+        .order_by("currency_id")
+    )
+
+
+def unclaimed_guest_orders(email: str) -> int:
+    """Orders carrying this email that belong to NO account.
+
+    Support's most common real question about a migrated customer — "why can't they see
+    their old orders?" — and the answer is almost always that they have not verified the
+    address yet. Reported as a count next to the lifetime value, never added into it.
+    """
+    email = (email or "").strip()
+    if not email:
+        return 0
+    return Order.objects.filter(user__isnull=True, email__iexact=email).count()
+
+
 def coupon_performance(window: Range) -> list[dict]:
     """Redemptions and the discount they gave away, per coupon.
 

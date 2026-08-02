@@ -173,6 +173,10 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # editing site structure. Wrong here is worse than missing — a bad row silently sends
     # traffic somewhere it never asked to go.
     "RedirectAdminViewSet": "cms.manage",
+    # --- customers (Plan-18b). The scope existed from Plan-16 and only global search
+    # used it; this is the list and detail it was granted for. Read-only by design —
+    # see the viewset docstring.
+    "CustomerAdminViewSet": "customers.view",
     # Banners and the homepage running order are CAMPAIGN material, not legally
     # load-bearing copy — rbac.py argues the split. A content editor must not be able to
     # override a live campaign's placement.

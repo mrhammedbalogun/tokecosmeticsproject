@@ -92,6 +92,10 @@ MATRIX: list[Row] = [
     Row("PageAdminViewSet", "get", "/api/v1/admin/pages/", _CONTENT),
     Row("MenuItemAdminViewSet", "get", "/api/v1/admin/menu-items/", _CONTENT),
     Row("RedirectAdminViewSet", "get", "/api/v1/admin/redirects/", _CONTENT),
+    # --- customers: Support holds customers.view, because answering a customer's
+    # question is the job. Content does not.
+    Row("CustomerAdminViewSet", "get", "/api/v1/admin/customers/",
+        {"Owner", "Manager", "Support"}),
     # Campaign material: Manager can run a promotion, a copywriter cannot.
     Row("BannerAdminViewSet", "get", "/api/v1/admin/banners/", _MANAGERS),
     Row("HomepageSectionAdminViewSet", "get", "/api/v1/admin/homepage-sections/", _MANAGERS),

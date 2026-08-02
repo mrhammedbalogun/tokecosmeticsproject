@@ -10,13 +10,18 @@ appear in the guard's explicit `PUBLIC_ADMIN_ROUTES` allowlist, which is what ma
 "public" a recorded decision rather than an absence.
 """
 from django.urls import path
+from rest_framework.routers import SimpleRouter
 
+from .customer_admin import CustomerAdminViewSet
 from .views import (
     StaffInviteAcceptView,
     StaffInviteListCreateView,
     StaffInviteRevokeView,
     StaffListView,
 )
+
+router = SimpleRouter()
+router.register("customers", CustomerAdminViewSet, basename="admin-customer")
 
 urlpatterns = [
     # The roster. Before `staff/invites/` only for readability; the paths cannot collide.
@@ -29,4 +34,4 @@ urlpatterns = [
         StaffInviteRevokeView.as_view(),
         name="admin-staff-invite-revoke",
     ),
-]
+] + router.urls

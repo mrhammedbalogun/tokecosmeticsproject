@@ -570,6 +570,10 @@ READ_ONLY_VIEWS = frozenset(
         # neither writes anything, so neither has a write case.
         "ReportView",
         "ReportExportView",
+        # Plan-18b: the customer list and detail are GET-only by design (the viewset
+        # docstring argues why editing a customer does not belong here), so there is no
+        # write case. Read-audited — declared in test_audit_guard.READ_AUDITED_VIEWS.
+        "CustomerAdminViewSet",
         "AdminOrderListView",
         "AdminOrderDetailView",
         "AdminRefundsOwedView",

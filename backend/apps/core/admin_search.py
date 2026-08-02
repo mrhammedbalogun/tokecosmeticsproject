@@ -284,12 +284,6 @@ def _product_row(product) -> dict:
     }
 
 
-def _customers_base() -> QuerySet:
-    from django.contrib.auth import get_user_model
-
-    return get_user_model().objects.admin_visible()
-
-
 def _product_match(term: str) -> Q:
     """Name, or the SKU of any variant — as a SUBQUERY, not as an OR across the join.
 
@@ -332,9 +326,11 @@ SEARCH_SOURCES: tuple[SearchSource, ...] = (
     ),
     SearchSource(
         key="customers",
-        list_view_path=None,
-        declared_scope="customers.view",
-        base=_customers_base,
+        # Plan-18b routed the list this always anticipated, so the scope is DERIVED from
+        # it like every other section rather than declared here. `base` stays: the search
+        # and the list share one queryset function, which is what stops their exclusions
+        # drifting apart.
+        list_view_path="apps.accounts.customer_admin.CustomerAdminViewSet",
         match=lambda term: (
             Q(toke_id__icontains=term)
             | Q(email__icontains=term)

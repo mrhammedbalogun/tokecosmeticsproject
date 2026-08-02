@@ -339,50 +339,51 @@ def test_every_section_scope_comes_from_its_own_list_endpoint():
         )
 
 
-def test_the_customers_section_is_the_only_underived_one_and_it_is_pinned():
-    """HONEST EXCEPTION, and the guard that keeps it from becoming a hole.
+def test_customers_search_runs_the_list_views_own_queryset(api, matchable, monkeypatch):
+    """The exception this replaces is gone, and this is what the tripwire asked for.
 
-    There is no customer list or detail endpoint anywhere on the admin surface yet —
-    `customers.view` sits in the scope table with nothing behind it (Plan-18 builds the
-    page). So the customers section has no endpoint to derive its scope FROM, and it
-    declares one.
+    `customers` was the ONE search section whose scope was declared by hand instead of
+    derived from a list view, because no customers list endpoint existed. Plan-18b routed
+    one, the tripwire fired, and it named its own fix: point `list_view_path` at the
+    viewset, drop `declared_scope`, and add this parity test.
 
-    The direction that can hurt is a future customers endpoint choosing a DIFFERENT scope,
-    leaving search as the looser of the two.
-
-    ── THIS TEST USED TO CLAIM MORE THAN IT CHECKED (fixed 2026-08-01) ──────────────
-
-    `admin_search.py` says this "also fails the day a customers list view IS routed, which
-    is the day this exception should be deleted". It did not. The second assertion only
-    compared SCOPES, so routing an `AdminCustomerListView` gated on `customers.view` — the
-    same scope search declares — passed in silence, and the exception would have quietly
-    outlived the condition that justified it.
-
-    Found by a Fable review during Plan-20 planning, and worth stating plainly because it
-    is the fourth time this project has found a comment describing a control nobody built.
-    The assertion below is now `not others`: any routed view in the `customers.` family
-    fails this test, whatever scope it holds, which is what the docstring always promised.
-    Today it is vacuously true — there are no such views.
+    Written as a MUTATION rather than a queryset comparison, matching the orders test
+    above: emptying the list view's queryset must empty the search section, which fails if
+    anybody later replaces the shared `_customers_base` with a hand-written queryset that
+    merely happens to match today. That drift is exactly what a customer list and a
+    customer search disagreeing would be — whichever showed more would be a way around the
+    other.
     """
-    from apps.accounts.tests.test_admin_surface_guard import ADMIN_SURFACE
+    from django.contrib.auth import get_user_model
 
-    customers = next(s for s in SEARCH_SOURCES if s.key == "customers")
-    assert customers.list_view_path is None, (
-        "a customers list endpoint now exists — point the search source at it and delete "
-        "the declared scope, so the derivation covers this section too"
+    from apps.accounts.customer_admin import CustomerAdminViewSet
+
+    monkeypatch.setattr(
+        CustomerAdminViewSet, "get_queryset", lambda self: get_user_model().objects.none()
     )
-    others = {
-        name: scope
-        for name, scope in ADMIN_SURFACE.items()
-        if (scope or "").startswith("customers.") and name != "AdminSearchView"
-    }
-    assert not others, (
-        f"a customers endpoint is now routed ({others}) — this exception should be "
-        f"deleted: point the search source's `list_view_path` at it, drop "
-        f"`declared_scope`, and let the derivation cover this section like every other. "
-        f"Add the queryset-parity test too; `_customers_base` was always meant to be "
-        f"shared with the list endpoint."
+    response = search(api)
+
+    assert response.data["customers"] == []
+    # The other sections are untouched, which is what shows the emptiness came from the
+    # patched queryset rather than from the search failing wholesale.
+    assert response.data["orders"], "only the customers section should have been affected"
+
+
+def test_STAFF_ARE_NOT_CUSTOMERS_in_search_either(api, django_user_model):
+    """The staff exclusion lives in `_customers_base`, so it applies to BOTH screens.
+
+    Putting it only on the list would have left global search as the way around it — a
+    support agent typing a colleague's name into the search box and getting their contact
+    details from a section scoped for customers.
+    """
+    django_user_model.objects.create_user(
+        email="colleague@toke.test", password="x", is_staff=True, first_name="Zeddicus"
     )
+
+    response = search(api, term="Zeddicus")
+
+    assert response.data["customers"] == []
+
 
 
 # --- 4. enumeration hygiene --------------------------------------------------
