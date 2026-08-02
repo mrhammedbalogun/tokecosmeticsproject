@@ -1,0 +1,1820 @@
+[
+ {
+  "LGAName": "AFAHA OFFOT",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "AKA OFFOT",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "AKA ROAD",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "ANUA OFFOT",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "ATIKU ABUBAKAR AVENUE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "EKAMBA NSUKARA",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "EKPRI NSUKARA",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "FOUR LANE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "IBB AVENUE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "IDORO ROAD",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "IKOT EKPENE ROAD, UYO",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "IKPA ROAD",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "ITU ROAD",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Itam",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "MBAK ROAD",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "MBIABONG",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "NWANIBA ROAD",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "ORON ROAD,UYO",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "OSONGOMA ESTATE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "SHELTER AFRIQUE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "TWO LANE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "UDO ETTE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "UDO\u00a0UDOMA\u00a0AVENUE",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "USE OFFOT",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "UYO OFFOT",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "WELLINGTON BASSEY WAY, UYO",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Aba",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Aba North",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Aba South",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Arochukwu",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Bende",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ikwuano",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Isiala Ngwa North",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Isiala Ngwa South",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Isuikwuato",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obi Ngwa",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obi Ngwa",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ohafia",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Osisioma",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ugwunagbo",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ukwa East",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ukwa West",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Umu Nneochi",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Umuahia North",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Umuahia South",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Demsa",
+  "LGAState": "Adamawa",
+  "StateId": 2,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Yola South",
+  "LGAState": "Adamawa",
+  "StateId": 2,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Abak",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Eastern Obolo",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Eket",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibiono Ibom",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ikot Ekpene",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obot Akara",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Uyo",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Onitsha North",
+  "LGAState": "Anambra",
+  "StateId": 4,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Onitsha South",
+  "LGAState": "Anambra",
+  "StateId": 4,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oyi",
+  "LGAState": "Anambra",
+  "StateId": 4,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Bauchi",
+  "LGAState": "Bauchi",
+  "StateId": 5,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Yenagoa",
+  "LGAState": "Bayelsa",
+  "StateId": 6,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Makurdi",
+  "LGAState": "Benue",
+  "StateId": 7,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Abadam",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Askira/Uba",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Bama",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Bayo",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Biu",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Chibok",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Damboa",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Dikwa",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gubio",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Guzamala",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gwoza",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Hawul",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Jere",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kaga",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kala/Balge",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Konduga",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kukawa",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kwaya Kusar",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Mafa",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Magumeri",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Maiduguri",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Marte",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Mobbar",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Monguno",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ngala",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Nganzai",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Shani",
+  "LGAState": "Borno",
+  "StateId": 8,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Abi",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Akamkpa",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Akpabuyo",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Bakassi",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Bekwarra",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Biase",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Boki",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Calabar Municipal",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Calabar South",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Etung",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ikom",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obanliku",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obubra",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obubra",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obudu",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Odukpani",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ogoja",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Yakuur",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Yala",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Oshimili North",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oshimili South",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Uvwie",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Warri North",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Warri South",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ikpoba Okha",
+  "LGAState": "EDO",
+  "StateId": 12,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ikpoba-Okha",
+  "LGAState": "EDO",
+  "StateId": 12,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ikpoba-Okha",
+  "LGAState": "EDO",
+  "StateId": 12,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ikpoba/Okha",
+  "LGAState": "EDO",
+  "StateId": 12,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ovia North East",
+  "LGAState": "EDO",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abakaliki",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Afikpo North",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Afikpo South (Edda)",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ebonyi",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ezza North",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ezza South",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ikwo",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ishielu",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ivo",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Izzi",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ohaozara",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ohaukwu",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Onicha",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Egor",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oredo",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ovia North-East",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Uhunmwonde",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "ikpoba-Okha",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ekiti East",
+  "LGAState": "Ekiti",
+  "StateId": 13,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Enugu East",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Enugu North",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Enugu South",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oji River",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "AMAC",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abaji",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abuja Municipal Area Council",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Bwari",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Gwagwalada",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Idogwari",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kubwa",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kuje",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kukwaba",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kwali",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lokogoma",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Municipal Area Coun",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Gombe",
+  "LGAState": "Gombe",
+  "StateId": 15,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Owerri Municipal",
+  "LGAState": "Imo",
+  "StateId": 16,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Owerri North",
+  "LGAState": "Imo",
+  "StateId": 16,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Owerri West",
+  "LGAState": "Imo",
+  "StateId": 16,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ringim",
+  "LGAState": "Jigawa",
+  "StateId": 17,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ahmedu Bello Bay",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Barnawa",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gonin gora",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Igabi\u00a0LGs",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kabala ",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kamozau",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Karji",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kawo",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kudenda",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Malali",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Mando",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Millenium city",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "NAF Base",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Rigachukwu",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Romi",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Sabo",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Trikania",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ungwan Dosa",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ungwan Rimi",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ungwan Sarki",
+  "LGAState": "KADUNA",
+  "StateId": 18,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Nassarawa",
+  "LGAState": "KANO",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Chikun",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Igabi",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kaduna North",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kaduna South",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Dala",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Fagge",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Gwale",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kakuri",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kano Municipal",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kumbotso",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Narayi",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Tarauni",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ungogo",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Katsina",
+  "LGAState": "Katsina",
+  "StateId": 20,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gwandu",
+  "LGAState": "Kebbi",
+  "StateId": 21,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Lokoja",
+  "LGAState": "Kogi",
+  "StateId": 22,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Asa",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Baruten",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Edu",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ekiti",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ifelodun",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ilorin East",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ilorin South",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ilorin West",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Irepodun",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Isin",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kaiama",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Moro",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Offa",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Oke Ero",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Oyun",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Pategi",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ajeromi/Ifelodun",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ifako/Ijaye",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lagos/Island",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oshodi/Isolo",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Agege",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ajeromi Ifelodun",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Alimosho",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Amuwo Odofin",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Apapa",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Eti Osa",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibeju Lekki",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ifako Ijaye",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ikeja",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ikorodu",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kosofe",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lagos Island",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lagos Mainland",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Mushin",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oshodi Isolo",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Shomolu",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Surulere",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Karu",
+  "LGAState": "Nasarawa",
+  "StateId": 25,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lafia",
+  "LGAState": "Nasarawa",
+  "StateId": 25,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Abeokuta North",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abeokuta South",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ado-Odo/Ota",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ifo",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ijebu Ode",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Akure North",
+  "LGAState": "Ondo",
+  "StateId": 28,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Akure South",
+  "LGAState": "Ondo",
+  "StateId": 28,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ede North",
+  "LGAState": "Osun",
+  "StateId": 29,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ife Central",
+  "LGAState": "Osun",
+  "StateId": 29,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Osogbo",
+  "LGAState": "Osun",
+  "StateId": 29,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Akinyele",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan North",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan North East",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan South East",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan South West",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ido",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Surulere",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Jos East",
+  "LGAState": "Plateau",
+  "StateId": 31,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Jos North",
+  "LGAState": "Plateau",
+  "StateId": 31,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Jos South",
+  "LGAState": "Plateau",
+  "StateId": 31,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Obio Akpor",
+  "LGAState": "RIVERS",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Port-Harcourt",
+  "LGAState": "RIVERS",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abua/Odual",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ahoada East",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ahoada West",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Akuku Toru",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Andoni",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Asari Toru",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Bonny",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Degema",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Eleme",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Emuoha",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Etche",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gokana",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ikwerre",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Khana",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Obio/Akpor",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ogba/Egbema/Ndoni",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Ogu/Bolo",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Okrika",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Omuma",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Opobo/Nkoro",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Oyigbo",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Port Harcourt",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Tai",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Binji",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Bodinga",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Dange Shuni",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Gada",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Goronyo",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gudu",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gwadabawa",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Illela",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Isa",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kebbe",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Kware",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Rabah",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Sabon Birni",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Shagari",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Silame",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Sokoto North",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Sokoto South",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Tambuwal",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Tangaza",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Tureta",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Wamako",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Wurno",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Yabo",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Jalingo",
+  "LGAState": "Taraba",
+  "StateId": 34,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Damaturu",
+  "LGAState": "Yobe",
+  "StateId": 35,
+  "HomeDeliveryStatus": false
+ },
+ {
+  "LGAName": "Gusau",
+  "LGAState": "Zamfara",
+  "StateId": 36,
+  "HomeDeliveryStatus": false
+ }
+]

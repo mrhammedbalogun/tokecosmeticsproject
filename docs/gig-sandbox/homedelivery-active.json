@@ -1,0 +1,620 @@
+[
+ {
+  "LGAName": "Itam",
+  "LGAState": "AKWA IBOM",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Aba",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Aba North",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Aba South",
+  "LGAState": "Abia",
+  "StateId": 1,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Eket",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibiono Ibom",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Uyo",
+  "LGAState": "Akwa Ibom",
+  "StateId": 3,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Onitsha South",
+  "LGAState": "Anambra",
+  "StateId": 4,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oyi",
+  "LGAState": "Anambra",
+  "StateId": 4,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Bauchi",
+  "LGAState": "Bauchi",
+  "StateId": 5,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Yenagoa",
+  "LGAState": "Bayelsa",
+  "StateId": 6,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Calabar Municipal",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Calabar South",
+  "LGAState": "Cross River",
+  "StateId": 9,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oshimili North",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oshimili South",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Uvwie",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Warri South",
+  "LGAState": "Delta",
+  "StateId": 10,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ovia North East",
+  "LGAState": "EDO",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abakaliki",
+  "LGAState": "Ebonyi",
+  "StateId": 11,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Egor",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oredo",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ovia North-East",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "ikpoba-Okha",
+  "LGAState": "Edo",
+  "StateId": 12,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Enugu East",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Enugu North",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Enugu South",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oji River",
+  "LGAState": "Enugu",
+  "StateId": 14,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "AMAC",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abaji",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abuja Municipal Area Council",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Bwari",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Gwagwalada",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Idogwari",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kubwa",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kuje",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kukwaba",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kwali",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lokogoma",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Municipal Area Coun",
+  "LGAState": "FCT",
+  "StateId": 37,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Owerri Municipal",
+  "LGAState": "Imo",
+  "StateId": 16,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Owerri North",
+  "LGAState": "Imo",
+  "StateId": 16,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Nassarawa",
+  "LGAState": "KANO",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Chikun",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Igabi",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kaduna North",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kaduna South",
+  "LGAState": "Kaduna",
+  "StateId": 18,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Dala",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Fagge",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Gwale",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kano Municipal",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kumbotso",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Tarauni",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ungogo",
+  "LGAState": "Kano",
+  "StateId": 19,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ilorin East",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ilorin South",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ilorin West",
+  "LGAState": "Kwara",
+  "StateId": 23,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ajeromi/Ifelodun",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ifako/Ijaye",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lagos/Island",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oshodi/Isolo",
+  "LGAState": "LAGOS",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Agege",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ajeromi Ifelodun",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Alimosho",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Amuwo Odofin",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Apapa",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Eti Osa",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibeju Lekki",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ifako Ijaye",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ikeja",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ikorodu",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Kosofe",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lagos Island",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Lagos Mainland",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Mushin",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Oshodi Isolo",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Shomolu",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Surulere",
+  "LGAState": "Lagos",
+  "StateId": 24,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Karu",
+  "LGAState": "Nasarawa",
+  "StateId": 25,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abeokuta North",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Abeokuta South",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ijebu Ode",
+  "LGAState": "Ogun",
+  "StateId": 27,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Akure North",
+  "LGAState": "Ondo",
+  "StateId": 28,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Akure South",
+  "LGAState": "Ondo",
+  "StateId": 28,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ede North",
+  "LGAState": "Osun",
+  "StateId": 29,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Osogbo",
+  "LGAState": "Osun",
+  "StateId": 29,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Akinyele",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan North",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan North East",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan South East",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ibadan South West",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Ido",
+  "LGAState": "Oyo",
+  "StateId": 30,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Jos East",
+  "LGAState": "Plateau",
+  "StateId": 31,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Jos North",
+  "LGAState": "Plateau",
+  "StateId": 31,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Jos South",
+  "LGAState": "Plateau",
+  "StateId": 31,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Obio Akpor",
+  "LGAState": "RIVERS",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Port-Harcourt",
+  "LGAState": "RIVERS",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Eleme",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Obio/Akpor",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Port Harcourt",
+  "LGAState": "Rivers",
+  "StateId": 32,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Dange Shuni",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Sokoto North",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Sokoto South",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ },
+ {
+  "LGAName": "Wamako",
+  "LGAState": "Sokoto",
+  "StateId": 33,
+  "HomeDeliveryStatus": true
+ }
+]

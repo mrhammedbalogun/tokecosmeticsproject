@@ -200,6 +200,100 @@ documents `0 | 1 | 4`), token lifetime, and whether the wallet is debited at cap
 
 ---
 
+## 2d. SANDBOX VERIFICATION 2026-08-02 — measured, not read
+
+Run against `dev-thirdpartynode.theagilitysystems.com` with the credentials GIG issued
+(`GIG_EMAIL`/`GIG_PASSWORD` in `backend/.env`). Account: `ECO038082`, role
+`ThirdPartyCustomers`, designation Ecommerce. Coverage snapshots saved to
+`docs/gig-sandbox/`. GIG also clarified: **TempCode and Waybill are the same kind of
+identifier** — TempCode means we drop off at a GIG experience centre, Waybill means GIG
+picks up from us.
+
+### What works, exactly as we need it to
+
+- **Login → price/v3 → capture/preshipment → track → get/preshipment, end to end.**
+  A sandbox shipment (Waybill `1349113095`) was created, tracked (status `MCRT`,
+  "ECOMMERCE HOME DELIVERY") and fetched.
+- **`/lga/active` and `/homedelivery/active`** — blank in the docs — work with a
+  **`StateId` filter** (every other query param is rejected by a strict validator;
+  unfiltered they cap at 50 rows).
+
+### THE PRECISION ANSWER: an LGA-centroid table is enough
+
+Same 0.5 kg parcel, sender fixed at Gbagada (the test account's address):
+
+| destination | GrandTotal (₦) |
+|---|---|
+| Ikeja **LGA centroid** | 5,996.54 |
+| Ikeja, Computer Village | 5,911.36 |
+| Ikeja, Alausa | 6,113.31 |
+| Ikeja, Oregun | 5,977.66 |
+| Abuja **AMAC centroid** | 11,391.32 |
+| Abuja, Wuse 2 | **11,391.32** |
+| Abuja, Garki | **11,391.32** |
+| Port Harcourt | **11,391.32** |
+| Kano | 12,955.50 |
+
+Intra-Lagos, street-level points differ from the LGA centroid by ~2–3%, and the centroid
+sits *inside* the street-point range. Inter-state, coordinates stop mattering entirely —
+three different Abuja points and Port Harcourt price **identically**; pricing is
+zone-banded. **Ruling: geocode via a static LGA → centroid table. No checkout change, no
+per-lookup geocoding bill.** (Centroid source: a public LGA dataset, e.g. GRID3 — 774
+rows computed once at implementation time.)
+
+### Facts the docs get wrong, measured live
+
+1. **The response envelope is single-nested** — `{message, apiId, status, data}` at the
+   top level. The docs' outer `{"success": true, "data": …}` wrapper does not exist.
+2. **`ShipmentType` must be `1`** (Regular). The documented `2=Ecommerce` is rejected:
+   `"must be one of [1, 0]"`, and `0` demands a `SpecialPackageId`.
+3. **The capture body is nested** into `SenderDetails` / `ReceiverDetails` /
+   `ShipmentDetails` / `ShipmentItems` — the docs' section headings are literal. Field
+   names shift between endpoints (`PickUpOptions` on price/v3, `PickupOptions` on
+   dropOff; `SenderStationId` vs `DepartureStationId`).
+4. **The WAF 403s non-browser User-Agents** — python-urllib's default is blocked; any
+   ordinary UA passes. The client must set one.
+
+### Pricing behaviour (sandbox rates)
+
+- **`VehicleType` dominates**: Bike ₦3,691 / Car ₦5,911 / Van ₦26,354 for the same
+  intra-Lagos parcel. (Truck prices at ₦2,767 — a haulage-rate artifact, not an option.)
+  **Default: Bike (1)**, pending GIG's confirmation.
+- **Weight is ignored** from 0.3 kg to 5 kg — same price to the kobo. Pricing is
+  vehicle + zone, so our missing-dimensions worry (§5) shrinks, though the 8 weightless
+  variants should still be fixed.
+- **`GrandTotal` does not reconcile from its parts** (confirmed on live calls, different
+  residues on different routes). Authoritative, never recomputed. ✔ as §7 suspected.
+- **The tracked shipment's `Amount` (₦2,691.11) = quote GrandTotal (₦3,691.11) minus the
+  ₦1,000 `SurchargeFee`.** Which figure the wallet is debited is now a question for GIG.
+
+### Coverage is real and NOT nationwide (`docs/gig-sandbox/`)
+
+- 46 stations; **303 active LGAs** of Nigeria's 774; **home delivery in only 103 LGAs**
+  (Lagos 17, FCT 12, Kano 7, Oyo 6…). The unfiltered endpoints report higher `count`
+  values (497/293) that include rows the StateId sweep never returns — presumably
+  inactive; treat 303/103 as the working set.
+- Consequence for checkout: **GIG home delivery is an option, not the option.** LGAs
+  without home delivery need service-centre pickup or the existing flat-rate manual
+  options; the fallback story in §6 is now a coverage story too.
+
+### Broken or unverifiable in sandbox — the new questions for GIG
+
+1. **`create/dropOff` returns 401 "Failure"** on every structurally-valid body. The
+   account appears not enabled for the drop-off flow, so the TempCode ⇄ Waybill claim
+   (tracking, labels) could not be exercised. Is drop-off available to Ecommerce
+   third-party accounts, and can the sandbox enable it?
+2. **`invoice/generate` → 401 "Shipment Details Not Found"** immediately after a
+   successful capture. When in the lifecycle does the label become available?
+3. **Which amount is debited** — the quoted GrandTotal or the tracked Amount (− surcharge)?
+4. **`WalletAmount` is `null`** on the sandbox account, so debit timing and
+   insufficient-balance behaviour could not be tested. Can the sandbox wallet be funded?
+5. The sandbox resolved a Lagos-coordinate sender to departure centre "NSUKKA" — test-data
+   quirk, or does the sender's service centre come from account config rather than
+   coordinates?
+
+---
+
 ## 3. The two flows — original analysis, superseded by §2b
 
 ### Flow A — PreShipment Mobile (GIG collects from us)
