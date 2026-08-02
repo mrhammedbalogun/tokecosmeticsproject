@@ -202,6 +202,13 @@ documents `0 | 1 | 4`), token lifetime, and whether the wallet is debited at cap
 
 ## 2d. SANDBOX VERIFICATION 2026-08-02 — measured, not read
 
+**RULING 2026-08-02 (Toke team):** GIG **picks up from the office** — the Waybill /
+`capture/preshipment` flow, exactly the one verified below. The drop-off flow, its
+TempCode, and the `create/dropOff` 401 all become irrelevant; question 1 below is
+withdrawn. New question in its place: **how is pickup triggered** — does a captured
+preshipment automatically queue for collection at our registered address (`IsBatchPickUp`?),
+and is that also why the sandbox resolved a Lagos sender to departure centre "NSUKKA"?
+
 Run against `dev-thirdpartynode.theagilitysystems.com` with the credentials GIG issued
 (`GIG_EMAIL`/`GIG_PASSWORD` in `backend/.env`). Account: `ECO038082`, role
 `ThirdPartyCustomers`, designation Ecommerce. Coverage snapshots saved to
