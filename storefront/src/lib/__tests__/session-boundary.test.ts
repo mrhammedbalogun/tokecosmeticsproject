@@ -50,7 +50,11 @@ function importsAWritingFetcher(source: string): boolean {
 }
 
 describe("cookie-writing fetchers stay out of Server Components", () => {
-  it("is only imported from Route Handlers", () => {
+  // 30s, not vitest's 5s default: this walks the whole source tree, and on /mnt/c
+  // (WSL's NTFS bridge) that I/O intermittently loses a race with a running dev
+  // server. It passes alone in ~2.4s; the timeout is headroom, not slowness
+  // (Plan-25's "noted, not fixed", now fixed).
+  it("is only imported from Route Handlers", { timeout: 30_000 }, () => {
     const offenders = walk(SRC)
       .filter((file) => file !== join(SRC, "lib", "session.ts"))
       .filter((file) => {
@@ -65,7 +69,7 @@ describe("cookie-writing fetchers stay out of Server Components", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("actually finds the Route Handlers that do use it (the scan is not vacuous)", () => {
+  it("actually finds the Route Handlers that do use it (the scan is not vacuous)", { timeout: 30_000 }, () => {
     const users = walk(SRC)
       .filter((file) => file !== join(SRC, "lib", "session.ts"))
       .filter((file) => importsAWritingFetcher(readFileSync(file, "utf8")));

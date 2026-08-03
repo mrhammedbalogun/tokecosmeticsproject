@@ -43,7 +43,11 @@ log "build and start"
 "${COMPOSE[@]}" up -d --build
 
 log "migrate"
-"${COMPOSE[@]}" exec -T web python manage.py migrate --noinput
+# Migrations run as the schema OWNER, not the runtime role: DDL needs ownership, and
+# the whole point of toke_app (create-app-role.sql, Plan-25 task 5) is that the running
+# app cannot alter tables or triggers. MIGRATE_DATABASE_URL is set in .env.prod once
+# the role split is applied; before that it is unset and this falls back unchanged.
+"${COMPOSE[@]}" exec -T web sh -c 'DATABASE_URL="${MIGRATE_DATABASE_URL:-$DATABASE_URL}" python manage.py migrate --noinput'
 
 log "collectstatic"
 "${COMPOSE[@]}" exec -T web python manage.py collectstatic --noinput
