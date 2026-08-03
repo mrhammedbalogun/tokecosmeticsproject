@@ -27,8 +27,23 @@ describe("the app root must not have a loading.tsx", () => {
 
   it("the routes that genuinely want a skeleton still have one", () => {
     // So that "delete the root one" is not quietly read as "loading states are banned".
-    for (const route of ["(shop)/products", "(shop)/product/[slug]", "(shop)/category/[slug]"]) {
+    // A LIST page can keep its skeleton: /products exists for every slug-less request,
+    // so its Suspense boundary never has a 404 to suppress.
+    for (const route of ["(shop)/products"]) {
       expect(existsSync(join(APP, route, "loading.tsx"))).toBe(true);
+    }
+  });
+
+  it("DETAIL routes must not have one either — a skeleton on a [slug] page is a soft 404", () => {
+    /**
+     * Same mechanism as the root case, scoped to the two routes that kept their own
+     * skeletons: the boundary commits 200 before the page can call notFound(), so a
+     * discontinued product answered 200 forever. Hammed ruled 2026-08-03: a truthful
+     * 404 on legacy product URLs (the migration's discontinued catalogue must drop out
+     * of Google) beats an instant skeleton on the heaviest pages.
+     */
+    for (const route of ["(shop)/product/[slug]", "(shop)/category/[slug]"]) {
+      expect(existsSync(join(APP, route, "loading.tsx"))).toBe(false);
     }
   });
 });
