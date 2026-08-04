@@ -11,26 +11,36 @@ import { FadeUp } from "@/components/motion/Motion";
  * leaves a bare heading. */
 export function ProductRow({
   title,
+  eyebrow,
   products,
   href,
   carousel = false,
+  compact = false,
 }: {
   title: string;
+  eyebrow?: string;
   products: ProductCardData[];
   href: string;
   carousel?: boolean;
+  /** Landing-card style: tall image, slim name+price+Add footer. */
+  compact?: boolean;
 }) {
   if (products.length === 0) return null;
   const cards = products.map((p) => (
     <div key={p.slug} className={carousel ? "w-[70vw] shrink-0 snap-start sm:w-72" : ""}>
-      <ProductCard product={p} />
+      <ProductCard product={p} compact={compact} />
     </div>
   ));
   return (
     <section aria-label={title} className="mx-auto max-w-7xl px-4 py-16">
       <FadeUp>
         <div className="flex items-end justify-between gap-4">
-          <h2 className="font-display text-3xl md:text-4xl">{title}</h2>
+          <div>
+            {eyebrow && (
+              <p className="mb-1 text-xs font-medium uppercase tracking-[0.18em] text-muted">{eyebrow}</p>
+            )}
+            <h2 className="font-display text-3xl md:text-4xl">{title}</h2>
+          </div>
           <Link
             href={href}
             className="shrink-0 text-sm font-medium text-accent transition-colors hover:text-accent-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"

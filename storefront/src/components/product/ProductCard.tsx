@@ -5,6 +5,7 @@ import { mediaUrl } from "@/lib/media";
 import { PriceTag } from "@/components/product/PriceTag";
 import { ReviewStars } from "@/components/product/ReviewStars";
 import { WishlistHeart } from "@/components/product/WishlistHeart";
+import { CardAddButton } from "@/components/product/CardAddButton";
 
 /** The one product card. Hover: image swaps to hover_image (pure CSS, no JS), the
  * artwork zooms gently, and the whole card lifts — the calm, "expensive" motion
@@ -21,9 +22,13 @@ function brandLabel(slug: string): string {
 export function ProductCard({
   product,
   priority = false,
+  compact = false,
 }: {
   product: ProductCardData;
   priority?: boolean;
+  /** Landing-page card (approved 2026-08-04): tall image, slim footer — one-line
+   * name + price + one-click Add. No brand line, no stars; those live on the PDP. */
+  compact?: boolean;
 }) {
   const img = mediaUrl(product.image);
   const hover = mediaUrl(product.hover_image);
@@ -63,18 +68,36 @@ export function ProductCard({
             </span>
           )}
         </div>
-        <div className="space-y-1.5 p-4">
-          {product.brand && (
-            <p className="text-xs uppercase tracking-wide text-muted">
-              {brandLabel(product.brand)}
-            </p>
-          )}
-          <h3 className="font-display text-base leading-snug">{product.name}</h3>
-          <ReviewStars rating={product.rating_avg} count={product.rating_count} />
-          {product.from_price && (
-            <PriceTag amount={product.from_price} currency={product.currency} from />
-          )}
-        </div>
+        {compact ? (
+          <div className="p-3">
+            <h3 className="truncate text-[13px] font-semibold leading-tight">{product.name}</h3>
+            <div className="mt-1.5 flex items-center justify-between gap-2">
+              {product.from_price ? (
+                <PriceTag amount={product.from_price} currency={product.currency} from />
+              ) : (
+                <span />
+              )}
+              <CardAddButton
+                variantId={product.default_variant_id}
+                name={product.name}
+                slug={product.slug}
+              />
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-1.5 p-4">
+            {product.brand && (
+              <p className="text-xs uppercase tracking-wide text-muted">
+                {brandLabel(product.brand)}
+              </p>
+            )}
+            <h3 className="font-display text-base leading-snug">{product.name}</h3>
+            <ReviewStars rating={product.rating_avg} count={product.rating_count} />
+            {product.from_price && (
+              <PriceTag amount={product.from_price} currency={product.currency} from />
+            )}
+          </div>
+        )}
       </Link>
     </div>
   );

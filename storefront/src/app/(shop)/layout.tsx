@@ -23,7 +23,7 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
 
   return (
     <>
-      <AnnouncementBar messages={announcements} />
+      <AnnouncementBar items={announcements} />
       <ScrollShrink />
       <CountrySuggestionBanner currentCountry={currentCountry} geoCountry={geoCountry} />
       <Header />

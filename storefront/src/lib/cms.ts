@@ -56,13 +56,32 @@ export interface CmsBanner {
   mobile_image: string | null;
   cta_text: string;
   cta_url: string;
+  /** Landing redesign: a hero banner may be a video; the image is its poster. */
+  video_url: string;
   placement: "hero" | "strip" | "category";
+  sort: number;
+}
+
+export interface GoogleReview {
+  id: number;
+  author: string;
+  location: string;
+  rating: number;
+  text: string;
+  review_url: string;
+  reviewed_at_text: string;
   sort: number;
 }
 
 export interface HomepagePayload {
   sections: HomepageSection[];
   banners: CmsBanner[];
+  reviews?: {
+    rating: string | null;
+    count_text: string;
+    profile_url: string;
+    items: GoogleReview[];
+  };
 }
 
 /**
@@ -92,10 +111,18 @@ export async function getHomepage(country: string): Promise<HomepagePayload | nu
 }
 
 /** The announcement strip's messages, falling back to the Plan-13 fixtures. */
-export function announcementsFrom(payload: HomepagePayload | null, fallback: string[]): string[] {
+export interface AnnouncementItem {
+  text: string;
+  url: string;
+}
+
+export function announcementsFrom(
+  payload: HomepagePayload | null,
+  fallback: string[],
+): AnnouncementItem[] {
   const strips = (payload?.banners ?? [])
     .filter((b) => b.placement === "strip")
     .sort((a, b) => a.sort - b.sort)
-    .map((b) => b.title);
-  return strips.length ? strips : fallback;
+    .map((b) => ({ text: b.title, url: b.cta_url }));
+  return strips.length ? strips : fallback.map((text) => ({ text, url: "" }));
 }

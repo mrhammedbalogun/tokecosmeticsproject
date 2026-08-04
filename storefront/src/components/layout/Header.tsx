@@ -33,6 +33,9 @@ export async function Header() {
           </Link>
         </div>
         <nav className="hidden items-center gap-6 md:flex">
+          <Link href="/products" className="text-sm hover:text-accent">
+            All Products
+          </Link>
           {categories.slice(0, 6).map((c) => (
             <Link key={c.slug} href={`/category/${c.slug}`} className="text-sm hover:text-accent">
               {c.name}

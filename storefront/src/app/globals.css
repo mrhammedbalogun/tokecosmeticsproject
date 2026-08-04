@@ -69,3 +69,14 @@ html[data-scrolled] header[data-site-header] .site-logo { transform: scale(0.85)
    zero JS for their effects. Every keyframe is gated behind motion-safe: utilities. */
 @keyframes heroZoom { from { transform: scale(1); } to { transform: scale(1.06); } }
 @keyframes announce { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
+
+/* News marquee (landing redesign): seamless loop = two copies translated -50%.
+   Hover pauses; reduced motion gets a static centred first item. */
+.announce-track { animation: marquee 28s linear infinite; }
+.announce-marquee:hover .announce-track { animation-play-state: paused; }
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) {
+  .announce-track { animation: none; width: 100%; justify-content: center; }
+  .announce-track > span:not(:first-child) { display: none; }
+}
+@keyframes heroTab { from { width: 0; } to { width: 100%; } }
