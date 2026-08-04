@@ -48,16 +48,33 @@ def _cache_key(region_id: int, weight_g: int) -> str:
     return f"gig:quote:v1:{region_id}:{max(1, math.ceil(weight_g / 1000))}"
 
 
-def coverage_region(address):
-    """The address's home-delivery-covered LGA region with a centroid, or None.
+def _pickup_cache_key(centre_id: int, weight_g: int) -> str:
+    # Keyed on the CENTRE, not the LGA: the receiver is the centre's own location.
+    return f"gig:quote:pickup:v1:{centre_id}:{max(1, math.ceil(weight_g / 1000))}"
 
-    Walks the address's regions (LGA first, then state — mirrors delivery
-    matching's ancestor logic in spirit, but coverage is LGA-granular so only
-    the area region can qualify)."""
+
+def receiver_point(address, region):
+    """The customer's pin when they set one (Plan-32b: door coordinates for the
+    rider), else the LGA centroid. Region is already validated to have one."""
+    if getattr(address, "latitude", None) is not None and getattr(address, "longitude", None) is not None:
+        return float(address.latitude), float(address.longitude)
+    return float(region.latitude), float(region.longitude)
+
+
+def coverage_region(address, *, home_delivery: bool = True):
+    """The address's GIG-covered LGA region with a centroid, or None.
+
+    `home_delivery=True` is the door-delivery precondition; `False` accepts any
+    active LGA — centre pickup works wherever GIG operates at all (their dev,
+    confirmed: non-home-delivery LGAs are pickup-only). Coverage is LGA-granular
+    so only the area region can qualify."""
     region = address.area_region
     if region is None or region.latitude is None or region.longitude is None:
         return None
-    if not region.gig_lgas.filter(is_active=True, home_delivery=True).exists():
+    lgas = region.gig_lgas.filter(is_active=True)
+    if home_delivery:
+        lgas = lgas.filter(home_delivery=True)
+    if not lgas.exists():
         return None
     return region
 
@@ -81,12 +98,9 @@ def quote_home_delivery(address, weight_g: int, declared_value: Decimal) -> GigQ
             "Latitude": settings.GIG_SENDER_LATITUDE,
             "Longitude": settings.GIG_SENDER_LONGITUDE,
         },
-        "ReceiverLocation": {
-            "Latitude": float(region.latitude),
-            "Longitude": float(region.longitude),
-        },
+        "ReceiverLocation": dict(zip(("Latitude", "Longitude"), receiver_point(address, region))),
         "VehicleType": settings.GIG_VEHICLE_TYPE,
-        "PickUpOptions": 0,  # home delivery; centre pickup is slice 32b
+        "PickUpOptions": 0,  # door delivery
         "ShipmentItems": [{
             "ItemName": "Cosmetics order",
             "Quantity": 1,
@@ -111,6 +125,47 @@ def quote_home_delivery(address, weight_g: int, declared_value: Decimal) -> GigQ
         logger.warning("gig quote malformed for region %s (apiId=%s)", region.id, result.api_id)
         return None
 
+    price = Decimal(str(payload["GrandTotal"])).quantize(TWO_DP)
+    cache.set(key, {"price": str(price), "breakdown": payload, "api_id": result.api_id},
+              QUOTE_CACHE_TTL)
+    return GigQuote(price=price, breakdown=payload, api_id=result.api_id, cache_key=key)
+
+
+def quote_centre_pickup(address, weight_g: int, declared_value: Decimal, centre) -> GigQuote | None:
+    """One cached-or-live pickup quote to a specific GigCentre, or None.
+
+    The centre's own coordinates are the receiver: the parcel travels to the
+    centre, and the customer's pin plays no part in what GIG charges. Coverage
+    precondition is only that the LGA is ACTIVE (pickup works wherever GIG
+    operates), which the caller has already established via coverage_region(
+    home_delivery=False)."""
+    if centre is None or centre.latitude is None or centre.longitude is None:
+        return None
+    key = _pickup_cache_key(centre.gig_centre_id, weight_g)
+    cached = cache.get(key)
+    if cached is not None:
+        return GigQuote(price=Decimal(cached["price"]), breakdown=cached["breakdown"],
+                        api_id=cached["api_id"], cache_key=key)
+    body = {
+        "SenderLocation": {"Latitude": settings.GIG_SENDER_LATITUDE,
+                           "Longitude": settings.GIG_SENDER_LONGITUDE},
+        "ReceiverLocation": {"Latitude": float(centre.latitude), "Longitude": float(centre.longitude)},
+        "VehicleType": settings.GIG_VEHICLE_TYPE,
+        "PickUpOptions": 1,  # customer collects from the centre
+        "ShipmentItems": [{"ItemName": "Cosmetics order", "Quantity": 1,
+                           "Weight": round(weight_g / 1000, 3) or 0.001,
+                           "ShipmentType": 1, "Value": float(declared_value),
+                           "IsVolumetric": False}],
+    }
+    try:
+        result = client.call("POST", "/price/v3", body, timeout=QUOTE_TIMEOUT_SECONDS, retries=0)
+    except client.GigError as exc:
+        logger.warning("gig pickup quote unavailable for centre %s: %s", centre.gig_centre_id, exc)
+        return None
+    payload = result.data.get("data", result.data) if isinstance(result.data, dict) else result.data
+    if not isinstance(payload, dict) or "GrandTotal" not in payload:
+        logger.warning("gig pickup quote malformed (apiId=%s)", result.api_id)
+        return None
     price = Decimal(str(payload["GrandTotal"])).quantize(TWO_DP)
     cache.set(key, {"price": str(price), "breakdown": payload, "api_id": result.api_id},
               QUOTE_CACHE_TTL)

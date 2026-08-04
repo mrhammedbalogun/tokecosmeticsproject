@@ -190,3 +190,93 @@ def test_free_over_zeroes_the_charge_but_not_the_cached_cost(ng, covered_ikeja, 
     assert gig["price"] == "0.00"  # customer pays nothing...
     cached = cache.get(_cache_key(covered_ikeja.id, 500))
     assert cached["price"] == "4175.20"  # ...but what GIG will cost us is unchanged
+
+
+# --- Plan-32b slice 2: pickup quoting, the pin, and the centres endpoint -------------
+
+
+@pytest.fixture
+def pickup_world(ng):
+    """Epe: active GIG LGA WITHOUT home delivery, centroid set, one nearby centre."""
+    from django.utils import timezone
+
+    epe = Region.objects.get(country_code="NG", level="area", name="Epe", parent__name="Lagos")
+    Region.objects.filter(pk=epe.pk).update(latitude="6.584200", longitude="3.983500")
+    epe.refresh_from_db()
+    GigLga.objects.create(state_name="Lagos", lga_name="Epe", gig_state_id=24, is_active=True,
+                          home_delivery=False, region=epe, synced_at=timezone.now())
+    from apps.delivery.models import GigCentre
+
+    centre = GigCentre.objects.create(gig_centre_id=901, gig_station_id=4, name="EPE CENTRE",
+                                      address="1 Epe Rd", latitude="6.5900", longitude="3.9800",
+                                      synced_at=timezone.now())
+    GigCentre.objects.create(gig_centre_id=902, gig_station_id=4, name="IKEJA FAR",
+                             address="Far", latitude="6.6186", longitude="3.3426",
+                             synced_at=timezone.now())
+    pickup = DeliveryOption.objects.get(carrier_code="gig", carrier_service="pickup")
+    pickup.is_active = True
+    pickup.save(update_fields=["is_active"])
+    return epe, centre
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_pickup_only_lga_offers_pickup_priced_to_the_nearest_centre(ng, gig_option, pickup_world):
+    epe, centre = pickup_world
+    route = respx.post(f"{BASE}/price/v3").mock(
+        return_value=httpx.Response(200, json=_quote_envelope(2500.0))
+    )
+    address = FakeAddress(area_region=epe, state_region=epe.parent)
+    options = _options(address, ng)
+    services = {o.get("carrier_service") for o in options if o["carrier_code"] == "gig"}
+    assert services == {"pickup"}  # home omitted: the LGA has no home delivery
+    import json as jsonlib
+
+    body = jsonlib.loads(route.calls[0].request.content)
+    assert body["PickUpOptions"] == 1
+    # Priced to the NEAREST centre's own coordinates (Epe, not Ikeja).
+    assert body["ReceiverLocation"] == {"Latitude": 6.59, "Longitude": 3.98}
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_the_pin_overrides_the_centroid_for_home_delivery(ng, covered_ikeja, gig_option):
+    route = respx.post(f"{BASE}/price/v3").mock(
+        return_value=httpx.Response(200, json=_quote_envelope(4175.2))
+    )
+
+    class PinnedAddress(FakeAddress):
+        latitude = "6.601000"
+        longitude = "3.351000"
+
+    address = PinnedAddress(area_region=covered_ikeja, state_region=covered_ikeja.parent)
+    _options(address, ng)
+    import json as jsonlib
+
+    body = jsonlib.loads(route.calls[0].request.content)
+    assert body["ReceiverLocation"] == {"Latitude": 6.601, "Longitude": 3.351}  # the pin
+    assert body["PickUpOptions"] == 0
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_gig_centres_endpoint_owns_addresses_and_sorts(ng, pickup_world, django_user_model):
+    from rest_framework.test import APIClient
+
+    from apps.accounts.models import Address
+
+    epe, centre = pickup_world
+    user = django_user_model.objects.create_user(email="pick@x.com", password="pw")
+    other = django_user_model.objects.create_user(email="other@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 Epe Road", country_code="NG",
+                                  state_region=epe.parent, area_region=epe)
+    api = APIClient()
+    api.force_authenticate(user)
+    r = api.get(f"/api/v1/checkout/gig-centres/?address_id={addr.id}")
+    assert r.status_code == 200
+    names = [c["name"] for c in r.json()]
+    assert names[0] == "EPE CENTRE"  # nearest first, address included
+    assert r.json()[0]["address"] == "1 Epe Rd"
+
+    api.force_authenticate(other)
+    assert api.get(f"/api/v1/checkout/gig-centres/?address_id={addr.id}").status_code == 404

@@ -57,6 +57,29 @@ class DeliveryOptionsView(APIView):
         return Response(priced_options_for_address(address, lines, totals.subtotal, request.country))
 
 
+class GigCentresView(APIView):
+    """GET /api/v1/checkout/gig-centres/?address_id= — the pickup picker's list:
+    active GIG centres sorted by distance from the address's pin (else its LGA
+    centroid). Own-address only, same pattern as DeliveryOptionsView; empty list
+    when the LGA has no active GIG coverage — the storefront then simply doesn't
+    offer pickup."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        from apps.delivery.gig.centres import nearest_centres
+        from apps.delivery.gig.quotes import coverage_region, receiver_point
+
+        address = get_object_or_404(
+            Address, pk=request.query_params.get("address_id"), user=request.user
+        )
+        region = coverage_region(address, home_delivery=False)
+        if region is None:
+            return Response([])
+        lat, lng = receiver_point(address, region)
+        return Response(nearest_centres(lat, lng, limit=6))
+
+
 class QuoteView(APIView):
     """Read-only totals + coupon preview (Plan-14). Never mutates."""
 
