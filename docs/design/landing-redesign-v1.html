@@ -1,0 +1,391 @@
+<title>Toke Cosmetics — Landing Redesign v1</title>
+<style>
+:root{
+  --cream:#fbf9f5; --beige:#f1eae0; --ink:#1a1a1a; --soft:#6b6862; --line:#e7e2d8;
+  --green:#1c7a3e; --green-d:#145f30; --leaf:#8cc63f; --gold:#c9a227; --white:#fff;
+  --r:0.75rem; --disp:'Playfair Display',Georgia,'Times New Roman',serif;
+  --sans:Inter,-apple-system,'Segoe UI',sans-serif;
+}
+*{box-sizing:border-box} html{scroll-behavior:smooth}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55}
+img{max-width:100%}
+/* full-bleed layout: content runs edge to edge with breathing room, no centered column */
+.wrap{width:100%;margin:0;padding:0 clamp(20px,3vw,48px)}
+h1,h2,h3{font-family:var(--disp);font-weight:600;text-wrap:balance;margin:0}
+.eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--soft);font-weight:600}
+.btn{display:inline-block;background:var(--green);color:#fff;border:none;border-radius:999px;padding:12px 28px;font:600 13px var(--sans);letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background .2s}
+.btn:hover{background:var(--green-d)}
+.btn.ghost{background:transparent;border:1px solid rgba(255,255,255,.75);color:#fff}
+.btn.ghost:hover{background:rgba(255,255,255,.15)}
+/* photo stand-ins */
+.ph{position:relative;overflow:hidden;border-radius:var(--r);background:#3a2f28;color:#fff;display:flex}
+.ph::before{content:"";position:absolute;inset:0;background:
+  radial-gradient(120% 90% at 70% 20%, rgba(255,255,255,.14), transparent 55%),
+  linear-gradient(160deg, var(--t1,#5a463a), var(--t2,#2b211c) 70%)}
+.ph>*{position:relative;z-index:1}
+/* announcement + header */
+/* marquee announcement — items come from admin; track is duplicated for a seamless loop */
+.announce{background:var(--green-d);color:#fff;font-size:12px;overflow:hidden;position:relative}
+.announce .track{display:flex;width:max-content;animation:marquee 28s linear infinite;padding:8px 0}
+.announce:hover .track{animation-play-state:paused}
+.announce span{display:inline-flex;align-items:center;white-space:nowrap;padding:0 28px}
+.announce span::after{content:"✦";color:var(--leaf);margin-left:56px;font-size:9px}
+.announce a{color:var(--leaf);text-decoration:underline}
+@keyframes marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@media (prefers-reduced-motion:reduce){.announce .track{animation:none;width:100%;justify-content:center}.announce span:nth-child(n+2){display:none}}
+header.site{position:sticky;top:0;z-index:50;background:rgba(251,249,245,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:28px;height:64px}
+.logo{width:44px;height:44px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;font:700 15px var(--disp)}
+.nav a{color:var(--ink);text-decoration:none;font-size:13px;font-weight:500}
+.nav a:hover{color:var(--green)}
+.nav .grow{flex:1}
+.nav .util{color:var(--soft);font-size:12.5px}
+.cart{background:var(--beige);border-radius:99px;padding:7px 14px;font-weight:600;font-size:13px}
+/* hero slider */
+.hero{padding:0}
+.slider{position:relative;border-radius:0;overflow:hidden}
+.slide{display:none;min-height:78vh;align-items:center}
+.slide.ph{border-radius:0}  /* the photo layer must not re-round the square banner */
+.slide.on{display:flex;animation:fade .6s ease}
+@keyframes fade{from{opacity:.3}to{opacity:1}}
+.slide .content{padding:64px;max-width:520px}
+.slide h1{font-size:clamp(34px,4.6vw,56px);line-height:1.08;color:#fff}
+.slide p{color:rgba(255,255,255,.85);margin:16px 0 26px;max-width:42ch}
+/* video slide ambience */
+.slide.video::before{animation:drift 9s ease-in-out infinite alternate}
+@keyframes drift{from{transform:scale(1) translateX(0)}to{transform:scale(1.08) translateX(-2.5%)}}
+/* slider chrome */
+.sarrow{position:absolute;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;border:1px solid rgba(255,255,255,.5);background:rgba(0,0,0,.25);color:#fff;font-size:16px;cursor:pointer;z-index:3}
+.sarrow:hover{background:rgba(0,0,0,.5)} .sarrow.l{left:18px}.sarrow.r{right:18px}
+.stabs{position:absolute;left:64px;right:64px;bottom:22px;display:flex;gap:28px;z-index:3}
+.stab{color:rgba(255,255,255,.65);font-size:11px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;padding-top:10px;border-top:2px solid rgba(255,255,255,.25);flex:1;text-align:left;background:none;border-left:none;border-right:none;border-bottom:none;position:relative}
+.stab b{display:block;color:#fff;font-size:12px;letter-spacing:.04em;margin-top:2px;font-weight:600}
+.stab.on{border-top-color:var(--leaf)}
+.stab.on .bar{position:absolute;top:-2px;left:0;height:2px;background:var(--leaf);animation:load 6s linear forwards}
+@keyframes load{from{width:0}to{width:100%}}
+/* sections */
+section{padding:44px 0}
+.shead{display:flex;align-items:end;justify-content:space-between;margin-bottom:22px}
+.shead h2{font-size:clamp(24px,3vw,34px)}
+.shead .sub{color:var(--soft);font-size:13.5px;margin-top:6px}
+.navbtns button{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);background:#fff;cursor:pointer;color:var(--ink)}
+.navbtns button:hover{border-color:var(--green);color:var(--green)}
+/* category tiles */
+.cats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.cat{aspect-ratio:3/4;align-items:flex-end;cursor:pointer}
+.cat .pill{margin:0 auto 26px;background:rgba(0,0,0,.35);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.5);color:#fff;border-radius:99px;padding:9px 22px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;transition:.2s}
+.cat{justify-content:center}
+.cat:hover .pill{background:var(--green);border-color:var(--green)}
+/* concerns strip */
+.concerns{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;border-radius:var(--r);overflow:hidden}
+.concern{border-radius:0;aspect-ratio:16/7;align-items:center;justify-content:center;cursor:pointer}
+.concern span{font-size:13px;letter-spacing:.2em;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.6);padding-bottom:5px}
+.concern:hover span{border-color:var(--leaf);color:var(--leaf)}
+/* split feature */
+.split{display:grid;grid-template-columns:1.25fr 1fr;gap:16px}
+.feature{min-height:430px;align-items:flex-end}
+.feature .content{padding:44px}
+.feature h2{color:#fff;font-size:clamp(28px,3.4vw,42px)}
+.feature p{color:rgba(255,255,255,.85);max-width:38ch;margin:10px 0 22px}
+.stack{display:grid;grid-template-rows:1fr 1fr;gap:16px}
+.stack .ph{align-items:flex-end}
+.stack .content{padding:24px}
+.stack h3{color:#fff;font-size:20px}
+.stack .content .eyebrow{color:rgba(255,255,255,.7)}
+/* product cards */
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card{background:var(--white);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;transition:box-shadow .2s,transform .2s}
+.card:hover{box-shadow:0 16px 34px -18px rgba(26,26,26,.25);transform:translateY(-2px)}
+.card .ph{aspect-ratio:1/1;border-radius:0;--t1:#efe7db;--t2:#ddcfbc}
+.badge{position:absolute;top:10px;left:10px;z-index:2;background:var(--green-d);color:#fff;font-size:9px;letter-spacing:.12em;text-transform:uppercase;border-radius:99px;padding:4px 10px}
+.badge.gold{background:var(--gold)}
+/* compact description box: one-line name, single meta row, tight spacing */
+.cbody{padding:10px 12px 12px}
+.cbody .name{font-weight:600;font-size:13px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cbody .cat{color:var(--soft);font-size:11px;margin-top:1px}
+.rowline{display:flex;align-items:center;justify-content:space-between;margin-top:7px}
+.price{font-weight:700;font-size:14px;font-variant-numeric:tabular-nums}
+.price s{color:var(--soft);font-weight:400;font-size:12px;margin-left:6px}
+.add{border:1px solid var(--line);background:#fff;border-radius:99px;padding:5px 12px;font:600 11px var(--sans);letter-spacing:.08em;cursor:pointer}
+.add:hover{background:var(--green);border-color:var(--green);color:#fff}
+.dots{display:flex;gap:4px;margin-top:6px}
+.dots i{width:9px;height:9px;border-radius:50%;display:block}
+/* men section */
+.men{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
+.men .bigph{min-height:520px;align-items:center;justify-content:center;text-align:center}
+.men .bigph h2{color:#fff;font-size:clamp(30px,3.6vw,46px);font-style:italic}
+.men .bigph p{color:rgba(255,255,255,.8);letter-spacing:.18em;text-transform:uppercase;font-size:11px}
+.men .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.men.flip .bigph{order:2}  /* Women: photo on the right, products left — page rhythm */
+/* tiktok */
+.tt{display:grid;grid-template-columns:1fr 1.1fr;gap:16px}
+.tt .promo{min-height:420px;align-items:flex-end}
+.tt .promo h2{color:#fff;font-size:clamp(26px,3vw,38px);font-style:italic}
+/* collections trio */
+.trio{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.trio .ph{aspect-ratio:3/4;align-items:flex-end}
+.trio .content{padding:28px;width:100%}
+.trio h3{color:#fff;font-size:24px}
+.trio p{color:rgba(255,255,255,.8);font-size:13px;margin:6px 0 16px}
+/* journal */
+.journal{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.jcard{background:var(--beige);border-radius:var(--r);padding:26px}
+.jcard h3{font-size:18px;line-height:1.3;margin:10px 0}
+.jcard p{color:var(--soft);font-size:13.5px}
+.jcard a{color:var(--green);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;text-decoration:none}
+/* google reviews */
+.reviews{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.review{display:block;background:var(--white);border:1px solid var(--line);border-radius:var(--r);padding:20px;text-decoration:none;color:var(--ink);transition:box-shadow .2s,transform .2s;position:relative}
+.review:hover{box-shadow:0 16px 34px -18px rgba(26,26,26,.25);transform:translateY(-2px)}
+.stars{color:var(--gold);font-size:14px;letter-spacing:2px}
+.review p{font-size:13.5px;line-height:1.55;color:var(--ink);margin:10px 0 14px;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.reviewer{display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font:600 13px var(--sans)}
+.reviewer b{display:block;font-size:12.5px}
+.reviewer small{color:var(--soft);font-size:11px}
+.gmark{position:absolute;top:16px;right:16px;width:20px;height:20px;border-radius:50%;background:#fff;border:1px solid var(--line);display:grid;place-items:center;font:700 11px var(--sans);color:#4285f4}
+.gsummary{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--soft)}
+.gsummary b{font-size:20px;color:var(--ink);font-family:var(--disp)}
+@media (max-width:900px){.reviews{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.reviews{grid-template-columns:1fr}}
+/* footer */
+footer{background:#111;color:#bdb9b2;margin-top:56px;padding:56px 0 28px}
+footer .cols{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:32px}
+footer h4{color:#fff;font-size:12px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 14px}
+footer a{display:block;color:#bdb9b2;text-decoration:none;font-size:13px;padding:4px 0}
+footer a:hover{color:var(--leaf)}
+.newsl{display:flex;gap:8px;margin-top:14px}
+.newsl input{flex:1;background:#1d1d1d;border:1px solid #2c2c2c;border-radius:99px;padding:11px 18px;color:#fff;font-size:13px}
+.copy{border-top:1px solid #262626;margin-top:40px;padding-top:22px;text-align:center;font-size:12px;color:#7d7973}
+@media (max-width:900px){
+  .cats,.grid4,.journal,.trio{grid-template-columns:repeat(2,1fr)}
+  .split,.men,.tt,.concerns{grid-template-columns:1fr}
+  footer .cols{grid-template-columns:1fr 1fr}
+  .slide .content{padding:36px}.stabs{left:36px;right:36px}
+}
+@media (max-width:560px){.cats,.grid4{grid-template-columns:1fr 1fr}.journal,.trio{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){.slide.video::before,.stab.on .bar{animation:none}}
+</style>
+
+<div class="announce"><div class="track">
+  <span>Now shipping to the UK, US &amp; Canada on our <a href="#">international website</a></span>
+  <span>Free delivery to the UK on all orders</span>
+  <span>We are open Monday–Saturday, 9am–6pm WAT</span>
+  <span>New: pay on delivery pickup at GIG centres nationwide</span>
+  <span>Now shipping to the UK, US &amp; Canada on our <a href="#">international website</a></span>
+  <span>Free delivery to the UK on all orders</span>
+  <span>We are open Monday–Saturday, 9am–6pm WAT</span>
+  <span>New: pay on delivery pickup at GIG centres nationwide</span>
+</div></div>
+<header class="site"><div class="wrap nav">
+  <div class="logo">tokè</div>
+  <a href="#">Home</a><a href="#">All Products</a><a href="#">Shop by Category</a><a href="#">Skin Quiz</a><a href="#">Blog</a>
+  <span class="grow"></span>
+  <a class="util" href="#">Our Stores</a><a class="util" href="#">About</a><a class="util" href="#">Become a Distributor</a>
+  <span class="cart">₦0.00 · 0</span>
+</div></header>
+
+<!-- HERO SLIDER: mixed media (image banners + video), admin-managed slides -->
+<div class="hero"><div class="slider" id="slider">
+  <div class="slide video on ph" style="--t1:#1e3b2a;--t2:#0d1f14" data-ph="video · 12s loop">
+    <div class="content">
+      <h1>Clear More.<br>Glow More.</h1>
+      <p>Your complete adaptive routine in one set — made to fight breakouts and fade dark spots, naturally.</p>
+      <button class="btn">Shop the Set</button>
+    </div>
+  </div>
+  <div class="slide ph" style="--t1:#6b5140;--t2:#241a14" data-ph="image banner">
+    <div class="content">
+      <h1>Refer &amp; Earn</h1>
+      <p>Share your favourite skincare and get rewards when friends join the Toke family.</p>
+      <button class="btn ghost">Join Now</button>
+    </div>
+  </div>
+  <div class="slide ph" style="--t1:#4c5a35;--t2:#1b2213" data-ph="image banner">
+    <div class="content">
+      <h1>Student<br>Entrepreneurship</h1>
+      <p>Build your own beauty business on campus — stock, training and support from Toke.</p>
+      <button class="btn ghost">Learn More</button>
+    </div>
+  </div>
+  <button class="sarrow l" onclick="go(-1)" aria-label="Previous slide">‹</button>
+  <button class="sarrow r" onclick="go(1)" aria-label="Next slide">›</button>
+  <div class="stabs">
+    <button class="stab on" onclick="show(0)">01 <b>Clear More. Glow More.</b><span class="bar"></span></button>
+    <button class="stab" onclick="show(1)">02 <b>Refer &amp; Earn</b></button>
+    <button class="stab" onclick="show(2)">03 <b>Student Entrepreneurship</b></button>
+  </div>
+</div></div>
+
+<section><div class="wrap">
+  <div class="shead"><div><span class="eyebrow">Shop by Category</span><h2>Made for every one of you</h2></div></div>
+  <div class="cats">
+    <div class="cat ph" style="--t1:#7a5c42;--t2:#2e2119" data-ph="photo"><span class="pill">Best Sellers</span></div>
+    <div class="cat ph" style="--t1:#4b342a;--t2:#1c120d" data-ph="photo"><span class="pill">Skin</span></div>
+    <div class="cat ph" style="--t1:#33291f;--t2:#120d09" data-ph="photo"><span class="pill">Hair</span></div>
+    <div class="cat ph" style="--t1:#2c3b2b;--t2:#101a10" data-ph="photo"><span class="pill">Babies</span></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <div class="shead"><div><span class="eyebrow">Shop by Concern</span><h2>Start where your skin is</h2></div></div>
+  <div class="concerns">
+    <div class="concern ph" style="--t1:#6b5140;--t2:#2a1e16" data-ph="photo"><span>Acne</span></div>
+    <div class="concern ph" style="--t1:#5a463a;--t2:#241a12" data-ph="photo"><span>Hyperpigmentation</span></div>
+    <div class="concern ph" style="--t1:#7d6a53;--t2:#33281c" data-ph="photo"><span>Dry Skin</span></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap split">
+  <div class="feature ph" style="--t1:#31502f;--t2:#12200f" data-ph="photo / video">
+    <div class="content"><h2>The Glow Set</h2>
+      <p>Brightening oil, daily facial wash and repair cream — the routine our community swears by.</p>
+      <button class="btn">Shop the Set</button></div>
+  </div>
+  <div class="stack">
+    <div class="ph" style="--t1:#1f4d33;--t2:#0b1f13" data-ph="video loop"><div class="content"><span class="eyebrow">tokè × natural</span><h3>Grown from nature, proven by science</h3></div></div>
+    <div class="ph" style="--t1:#8a6a3d;--t2:#3a2b16" data-ph="photo"><div class="content"><span class="eyebrow">Collection</span><h3>Toke Naturals</h3></div></div>
+  </div>
+</div></section>
+
+<section><div class="wrap">
+  <div class="shead"><div><span class="eyebrow">Best Sellers</span><h2>Loved by thousands</h2></div>
+    <div class="navbtns"><button aria-label="Previous">‹</button> <button aria-label="Next">›</button></div></div>
+  <div class="grid4">
+    <div class="card"><div class="ph" data-ph="product"><span class="badge gold">Best Seller</span></div><div class="cbody"><div class="name">Carrot Shea Butter</div><div class="rowline"><span class="price">₦600 <s>₦2,000</s></span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge gold">Best Seller</span></div><div class="cbody"><div class="name">Toke Brightening Oil</div><div class="rowline"><span class="price">₦4,225</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge gold">Best Seller</span></div><div class="cbody"><div class="name">Toke Natural Soap (Sesame Formula)</div><div class="rowline"><span class="price">₦800 <s>₦25,592</s></span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge gold">Best Seller</span></div><div class="cbody"><div class="name">Toke Soothing Face Repair Cream</div><div class="rowline"><span class="price">₦6,320</span><button class="add">Add</button></div></div></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap men">
+  <div class="bigph ph" style="--t1:#2f2a26;--t2:#0f0d0b" data-ph="photo / video">
+    <div><p>New Formulas</p><h2>New for Men</h2><p style="margin-top:14px">Made for men's skin</p><br><button class="btn ghost">Shop Now</button></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Hydrate &amp; Glow Lotion</div><div class="rowline"><span class="price">₦1,660</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Orange Shower Gel</div><div class="rowline"><span class="price">₦2,472 <s>₦4,940</s></span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Hydrate &amp; Soothing Face Toner</div><div class="rowline"><span class="price">₦1,475</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Hair Growth Oil</div><div class="rowline"><span class="price">₦2,180 <s>₦2,762</s></span><button class="add">Add</button></div></div></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap men flip">
+  <div class="bigph ph" style="--t1:#7a5c42;--t2:#2b1f16" data-ph="photo / video">
+    <div><p>Radiance Rituals</p><h2>For Women</h2><p style="margin-top:14px">Glow that starts with care</p><br><button class="btn ghost">Shop Now</button></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="ph" data-ph="product"><span class="badge gold">Best Seller</span></div><div class="cbody"><div class="name">Toke Brightening Oil</div><div class="rowline"><span class="price">₦4,225</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"></div><div class="cbody"><div class="name">Carrot Shea Butter</div><div class="rowline"><span class="price">₦600 <s>₦2,000</s></span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Radiance Face Serum</div><div class="rowline"><span class="price">₦3,850</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"></div><div class="cbody"><div class="name">Sesame Glow Soap</div><div class="rowline"><span class="price">₦800</span><button class="add">Add</button></div></div></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap men">
+  <div class="bigph ph" style="--t1:#2c4a33;--t2:#0e2015" data-ph="photo / video">
+    <div><p>Gentle by Design</p><h2>For Babies</h2><p style="margin-top:14px">Soft care for the softest skin</p><br><button class="btn ghost">Shop Now</button></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Baby Set</div><div class="rowline"><span class="price">₦8,062</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"></div><div class="cbody"><div class="name">Toke Kids Shampoo</div><div class="rowline"><span class="price">₦1,950</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"></div><div class="cbody"><div class="name">Kids Hair Care Set</div><div class="rowline"><span class="price">₦14,200</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Baby Soothing Balm</div><div class="rowline"><span class="price">₦2,400</span><button class="add">Add</button></div></div></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <div class="shead"><div><span class="eyebrow">New Arrivals</span><h2>Natural Products</h2></div>
+    <div class="navbtns"><button aria-label="Previous">‹</button> <button aria-label="Next">›</button></div></div>
+  <div class="grid4">
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Princess's Combo</div><div class="rowline"><span class="price">₦13,000</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">New Mom Package (Caramel Skin)</div><div class="rowline"><span class="price">₦49,000</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">New Mom Package (Fair Skin)</div><div class="rowline"><span class="price">₦49,000</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Teens Set (Fair Skin)</div><div class="rowline"><span class="price">₦20,300</span><button class="add">Add</button></div></div></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap tt">
+  <div class="grid4" style="grid-template-columns:1fr 1fr">
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Natural Soap with AHA</div><div class="rowline"><span class="price">₦752</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"></div><div class="cbody"><div class="name">Carrot Shea Butter</div><div class="rowline"><span class="price">₦967</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"><span class="badge">New</span></div><div class="cbody"><div class="name">Baby Set</div><div class="rowline"><span class="price">₦8,062</span><button class="add">Add</button></div></div></div>
+    <div class="card"><div class="ph" data-ph="product"></div><div class="cbody"><div class="name">Kids Hair Care Set</div><div class="rowline"><span class="price">₦14,200</span><button class="add">Add</button></div></div></div>
+  </div>
+  <div class="promo ph" style="--t1:#3a5238;--t2:#141d13" data-ph="video">
+    <div class="content" style="padding:40px"><h2>TikTok Made Me Try It</h2>
+      <p style="color:rgba(255,255,255,.85);margin:8px 0 20px">The community favourites, as seen on your feed.</p>
+      <button class="btn ghost">Shop Now</button></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap trio">
+  <div class="ph" style="--t1:#42502e;--t2:#181e10" data-ph="photo"><div class="content"><h3>Kids' Collection</h3><p>Made comfortable for growing skin.</p><button class="btn ghost">Explore</button></div></div>
+  <div class="ph" style="--t1:#33291f;--t2:#100d09" data-ph="photo"><div class="content"><h3>Men's Essentials</h3><p>Built for strength, made to refresh.</p><button class="btn ghost">Explore</button></div></div>
+  <div class="ph" style="--t1:#4c5a35;--t2:#1a2113" data-ph="photo"><div class="content"><h3>Family</h3><p>Together in care, together in glow.</p><button class="btn ghost">Explore</button></div></div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <div class="shead"><div><span class="eyebrow">The Journal</span><h2>Skincare, explained simply</h2></div></div>
+  <div class="journal">
+    <div class="jcard"><span class="eyebrow">Routine</span><h3>3 morning skincare steps for a healthy glow</h3><p>Kickstart your day with a simple, effective routine that wakes up your skin and keeps it radiant from morning to night.</p><a href="#">Read →</a></div>
+    <div class="jcard"><span class="eyebrow">Ingredients</span><h3>Ingredients to avoid in your skincare routine</h3><p>Not all products are created equal — learn which common ingredients can irritate or age your skin, and what to choose instead.</p><a href="#">Read →</a></div>
+    <div class="jcard"><span class="eyebrow">Science</span><h3>Why hydration is the secret to youthful skin</h3><p>How proper hydration can plump fine lines, improve elasticity and transform dull, tired skin into a fresh, healthy complexion.</p><a href="#">Read →</a></div>
+  </div>
+</div></section>
+
+<section style="padding-top:0"><div class="wrap">
+  <div class="shead">
+    <div><span class="eyebrow">Customer Reviews</span><h2>Loved on Google</h2>
+      <div class="gsummary" style="margin-top:8px"><b>4.8</b><span class="stars">★★★★★</span><span>from 300+ Google reviews</span></div>
+    </div>
+    <a href="#" class="btn ghost" style="border-color:var(--line);color:var(--ink)">Review us on Google</a>
+  </div>
+  <div class="reviews">
+    <a class="review" href="#" title="Read this review on Google">
+      <span class="gmark">G</span><span class="stars">★★★★★</span>
+      <p>The brightening oil cleared my dark spots in three weeks. I've tried so many products — this is the first one that actually worked for my skin.</p>
+      <span class="reviewer"><span class="avatar" style="background:#7a5c42">AO</span><span><b>Adaeze O.</b><small>2 weeks ago · Lagos</small></span></span>
+    </a>
+    <a class="review" href="#" title="Read this review on Google">
+      <span class="gmark">G</span><span class="stars">★★★★★</span>
+      <p>Ordered the New Mom package for my wife — delivery was fast and the products smell amazing. Baby's skin has never been softer.</p>
+      <span class="reviewer"><span class="avatar" style="background:#31502f">TB</span><span><b>Tunde B.</b><small>1 month ago · Abuja</small></span></span>
+    </a>
+    <a class="review" href="#" title="Read this review on Google">
+      <span class="gmark">G</span><span class="stars">★★★★☆</span>
+      <p>Genuine natural ingredients, you can tell. The carrot shea butter is my holy grail now. Took a star only because my order came a day late.</p>
+      <span class="reviewer"><span class="avatar" style="background:#8a6a3d">CE</span><span><b>Chioma E.</b><small>3 weeks ago · Port Harcourt</small></span></span>
+    </a>
+    <a class="review" href="#" title="Read this review on Google">
+      <span class="gmark">G</span><span class="stars">★★★★★</span>
+      <p>I use the men's line daily. Nothing complicated, just products that work. Customer service on WhatsApp is also top notch.</p>
+      <span class="reviewer"><span class="avatar" style="background:#2c4a33">KA</span><span><b>Kunle A.</b><small>2 months ago · Ibadan</small></span></span>
+    </a>
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <div class="cols">
+    <div><h4>Toke Cosmetics</h4><p style="font-size:13px;max-width:34ch">Premium skincare with African identity — natural ingredients, science-backed, made for every shade of you.</p>
+      <div class="newsl"><input placeholder="Your email for glow tips &amp; offers"><button class="btn" style="padding:11px 20px">Join</button></div></div>
+    <div><h4>Help</h4><a href="#">Return Policy</a><a href="#">Text Us</a><a href="#">Call Us</a><a href="#">FAQ</a><a href="#">Policies</a></div>
+    <div><h4>Shop</h4><a href="#">Skin Care</a><a href="#">Hair Care</a><a href="#">Acne</a><a href="#">Kids Care</a><a href="#">Hyperpigmentation</a></div>
+    <div><h4>Company</h4><a href="#">About Us</a><a href="#">Services</a><a href="#">Contact Us</a><a href="#">Our Blog</a><a href="#">Our Stores</a><a href="#">Affiliates</a><a href="#">Entrepreneurship Program</a></div>
+  </div>
+  <div class="copy">© Toke Cosmetics 2026 · All rights reserved</div>
+</div></footer>
+
+<script>
+let cur=0, timer;
+const slides=[...document.querySelectorAll('.slide')], tabs=[...document.querySelectorAll('.stab')];
+function show(i){cur=(i+slides.length)%slides.length;
+  slides.forEach((s,n)=>s.classList.toggle('on',n===cur));
+  tabs.forEach((t,n)=>{t.classList.toggle('on',n===cur);
+    t.querySelector('.bar')?.remove();
+    if(n===cur){const b=document.createElement('span');b.className='bar';t.appendChild(b);}});
+  clearTimeout(timer); timer=setTimeout(()=>show(cur+1),6000);}
+function go(d){show(cur+d)}
+timer=setTimeout(()=>show(1),6000);
+</script>
