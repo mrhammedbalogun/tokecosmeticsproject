@@ -70,7 +70,7 @@ def covered_ikeja(ng):
 
 @pytest.fixture
 def gig_option(ng):
-    option = DeliveryOption.objects.get(carrier_code="gig")  # seeded by migration 0006
+    option = DeliveryOption.objects.get(carrier_code="gig", carrier_service="home")  # seeded by migration 0006
     option.is_active = True
     option.save(update_fields=["is_active"])
     return option

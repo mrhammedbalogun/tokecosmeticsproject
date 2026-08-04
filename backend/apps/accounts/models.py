@@ -380,6 +380,13 @@ class Address(TimeStampedModel):
     state_text = models.CharField(max_length=100, blank=True)
     postcode = models.CharField(max_length=20, blank=True)
 
+    # The customer's pin (Plan-32b): captured by the Places pick or the confirm-your-pin
+    # map step at checkout. Null is normal and permanent for addresses entered before
+    # the rebuild or typed free-text without a pin — carrier quoting falls back to the
+    # LGA centroid (core.Region), and nothing anywhere requires these to be set.
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
     is_default_shipping = models.BooleanField(default=False)
     is_default_billing = models.BooleanField(default=False)
 

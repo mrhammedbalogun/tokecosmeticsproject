@@ -98,6 +98,7 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
             "name": o.name,
             "kind": o.kind,
             "carrier_code": o.carrier_code,
+            "carrier_service": o.carrier_service,
             "currency": o.currency_id,
             # None, never "0.00": an unknown cost must not be renderable as "Free".
             "price": None if o.quote_required else str(_price_for(o, weight_g, subtotal)),

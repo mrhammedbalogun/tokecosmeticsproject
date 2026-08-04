@@ -529,6 +529,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.delivery.tasks.sync_gig_coverage_task",
         "schedule": 86400.0,  # daily — GIG's network changes on human timescales
     },
+    "sync-gig-centres": {
+        "task": "apps.delivery.tasks.sync_gig_centres_task",
+        "schedule": 86400.0,  # daily — centres change on human timescales, like LGAs
+    },
     "poll-gig-tracking": {
         "task": "apps.delivery.tasks.poll_gig_tracking",
         "schedule": 7200.0,  # every 2h — pull until GIG's webhook exists, fallback after

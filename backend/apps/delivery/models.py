@@ -9,6 +9,9 @@ class DeliveryOption(TimeStampedModel):
     name = models.CharField(max_length=100)
     kind = models.CharField(max_length=10, choices=KIND_CHOICES, default="manual")
     carrier_code = models.CharField(max_length=20, blank=True)  # "dhl", "gig" — Plan-32
+    # One carrier, several services (Plan-32b): "home" = door delivery, "pickup" =
+    # customer collects from a carrier location. Blank for manual options.
+    carrier_service = models.CharField(max_length=20, blank=True)
     price = models.DecimalField(max_digits=12, decimal_places=2)  # flat price (common case)
     currency = models.ForeignKey("core.Currency", on_delete=models.PROTECT)
     free_over = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -68,6 +71,32 @@ class GigLga(TimeStampedModel):
     def __str__(self) -> str:
         flags = f"{'active' if self.is_active else 'inactive'}, hd={self.home_delivery}"
         return f"{self.state_name}/{self.lga_name} ({flags})"
+
+
+class GigCentre(TimeStampedModel):
+    """One GIG service centre, synced nightly from `serviceCentresByStation`
+    (Plan-32b slice 1) — the pickup picker's data source.
+
+    Same lifecycle discipline as GigLga: rows that vanish from GIG's list are
+    deactivated, never deleted, and the ORDER keeps its own snapshot of the chosen
+    centre (ruling 4) — this table answers "what can I pick today", the snapshot
+    answers "where do I collect my parcel" forever."""
+
+    gig_centre_id = models.IntegerField(unique=True)  # GIG's ServiceCentreId
+    gig_station_id = models.IntegerField()
+    name = models.CharField(max_length=200)
+    address = models.CharField(max_length=500, blank=True)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    synced_at = models.DateTimeField()
+
+    class Meta:
+        verbose_name = "GIG centre"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({'active' if self.is_active else 'inactive'})"
 
 
 class GigShipment(TimeStampedModel):

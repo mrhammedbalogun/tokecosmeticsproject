@@ -36,6 +36,10 @@ def priced_options_for_address(address, lines, subtotal: Decimal, country) -> li
             continue
         if option["carrier_code"] != "gig":  # only GIG is wired up (DHL: Plan-32c)
             continue
+        if option.get("carrier_service") and option["carrier_service"] != "home":
+            # The pickup service quotes differently (32b slice 2). Until that lands,
+            # a prematurely-activated pickup row is omitted, never home-quoted.
+            continue
         quote = quote_home_delivery(address, weight_g, declared_value=subtotal)
         if quote is None:
             continue

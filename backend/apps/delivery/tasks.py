@@ -20,6 +20,18 @@ def sync_gig_coverage_task() -> dict:
 
 
 @shared_task
+def sync_gig_centres_task() -> dict:
+    """Nightly, same failure posture as the LGA sync: an outage keeps yesterday's
+    centre list serving the picker, and the order snapshot is what fulfilment reads."""
+    from apps.delivery.gig.centres import sync_gig_centres
+
+    try:
+        return sync_gig_centres()
+    except GigError as exc:
+        return {"skipped": f"GIG unavailable: {exc}"}
+
+
+@shared_task
 def poll_gig_tracking() -> dict:
     """Every 2h until GIG's webhook exists; the fallback after. Outage = skipped
     pass; the shipments keep their last known scan and the next pass catches up."""

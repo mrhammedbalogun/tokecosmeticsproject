@@ -53,7 +53,7 @@ def _world():
     GigLga.objects.create(state_name="Lagos", lga_name="Ikeja", gig_state_id=24,
                           is_active=True, home_delivery=True, region=ikeja,
                           synced_at=timezone.now())
-    gig_option = DeliveryOption.objects.get(carrier_code="gig")
+    gig_option = DeliveryOption.objects.get(carrier_code="gig", carrier_service="home")
     gig_option.is_active = True
     gig_option.save(update_fields=["is_active"])
     BankAccount.objects.create(country=ng, currency=ngn, bank_name="GTBank",
