@@ -181,6 +181,9 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # load-bearing copy — rbac.py argues the split. A content editor must not be able to
     # override a live campaign's placement.
     "BannerAdminViewSet": "marketing.manage",
+    # Landing redesign: featured Google reviews are campaign material, like banners.
+    "GoogleReviewAdminViewSet": "marketing.manage",
+    "GoogleReviewsMetaAdminView": "marketing.manage",
     "HomepageSectionAdminViewSet": "marketing.manage",
     # --- inventory ---------------------------------------------------------------
     # Warehouses are where stock physically is, and `serves_countries` on one of them

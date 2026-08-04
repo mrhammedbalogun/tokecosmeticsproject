@@ -6,17 +6,21 @@ in the project declared the scope. This is the first thing that role can do.
 """
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
+from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework.filters import SearchFilter
 
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
 from apps.cms.admin_serializers import (
+    GoogleReviewAdminSerializer,
+    GoogleReviewsMetaAdminSerializer,
     BannerAdminSerializer,
     HomepageSectionAdminSerializer,
     MenuItemAdminSerializer,
     PageAdminSerializer,
 )
-from apps.cms.models import Banner, HomepageSection, MenuItem, Page
+from apps.cms.models import Banner, HomepageSection, MenuItem, Page, GoogleReview, GoogleReviewsMeta
 from apps.core.audit import AdminAuditMixin
 
 
@@ -87,3 +91,39 @@ class MenuItemAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = MenuItem.objects.all()
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["menu", "is_active"]
+
+
+class GoogleReviewAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """`marketing.manage`, like banners: featured reviews are campaign material.
+    DELETE allowed for the banner's reason — a retired review is disposable."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("marketing.manage")]
+    serializer_class = GoogleReviewAdminSerializer
+    audit_serializers = (GoogleReviewAdminSerializer,)
+    audit_model_label = "cms.googlereview"
+    queryset = GoogleReview.objects.all()
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["is_active"]
+
+
+class GoogleReviewsMetaAdminView(AdminAuditMixin, APIView):
+    """GET/PUT the singleton header numbers (rating, count text, profile URL)."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("marketing.manage")]
+    audit_action = "google_reviews_meta"
+    audit_model_label = "cms.googlereviewsmeta"
+
+    def get(self, request):
+        meta = GoogleReviewsMeta.objects.first()
+        if meta is None:
+            return Response({"rating": None, "review_count_text": "", "profile_url": ""})
+        return Response(GoogleReviewsMetaAdminSerializer(meta).data)
+
+    def put(self, request):
+        meta = GoogleReviewsMeta.objects.first() or GoogleReviewsMeta()
+        serializer = GoogleReviewsMetaAdminSerializer(meta, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)

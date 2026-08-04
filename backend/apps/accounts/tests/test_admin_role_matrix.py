@@ -98,6 +98,8 @@ MATRIX: list[Row] = [
         {"Owner", "Manager", "Support"}),
     # Campaign material: Manager can run a promotion, a copywriter cannot.
     Row("BannerAdminViewSet", "get", "/api/v1/admin/banners/", _MANAGERS),
+    Row("GoogleReviewAdminViewSet", "get", "/api/v1/admin/google-reviews/", _MANAGERS),
+    Row("GoogleReviewsMetaAdminView", "get", "/api/v1/admin/google-reviews-meta/", _MANAGERS),
     Row("HomepageSectionAdminViewSet", "get", "/api/v1/admin/homepage-sections/", _MANAGERS),
     # --- inventory ---------------------------------------------------------------
     Row("WarehouseAdminViewSet", "get", "/api/v1/admin/warehouses/", _MANAGERS),

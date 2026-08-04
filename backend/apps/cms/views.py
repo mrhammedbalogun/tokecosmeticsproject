@@ -9,6 +9,7 @@ from rest_framework.views import APIView
 from apps.cms.models import Banner, HomepageSection, MenuItem, Page
 from apps.cms.serializers import (
     PublicBannerSerializer,
+    PublicGoogleReviewSerializer,
     PublicHomepageSectionSerializer,
     PublicMenuItemSerializer,
     PublicPageSerializer,
@@ -72,9 +73,23 @@ class PublicHomepageView(APIView):
             ]
 
         sections = HomepageSection.objects.filter(is_active=True)
+        # Landing redesign: the reviews ride the same single request, for the same
+        # round-trip reason. Meta may not exist yet; the storefront hides the section
+        # when there are no reviews, so an empty shape is a valid answer.
+        from apps.cms.models import GoogleReview, GoogleReviewsMeta
+
+        meta = GoogleReviewsMeta.objects.first()
         return Response({
             "sections": PublicHomepageSectionSerializer(sections, many=True).data,
             "banners": PublicBannerSerializer(live, many=True, context={"request": request}).data,
+            "reviews": {
+                "rating": str(meta.rating) if meta else None,
+                "count_text": meta.review_count_text if meta else "",
+                "profile_url": meta.profile_url if meta else "",
+                "items": PublicGoogleReviewSerializer(
+                    GoogleReview.objects.filter(is_active=True), many=True
+                ).data,
+            },
         })
 
 

@@ -88,6 +88,11 @@ class Banner(TimeStampedModel):
     mobile_image = models.ImageField(upload_to="cms/banners/", blank=True)
     cta_text = models.CharField(max_length=60, blank=True)
     cta_url = models.CharField(max_length=300, blank=True)
+    # Landing redesign (2026-08-04): a HERO banner may be a video instead of an image.
+    # A URL, not an upload: hero videos are heavy, live on S3/CDN, and the admin pastes
+    # the address. When set, the storefront renders <video autoplay muted loop>; the
+    # image (if any) is the poster/fallback. No media-type tag is ever shown to customers.
+    video_url = models.URLField(blank=True)
     placement = models.CharField(max_length=20, choices=PLACEMENT_CHOICES, default=STRIP)
     sort = models.PositiveSmallIntegerField(default=0)
     starts_at = models.DateTimeField(null=True, blank=True)
@@ -174,3 +179,56 @@ class MenuItem(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.menu}: {self.label}"
+
+
+class GoogleReview(TimeStampedModel):
+    """One CURATED Google review featured on the landing page.
+
+    Curated, not synced: the Places API returns at most five "most relevant" reviews
+    and no per-review permalink, so automation cannot satisfy "click goes to that
+    exact review" (design ruling, 2026-08-04). A human picks the review on Google
+    Maps, presses "Share review", and pastes the permalink here. That also keeps a
+    mediocre rotating review off the homepage.
+    """
+
+    author = models.CharField(max_length=100)          # "Adaeze O." — as shown on Google
+    location = models.CharField(max_length=100, blank=True)  # "Lagos"
+    rating = models.PositiveSmallIntegerField(default=5)     # 1-5 stars
+    text = models.TextField()                          # plain text; React escapes it
+    review_url = models.URLField()                     # the Google share-link permalink
+    reviewed_at_text = models.CharField(max_length=60, blank=True)  # "2 weeks ago", verbatim
+    sort = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort", "-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.author} ({self.rating}★)"
+
+
+class GoogleReviewsMeta(TimeStampedModel):
+    """Singleton: the header numbers next to the featured reviews.
+
+    Admin-entered for now ("4.8", "300+"); a Places API fetch can update it later
+    without changing this shape. pk is forced to 1 so there is exactly one row.
+    """
+
+    rating = models.DecimalField(max_digits=2, decimal_places=1, default=5.0)
+    review_count_text = models.CharField(max_length=40, default="")  # "300+", shown verbatim
+    profile_url = models.URLField(blank=True)  # "Review us on Google" target
+
+    class Meta:
+        verbose_name_plural = "google reviews meta"
+
+    def save(self, *args, **kwargs):
+        # Forced pk=1 confuses Django's insert-or-update guess (a fresh instance with a
+        # pk inserts and trips the auto created_at), so decide explicitly.
+        self.pk = 1
+        existing = type(self).objects.filter(pk=1).values_list("created_at", flat=True).first()
+        if existing:
+            self.created_at = existing
+            kwargs["force_update"] = True
+        else:
+            kwargs["force_insert"] = True
+        super().save(*args, **kwargs)

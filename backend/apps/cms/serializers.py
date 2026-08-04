@@ -1,7 +1,7 @@
 """Public CMS serializers. Admin ones live in `admin_serializers.py`."""
 from rest_framework import serializers
 
-from apps.cms.models import Banner, HomepageSection, MenuItem, Page
+from apps.cms.models import Banner, GoogleReview, HomepageSection, MenuItem, Page
 
 
 class PublicPageSerializer(serializers.ModelSerializer):
@@ -22,7 +22,7 @@ class PublicBannerSerializer(serializers.ModelSerializer):
         model = Banner
         fields = [
             "id", "title", "subtitle", "image", "mobile_image",
-            "cta_text", "cta_url", "placement", "sort",
+            "cta_text", "cta_url", "video_url", "placement", "sort",
         ]
 
 
@@ -36,3 +36,10 @@ class PublicMenuItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = MenuItem
         fields = ["id", "label", "url", "menu", "parent", "sort"]
+
+
+class PublicGoogleReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GoogleReview
+        fields = ["id", "author", "location", "rating", "text", "review_url",
+                  "reviewed_at_text", "sort"]

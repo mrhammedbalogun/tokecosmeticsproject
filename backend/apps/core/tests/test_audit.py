@@ -551,7 +551,27 @@ def _case_gig_label(client, monkeypatch):
     return client.post(f"/api/v1/admin/orders/{order.number}/gig/label/"), 200
 
 
+def _case_google_review(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/google-reviews/",
+        {"author": "Ada O.", "rating": 5, "text": "Great oil",
+         "review_url": "https://g.co/kgs/abc123"},
+        format="json",
+    ), 201
+
+
+def _case_google_reviews_meta(client, monkeypatch):
+    return client.put(
+        "/api/v1/admin/google-reviews-meta/",
+        {"rating": "4.8", "review_count_text": "300+",
+         "profile_url": "https://g.page/toke-cosmetics"},
+        format="json",
+    ), 200
+
+
 WRITE_CASES: dict[str, tuple] = {
+    "GoogleReviewAdminViewSet": (_case_google_review, "create"),
+    "GoogleReviewsMetaAdminView": (_case_google_reviews_meta, "google_reviews_meta"),
     "AdminGigCaptureView": (_case_gig_capture, "gig_capture"),
     "AdminGigLabelView": (_case_gig_label, "gig_label"),
     "ProductAdminViewSet": (_case_product, "create"),
