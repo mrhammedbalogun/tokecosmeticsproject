@@ -199,3 +199,18 @@ plus cross-account tests for the address action routes and the payment-verify en
 4 (404 truthfulness — now only the two routes above), 5 (least-privilege Postgres role),
 6 (VPS patching), 7 (S3 versioning then the orphan sweep), 8 (analytics tags). 6 and 7
 touch live infrastructure and are gated the same way the migration credential is.
+
+## Progress (2026-08-04)
+
+- **Task 4 done** (`6fef6bd`): detail routes answer truthful 404s; structural test forbids
+  the skeletons returning.
+- **Task 5 done** (`10ce684` + applied to prod 2026-08-03): the app connects as
+  `toke_app` — 0006's REVOKE is live; posture verified on production.
+- **Task 7 done** (2026-08-04): bucket versioning **Enabled** on
+  `tokecosmetics-assets-899805259502-eu-west-1-an`, then the Plan-21 orphan sweep —
+  38/38 objects soft-deleted (delete markers; recoverable), pre-checked: all under
+  `catalog/products/`, zero still referenced by live rows. Manifest:
+  `docs/migration/orphaned-s3-objects-plan21.txt`.
+- Remaining: **6** (VPS patching — awaiting Hammed's Namecheap snapshot), **8**
+  (analytics tags — scope conversation), and flipping the storefront CSP from
+  report-only once reports are reviewed.
