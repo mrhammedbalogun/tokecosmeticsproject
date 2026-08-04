@@ -99,3 +99,45 @@ pickup-vs-home pricing on production credentials when they arrive.
 Sequencing: 1–2 backend-parallel; 3 and 4 are the same checkout surface — 3 first, 4 on
 top of it; 5 gated on task 0. All of it lands before Plan-26 UAT, per the no-cutover
 ruling.
+
+---
+
+## STATUS — recorded 2026-08-04 (paused here to work other tracks)
+
+### Done and pushed
+
+**Plan-32a (GIG home delivery) — COMPLETE, shipped dark.** All seven slices: client +
+centroids (774/774), coverage sync (nightly), live quotes at checkout with flat-rate
+fallback, GigShipment born at placement, the admin capture surface (verified with a live
+browser-driven sandbox capture, waybill 1349113107), tracking poll + wallet monitor, and
+the go-live runbook (`docs/runbooks/gig-golive.md`). Both option rows exist and are
+INACTIVE until that runbook runs.
+
+**Plan-32b slices 1–2 — done** (commits `88dbc0b`, `2dc8f9c`):
+- `Address.latitude/longitude` (the pin, null = centroid fallback); `GigCentre` synced
+  nightly (181 centres live); `nearest_centres` haversine helper; `carrier_service` on
+  DeliveryOption; "Pickup at GIG Centre" seeded dark.
+- Pickup quoting (`PickUpOptions=1`, priced to the centre, cached per centre) — live
+  sandbox: pickup ₦3,899.27 vs door ₦4,175.20, genuinely cheaper. Pin overrides centroid
+  for door delivery. `/api/v1/checkout/gig-centres/?address_id=` feeds the picker.
+
+### Left to do
+
+| # | Work | Gated on |
+|---|---|---|
+| 32b slice 3 | Storefront address rebuild: Places autocomplete assist + confirm-your-pin map + LGA-mismatch nudge, checkout AND address book | **Hammed: Google Maps API key** (guide given 2026-08-03; `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` into storefront/.env.local + Vercel) |
+| 32b slice 4 | Centre picker UI in checkout; placement carries the chosen centre; order/GigShipment snapshot it; placement re-quotes the chosen centre server-side | slice 3 (same surface) — picker itself could start earlier if needed |
+| 32b task 0 + slice 5 | Learn `capture/preshipment` shape for centre delivery (sandbox experiment or GIG's WhatsApp answer, question queued in the draft); then pickup capture + pickup-flavoured emails + admin centre display | GIG's answer OR one sandbox session |
+| 32b slice 6 | UAT scenarios + go-live runbook addendum (flip BOTH rows, verify production pickup pricing) | slices 3–5 |
+| 32a go-live | `docs/runbooks/gig-golive.md` steps 1–9 | Hammed: send the WhatsApp asks (final draft in chat 2026-08-03); GIG: production creds, webhook, Bike + pickup-hours confirmations; wallet funding |
+
+### Loose ends worth remembering
+
+- The 8 weightless variants (runbook step 1) — admin data entry, any time.
+- Dev walkthrough account password was reset to `WalkThru!2026` during slice-5
+  verification (owner-walk@tokecosmetics.local).
+- Sandbox order `TC-GIGLIVE1` + waybills 1349113095/1349113107 exist in the dev DB for
+  testing; the tracking poll runs against them harmlessly.
+- Full backend suite last gated green at slice 6 of 32a (2,126); 32b slices 1–2 gated on
+  the touched suites (156 delivery+checkout) — run the full suite before the next
+  32b commit.
