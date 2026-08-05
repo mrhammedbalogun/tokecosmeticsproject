@@ -46,8 +46,6 @@ const COLUMNS: { heading: string; links: readonly (readonly [string, string])[] 
   },
 ];
 
-const PAYMENTS = ["visa", "mastercard", "verve", "paystack", "bank-transfer"];
-
 const SOCIALS: { label: string; href: string; icon: ReactNode }[] = [
   {
     label: "Instagram",
@@ -143,16 +141,11 @@ export function Footer() {
       </div>
 
       <div className="border-t border-[#262626]">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-[#7d7973] md:flex-row">
-          <span>© {new Date().getFullYear()} Toke Cosmetics · Lagos, Nigeria</span>
-          <ul className="flex flex-wrap items-center gap-2">
-            {PAYMENTS.map((p) => (
-              <li key={p} className="rounded border border-[#2c2c2c] px-2 py-1 capitalize">
-                {p.replace("-", " ")}
-              </li>
-            ))}
-          </ul>
-        </div>
+        {/* The year renders at REQUEST time (this is a Server Component on a dynamic
+            page), so on 1 January it advances by itself — no deploy, no stale build. */}
+        <p className="mx-auto max-w-7xl px-4 py-5 text-center text-xs text-[#7d7973]">
+          © Toke Cosmetics {new Date().getFullYear()}. All Rights Reserved.
+        </p>
       </div>
     </footer>
   );
