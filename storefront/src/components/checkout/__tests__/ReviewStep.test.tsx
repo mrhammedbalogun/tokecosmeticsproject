@@ -246,7 +246,7 @@ describe("ReviewStep", () => {
     fireEvent.click(button);
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/no longer available/i));
-    expect(screen.getByRole("link", { name: /review your bag/i })).toHaveAttribute("href", "/cart");
+    expect(screen.getByRole("link", { name: /review your cart/i })).toHaveAttribute("href", "/cart");
     expect(button).not.toBeDisabled();
   });
 

@@ -14,7 +14,7 @@ export default async function WishlistPage() {
   // The country cookie MUST be forwarded: /me/wishlist/ returns country-resolved
   // product cards (price, currency, default_variant_id availability), and without it
   // the backend defaults to NG — a non-NG shopper would see NGN prices and NG stock
-  // driving their wishlist's "Add to bag" availability.
+  // driving their wishlist's "Add to Cart" availability.
   const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
   const items = await fetchWithAuthOrBounce<WishlistItem[]>(
     "/me/wishlist/", "/account/wishlist", { country },

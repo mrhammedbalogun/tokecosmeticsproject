@@ -28,7 +28,7 @@ function json(data: unknown, status = 200) {
  * Functions, which compare Origin against Host themselves. Without this, a cross-site
  * form POST to /api/auth/login carrying the ATTACKER's credentials is session fixation:
  * our response Set-Cookie logs the victim into the attacker's account, and
- * mergeGuestCart then folds the victim's bag into it.
+ * mergeGuestCart then folds the victim's cart into it.
  *
  * SameSite=Lax does not help here. The attack needs no pre-existing cookie to be sent —
  * it is the response's Set-Cookie that does the damage.

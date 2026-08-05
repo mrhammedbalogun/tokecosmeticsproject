@@ -52,7 +52,7 @@ function req(body: unknown, headers: Record<string, string> = {}) {
 describe("auth BFF — same-origin gate", () => {
   // A cross-site form POST with the ATTACKER's credentials would otherwise get our
   // Set-Cookie response, logging the victim into the attacker's account; mergeGuestCart
-  // then folds the victim's bag into it. SameSite=Lax does not prevent this, because
+  // then folds the victim's cart into it. SameSite=Lax does not prevent this, because
   // the attack needs no existing cookie — it is the response that does the damage.
   it("rejects a cross-site origin without calling upstream or setting cookies", async () => {
     upstream(200, { access: "AAA", refresh: "RRR" });
@@ -166,7 +166,7 @@ describe("auth BFF", () => {
  * Merging the guest cart is a property of AUTHENTICATING, not of whichever page
  * remembered to call it. It used to live in checkout's SignInStep, which meant any new
  * sign-in surface (the Plan-15 /login and /register pages) would silently drop a
- * shopper's bag — the exact bug the Plan-14 walkthrough caught, waiting to happen again
+ * shopper's cart — the exact bug the Plan-14 walkthrough caught, waiting to happen again
  * on a different route.
  *
  * Moving it here also kills a latent race: SignInStep snapshotted `cart.id` from

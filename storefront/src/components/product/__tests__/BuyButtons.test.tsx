@@ -44,7 +44,7 @@ let qc: QueryClient;
 function renderButtons() {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // The stale-cache trap this file exists for: the shopper browsed with an empty
-  // bag, so ["cart"] holds a FRESH (staleTime 30s) empty cart when they hit Buy Now.
+  // cart, so ["cart"] holds a FRESH (staleTime 30s) empty cart when they hit Buy Now.
   qc.setQueryData(["cart"], EMPTY_CART);
   render(
     <QueryClientProvider client={qc}>
@@ -78,7 +78,7 @@ describe("BuyButtons — Buy Now", () => {
       }),
     );
     // Without this, checkout trusts the fresh-for-30s empty cart and renders
-    // "Your bag is empty" — the exact live bug this change fixes.
+    // "Your cart is empty" — the exact live bug this change fixes.
     expect(qc.getQueryData(["cart"])).toEqual(CART_WITH_ITEM);
   });
 

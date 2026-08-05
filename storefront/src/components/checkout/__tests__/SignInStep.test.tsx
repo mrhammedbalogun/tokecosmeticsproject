@@ -119,7 +119,7 @@ describe("SignInStep", () => {
     // The merge moved server-side into api/auth/[action]. Two reasons it had to move:
     // it belongs to authenticating rather than to checkout (the Plan-15 /login and
     // /register pages would each have had to remember it, and a shopper signing in
-    // from the header would have lost their bag), and the client snapshot read
+    // from the header would have lost their cart), and the client snapshot read
     // `cart.id` from react-query — submitting before that query resolved merged
     // nothing at all.
     //

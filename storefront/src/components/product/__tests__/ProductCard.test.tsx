@@ -1,10 +1,20 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProductCard } from "@/components/product/ProductCard";
 import type { ProductCard as ProductCardData } from "@/lib/catalog";
 
 // ProductCard embeds the WishlistHeart client island, which calls useRouter().
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+// CardAddButton (now on every card variant) uses useCart, which needs a QueryClient.
+function renderCard(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  return render(ui, { wrapper });
+}
 
 function make(overrides: Partial<ProductCardData> = {}): ProductCardData {
   return {
@@ -26,7 +36,7 @@ function make(overrides: Partial<ProductCardData> = {}): ProductCardData {
 
 describe("ProductCard", () => {
   it("renders only the primary image when hover_image is null (no second/broken img)", () => {
-    render(<ProductCard product={make({ hover_image: null })} />);
+    renderCard(<ProductCard product={make({ hover_image: null })} />);
     // The hover <Image> has alt="" (role=presentation), so an accessible image
     // query returns exactly the primary product image — none is left broken.
     const imgs = screen.getAllByRole("img");
@@ -35,13 +45,13 @@ describe("ProductCard", () => {
   });
 
   it("title-cases the brand slug and links to the product", () => {
-    render(<ProductCard product={make()} />);
+    renderCard(<ProductCard product={make()} />);
     expect(screen.getByText("Toke Naturals")).toBeInTheDocument();
     expect(screen.getByRole("link")).toHaveAttribute("href", "/product/radiance-glow-serum");
   });
 
   it("shows the gold Bestseller badge only for featured products", () => {
-    const { rerender } = render(<ProductCard product={make({ is_featured: false })} />);
+    const { rerender } = renderCard(<ProductCard product={make({ is_featured: false })} />);
     expect(screen.queryByText("Bestseller")).toBeNull();
     rerender(<ProductCard product={make({ is_featured: true })} />);
     expect(screen.getByText("Bestseller")).toBeInTheDocument();

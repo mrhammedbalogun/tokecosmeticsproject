@@ -6,11 +6,11 @@ const MESSAGES: Record<string, string> = {
   inactive: "That code isn't active.",
   not_started: "That code isn't active yet.",
   expired: "That code has expired.",
-  min_not_met: "Your bag doesn't meet this code's minimum spend.",
+  min_not_met: "Your cart doesn't meet this code's minimum spend.",
   wrong_currency: "That code isn't valid in your currency.",
   exhausted: "That code has been fully redeemed.",
   user_exhausted: "You've already used that code.",
-  not_valid_for_items: "That code doesn't apply to the items in your bag.",
+  not_valid_for_items: "That code doesn't apply to the items in your cart.",
 };
 
 export function couponMessage(code: string): string {

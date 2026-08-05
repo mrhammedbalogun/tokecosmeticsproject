@@ -11,8 +11,8 @@ export function CartButton() {
   const count = cart.items.reduce((n, l) => n + l.quantity, 0);
   return (
     <>
-      <button onClick={() => setOpen(true)} className="relative" aria-label={`Bag, ${count} items`}>
-        Bag
+      <button onClick={() => setOpen(true)} className="relative" aria-label={`Cart, ${count} items`}>
+        Cart
         {count > 0 && (
           <span className="absolute -right-3 -top-2 rounded-full bg-accent px-1.5 text-xs text-surface">
             {count}

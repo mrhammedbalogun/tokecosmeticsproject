@@ -26,7 +26,7 @@ export function BuyButtons() {
       await addItem.mutateAsync({ variantId: variant.id, quantity: qty });
       openCartDrawer();
     } catch {
-      setError("Could not add to bag — please try again.");
+      setError("Could not add to cart — please try again.");
     } finally { setBusy(null); }
   }
 
@@ -48,7 +48,7 @@ export function BuyButtons() {
       // Buy-now returns the STANDARD cart with the item added (it is the same cart
       // checkout reads). Seed the query cache before navigating: ["cart"] is fresh
       // for 30s, so without this checkout would trust a stale empty cart and render
-      // "Your bag is empty" — the shipped bug that retired the express cart.
+      // "Your cart is empty" — the shipped bug that retired the express cart.
       queryClient.setQueryData(["cart"], await res.json());
       router.push("/checkout");
     } catch {

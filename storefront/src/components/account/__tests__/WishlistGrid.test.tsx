@@ -80,7 +80,7 @@ describe("WishlistGrid", () => {
     expect(screen.getByText("TOKE-GONE")).toBeInTheDocument();
   });
 
-  it("Add to bag POSTs /api/cart/items with {variant_id, quantity: 1} and opens the drawer", async () => {
+  it("Add to Cart POSTs /api/cart/items with {variant_id, quantity: 1} and opens the drawer", async () => {
     const f = mockFetch({
       "POST /api/cart/items": { status: 200, body: { id: "cart-1", items: [], subtotal: "0.00" } },
     });
@@ -88,7 +88,7 @@ describe("WishlistGrid", () => {
     const off = onCartDrawerOpen(opened);
     renderGrid([item()]);
 
-    fireEvent.click(screen.getByRole("button", { name: /add to bag/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add to cart/i }));
 
     await waitFor(() => expect(f).toHaveBeenCalledWith(
       "/api/cart/items",
@@ -102,11 +102,11 @@ describe("WishlistGrid", () => {
     off();
   });
 
-  it("disables Add to bag with a region hint when default_variant_id is null", () => {
+  it("disables Add to Cart with a region hint when default_variant_id is null", () => {
     mockFetch({});
     renderGrid([item({ product: product({ default_variant_id: null }) })]);
 
-    expect(screen.getByRole("button", { name: /add to bag/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /add to cart/i })).toBeDisabled();
     expect(screen.getByText(/not available in your region/i)).toBeInTheDocument();
   });
 
@@ -141,7 +141,7 @@ describe("WishlistGrid", () => {
     expect(f.mock.calls.filter(([url]) => String(url).startsWith("/api/wishlist"))).toHaveLength(1);
   });
 
-  it("add-to-bag failure shows the inline error and leaves the list unchanged", async () => {
+  it("add-to-cart failure shows the inline error and leaves the list unchanged", async () => {
     // Exercises the reject path via a network failure. useCart's addItem mutation also
     // rejects on a non-ok HTTP response (throws instead of resolving the error body as
     // if it were a Cart — see useCart.ts / useCart.test.ts), which drives this same
@@ -151,7 +151,7 @@ describe("WishlistGrid", () => {
     });
     renderGrid([item()]);
 
-    fireEvent.click(screen.getByRole("button", { name: /add to bag/i }));
+    fireEvent.click(screen.getByRole("button", { name: /add to cart/i }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(screen.getByText("Shea Butter Cream")).toBeInTheDocument();

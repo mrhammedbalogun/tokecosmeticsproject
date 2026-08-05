@@ -9,7 +9,7 @@
  *
  * That matters most for the guest-cart merge. It belongs to *authenticating*, not to
  * whichever page remembered to call it — it used to live in checkout's `SignInStep`, so a
- * shopper who signed in from the header silently lost their bag. A lib module enforces
+ * shopper who signed in from the header silently lost their cart. A lib module enforces
  * "no future sign-in surface can omit it" better than a route file does.
  *
  * Every function takes the cookie jar explicitly instead of calling `cookies()` itself.

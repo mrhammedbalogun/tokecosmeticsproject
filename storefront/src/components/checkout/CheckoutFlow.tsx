@@ -72,7 +72,7 @@ export function CheckoutFlow() {
   if (cart.items.length === 0) {
     return (
       <div className="mt-10 rounded-[var(--radius-card)] border border-line bg-surface p-10 text-center">
-        <p className="text-muted">Your bag is empty.</p>
+        <p className="text-muted">Your cart is empty.</p>
         <Link
           href="/products"
           className="mt-4 inline-block rounded-[var(--radius-card)] bg-accent px-6 py-3 text-surface transition-colors hover:bg-accent-strong"

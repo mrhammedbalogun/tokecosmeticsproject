@@ -3,7 +3,7 @@
 /**
  * The account wishlist grid (Plan-15d Task 3). Same no-optimistic-state ruling as
  * AddressBook: a successful Remove re-GETs /api/wishlist and replaces the list
- * wholesale rather than splicing the removed item out locally. Add-to-bag mirrors
+ * wholesale rather than splicing the removed item out locally. Add-to-cart mirrors
  * the PDP's Add to Cart exactly (BuyButtons.addToCart): addItem.mutateAsync then
  * openCartDrawer().
  *
@@ -24,7 +24,7 @@ export interface WishlistItem {
   created_at: string;
 }
 
-const ADD_ERROR = "Couldn't add to bag — try again.";
+const ADD_ERROR = "Couldn't add to cart — try again.";
 const REMOVE_ERROR = "Couldn't remove — try again.";
 
 function omit(rec: Record<string, string>, sku: string): Record<string, string> {
@@ -149,7 +149,7 @@ function WishlistCard({
             disabled={busy}
             className="w-full rounded-full bg-accent px-3 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:opacity-50"
           >
-            {busy ? "Adding…" : "Add to bag"}
+            {busy ? "Adding…" : "Add to Cart"}
           </button>
         ) : (
           <div>
@@ -158,7 +158,7 @@ function WishlistCard({
               disabled
               className="w-full rounded-full bg-accent px-3 py-2 text-sm text-surface opacity-50"
             >
-              Add to bag
+              Add to Cart
             </button>
             <p className="mt-1 text-xs text-muted">Not available in your region</p>
           </div>

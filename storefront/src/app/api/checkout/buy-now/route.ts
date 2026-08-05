@@ -7,7 +7,7 @@ import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 /** Buy-Now proxy (Plan-13 D6). Authed-only by backend design: adds this item to the
  * user's STANDARD cart — the same cart checkout reads. (Express carts retired
  * 2026-07-28: nothing ever consumed them, so Buy Now reached checkout with an empty
- * bag.) Guests never reach here — the client stashes intent and routes to /login.
+ * cart.) Guests never reach here — the client stashes intent and routes to /login.
  * NOT a checkout placement — Plan-14 owns that. */
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {

@@ -6,7 +6,7 @@ import { openCartDrawer } from "@/lib/cart-ui";
 
 /** One-click Add on a landing card (approved design). Single-variant products add
  * their default variant and open the drawer — the shortest path from homepage to
- * bag. Multi-variant products (no default_variant_id) route to the PDP instead:
+ * cart. Multi-variant products (no default_variant_id) route to the PDP instead:
  * silently picking a shade for someone is worse than one extra click.
  *
  * Inside the card's <Link>, so every event must stop propagation or the card
@@ -49,10 +49,10 @@ export function CardAddButton({
       type="button"
       onClick={onClick}
       disabled={busy}
-      aria-label={`Add ${name} to bag`}
-      className="rounded-full border border-line bg-surface px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors hover:border-accent hover:bg-accent hover:text-surface disabled:opacity-50"
+      aria-label={`Add ${name} to cart`}
+      className="whitespace-nowrap rounded-full border border-line bg-surface px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors hover:border-accent hover:bg-accent hover:text-surface disabled:opacity-50"
     >
-      {busy ? "…" : "Add"}
+      {busy ? "…" : "Add to Cart"}
     </button>
   );
 }

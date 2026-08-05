@@ -16,7 +16,7 @@ import type { Totals } from "@/lib/checkout";
 const COUPON_STORAGE_KEY = "toke-coupon-code";
 
 /** Real CheckoutError codes from backend/apps/checkout/services/checkout.py, mapped to
- * shopper-facing copy. `cartLink` codes get a "Review your bag" link back to /cart;
+ * shopper-facing copy. `cartLink` codes get a "Review your cart" link back to /cart;
  * there is no "reservation_expired" code — reservation only exists for an order that
  * already placed, not for placement itself, so that scenario from the task brief
  * doesn't apply here (see the final report for this note). */
@@ -35,13 +35,13 @@ function mapPlaceOrderError(data: { error?: string; detail?: string } | null): {
     return { message: couponMessage(code.slice("coupon_".length)), cartLink: false };
   }
   if (code === "insufficient_stock" || code === "line_unavailable") {
-    return { message: "Some items in your bag are no longer available in that quantity.", cartLink: true };
+    return { message: "Some items in your cart are no longer available in that quantity.", cartLink: true };
   }
   if (code === "cart_changed") {
-    return { message: "Prices changed since you started checkout — please review your bag.", cartLink: true };
+    return { message: "Prices changed since you started checkout — please review your cart.", cartLink: true };
   }
   if (code === "cart_not_active" || code === "cart_empty") {
-    return { message: "Your bag has changed — please review it before continuing.", cartLink: true };
+    return { message: "Your cart has changed — please review it before continuing.", cartLink: true };
   }
   if (code === "delivery_option_invalid") {
     return { message: "That delivery option is no longer valid for this address — please choose again.", cartLink: false };
@@ -336,7 +336,7 @@ export function ReviewStep() {
           {placeError.message}{" "}
           {placeError.cartLink && (
             <a href="/cart" className="underline">
-              Review your bag
+              Review your cart
             </a>
           )}
         </p>

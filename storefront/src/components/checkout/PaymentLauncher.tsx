@@ -95,7 +95,7 @@ export function PaymentLauncher({ launch: initialLaunch }: { launch: LaunchInfo 
         <p role="alert" className="text-sm text-red-700">
           Your payment didn&apos;t go through.
         </p>
-        {/* Placing the order already converted the cart, so there is no bag to go back
+        {/* Placing the order already converted the cart, so there is no cart to go back
             to — both routes out have to work on THIS order. Retry re-opens the same
             attempt (the Paystack access code / PayPal order id stays valid); the switch
             asks the backend to open a new attempt on another gateway. Naming the order

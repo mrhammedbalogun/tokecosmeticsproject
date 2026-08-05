@@ -15,16 +15,16 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
       <aside
         role="dialog"
-        aria-label="Shopping bag"
+        aria-label="Shopping cart"
         className={`absolute right-0 top-0 h-full w-full max-w-md bg-surface shadow-xl transition-transform ${open ? "translate-x-0" : "translate-x-full"}`}
       >
         <header className="flex items-center justify-between border-b border-line p-5">
-          <h2 className="font-display text-xl">Your bag</h2>
-          <button onClick={onClose} aria-label="Close bag" className="text-muted hover:text-foreground">✕</button>
+          <h2 className="font-display text-xl">Your cart</h2>
+          <button onClick={onClose} aria-label="Close cart" className="text-muted hover:text-foreground">✕</button>
         </header>
         <div className="max-h-[calc(100%-9rem)] overflow-y-auto p-5">
           {cart.items.length === 0 ? (
-            <p className="text-muted">Your bag is empty.</p>
+            <p className="text-muted">Your cart is empty.</p>
           ) : (
             cart.items.map((l) => (
               <div key={l.id} className="flex items-center justify-between border-b border-line py-3">

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ProductRow } from "@/components/home/ProductRow";
 import type { ProductCard as ProductCardData } from "@/lib/catalog";
 
@@ -9,6 +10,15 @@ vi.mock("@/components/motion/Motion", () => ({
 }));
 // ProductCard -> WishlistHeart island calls useRouter().
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
+// ProductCard -> CardAddButton uses useCart, which needs a QueryClient.
+function renderRow(ui: React.ReactElement) {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+  );
+  return render(ui, { wrapper });
+}
 
 function make(slug: string): ProductCardData {
   return {
@@ -29,14 +39,14 @@ function make(slug: string): ProductCardData {
 
 describe("ProductRow", () => {
   it("renders nothing when there are no products", () => {
-    const { container } = render(
+    const { container } = renderRow(
       <ProductRow title="Best sellers" products={[]} href="/products" />,
     );
     expect(container).toBeEmptyDOMElement();
   });
 
   it("renders the title, a View all link, and one card per product", () => {
-    render(
+    renderRow(
       <ProductRow title="New arrivals" products={[make("a"), make("b")]} href="/products?ordering=newest" />,
     );
     expect(screen.getByRole("heading", { name: "New arrivals" })).toBeInTheDocument();
@@ -49,7 +59,7 @@ describe("ProductRow", () => {
   });
 
   it("wraps cards in a labelled carousel group only in carousel mode", () => {
-    const { rerender } = render(
+    const { rerender } = renderRow(
       <ProductRow title="Best sellers" products={[make("a")]} href="/x" carousel />,
     );
     expect(screen.getByRole("group", { name: "Best sellers" })).toBeInTheDocument();
