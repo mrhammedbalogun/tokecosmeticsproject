@@ -39,6 +39,16 @@ else
     log "WARNING: pre-deploy backup skipped by DEPLOY_SKIP_BACKUP=1"
 fi
 
+# Compose's recreate renames the old container to "<hex>_tokecosmetics-web-1" and
+# sometimes fails to remove it (hit on v0.6.1, v0.6.2 AND v0.7.0: "container name
+# already in use", leaving web DOWN with the deploy half-done). Clear any such
+# leftover from a previous run before recreating. The pattern is anchored to the
+# 12-hex-digit rename prefix, so live containers (tokecosmetics-web-1) can't match.
+docker ps -a --format '{{.Names}}' \
+    | grep -E '^[0-9a-f]{12}_tokecosmetics-[a-z]+-[0-9]+$' \
+    | xargs -r -n1 docker rm -f \
+    || true
+
 log "build and start"
 "${COMPOSE[@]}" up -d --build
 
