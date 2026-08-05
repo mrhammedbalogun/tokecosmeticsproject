@@ -1,22 +1,20 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
-import { getCategoryTree, getProducts } from "@/lib/catalog";
+import { getProducts } from "@/lib/catalog";
 import { getHomepage } from "@/lib/cms";
 import { pageMetadata, organizationJsonLd, webSiteJsonLd, DEFAULT_DESCRIPTION } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { HeroSlider } from "@/components/home/HeroSlider";
-import { GenderSection } from "@/components/home/GenderSection";
-import { GoogleReviews } from "@/components/home/GoogleReviews";
-import { FeaturedCategories } from "@/components/home/FeaturedCategories";
-import { SkinConcerns } from "@/components/home/SkinConcerns";
-import { BrandStory } from "@/components/home/BrandStory";
+import { ShopByCategory } from "@/components/home/ShopByCategory";
+import { ConcernsStrip } from "@/components/home/ConcernsStrip";
+import { FeatureSplit } from "@/components/home/FeatureSplit";
 import { ProductRow } from "@/components/home/ProductRow";
-import { CollectionBanner } from "@/components/home/CollectionBanner";
-import { WhyChoose } from "@/components/home/WhyChoose";
-import { CommunityGrid } from "@/components/home/CommunityGrid";
-import { EducationTeasers } from "@/components/home/EducationTeasers";
-import { NewsletterCta } from "@/components/home/NewsletterCta";
+import { GenderSection } from "@/components/home/GenderSection";
+import { TikTokSection } from "@/components/home/TikTokSection";
+import { TrioSection } from "@/components/home/TrioSection";
+import { Journal } from "@/components/home/Journal";
+import { GoogleReviews } from "@/components/home/GoogleReviews";
 
 export const metadata: Metadata = pageMetadata({
   title: "Toke Cosmetics — Premium Skincare for Melanin-Rich Skin",
@@ -30,8 +28,7 @@ export default async function HomePage() {
   const homepage = await getHomepage(country);
   const collection = (slug: string) =>
     getProducts({ collection: slug }, country).then((p) => p.results).catch(() => []);
-  const [categories, bestSellers, newArrivals, men, women, babies] = await Promise.all([
-    getCategoryTree(country).catch(() => []),
+  const [bestSellers, newArrivals, men, women, babies] = await Promise.all([
     collection("best-sellers"),
     getProducts({ collection: "new-arrivals", ordering: "newest" }, country)
       .then((p) => p.results)
@@ -47,10 +44,11 @@ export default async function HomePage() {
     <>
       <JsonLd data={organizationJsonLd()} />
       <JsonLd data={webSiteJsonLd()} />
+      {/* The approved artifact, section for section, top to bottom. */}
       <HeroSlider banners={homepage?.banners ?? []} />
-      <FeaturedCategories categories={categories} />
-      <SkinConcerns />
-      <BrandStory />
+      <ShopByCategory banners={homepage?.banners ?? []} />
+      <ConcernsStrip />
+      <FeatureSplit />
       <ProductRow
         title="Loved by thousands"
         eyebrow="Best Sellers"
@@ -91,12 +89,10 @@ export default async function HomePage() {
         href="/products?ordering=newest"
         compact
       />
-      <CollectionBanner />
-      <WhyChoose />
-      <CommunityGrid />
-      <EducationTeasers />
+      <TikTokSection products={bestSellers.slice(4, 8).length ? bestSellers.slice(4, 8) : newArrivals.slice(0, 4)} />
+      <TrioSection />
+      <Journal />
       <GoogleReviews reviews={homepage?.reviews} />
-      <NewsletterCta />
     </>
   );
 }

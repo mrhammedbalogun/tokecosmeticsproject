@@ -74,19 +74,19 @@ const SOCIALS: { label: string; href: string; icon: ReactNode }[] = [
 
 export function Footer() {
   return (
-    <footer className="mt-16 border-t border-line bg-surface">
+    <footer className="mt-16 bg-[#111] text-[#bdb9b2]">
       <div className="mx-auto max-w-7xl px-4 py-14">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-12">
           {/* Brand + newsletter */}
           <div className="lg:col-span-4">
-            <h3 className="font-display text-xl">Toke Cosmetics</h3>
-            <p className="mt-2 max-w-xs text-sm leading-relaxed text-muted">
+            <h3 className="font-display text-xl text-surface">Toke Cosmetics</h3>
+            <p className="mt-2 max-w-xs text-sm leading-relaxed text-[#bdb9b2]">
               Premium skincare for melanin-rich skin — natural ingredients,
               science-backed, shipped from Nigeria worldwide.
             </p>
             <div className="mt-6">
-              <h4 className="text-sm font-medium">Join our list</h4>
-              <p className="mt-1 text-sm text-muted">Offers, launches and beauty tips.</p>
+              <h4 className="text-sm font-medium text-surface">Join our list</h4>
+              <p className="mt-1 text-sm text-[#bdb9b2]">Offers, launches and beauty tips.</p>
               <div className="mt-3 max-w-sm">
                 <NewsletterForm />
               </div>
@@ -99,7 +99,7 @@ export function Footer() {
                     target="_blank"
                     rel="noopener noreferrer"
                     aria-label={s.label}
-                    className="grid h-9 w-9 place-items-center rounded-full border border-line text-muted transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    className="grid h-9 w-9 place-items-center rounded-full border border-[#2c2c2c] text-[#bdb9b2] transition-colors hover:border-leaf hover:text-leaf focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-leaf"
                   >
                     <svg
                       aria-hidden
@@ -123,13 +123,13 @@ export function Footer() {
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-4 lg:col-span-8">
             {COLUMNS.map((col) => (
               <nav key={col.heading} aria-label={col.heading}>
-                <h4 className="text-sm font-semibold">{col.heading}</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-surface">{col.heading}</h4>
                 <ul className="mt-3 grid gap-2">
                   {col.links.map(([label, href]) => (
                     <li key={href}>
                       <Link
                         href={href}
-                        className="text-sm text-muted transition-colors hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                        className="text-sm text-[#bdb9b2] transition-colors hover:text-leaf focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-leaf"
                       >
                         {label}
                       </Link>
@@ -142,12 +142,12 @@ export function Footer() {
         </div>
       </div>
 
-      <div className="border-t border-line">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-muted md:flex-row">
+      <div className="border-t border-[#262626]">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 py-5 text-xs text-[#7d7973] md:flex-row">
           <span>© {new Date().getFullYear()} Toke Cosmetics · Lagos, Nigeria</span>
           <ul className="flex flex-wrap items-center gap-2">
             {PAYMENTS.map((p) => (
-              <li key={p} className="rounded border border-line px-2 py-1 capitalize">
+              <li key={p} className="rounded border border-[#2c2c2c] px-2 py-1 capitalize">
                 {p.replace("-", " ")}
               </li>
             ))}

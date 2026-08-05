@@ -9,6 +9,7 @@ import { CartButton } from "@/components/layout/CartButton";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { SearchBar } from "@/components/layout/SearchBar";
+import { CategoryDropdown } from "@/components/layout/CategoryDropdown";
 
 interface Category { name: string; slug: string; children: Category[] }
 
@@ -32,15 +33,22 @@ export async function Header() {
             <Image src="/logos/toke-logo.png" alt="Toke Cosmetics" width={96} height={56} priority />
           </Link>
         </div>
+        {/* The approved artifact's menu: Home · All Products · Shop by Category ·
+            Skin Quiz · Blog. Categories live in the dropdown, not inline. */}
         <nav className="hidden items-center gap-6 md:flex">
+          <Link href="/" className="text-sm hover:text-accent">
+            Home
+          </Link>
           <Link href="/products" className="text-sm hover:text-accent">
             All Products
           </Link>
-          {categories.slice(0, 6).map((c) => (
-            <Link key={c.slug} href={`/category/${c.slug}`} className="text-sm hover:text-accent">
-              {c.name}
-            </Link>
-          ))}
+          <CategoryDropdown categories={categories.map(({ name, slug }) => ({ name, slug }))} />
+          <Link href="/skin-quiz" className="text-sm hover:text-accent">
+            Skin Quiz
+          </Link>
+          <Link href="/blog" className="text-sm hover:text-accent">
+            Blog
+          </Link>
         </nav>
         <SearchBar />
         <div className="flex items-center gap-5">
