@@ -754,16 +754,22 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * @description CRUD minus delete: a delivery option is named on every order that used it
-         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
-         *     match), and deactivating is what "retire this option" means.
+         * @description Full CRUD. Delete became real when creation did (the wizard): a mistyped option
+         *     deserves better than immortality as an inactive row. It is referentially safe —
+         *     orders snapshot only the option NAME (`Order.delivery_option_name`), nothing holds
+         *     an FK to the row, and a checkout in flight re-matches by id at place time, where a
+         *     deleted option fails exactly like a deactivated one. "Retire because prices moved"
+         *     is still `is_active=False`; delete is for mistakes.
          */
         get: operations["v1_admin_delivery_options_list"];
         put?: never;
         /**
-         * @description CRUD minus delete: a delivery option is named on every order that used it
-         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
-         *     match), and deactivating is what "retire this option" means.
+         * @description Full CRUD. Delete became real when creation did (the wizard): a mistyped option
+         *     deserves better than immortality as an inactive row. It is referentially safe —
+         *     orders snapshot only the option NAME (`Order.delivery_option_name`), nothing holds
+         *     an FK to the row, and a checkout in flight re-matches by id at place time, where a
+         *     deleted option fails exactly like a deactivated one. "Retire because prices moved"
+         *     is still `is_active=False`; delete is for mistakes.
          */
         post: operations["v1_admin_delivery_options_create"];
         delete?: never;
@@ -780,25 +786,42 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * @description CRUD minus delete: a delivery option is named on every order that used it
-         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
-         *     match), and deactivating is what "retire this option" means.
+         * @description Full CRUD. Delete became real when creation did (the wizard): a mistyped option
+         *     deserves better than immortality as an inactive row. It is referentially safe —
+         *     orders snapshot only the option NAME (`Order.delivery_option_name`), nothing holds
+         *     an FK to the row, and a checkout in flight re-matches by id at place time, where a
+         *     deleted option fails exactly like a deactivated one. "Retire because prices moved"
+         *     is still `is_active=False`; delete is for mistakes.
          */
         get: operations["v1_admin_delivery_options_retrieve"];
         /**
-         * @description CRUD minus delete: a delivery option is named on every order that used it
-         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
-         *     match), and deactivating is what "retire this option" means.
+         * @description Full CRUD. Delete became real when creation did (the wizard): a mistyped option
+         *     deserves better than immortality as an inactive row. It is referentially safe —
+         *     orders snapshot only the option NAME (`Order.delivery_option_name`), nothing holds
+         *     an FK to the row, and a checkout in flight re-matches by id at place time, where a
+         *     deleted option fails exactly like a deactivated one. "Retire because prices moved"
+         *     is still `is_active=False`; delete is for mistakes.
          */
         put: operations["v1_admin_delivery_options_update"];
         post?: never;
-        delete?: never;
+        /**
+         * @description Full CRUD. Delete became real when creation did (the wizard): a mistyped option
+         *     deserves better than immortality as an inactive row. It is referentially safe —
+         *     orders snapshot only the option NAME (`Order.delivery_option_name`), nothing holds
+         *     an FK to the row, and a checkout in flight re-matches by id at place time, where a
+         *     deleted option fails exactly like a deactivated one. "Retire because prices moved"
+         *     is still `is_active=False`; delete is for mistakes.
+         */
+        delete: operations["v1_admin_delivery_options_destroy"];
         options?: never;
         head?: never;
         /**
-         * @description CRUD minus delete: a delivery option is named on every order that used it
-         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
-         *     match), and deactivating is what "retire this option" means.
+         * @description Full CRUD. Delete became real when creation did (the wizard): a mistyped option
+         *     deserves better than immortality as an inactive row. It is referentially safe —
+         *     orders snapshot only the option NAME (`Order.delivery_option_name`), nothing holds
+         *     an FK to the row, and a checkout in flight re-matches by id at place time, where a
+         *     deleted option fails exactly like a deactivated one. "Retire because prices moved"
+         *     is still `is_active=False`; delete is for mistakes.
          */
         patch: operations["v1_admin_delivery_options_partial_update"];
         trace?: never;
@@ -4582,6 +4605,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/products/{slug}/reviews/eligibility/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Answers "may I review this product?" for the signed-in customer, so the
+         *     storefront can pick which state to render (form / already-reviewed / not a
+         *     purchaser) instead of showing every visitor a form that 403s on submit.
+         */
+        get: operations["v1_products_reviews_eligibility_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search/": {
         parameters: {
             query?: never;
@@ -5178,6 +5222,17 @@ export interface components {
             country_codes?: string[];
             readonly region_count: number;
             region_ids?: number[];
+            /**
+             * @description Structured coverage for the list's human summary line ("Ikeja + 1 more LGA,
+             *     Lagos") — resolved server-side because the list page should not need all 879
+             *     region rows just to name a handful. Region names are CAPPED; `region_total` is
+             *     the honest count so the client can say "+ N more" instead of pretending the cap
+             *     is everything. Needs the view to prefetch regions with select_related("parent")
+             *     or this goes N+1.
+             */
+            readonly coverage: {
+                [key: string]: unknown;
+            };
         };
         EmailVerify: {
             token: string;
@@ -5473,21 +5528,6 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["CustomerList"][];
-        };
-        PaginatedDeliveryOptionAdminList: {
-            /** @example 123 */
-            count: number;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=4
-             */
-            next?: string | null;
-            /**
-             * Format: uri
-             * @example http://api.example.org/accounts/?page=2
-             */
-            previous?: string | null;
-            results: components["schemas"]["DeliveryOptionAdmin"][];
         };
         PaginatedGoogleReviewAdminList: {
             /** @example 123 */
@@ -5949,6 +5989,17 @@ export interface components {
             country_codes?: string[];
             readonly region_count?: number;
             region_ids?: number[];
+            /**
+             * @description Structured coverage for the list's human summary line ("Ikeja + 1 more LGA,
+             *     Lagos") — resolved server-side because the list page should not need all 879
+             *     region rows just to name a handful. Region names are CAPPED; `region_total` is
+             *     the honest count so the client can say "+ N more" instead of pretending the cap
+             *     is everything. Needs the view to prefetch regions with select_related("parent")
+             *     or this goes N+1.
+             */
+            readonly coverage?: {
+                [key: string]: unknown;
+            };
         };
         /**
          * @description Everything is audited: a fabricated five-star review on the homepage is a
@@ -7597,8 +7648,6 @@ export interface operations {
                  *     * `carrier` - Carrier API
                  */
                 kind?: "carrier" | "manual";
-                /** @description A page number within the paginated result set. */
-                page?: number;
             };
             header?: never;
             path?: never;
@@ -7611,7 +7660,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PaginatedDeliveryOptionAdminList"];
+                    "application/json": components["schemas"]["DeliveryOptionAdmin"][];
                 };
             };
         };
@@ -7688,6 +7737,27 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeliveryOptionAdmin"];
                 };
+            };
+        };
+    };
+    v1_admin_delivery_options_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery option. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -11780,6 +11850,26 @@ export interface operations {
         };
     };
     v1_products_reviews_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_products_reviews_eligibility_retrieve: {
         parameters: {
             query?: never;
             header?: never;

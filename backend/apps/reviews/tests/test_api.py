@@ -110,3 +110,72 @@ def test_cannot_review_the_same_product_twice(django_user_model):
     r = c.post(f"/api/v1/products/{product.slug}/reviews/", {"rating": 1, "body": "two"},
                format="json")
     assert r.status_code == 400
+
+
+@pytest.mark.django_db
+def test_an_oversized_body_is_rejected(django_user_model):
+    variant = ProductVariantFactory()
+    product = variant.product
+    user = django_user_model.objects.create_user(email="a@b.com", password="pw")
+    _delivered_order_for(user, variant)
+    c = APIClient()
+    c.force_authenticate(user)
+
+    r = c.post(f"/api/v1/products/{product.slug}/reviews/",
+               {"rating": 5, "body": "x" * 4001}, format="json")
+
+    assert r.status_code == 400
+    assert not Review.objects.filter(product=product, user=user).exists()
+
+
+@pytest.mark.django_db
+def test_eligibility_requires_authentication():
+    variant = ProductVariantFactory()
+    r = APIClient().get(f"/api/v1/products/{variant.product.slug}/reviews/eligibility/")
+    assert r.status_code == 401
+
+
+@pytest.mark.django_db
+def test_eligibility_true_for_a_verified_purchaser(django_user_model):
+    variant = ProductVariantFactory()
+    product = variant.product
+    user = django_user_model.objects.create_user(email="a@b.com", password="pw")
+    _delivered_order_for(user, variant)
+    c = APIClient()
+    c.force_authenticate(user)
+
+    r = c.get(f"/api/v1/products/{product.slug}/reviews/eligibility/")
+
+    assert r.status_code == 200
+    assert r.data == {"has_reviewed": False, "review_status": None, "eligible": True}
+
+
+@pytest.mark.django_db
+def test_eligibility_false_for_a_non_purchaser(django_user_model):
+    variant = ProductVariantFactory()
+    product = variant.product
+    user = django_user_model.objects.create_user(email="a@b.com", password="pw")
+    c = APIClient()
+    c.force_authenticate(user)
+
+    r = c.get(f"/api/v1/products/{product.slug}/reviews/eligibility/")
+
+    assert r.status_code == 200
+    assert r.data == {"has_reviewed": False, "review_status": None, "eligible": False}
+
+
+@pytest.mark.django_db
+def test_eligibility_reports_an_existing_review_and_its_status(django_user_model):
+    variant = ProductVariantFactory()
+    product = variant.product
+    user = django_user_model.objects.create_user(email="a@b.com", password="pw")
+    _delivered_order_for(user, variant)
+    Review.objects.create(product=product, user=user, rating=5, body="mine",
+                          status="pending")
+    c = APIClient()
+    c.force_authenticate(user)
+
+    r = c.get(f"/api/v1/products/{product.slug}/reviews/eligibility/")
+
+    assert r.status_code == 200
+    assert r.data == {"has_reviewed": True, "review_status": "pending", "eligible": False}

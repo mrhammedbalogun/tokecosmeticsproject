@@ -994,6 +994,19 @@ only**. They are never writable through any serializer or admin form — treat t
 Approval happens via the Django-admin "Approve selected reviews" action now; the **approval REST
 API is Plan-18** (only the model, the admin action, and the recompute service land in Plan-11).
 
+**PDP write flow (post-Plan-11 addition).** `GET /api/v1/products/{slug}/reviews/eligibility/`
+(authenticated) answers `{has_reviewed, review_status, eligible}` so the storefront renders the
+right state — sign-in link / "purchasers only" note / "awaiting approval" / the form — instead of
+showing every visitor a form that 403s on submit. The probe goes through a BFF Route Handler
+(`/api/products/[slug]/reviews/eligibility`), NOT a Server-Component fetch, because only a Route
+Handler may silently refresh the 14-minute access cookie; the PDP passes a `signedIn` hint read
+from the refresh cookie (same reasoning as `src/proxy.ts`) so signed-out visitors never probe at
+all. Submission is a Server Function (`storefront/.../product/[slug]/actions.ts`) for the free
+Origin/Host CSRF check. `ReviewWriteSerializer` caps `body` at 4000 chars — the model's TextField
+is unbounded. Review bodies remain plain text rendered as escaped JSX; if they ever reach
+`dangerouslySetInnerHTML` or an email template, route them through `apps.cms.sanitize.clean_html`
+on write first (the `GoogleReview.text` precedent, `cms/models.py`).
+
 ### Search sync for ratings (D2)
 
 There is no separate search index to sync today — `apps.search.backends.PostgresSearchBackend`

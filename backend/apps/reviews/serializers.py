@@ -17,6 +17,10 @@ class ReviewReadSerializer(serializers.ModelSerializer):
 
 
 class ReviewWriteSerializer(serializers.ModelSerializer):
+    # The model's TextField is unbounded; cap accepted input here so a review can't
+    # arrive at request-body scale (title is already capped at 140 by the model).
+    body = serializers.CharField(max_length=4000)
+
     class Meta:
         model = Review
         fields = ["rating", "title", "body"]

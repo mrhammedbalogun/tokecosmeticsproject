@@ -55,6 +55,8 @@ OBJECT_ROUTES: dict[str, tuple[str, str]] = {
     # --- public by design ---
     "api/v1/products/<slug:slug>/": (PUBLIC, "the catalogue is public"),
     "api/v1/products/<slug:slug>/reviews/": (PUBLIC, "published reviews are public"),
+    "api/v1/products/<slug:slug>/reviews/eligibility/": (
+        OWNED, "answers only from request.user's own orders and review; the slug names a public product"),
     "api/v1/collections/<slug:slug>/": (
         PUBLIC, "a merchandising grouping; the slug names no person"),
     "api/v1/cms/pages/<slug:slug>/": (PUBLIC, "published pages only; a draft 404s"),

@@ -7,6 +7,7 @@ import { getProduct, type ProductDetail } from "@/lib/catalog";
 import { mediaUrl } from "@/lib/media";
 import { deliveryEstimateFor } from "@/lib/delivery-estimates";
 import { getAccessToken } from "@/lib/session";
+import { REFRESH_COOKIE } from "@/lib/auth";
 import { breadcrumbJsonLd, faqJsonLd, pageMetadata, productJsonLd } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumbs } from "@/components/plp/Breadcrumbs";
@@ -75,7 +76,11 @@ async function deliveryLineFor(country: string): Promise<string> {
 
 export default async function ProductPage({ params }: { params: Params }) {
   const { slug } = await params;
-  const country = (await cookies()).get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
+  const jar = await cookies();
+  const country = jar.get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
+  // Gate on the refresh cookie, not access (14-min lifetime) — same reasoning as
+  // src/proxy.ts. A hint only: the review form's eligibility probe tells the truth.
+  const signedIn = Boolean(jar.get(REFRESH_COOKIE)?.value);
   const product = await loadProduct(slug, country);
   if (!product) notFound();
   const deliveryLine = await deliveryLineFor(country);
@@ -112,7 +117,7 @@ export default async function ProductPage({ params }: { params: Params }) {
         from_price: product.variants.find((v) => v.price)?.price?.amount ?? null,
         currency: product.variants.find((v) => v.price)?.price?.currency ?? "NGN",
       }} />
-      <ReviewList slug={slug} ratingAvg={product.rating_avg} ratingCount={product.rating_count} />
+      <ReviewList slug={slug} ratingAvg={product.rating_avg} ratingCount={product.rating_count} signedIn={signedIn} />
       <RelatedProducts products={product.related} />
       <RecentlyViewed excludeSlug={slug} />
     </section>

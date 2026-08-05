@@ -26,6 +26,27 @@ def _verified_order(user, product):
     )
 
 
+class ReviewEligibilityView(APIView):
+    """Answers "may I review this product?" for the signed-in customer, so the
+    storefront can pick which state to render (form / already-reviewed / not a
+    purchaser) instead of showing every visitor a form that 403s on submit."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, slug):
+        product = get_object_or_404(Product, slug=slug)
+        existing = Review.objects.filter(product=product, user=request.user).first()
+        return Response(
+            {
+                "has_reviewed": existing is not None,
+                # Exposed so the UI can say "awaiting approval" for a pending review.
+                "review_status": existing.status if existing else None,
+                "eligible": existing is None
+                and _verified_order(request.user, product) is not None,
+            }
+        )
+
+
 class ProductReviewsView(APIView):
     def get_permissions(self):
         # Public GET, authenticated POST.

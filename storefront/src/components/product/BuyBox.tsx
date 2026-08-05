@@ -19,7 +19,15 @@ export function BuyBox({ product, deliveryLine }: {
       )}
       <h1 className="mt-1 font-display text-3xl leading-tight">{product.name}</h1>
       <div className="mt-2">
-        <ReviewStars rating={product.rating_avg} count={product.rating_count} />
+        {product.rating_count > 0 ? (
+          <a href="#reviews" className="inline-block transition-opacity hover:opacity-80">
+            <ReviewStars rating={product.rating_avg} count={product.rating_count} />
+          </a>
+        ) : (
+          <a href="#reviews" className="text-sm text-muted underline-offset-2 hover:underline">
+            Be the first to review
+          </a>
+        )}
       </div>
       {price ? (
         <div className="mt-4">
