@@ -12,6 +12,17 @@ import { CardAddButton } from "@/components/product/CardAddButton";
  * vocabulary from design-direction.md. Gold "Bestseller" badge for featured
  * products (gold = seasoning). NOTE: the list API's `brand` field is the brand
  * SLUG (SlugRelatedField) — title-case it for display. */
+/** Replaces the Add to Cart button when the product has no sellable stock in the
+ * shopper's country (in_stock === false; missing field = old cached payload, assume
+ * in stock). Same pill dimensions as the button so card footers stay aligned. */
+function SoldOutTag() {
+  return (
+    <span className="whitespace-nowrap rounded-full border border-line px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
+      Sold Out
+    </span>
+  );
+}
+
 function brandLabel(slug: string): string {
   return slug
     .split("-")
@@ -77,11 +88,15 @@ export function ProductCard({
               ) : (
                 <span />
               )}
-              <CardAddButton
-                variantId={product.default_variant_id}
-                name={product.name}
-                slug={product.slug}
-              />
+              {product.in_stock === false ? (
+                <SoldOutTag />
+              ) : (
+                <CardAddButton
+                  variantId={product.default_variant_id}
+                  name={product.name}
+                  slug={product.slug}
+                />
+              )}
             </div>
           </div>
         ) : (
@@ -99,11 +114,15 @@ export function ProductCard({
               ) : (
                 <span />
               )}
-              <CardAddButton
-                variantId={product.default_variant_id}
-                name={product.name}
-                slug={product.slug}
-              />
+              {product.in_stock === false ? (
+                <SoldOutTag />
+              ) : (
+                <CardAddButton
+                  variantId={product.default_variant_id}
+                  name={product.name}
+                  slug={product.slug}
+                />
+              )}
             </div>
           </div>
         )}

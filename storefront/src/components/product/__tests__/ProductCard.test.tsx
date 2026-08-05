@@ -50,6 +50,23 @@ describe("ProductCard", () => {
     expect(screen.getByRole("link")).toHaveAttribute("href", "/product/radiance-glow-serum");
   });
 
+  it("swaps Add to Cart for Sold Out when in_stock is false, in both variants", () => {
+    const { rerender } = renderCard(
+      <ProductCard product={make({ in_stock: false })} />,
+    );
+    expect(screen.getByText("Sold Out")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add .* to cart/i })).toBeNull();
+    rerender(<ProductCard product={make({ in_stock: false })} compact />);
+    expect(screen.getByText("Sold Out")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add .* to cart/i })).toBeNull();
+  });
+
+  it("keeps the Add to Cart button when in_stock is missing (old cached payloads)", () => {
+    renderCard(<ProductCard product={make()} />);
+    expect(screen.getByRole("button", { name: /add .* to cart/i })).toBeInTheDocument();
+    expect(screen.queryByText("Sold Out")).toBeNull();
+  });
+
   it("shows the gold Bestseller badge only for featured products", () => {
     const { rerender } = renderCard(<ProductCard product={make({ is_featured: false })} />);
     expect(screen.queryByText("Bestseller")).toBeNull();

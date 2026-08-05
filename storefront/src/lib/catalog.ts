@@ -13,6 +13,7 @@ export interface ProductCard {
   currency: string;
   image: string | null; hover_image: string | null;   // relative /media URLs
   default_variant_id: number | null; default_sku: string | null;
+  in_stock?: boolean;             // optional: missing (old cached payloads) = assume in stock
   rating_avg: string;             // "4.50"
   rating_count: number;
 }
