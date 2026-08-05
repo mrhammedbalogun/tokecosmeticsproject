@@ -39,6 +39,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Customers", href: "/customers", scopes: ["customers.view"] },
   { label: "Reviews", href: "/reviews", scopes: ["products.manage", "cms.manage"] },
   { label: "Coupons", href: "/coupons", scopes: ["marketing.manage"] },
+  // One door for everything the landing page shows (Hammed's ask, 2026-08-05):
+  // slides, news, reviews and the product-row collections, in section order.
+  { label: "Home Content", href: "/home-content", scopes: ["marketing.manage"] },
   { label: "Content", href: "/content", scopes: ["cms.manage"] },
   { label: "Reports", href: "/reports", scopes: ["reports.view"] },
   { label: "Settings", href: "/settings", scopes: ["settings.manage"] },
