@@ -14,7 +14,7 @@ const POSTS = [
 
 export function Journal() {
   return (
-    <section aria-label="The Journal" className="mx-auto max-w-7xl px-4 py-8">
+    <section aria-label="The Journal" className="wrap py-8">
       <FadeUp>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">The Journal</p>
         <h2 className="mt-1 font-display text-3xl md:text-4xl">Skincare, explained simply</h2>

@@ -19,7 +19,7 @@ function Stars({ rating }: { rating: number }) {
 export function GoogleReviews({ reviews }: { reviews: HomepagePayload["reviews"] }) {
   if (!reviews || reviews.items.length === 0) return null;
   return (
-    <section aria-label="Customer reviews" className="mx-auto max-w-7xl px-4 py-16">
+    <section aria-label="Customer reviews" className="wrap py-16">
       <FadeUp>
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>

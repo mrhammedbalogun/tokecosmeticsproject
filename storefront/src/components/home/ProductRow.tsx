@@ -32,7 +32,7 @@ export function ProductRow({
     </div>
   ));
   return (
-    <section aria-label={title} className="mx-auto max-w-7xl px-4 py-16">
+    <section aria-label={title} className="wrap py-16">
       <FadeUp>
         <div className="flex items-end justify-between gap-4">
           <div>

@@ -16,7 +16,7 @@ export function TrioSection({ banners }: { banners: CmsBanner[] }) {
   const cms = bannersFor(banners, "trio");
   const tiles = DEFAULTS.map((d, i) => ({ ...d, banner: cms[i] ?? null }));
   return (
-    <section aria-label="Collections" className="mx-auto max-w-7xl px-4 py-8">
+    <section aria-label="Collections" className="wrap py-8">
       <FadeUp>
         <div className="grid gap-4 md:grid-cols-3">
           {tiles.map((tile) => (

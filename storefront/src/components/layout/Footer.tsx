@@ -73,7 +73,7 @@ const SOCIALS: { label: string; href: string; icon: ReactNode }[] = [
 export function Footer() {
   return (
     <footer className="mt-16 bg-[#111] text-[#bdb9b2]">
-      <div className="mx-auto max-w-7xl px-4 py-14">
+      <div className="wrap py-14">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-12">
           {/* Brand + newsletter */}
           <div className="lg:col-span-4">
@@ -143,7 +143,7 @@ export function Footer() {
       <div className="border-t border-[#262626]">
         {/* The year renders at REQUEST time (this is a Server Component on a dynamic
             page), so on 1 January it advances by itself — no deploy, no stale build. */}
-        <p className="mx-auto max-w-7xl px-4 py-5 text-center text-xs text-[#7d7973]">
+        <p className="wrap py-5 text-center text-xs text-[#7d7973]">
           © Toke Cosmetics {new Date().getFullYear()}. All Rights Reserved.
         </p>
       </div>

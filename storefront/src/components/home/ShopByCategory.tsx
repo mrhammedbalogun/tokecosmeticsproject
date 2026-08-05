@@ -18,7 +18,7 @@ export function ShopByCategory({ banners }: { banners: CmsBanner[] }) {
   const cms = bannersFor(banners, "category");
   const tiles = DEFAULTS.map((d, i) => ({ ...d, banner: cms[i] ?? null }));
   return (
-    <section aria-label="Shop by category" className="mx-auto max-w-7xl px-4 py-12">
+    <section aria-label="Shop by category" className="wrap py-12">
       <FadeUp>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">
           Shop by Category

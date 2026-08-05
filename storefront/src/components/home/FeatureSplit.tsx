@@ -11,7 +11,7 @@ export function FeatureSplit({ banners }: { banners: CmsBanner[] }) {
   const nature = bannerFor(banners, "feature_nature");
   const collection = bannerFor(banners, "feature_collection");
   return (
-    <section aria-label={feature?.title || "The Glow Set"} className="mx-auto max-w-7xl px-4 pb-12">
+    <section aria-label={feature?.title || "The Glow Set"} className="wrap pb-12">
       <FadeUp>
         <div className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
           <div className="relative flex min-h-[430px] items-end overflow-hidden rounded-[var(--radius-card)]">

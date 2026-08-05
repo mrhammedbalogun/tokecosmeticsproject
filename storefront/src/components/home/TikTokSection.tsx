@@ -17,7 +17,7 @@ export function TikTokSection({
 }) {
   if (products.length === 0) return null;
   return (
-    <section aria-label="TikTok favourites" className="mx-auto max-w-7xl px-4 py-8">
+    <section aria-label="TikTok favourites" className="wrap py-8">
       <FadeUp>
         <div className="grid gap-4 lg:grid-cols-[1fr_1.1fr]">
           <div className="grid grid-cols-2 gap-4">

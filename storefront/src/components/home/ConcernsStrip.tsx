@@ -16,7 +16,7 @@ export function ConcernsStrip({ banners }: { banners: CmsBanner[] }) {
   const cms = bannersFor(banners, "concern");
   const tiles = DEFAULTS.map((d, i) => ({ ...d, banner: cms[i] ?? null }));
   return (
-    <section aria-label="Shop by concern" className="mx-auto max-w-7xl px-4 pb-12">
+    <section aria-label="Shop by concern" className="wrap pb-12">
       <FadeUp>
         <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted">
           Shop by Concern

@@ -26,7 +26,7 @@ export async function Header() {
 
   return (
     <header data-site-header className="sticky top-0 z-40 border-b border-line bg-background/95 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3">
+      <div className="wrap flex items-center justify-between gap-4 py-3">
         <div className="flex items-center gap-3">
           <MobileNav categories={categories} />
           <Link href="/" className="site-logo flex items-center gap-2">

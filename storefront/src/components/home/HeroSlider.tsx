@@ -121,7 +121,7 @@ export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
           <div className="absolute inset-0 bg-gradient-to-r from-black/45 via-black/15 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/30 to-transparent" />
           <div className="relative flex min-h-[78vh] items-center">
-            <div className="mx-auto w-full max-w-7xl px-4 py-24">
+            <div className="wrap py-24">
               {slide.eyebrow && (
                 <p className="mb-5 flex items-center gap-3 text-xs font-medium uppercase tracking-[0.22em] text-surface/85">
                   <span className="h-px w-8 bg-gold" aria-hidden />
@@ -167,7 +167,7 @@ export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
           >
             ›
           </button>
-          <div className="absolute inset-x-0 bottom-6 z-10 mx-auto flex w-full max-w-7xl gap-7 px-4">
+          <div className="wrap absolute inset-x-0 bottom-6 z-10 flex gap-7">
             {slides.map((slide, i) => (
               <button
                 key={slide.key}

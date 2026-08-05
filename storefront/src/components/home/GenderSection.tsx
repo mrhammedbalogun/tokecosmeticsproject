@@ -36,7 +36,7 @@ export function GenderSection({
 }) {
   if (products.length === 0) return null;
   return (
-    <section aria-label={title} className="mx-auto max-w-7xl px-4 py-8">
+    <section aria-label={title} className="wrap py-8">
       <FadeUp>
         <div className="grid gap-4 lg:grid-cols-[1.1fr_1fr]">
           <div
