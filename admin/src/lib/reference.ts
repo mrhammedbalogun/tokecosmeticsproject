@@ -35,6 +35,7 @@ export interface TagRef {
 export interface CountryRef {
   code: string;
   name: string;
+  is_default?: boolean;
   is_rest_of_world: boolean;
   /** Local names for the region levels (Countries_breakdown): "State"/"Province"/
    * "Country", and "LGA"/"County"/"Municipality"/"District". */

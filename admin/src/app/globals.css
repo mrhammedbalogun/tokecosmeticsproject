@@ -23,6 +23,7 @@
   --color-accent-strong: #312e81;
   --color-danger: #b91c1c;        /* destructive actions, the STAGING badge */
   --color-warn: #b45309;
+  --color-ok: #15803d;         /* success text, the "offered at checkout" dot */
   --radius-card: 0.5rem;
 }
 
@@ -38,6 +39,7 @@
   --color-accent-strong: var(--color-accent-strong);
   --color-danger: var(--color-danger);
   --color-warn: var(--color-warn);
+  --color-ok: var(--color-ok);
   --radius-card: var(--radius-card);
 }
 

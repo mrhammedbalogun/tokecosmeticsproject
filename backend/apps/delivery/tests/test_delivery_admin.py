@@ -75,8 +75,28 @@ def test_coverage_is_reported_but_not_editable_here(client):
     assert list(option.countries.values_list("code", flat=True)) == []
 
 
-def test_a_delivery_option_cannot_be_deleted(client):
+def test_a_delivery_option_can_be_deleted(client):
+    """Delete became real when creation did (the wizard) — a mistyped option deserves
+    better than immortality as an inactive row. Referentially safe: orders snapshot
+    only the option name."""
     option = _option()
 
-    assert client.delete(f"/api/v1/admin/delivery-options/{option.pk}/").status_code == 405
-    assert DeliveryOption.objects.filter(pk=option.pk).exists()
+    assert client.delete(f"/api/v1/admin/delivery-options/{option.pk}/").status_code == 204
+    assert not DeliveryOption.objects.filter(pk=option.pk).exists()
+
+
+def test_deleting_writes_a_full_snapshot_to_the_audit_log(client):
+    """`changes` is normally the request body — empty on a DELETE, and a seeded option
+    has no API create row either. Without the snapshot, the audit trail would prove
+    only that *something* was deleted."""
+    from apps.core.models import AuditLog
+
+    option = _option()
+
+    client.delete(f"/api/v1/admin/delivery-options/{option.pk}/")
+
+    # DRF's viewset action name ("destroy") is what resolve_action records.
+    row = AuditLog.objects.filter(action="destroy", object_id=str(option.pk)).latest("id")
+    assert row.changes["deleted"]["name"] == "Lagos Delivery"
+    assert "price" in row.changes["deleted"]
+    assert "coverage" in row.changes["deleted"]

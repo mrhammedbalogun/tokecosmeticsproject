@@ -128,6 +128,21 @@ export async function createDeliveryOptionAction(input: {
   return { savedAt: Date.now() };
 }
 
+/** DELETE is for mistakes; "prices moved" is still the is_active checkbox. The API
+ * writes a full snapshot of the option into the audit log before the row goes. */
+export async function deleteDeliveryOptionAction(input: {
+  id: number;
+}): Promise<DeliveryState> {
+  try {
+    await fetchWithAuth(`/admin/delivery-options/${input.id}/`, { method: "DELETE" });
+  } catch (e) {
+    if (!(e instanceof ApiError)) return { message: "The API is not responding." };
+    return { message: "That option could not be deleted." };
+  }
+  revalidatePath("/settings/delivery");
+  return { savedAt: Date.now() };
+}
+
 export interface DeliveryPreviewOption {
   id: number;
   name: string;

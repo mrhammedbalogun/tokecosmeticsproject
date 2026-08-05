@@ -53,13 +53,36 @@ class DeliveryOptionAdminSerializer(serializers.ModelSerializer):
     region_ids = serializers.PrimaryKeyRelatedField(
         source="regions", many=True, queryset=Region.objects.all(), required=False
     )
+    coverage = serializers.SerializerMethodField()
+
+    def get_coverage(self, obj) -> dict:
+        """Structured coverage for the list's human summary line ("Ikeja + 1 more LGA,
+        Lagos") — resolved server-side because the list page should not need all 879
+        region rows just to name a handful. Region names are CAPPED; `region_total` is
+        the honest count so the client can say "+ N more" instead of pretending the cap
+        is everything. Needs the view to prefetch regions with select_related("parent")
+        or this goes N+1."""
+        regions = list(obj.regions.all())
+        return {
+            "countries": [{"code": c.code, "name": c.name} for c in obj.countries.all()],
+            "regions": [
+                {
+                    "name": r.name,
+                    "level": r.level,
+                    "country_code": r.country_code,
+                    "parent_name": r.parent.name if r.parent else None,
+                }
+                for r in regions[:6]
+            ],
+            "region_total": len(regions),
+        }
 
     class Meta:
         model = DeliveryOption
         fields = [
             "id", "name", "kind", "carrier_code", "price", "currency", "free_over",
             "quote_required", "disclaimer", "min_days", "max_days", "is_active", "sort",
-            "country_codes", "region_count", "region_ids",
+            "country_codes", "region_count", "region_ids", "coverage",
         ]
 
     def validate(self, attrs):

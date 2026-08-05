@@ -70,7 +70,7 @@ export default async function DeliverySettingsPage() {
             {error}
           </p>
         ) : (
-          <DeliveryOptions options={options} />
+          <DeliveryOptions options={options} countries={countries} />
         )}
         {countries.length > 0 && (
           <DeliveryTester countries={countries} regions={regions} />

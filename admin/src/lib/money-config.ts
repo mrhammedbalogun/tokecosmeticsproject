@@ -38,6 +38,18 @@ export interface CouponRow {
   created_at: string;
 }
 
+export interface DeliveryCoverageSummary {
+  countries: { code: string; name: string }[];
+  /** Capped server-side (first few) — use region_total for the honest count. */
+  regions: {
+    name: string;
+    level: "state" | "city" | "area";
+    country_code: string;
+    parent_name: string | null;
+  }[];
+  region_total: number;
+}
+
 export interface DeliveryOptionRow {
   id: number;
   name: string;
@@ -55,6 +67,7 @@ export interface DeliveryOptionRow {
   country_codes: string[];
   region_count: number;
   region_ids: number[];
+  coverage: DeliveryCoverageSummary;
 }
 
 /** Markets whose bank transfer is switched on but that have no ACTIVE bank account.

@@ -4,6 +4,7 @@
 a delivery price is an operational number, not a money-routing decision like the payout
 account (which is Owner-only under `settings.manage`).
 """
+from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import viewsets
 
@@ -26,9 +27,12 @@ from apps.delivery.models import DeliveryOption
 
 
 class DeliveryOptionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
-    """CRUD minus delete: a delivery option is named on every order that used it
-    (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
-    match), and deactivating is what "retire this option" means.
+    """Full CRUD. Delete became real when creation did (the wizard): a mistyped option
+    deserves better than immortality as an inactive row. It is referentially safe —
+    orders snapshot only the option NAME (`Order.delivery_option_name`), nothing holds
+    an FK to the row, and a checkout in flight re-matches by id at place time, where a
+    deleted option fails exactly like a deactivated one. "Retire because prices moved"
+    is still `is_active=False`; delete is for mistakes.
     """
 
     authentication_classes = [AdminJWTAuthentication]
@@ -37,12 +41,34 @@ class DeliveryOptionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     audit_serializers = (DeliveryOptionAdminSerializer,)
     queryset = (
         DeliveryOption.objects.select_related("currency")
-        .prefetch_related("countries", "regions")
+        .prefetch_related(
+            "countries",
+            # parent joined so the coverage summary can say "Ikeja, Lagos" without an
+            # extra query per region row.
+            Prefetch("regions", queryset=Region.objects.select_related("parent")),
+        )
         .order_by("sort", "name")
     )
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["is_active", "kind", "countries"]
-    http_method_names = ["get", "post", "put", "patch", "head", "options"]
+    # No pagination: the global PAGE_SIZE (24) would silently truncate the list page
+    # at option 25, and under country grouping a truncated list reads as "this country
+    # has no options" — a lie with consequences. The row count here is operator-scale.
+    pagination_class = None
+
+    def destroy(self, request, *args, **kwargs):
+        # `changes` is normally built from request.data — empty on a DELETE. And a
+        # seeded option has no API create row either, so without this snapshot the
+        # audit trail would prove only that *something* was deleted. Serialized BEFORE
+        # the delete, merged into the row by `_changes` below, same transaction.
+        self._deleted_option = DeliveryOptionAdminSerializer(self.get_object()).data
+        return super().destroy(request, *args, **kwargs)
+
+    def _changes(self, response) -> dict:
+        changes = super()._changes(response)
+        if self.request.method.upper() == "DELETE" and hasattr(self, "_deleted_option"):
+            changes["deleted"] = self._deleted_option
+        return changes
 
     @action(detail=False, methods=["get"])
     def preview(self, request):
