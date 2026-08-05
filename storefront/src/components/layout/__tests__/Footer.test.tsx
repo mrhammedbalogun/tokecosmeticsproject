@@ -25,12 +25,16 @@ describe("Footer (large upgrade)", () => {
     expect(screen.getByRole("link", { name: /all products/i })).toHaveAttribute("href", "/products");
   });
 
-  it("keeps payment logos and shows the Lagos legal strip", () => {
+  it("closes with the centred copyright line and nothing else (Hammed, 2026-08-05)", () => {
     render(<Footer />);
-    expect(screen.getByText(/© \d{4} Toke Cosmetics · Lagos, Nigeria/)).toBeInTheDocument();
-    // `capitalize` is CSS-only — DOM text stays lowercase.
-    expect(screen.getByText("visa")).toBeInTheDocument();
-    expect(screen.getByText("bank transfer")).toBeInTheDocument();
+    // The real © glyph, the CURRENT year (request-time, so 1 January advances it),
+    // and no payment badges — those were removed with the artifact's dark footer.
+    const year = new Date().getFullYear();
+    const line = screen.getByText(`© Toke Cosmetics ${year}. All Rights Reserved.`);
+    expect(line).toBeInTheDocument();
+    expect(line).toHaveClass("text-center");
+    expect(screen.queryByText("visa")).toBeNull();
+    expect(screen.queryByText("bank transfer")).toBeNull();
   });
 
   it("exposes social profiles with accessible labels", () => {
