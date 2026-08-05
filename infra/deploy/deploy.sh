@@ -50,7 +50,18 @@ docker ps -a --format '{{.Names}}' \
     || true
 
 log "build and start"
-"${COMPOSE[@]}" up -d --build
+# The rename collision can also form DURING this recreate (seen on v0.7.1: compose's
+# own temp-rename hit a name that materialised mid-flight), which the pre-clean above
+# cannot prevent. One clear-and-retry covers it; a second failure is a real problem
+# that should stop the deploy.
+if ! "${COMPOSE[@]}" up -d --build; then
+    log "compose up failed — clearing renamed leftovers and retrying once"
+    docker ps -a --format '{{.Names}}' \
+        | grep -E '^[0-9a-f]{12}_tokecosmetics-[a-z]+-[0-9]+$' \
+        | xargs -r -n1 docker rm -f \
+        || true
+    "${COMPOSE[@]}" up -d --build
+fi
 
 log "migrate"
 # Migrations run as the schema OWNER, not the runtime role: DDL needs ownership, and
