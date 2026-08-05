@@ -14,7 +14,12 @@ class SearchView(generics.ListAPIView):
     throttle_scope = "search"
 
     def get_queryset(self):
-        return get_backend().search_queryset(self.request.query_params, self.request.country)
+        from apps.catalog.services import annotate_in_stock
+
+        country = self.request.country
+        return annotate_in_stock(
+            get_backend().search_queryset(self.request.query_params, country), country
+        )
 
 
 class SuggestView(APIView):

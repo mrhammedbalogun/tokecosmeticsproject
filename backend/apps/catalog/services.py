@@ -69,3 +69,23 @@ def annotate_min_price(queryset, country):
         .values("amount")[:1]
     )
     return queryset.annotate(min_price=Subquery(cheapest))
+
+
+def annotate_in_stock(queryset, country):
+    """Annotate `has_stock`: does any active variant have positive availability in
+    this country? One stock row with quantity > reserved is equivalent to
+    available_for_country() > 0 because reserved <= quantity is DB-enforced per row
+    (stock_reserved_lte_quantity), so per-row availability can never be negative.
+    """
+    from django.db.models import Exists, F
+
+    from apps.inventory.models import StockItem
+
+    positive = StockItem.objects.filter(
+        variant__product=OuterRef("pk"),
+        variant__is_active=True,
+        warehouse__is_active=True,
+        warehouse__serves_countries=country,
+        quantity__gt=F("reserved"),
+    )
+    return queryset.annotate(has_stock=Exists(positive))

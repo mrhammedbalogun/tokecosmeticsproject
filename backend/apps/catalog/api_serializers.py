@@ -70,12 +70,28 @@ class ProductListSerializer(serializers.ModelSerializer):
     hover_image = serializers.SerializerMethodField()
     default_variant_id = serializers.SerializerMethodField()
     default_sku = serializers.SerializerMethodField()
+    in_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = ["name", "slug", "brand", "is_featured", "from_price", "currency",
                   "image", "hover_image", "default_variant_id", "default_sku",
-                  "rating_avg", "rating_count"]
+                  "in_stock", "rating_avg", "rating_count"]
+
+    def get_in_stock(self, obj):
+        # Fast path: list-style views annotate has_stock (see annotate_in_stock).
+        annotated = getattr(obj, "has_stock", None)
+        if annotated is not None:
+            return annotated
+        # Unannotated path (wishlist serializes a lone Product instance).
+        from apps.inventory.services import available_for_country
+
+        country = self.context["request"].country
+        return any(
+            available_for_country(v, country) > 0
+            for v in obj.variants.all()
+            if v.is_active
+        )
 
     def get_from_price(self, obj):
         amount = getattr(obj, "min_price", None)
@@ -137,14 +153,14 @@ class ProductDetailSerializer(serializers.ModelSerializer):
                 for i in obj.images.all()]
 
     def get_related(self, obj):
-        from apps.catalog.services import annotate_min_price, sellable_in
+        from apps.catalog.services import annotate_in_stock, annotate_min_price, sellable_in
 
         country = self.context["request"].country
         sellable = [p for p in obj.related.all() if sellable_in(p, country)]
         pks = [p.pk for p in sellable]
-        qs = annotate_min_price(Product.objects.filter(pk__in=pks), country).prefetch_related(
-            "images"
-        ).select_related("brand")
+        qs = annotate_in_stock(
+            annotate_min_price(Product.objects.filter(pk__in=pks), country), country
+        ).prefetch_related("images").select_related("brand")
         return ProductListSerializer(qs, many=True, context=self.context).data
 
 

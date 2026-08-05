@@ -113,3 +113,29 @@ def test_detail_in_stock_reflects_inventory():
     si.save(update_fields=["quantity"])
     r = APIClient().get(f"/api/v1/products/{p.slug}/", HTTP_X_COUNTRY="NG")
     assert r.data["variants"][0]["in_stock"] is True
+
+
+@pytest.mark.django_db
+def test_list_in_stock_reflects_inventory():
+    from apps.core.models import Country
+    from apps.inventory.factories import StockItemFactory, WarehouseFactory
+
+    stocked = _priced_product("1000")
+    v = stocked.variants.first()
+    ng = Country.objects.get(code="NG")
+    w = WarehouseFactory()
+    w.serves_countries.add(ng)
+    StockItemFactory(variant=v, warehouse=w, quantity=5, reserved=5)  # fully reserved
+
+    bare = _priced_product("2000")  # no stock rows at all
+
+    r = APIClient().get("/api/v1/products/", HTTP_X_COUNTRY="NG")
+    by_slug = {row["slug"]: row["in_stock"] for row in r.data["results"]}
+    assert by_slug == {stocked.slug: False, bare.slug: False}
+
+    si = v.stock_items.first()
+    si.quantity = 6  # one sellable unit past the reservation
+    si.save(update_fields=["quantity"])
+    r = APIClient().get("/api/v1/products/", HTTP_X_COUNTRY="NG")
+    by_slug = {row["slug"]: row["in_stock"] for row in r.data["results"]}
+    assert by_slug == {stocked.slug: True, bare.slug: False}

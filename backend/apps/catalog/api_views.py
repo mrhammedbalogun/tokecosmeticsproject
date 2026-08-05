@@ -11,7 +11,12 @@ from apps.catalog.api_serializers import (
     ProductListSerializer,
 )
 from apps.catalog.models import Brand, Category, Collection, Product
-from apps.catalog.services import CATALOG_CACHE_TTL, annotate_min_price, catalog_cache_key
+from apps.catalog.services import (
+    CATALOG_CACHE_TTL,
+    annotate_in_stock,
+    annotate_min_price,
+    catalog_cache_key,
+)
 
 
 class CatalogCacheMixin:
@@ -65,6 +70,7 @@ class ProductListView(CatalogCacheMixin, generics.ListAPIView):
         qs = annotate_min_price(qs, country)
         # "hide until priced": drop rows with no resolvable price in this currency.
         qs = qs.filter(min_price__isnull=False)
+        qs = annotate_in_stock(qs, country)
 
         p = self.request.query_params
         if p.get("category"):
