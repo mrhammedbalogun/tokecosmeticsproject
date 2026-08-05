@@ -58,6 +58,7 @@ export interface CmsBanner {
   cta_url: string;
   /** Landing redesign: a hero banner may be a video; the image is its poster. */
   video_url: string;
+  tagline: string;
   placement: "hero" | "strip" | "category";
   sort: number;
 }

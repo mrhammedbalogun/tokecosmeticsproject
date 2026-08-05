@@ -15,6 +15,7 @@ import { TikTokSection } from "@/components/home/TikTokSection";
 import { TrioSection } from "@/components/home/TrioSection";
 import { Journal } from "@/components/home/Journal";
 import { GoogleReviews } from "@/components/home/GoogleReviews";
+import { bannerFor } from "@/components/home/TileMedia";
 
 export const metadata: Metadata = pageMetadata({
   title: "Toke Cosmetics — Premium Skincare for Melanin-Rich Skin",
@@ -47,8 +48,8 @@ export default async function HomePage() {
       {/* The approved artifact, section for section, top to bottom. */}
       <HeroSlider banners={homepage?.banners ?? []} />
       <ShopByCategory banners={homepage?.banners ?? []} />
-      <ConcernsStrip />
-      <FeatureSplit />
+      <ConcernsStrip banners={homepage?.banners ?? []} />
+      <FeatureSplit banners={homepage?.banners ?? []} />
       <ProductRow
         title="Loved by thousands"
         eyebrow="Best Sellers"
@@ -63,6 +64,7 @@ export default async function HomePage() {
         tagline="Made for men's skin"
         href="/products?collection=men"
         products={men}
+        banner={bannerFor(homepage?.banners ?? [], "men")}
         tone="from-[#2f2a26] to-[#0f0d0b]"
       />
       <GenderSection
@@ -71,6 +73,7 @@ export default async function HomePage() {
         tagline="Glow that starts with care"
         href="/products?collection=women"
         products={women}
+        banner={bannerFor(homepage?.banners ?? [], "women")}
         flip
         tone="from-[#7a5c42] to-[#2b1f16]"
       />
@@ -80,6 +83,7 @@ export default async function HomePage() {
         tagline="Soft care for the softest skin"
         href="/products?collection=babies"
         products={babies}
+        banner={bannerFor(homepage?.banners ?? [], "babies")}
         tone="from-[#2c4a33] to-[#0e2015]"
       />
       <ProductRow
@@ -89,8 +93,8 @@ export default async function HomePage() {
         href="/products?ordering=newest"
         compact
       />
-      <TikTokSection products={bestSellers.slice(4, 8).length ? bestSellers.slice(4, 8) : newArrivals.slice(0, 4)} />
-      <TrioSection />
+      <TikTokSection banner={bannerFor(homepage?.banners ?? [], "tiktok")} products={bestSellers.slice(4, 8).length ? bestSellers.slice(4, 8) : newArrivals.slice(0, 4)} />
+      <TrioSection banners={homepage?.banners ?? []} />
       <Journal />
       <GoogleReviews reviews={homepage?.reviews} />
     </>

@@ -17,7 +17,7 @@
  */
 import { startTransition, useState } from "react";
 import { deleteBannerAction, saveBannerAction, uploadBannerMediaAction } from "@/app/(shell)/content/banners/actions";
-import { bannerState, type BannerRow } from "@/lib/banners";
+import { PLACEMENTS, bannerState, type BannerRow } from "@/lib/banners";
 
 const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
@@ -144,6 +144,7 @@ export function BannerManager({ banners }: { banners: BannerRow[] }) {
 function BannerForm({ banner, onDone }: { banner: BannerRow | null; onDone: () => void }) {
   const [title, setTitle] = useState(banner?.title ?? "");
   const [subtitle, setSubtitle] = useState(banner?.subtitle ?? "");
+  const [tagline, setTagline] = useState(banner?.tagline ?? "");
   const [ctaText, setCtaText] = useState(banner?.cta_text ?? "");
   const [ctaUrl, setCtaUrl] = useState(banner?.cta_url ?? "");
   const [placement, setPlacement] = useState<BannerRow["placement"]>(
@@ -164,7 +165,7 @@ function BannerForm({ banner, onDone }: { banner: BannerRow | null; onDone: () =
     startTransition(async () => {
       const state = await saveBannerAction({
         id: banner?.id,
-        title, subtitle, cta_text: ctaText, cta_url: ctaUrl, placement,
+        title, subtitle, tagline, cta_text: ctaText, cta_url: ctaUrl, placement,
         starts_at: startsAt, ends_at: endsAt, is_active: isActive,
       });
       setPending(false);
@@ -194,20 +195,31 @@ function BannerForm({ banner, onDone }: { banner: BannerRow | null; onDone: () =
           {errors.title && <p className="mt-1 text-xs text-warn">{errors.title}</p>}
         </label>
         <label className="block text-xs text-muted">
-          Subtitle
+          Subtitle / eyebrow
           <input type="text" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} className={`mt-1 ${FIELD}`} />
+        </label>
+        <label className="block text-xs text-muted">
+          Tagline (the small paragraph, where the tile shows one)
+          <input type="text" value={tagline} onChange={(e) => setTagline(e.target.value)} className={`mt-1 ${FIELD}`} />
         </label>
         <label className="block text-xs text-muted">
           Placement
           <select
             value={placement}
-            onChange={(e) => setPlacement(e.target.value as BannerRow["placement"])}
+            onChange={(e) => setPlacement(e.target.value)}
             className={`mt-1 ${FIELD}`}
           >
-            <option value="strip">Announcement strip</option>
-            <option value="hero">Homepage hero</option>
-            <option value="category">Category</option>
+            {PLACEMENTS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
           </select>
+          {/* The uploader's cheat-sheet: what this placement shows and the artwork
+              size it wants. */}
+          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+            {PLACEMENTS.find((p) => p.value === placement)?.guide}
+          </p>
         </label>
         <label className="flex items-end gap-2 text-sm">
           <input

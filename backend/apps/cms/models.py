@@ -80,7 +80,25 @@ class Banner(TimeStampedModel):
     HERO = "hero"
     STRIP = "strip"
     CATEGORY = "category"
-    PLACEMENT_CHOICES = [(HERO, "Hero"), (STRIP, "Announcement strip"), (CATEGORY, "Category")]
+    # Landing redesign (2026-08-05): every homepage tile is a Banner with a placement,
+    # so one manager edits the whole page and every tile gets image/video + CTA +
+    # scheduling for free. Multi-tile placements (category ×4, concern ×3, trio ×3)
+    # order by `sort`; the storefront falls back to its built-in tile when a placement
+    # has no live banner — an empty CMS never blanks a section.
+    PLACEMENT_CHOICES = [
+        (HERO, "Hero slide"),
+        (STRIP, "News marquee item"),
+        (CATEGORY, "Shop-by-category tile"),
+        ("concern", "Shop-by-concern tile"),
+        ("feature", "Glow Set feature"),
+        ("feature_nature", "tokè × natural tile"),
+        ("feature_collection", "Toke Naturals tile"),
+        ("men", "Men section banner"),
+        ("women", "Women section banner"),
+        ("babies", "Babies section banner"),
+        ("tiktok", "TikTok section banner"),
+        ("trio", "Collections trio tile"),
+    ]
 
     title = models.CharField(max_length=200)
     subtitle = models.CharField(max_length=300, blank=True)
@@ -94,6 +112,9 @@ class Banner(TimeStampedModel):
     # banner artwork. The storefront renders <video autoplay muted loop> with the
     # image (if any) as poster; no media-type tag is ever shown to customers.
     video = models.FileField(upload_to="catalog/cms-banners/", blank=True)
+    # The third text some tiles need (a section tagline, the feature paragraph).
+    # Plain text like everything else here — React escapes it.
+    tagline = models.CharField(max_length=300, blank=True)
     placement = models.CharField(max_length=20, choices=PLACEMENT_CHOICES, default=STRIP)
     sort = models.PositiveSmallIntegerField(default=0)
     starts_at = models.DateTimeField(null=True, blank=True)

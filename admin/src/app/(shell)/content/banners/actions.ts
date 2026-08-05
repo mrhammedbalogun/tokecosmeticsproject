@@ -27,9 +27,10 @@ export async function saveBannerAction(input: {
   id?: number;
   title: string;
   subtitle: string;
+  tagline: string;
   cta_text: string;
   cta_url: string;
-  placement: "hero" | "strip" | "category";
+  placement: string;
   starts_at: string;
   ends_at: string;
   is_active: boolean;
@@ -42,6 +43,7 @@ export async function saveBannerAction(input: {
   const body = {
     title: input.title.trim(),
     subtitle: input.subtitle.trim(),
+    tagline: input.tagline.trim(),
     cta_text: input.cta_text.trim(),
     cta_url: input.cta_url.trim(),
     placement: input.placement,

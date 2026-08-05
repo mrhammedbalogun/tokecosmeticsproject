@@ -91,10 +91,11 @@ export default async function HomeContentPage() {
       <section id="banners">
         <h2 className="text-base font-semibold">1 · Slider &amp; news</h2>
         <p className="mb-4 mt-1 text-sm text-muted">
-          <span className="font-medium">Hero</span> banners are the big slider (upload an
-          image or a video to each; two or more make it rotate).{" "}
-          <span className="font-medium">Announcement strip</span> banners are the scrolling
-          news bar. Scheduling applies on the server, so nothing appears early.
+          Every tile on the homepage is a banner with a placement — hero slides, the news
+          marquee, the category and concern tiles, the Glow Set trio, the Men/Women/Babies
+          and TikTok section banners, and the collections trio. Pick the placement and the
+          form shows what that tile displays and the artwork size it wants. Tiles you
+          haven&apos;t created keep their built-in look, so nothing ever goes blank.
         </p>
         <BannerManager banners={banners} />
       </section>
@@ -128,10 +129,20 @@ export default async function HomeContentPage() {
         </ul>
       </section>
 
+      <section id="journal">
+        <h2 className="text-base font-semibold">3 · The Journal</h2>
+        <p className="mb-4 mt-1 text-sm text-muted">
+          The three journal teasers currently show built-in articles. They will bind to
+          the blog automatically when the blog module ships — nothing to manage here yet.
+        </p>
+      </section>
+
       <section id="reviews">
-        <h2 className="text-base font-semibold">3 · Google reviews</h2>
+        <h2 className="text-base font-semibold">4 · Google reviews</h2>
         <p className="mb-4 mt-1 text-sm text-muted">
           The closing “Loved on Google” section — header numbers plus the featured cards.
+          Once Google API access is connected, the rating and reviews can pull directly
+          from your Google profile; curation stays available either way.
         </p>
         <GoogleReviewsManager reviews={reviews} meta={meta} />
       </section>
