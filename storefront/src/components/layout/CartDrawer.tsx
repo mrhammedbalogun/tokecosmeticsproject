@@ -1,10 +1,12 @@
 "use client";
 import { useCart } from "@/hooks/useCart";
 import { formatMoney } from "@/lib/country";
+import { OverlayPortal } from "@/components/layout/OverlayPortal";
 
 export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { cart, setQty } = useCart();
   return (
+    <OverlayPortal>
     <div
       aria-hidden={!open}
       // overflow-hidden clips the off-canvas <aside> (translate-x-full) when closed —
@@ -55,5 +57,6 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         </footer>
       </aside>
     </div>
+    </OverlayPortal>
   );
 }

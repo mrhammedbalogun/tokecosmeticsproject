@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { OverlayPortal } from "@/components/layout/OverlayPortal";
 
 interface Category { name: string; slug: string }
 
@@ -10,6 +11,7 @@ export function MobileNav({ categories }: { categories: Category[] }) {
     <div className="md:hidden">
       <button onClick={() => setOpen(true)} aria-label="Open menu" className="text-xl">☰</button>
       {open && (
+        <OverlayPortal>
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
           <nav className="absolute left-0 top-0 h-full w-72 bg-surface p-6" aria-label="Mobile">
@@ -30,6 +32,7 @@ export function MobileNav({ categories }: { categories: Category[] }) {
             </ul>
           </nav>
         </div>
+        </OverlayPortal>
       )}
     </div>
   );
