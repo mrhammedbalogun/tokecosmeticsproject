@@ -88,11 +88,12 @@ class Banner(TimeStampedModel):
     mobile_image = models.ImageField(upload_to="cms/banners/", blank=True)
     cta_text = models.CharField(max_length=60, blank=True)
     cta_url = models.CharField(max_length=300, blank=True)
-    # Landing redesign (2026-08-04): a HERO banner may be a video instead of an image.
-    # A URL, not an upload: hero videos are heavy, live on S3/CDN, and the admin pastes
-    # the address. When set, the storefront renders <video autoplay muted loop>; the
-    # image (if any) is the poster/fallback. No media-type tag is ever shown to customers.
-    video_url = models.URLField(blank=True)
+    # Landing redesign (2026-08-04, amended same day): a HERO banner may be a video.
+    # An UPLOAD, like the images — Hammed's ruling: all media lives in the Toke S3
+    # bucket, so marketers upload the file and django-storages puts it beside the
+    # banner artwork. The storefront renders <video autoplay muted loop> with the
+    # image (if any) as poster; no media-type tag is ever shown to customers.
+    video = models.FileField(upload_to="cms/banners/", blank=True)
     placement = models.CharField(max_length=20, choices=PLACEMENT_CHOICES, default=STRIP)
     sort = models.PositiveSmallIntegerField(default=0)
     starts_at = models.DateTimeField(null=True, blank=True)

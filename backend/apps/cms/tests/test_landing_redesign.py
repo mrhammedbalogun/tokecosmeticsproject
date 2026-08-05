@@ -11,8 +11,10 @@ pytestmark = pytest.mark.django_db
 
 
 def test_homepage_carries_video_banners_strip_news_and_reviews():
-    Banner.objects.create(title="Clear More. Glow More.", placement="hero",
-                          video_url="https://cdn.example/hero.mp4", sort=0)
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    Banner.objects.create(title="Clear More. Glow More.", placement="hero", sort=0,
+                          video=SimpleUploadedFile("hero.mp4", b"vid", "video/mp4"))
     Banner.objects.create(title="Free delivery to the UK on all orders",
                           placement="strip", sort=1)
     GoogleReviewsMeta(rating=Decimal("4.8"), review_count_text="300+",
@@ -27,7 +29,8 @@ def test_homepage_carries_video_banners_strip_news_and_reviews():
     assert r.status_code == 200
     data = r.json()
     hero = next(b for b in data["banners"] if b["placement"] == "hero")
-    assert hero["video_url"] == "https://cdn.example/hero.mp4"
+    # The wire field is a URL to the uploaded file (S3 in prod, /media in tests).
+    assert hero["video_url"].endswith(".mp4") and hero["video_url"].startswith("http")
     assert any(b["placement"] == "strip" for b in data["banners"])
     assert data["reviews"]["rating"] == "4.8"
     assert data["reviews"]["count_text"] == "300+"

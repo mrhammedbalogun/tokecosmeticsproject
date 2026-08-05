@@ -29,7 +29,7 @@ class BannerAdminSerializer(serializers.ModelSerializer):
     the wrong moment is a marketing incident somebody will want explained."""
 
     audit_allowlist = (
-        "title", "subtitle", "cta_text", "cta_url", "video_url", "placement", "sort",
+        "title", "subtitle", "cta_text", "cta_url", "placement", "sort",
         "starts_at", "ends_at", "is_active", "countries",
     )
 
@@ -38,8 +38,8 @@ class BannerAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Banner
         fields = [
-            "id", "title", "subtitle", "image", "mobile_image", "cta_text", "cta_url",
-            "video_url", "placement", "sort", "starts_at", "ends_at", "is_active",
+            "id", "title", "subtitle", "image", "mobile_image", "video", "cta_text",
+            "cta_url", "placement", "sort", "starts_at", "ends_at", "is_active",
             "countries", "is_live", "updated_at",
         ]
 

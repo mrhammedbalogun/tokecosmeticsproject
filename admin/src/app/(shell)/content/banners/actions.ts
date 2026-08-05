@@ -74,3 +74,40 @@ export async function deleteBannerAction(id: number): Promise<BannerState> {
   revalidatePath("/content/banners");
   return { savedAt: Date.now() };
 }
+
+/** Media uploads (landing redesign 2026-08-04): image, mobile image, or VIDEO —
+ * all land in the Toke S3 bucket via the backend's FileField, exactly like
+ * product images. A separate action from the JSON save for the products
+ * pattern's reason: media is multipart and takes effect immediately; the
+ * banner's text fields save together on Save. */
+export async function uploadBannerMediaAction(
+  id: number,
+  kind: "image" | "mobile_image" | "video",
+  formData: FormData,
+): Promise<BannerState> {
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { message: "Choose a file to upload." };
+  }
+  // Hero videos autoplay on the shop's front door; a wrong file here is customer-facing
+  // within a minute. Cheap guards, clear sentences.
+  if (kind === "video" && !file.type.startsWith("video/")) {
+    return { message: "That is not a video file (mp4 or webm)." };
+  }
+  if (kind !== "video" && !file.type.startsWith("image/")) {
+    return { message: "That is not an image file." };
+  }
+  if (file.size > 80 * 1024 * 1024) {
+    return { message: "Keep uploads under 80 MB — compress the video first." };
+  }
+  const body = new FormData();
+  body.set(kind, file);
+  try {
+    await fetchWithAuth(`/admin/banners/${id}/`, { method: "PATCH", body });
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+    return { message: "The upload was refused — try again." };
+  }
+  revalidatePath("/content/banners");
+  return { message: "Uploaded." };
+}

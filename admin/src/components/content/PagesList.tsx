@@ -87,9 +87,12 @@ export function PagesList({ pages }: { pages: PageRow[] }) {
         </ul>
       </section>
 
-      <p className="text-sm">
+      <p className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
         <Link href="/content/banners" className="underline underline-offset-2 hover:text-accent">
           Banners and the homepage hero →
+        </Link>
+        <Link href="/content/reviews" className="underline underline-offset-2 hover:text-accent">
+          Featured Google reviews →
         </Link>
       </p>
 

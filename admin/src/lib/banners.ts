@@ -6,6 +6,7 @@ export interface BannerRow {
   subtitle: string;
   image: string | null;
   mobile_image: string | null;
+  video: string | null;
   cta_text: string;
   cta_url: string;
   placement: "hero" | "strip" | "category";

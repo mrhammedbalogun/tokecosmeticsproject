@@ -16,7 +16,7 @@
  * operator, not the control.
  */
 import { startTransition, useState } from "react";
-import { deleteBannerAction, saveBannerAction } from "@/app/(shell)/content/banners/actions";
+import { deleteBannerAction, saveBannerAction, uploadBannerMediaAction } from "@/app/(shell)/content/banners/actions";
 import { bannerState, type BannerRow } from "@/lib/banners";
 
 const FIELD =
@@ -252,10 +252,71 @@ function BannerForm({ banner, onDone }: { banner: BannerRow | null; onDone: () =
           Cancel
         </button>
       </div>
-      <p className="mt-2 text-xs text-muted">
-        Artwork upload arrives with the image picker; a hero with no image keeps the
-        built-in one.
-      </p>
+      {banner && (
+        <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-3">
+          <MediaPicker banner={banner} kind="image" label="Image" accept="image/*" current={banner.image} />
+          <MediaPicker banner={banner} kind="mobile_image" label="Mobile image" accept="image/*" current={banner.mobile_image} />
+          <MediaPicker banner={banner} kind="video" label="Video (hero slides)" accept="video/mp4,video/webm" current={banner.video} />
+        </div>
+      )}
+      {!banner && (
+        <p className="mt-2 text-xs text-muted">
+          Save the banner first, then upload its image or video — media attaches to a
+          saved banner and goes live immediately.
+        </p>
+      )}
     </form>
+  );
+}
+
+
+/** One upload slot. Media takes effect IMMEDIATELY (unlike the text fields), which the
+ * copy says out loud — on the hero this is the shop's front door. Files land in the
+ * Toke S3 bucket via the backend. */
+function MediaPicker({
+  banner,
+  kind,
+  label,
+  accept,
+  current,
+}: {
+  banner: BannerRow;
+  kind: "image" | "mobile_image" | "video";
+  label: string;
+  accept: string;
+  current: string | null;
+}) {
+  const [note, setNote] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  return (
+    <div className="text-xs">
+      <p className="font-medium">{label}</p>
+      <p className="mt-0.5 truncate text-muted">
+        {current ? current.split("/").pop() : "none yet"}
+      </p>
+      <label className="mt-1.5 inline-block cursor-pointer rounded border border-line px-2.5 py-1 hover:border-accent">
+        {uploading ? "Uploading…" : current ? "Replace" : "Upload"}
+        <input
+          type="file"
+          accept={accept}
+          className="hidden"
+          disabled={uploading}
+          onChange={(e) => {
+            const file = e.currentTarget.files?.[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.set("file", file);
+            setUploading(true);
+            setNote(null);
+            startTransition(async () => {
+              const state = await uploadBannerMediaAction(banner.id, kind, formData);
+              setUploading(false);
+              setNote(state.message ?? null);
+            });
+          }}
+        />
+      </label>
+      {note && <p className="mt-1 text-warn">{note}</p>}
+    </div>
   );
 }
