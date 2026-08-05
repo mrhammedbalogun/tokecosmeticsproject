@@ -30,11 +30,21 @@ async function fetchCart(): Promise<Cart> {
 
 /** A BFF error body ({ detail, ... }) is not a Cart — surfacing it as one poisons the
  * ["cart"] cache and the render tree that reads it. Thrown so onError/catch paths run
- * instead of onSuccess/onSettled; the status rides along for anyone who wants it. */
-class CartRequestError extends Error {
-  constructor(public status: number) {
+ * instead of onSuccess/onSettled; status and the backend's machine code ride along
+ * (code "out_of_stock" = the stock cap ate the whole add — "just sold out"). */
+export class CartRequestError extends Error {
+  constructor(public status: number, public code?: string) {
     super(`Cart request failed: ${status}`);
   }
+}
+
+export function isJustSoldOut(e: unknown): boolean {
+  return e instanceof CartRequestError && e.code === "out_of_stock";
+}
+
+async function throwCartError(res: Response): Promise<never> {
+  const body: { code?: string } | null = await res.json().catch(() => null);
+  throw new CartRequestError(res.status, body?.code);
 }
 
 export function useCart() {
@@ -47,7 +57,7 @@ export function useCart() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ quantity: v.quantity }),
       });
-      if (!res.ok) throw new CartRequestError(res.status);
+      if (!res.ok) await throwCartError(res);
       return res.json() as Promise<Cart>;
     },
     onMutate: async (v) => {
@@ -66,7 +76,7 @@ export function useCart() {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ variant_id: v.variantId, quantity: v.quantity }),
       });
-      if (!res.ok) throw new CartRequestError(res.status);
+      if (!res.ok) await throwCartError(res);
       return res.json() as Promise<Cart>;
     },
     onSuccess: (data) => qc.setQueryData(KEY, data),

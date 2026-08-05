@@ -6,12 +6,14 @@ from rest_framework.views import APIView
 
 from apps.carts.serializers import serialize_cart
 from apps.carts.services import (
-    add_item,
+    add_item_reporting,
     get_or_create_cart,
     merge_guest_cart,
     remove_item,
     set_quantity,
 )
+
+OUT_OF_STOCK = {"detail": "This item just sold out.", "code": "out_of_stock"}
 from apps.catalog.models import ProductVariant
 
 
@@ -39,7 +41,9 @@ class CartItemsView(_CartBase):
         if qty <= 0:
             return Response({"quantity": ["Must be positive."]}, status=status.HTTP_400_BAD_REQUEST)
         cart = get_or_create_cart(request)
-        add_item(cart, variant, qty, request.country)
+        _, added = add_item_reporting(cart, variant, qty, request.country)
+        if not added:
+            return Response(OUT_OF_STOCK, status=status.HTTP_409_CONFLICT)
         return self._respond(cart, request)
 
 

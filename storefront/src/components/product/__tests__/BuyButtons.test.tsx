@@ -6,7 +6,8 @@ import { BUYNOW_INTENT_KEY } from "@/lib/buynow-intent";
 import { EMPTY_CART } from "@/lib/cart-types";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
 
 // A priced, in-stock selection; qty 2 proves the quantity travels with the request.
 vi.mock("@/components/product/PdpContext", () => ({
@@ -55,6 +56,7 @@ function renderButtons() {
 
 beforeEach(() => {
   push.mockClear();
+  refresh.mockClear();
   sessionStorage.clear();
 });
 afterEach(() => {
@@ -105,5 +107,47 @@ describe("BuyButtons — Buy Now", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(push).not.toHaveBeenCalled();
     expect(qc.getQueryData(["cart"])).toEqual(EMPTY_CART);
+  });
+
+  it("409 out_of_stock shows the just-sold-out message and refreshes, no navigation", async () => {
+    mockFetch(() =>
+      new Response(JSON.stringify({ detail: "This item just sold out.", code: "out_of_stock" }), {
+        status: 409,
+      }),
+    );
+    renderButtons();
+
+    fireEvent.click(screen.getByRole("button", { name: "Buy Now" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/just sold out/i),
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(refresh).toHaveBeenCalled();
+  });
+});
+
+describe("BuyButtons — Add to Cart", () => {
+  it("409 out_of_stock shows the just-sold-out message and refreshes", async () => {
+    const f = vi.fn((url: string | URL, init?: RequestInit) => {
+      if (String(url) === "/api/cart/items" && init?.method === "POST") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ detail: "This item just sold out.", code: "out_of_stock" }),
+            { status: 409 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify(EMPTY_CART), { status: 200 }));
+    });
+    global.fetch = f as unknown as typeof fetch;
+    renderButtons();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to Cart" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/just sold out/i),
+    );
+    expect(refresh).toHaveBeenCalled();
   });
 });

@@ -84,3 +84,13 @@ def test_buying_the_same_variant_again_merges_the_line(shop):
     # Capped at available stock on a further buy, like any other add.
     r = _buy_now(client, variant, 99)
     assert [i["quantity"] for i in r.data["items"]] == [5]
+
+
+def test_buy_now_sold_out_returns_409(shop):
+    client, user, wh, ngn = shop
+    variant = _variant(wh, ngn, stock=0)
+
+    r = _buy_now(client, variant, 1)
+
+    assert r.status_code == 409
+    assert r.data["code"] == "out_of_stock"

@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from apps.accounts.models import Address
 from apps.carts.models import Cart
 from apps.carts.serializers import serialize_cart
-from apps.carts.services import add_item, get_or_create_cart
+from apps.carts.services import add_item_reporting, get_or_create_cart
 from apps.catalog.models import ProductVariant
 from apps.checkout.serializers import QuoteRequestSerializer
 from apps.checkout.services.checkout import CheckoutError, place_order, retry_payment
@@ -234,5 +234,10 @@ class BuyNowView(APIView):
         variant = get_object_or_404(ProductVariant, pk=request.data.get("variant_id"), is_active=True)
         qty = int(request.data.get("quantity", 1))
         cart = get_or_create_cart(request)
-        add_item(cart, variant, qty, request.country)
+        _, added = add_item_reporting(cart, variant, qty, request.country)
+        if not added:
+            return Response(
+                {"detail": "This item just sold out.", "code": "out_of_stock"},
+                status=status.HTTP_409_CONFLICT,
+            )
         return Response(serialize_cart(cart, request.country))

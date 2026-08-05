@@ -109,3 +109,45 @@ def test_patch_and_delete_line(django_user_model):
     assert r.data["items"][0]["quantity"] == 1
     r = client.delete(f"/api/v1/cart/items/{variant.id}/", HTTP_X_COUNTRY="NG")
     assert r.data["items"] == []
+
+
+def test_add_capped_to_zero_returns_409_out_of_stock():
+    """A stock cap that eats the whole add is an explicit 409, not a silent 200 —
+    the storefront shows "just sold out" instead of opening an empty drawer."""
+    variant = ProductVariantFactory()
+    _ng_with_stock(variant, qty=0)
+    client = APIClient()
+
+    r = client.post("/api/v1/cart/items/", {"variant_id": variant.id, "quantity": 1},
+                    format="json", HTTP_X_COUNTRY="NG")
+
+    assert r.status_code == 409
+    assert r.data["code"] == "out_of_stock"
+
+
+def test_add_beyond_existing_line_cap_returns_409():
+    variant = ProductVariantFactory()
+    _ng_with_stock(variant, qty=3)
+    client = APIClient()
+    r = client.post("/api/v1/cart/items/", {"variant_id": variant.id, "quantity": 3},
+                    format="json", HTTP_X_COUNTRY="NG")
+    assert r.status_code == 200
+    cart_id = r.data["id"]
+
+    # Line is already at the cap — another add can't grow it.
+    r = client.post("/api/v1/cart/items/", {"variant_id": variant.id, "quantity": 1},
+                    format="json", HTTP_X_COUNTRY="NG", HTTP_X_CART_ID=cart_id)
+    assert r.status_code == 409
+    assert r.data["code"] == "out_of_stock"
+
+
+def test_add_partially_capped_is_still_200():
+    """Requested 5, only 2 in stock: the line grows to 2 — that's a success, not
+    a sold-out; the server-clamped cart is the response."""
+    variant = ProductVariantFactory()
+    _ng_with_stock(variant, qty=2)
+    client = APIClient()
+    r = client.post("/api/v1/cart/items/", {"variant_id": variant.id, "quantity": 5},
+                    format="json", HTTP_X_COUNTRY="NG")
+    assert r.status_code == 200
+    assert r.data["items"][0]["quantity"] == 2

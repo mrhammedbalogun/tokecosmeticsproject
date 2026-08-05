@@ -68,12 +68,21 @@ def _cap(variant, country, wanted: int) -> int:
 def add_item(cart, variant, qty: int, country) -> CartItem | None:
     """Add `qty` of a variant, merging into an existing line. Result quantity is
     capped at available stock. Returns the line, or None if it was capped to 0."""
+    line, _ = add_item_reporting(cart, variant, qty, country)
+    return line
+
+
+@transaction.atomic
+def add_item_reporting(cart, variant, qty: int, country) -> tuple[CartItem | None, bool]:
+    """add_item, plus whether the line actually grew. False means the stock cap ate
+    the whole request ("just sold out") — capped to 0, or an existing line already at
+    the cap. Views turn that into an explicit 409 instead of a silent 200 no-op."""
     if qty <= 0:
         raise ValueError("qty must be positive")
     line = CartItem.objects.select_for_update().filter(cart=cart, variant=variant).first()
     current = line.quantity if line else 0
     new_qty = _cap(variant, country, current + qty)
-    return _write_line(cart, variant, new_qty, country, line)
+    return _write_line(cart, variant, new_qty, country, line), new_qty > current
 
 
 @transaction.atomic

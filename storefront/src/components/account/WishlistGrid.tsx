@@ -15,7 +15,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { ProductCard as ProductCardData } from "@/lib/catalog";
 import { ProductCard } from "@/components/product/ProductCard";
-import { useCart } from "@/hooks/useCart";
+import { isJustSoldOut, useCart } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
 
 export interface WishlistItem {
@@ -25,6 +25,7 @@ export interface WishlistItem {
 }
 
 const ADD_ERROR = "Couldn't add to cart — try again.";
+const SOLD_OUT_ERROR = "Just sold out — no longer available.";
 const REMOVE_ERROR = "Couldn't remove — try again.";
 
 function omit(rec: Record<string, string>, sku: string): Record<string, string> {
@@ -53,8 +54,9 @@ export function WishlistGrid({ initial }: { initial: WishlistItem[] }) {
     try {
       await addItem.mutateAsync({ variantId, quantity: 1 });
       openCartDrawer();
-    } catch {
-      setErrors((prev) => ({ ...prev, [sku]: ADD_ERROR }));
+    } catch (err) {
+      setErrors((prev) => ({ ...prev, [sku]: isJustSoldOut(err) ? SOLD_OUT_ERROR : ADD_ERROR }));
+      if (isJustSoldOut(err)) void refresh(); // re-pull the list so the card shows Sold Out
     } finally {
       setBusy((prev) => ({ ...prev, [sku]: false }));
     }

@@ -157,6 +157,24 @@ describe("WishlistGrid", () => {
     expect(screen.getByText("Shea Butter Cream")).toBeInTheDocument();
   });
 
+  it("409 out_of_stock shows the just-sold-out message and re-pulls the list", async () => {
+    const f = mockFetch({
+      "POST /api/cart/items": {
+        status: 409,
+        body: { detail: "This item just sold out.", code: "out_of_stock" },
+      },
+      "GET /api/wishlist": { status: 200, body: [item()] },
+    });
+    renderGrid([item()]);
+
+    fireEvent.click(screen.getByRole("button", { name: /add to cart/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/just sold out/i),
+    );
+    await waitFor(() => expect(f).toHaveBeenCalledWith("/api/wishlist"));
+  });
+
   it("empty state renders the browse link", () => {
     mockFetch({});
     renderGrid([]);

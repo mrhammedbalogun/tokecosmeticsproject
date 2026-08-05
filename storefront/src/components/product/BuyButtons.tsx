@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useCart } from "@/hooks/useCart";
+import { isJustSoldOut, useCart } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
 import { usePdp } from "@/components/product/PdpContext";
 import { BUYNOW_INTENT_KEY } from "@/lib/buynow-intent";
@@ -25,8 +25,13 @@ export function BuyButtons() {
     try {
       await addItem.mutateAsync({ variantId: variant.id, quantity: qty });
       openCartDrawer();
-    } catch {
-      setError("Could not add to cart — please try again.");
+    } catch (err) {
+      if (isJustSoldOut(err)) {
+        setError("Just sold out — this item is no longer available.");
+        router.refresh(); // re-render the PDP with its true stock state
+      } else {
+        setError("Could not add to cart — please try again.");
+      }
     } finally { setBusy(null); }
   }
 
@@ -44,7 +49,16 @@ export function BuyButtons() {
         router.push("/login?next=/checkout");
         return;
       }
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const body: { code?: string } | null = await res.json().catch(() => null);
+        if (res.status === 409 && body?.code === "out_of_stock") {
+          setError("Just sold out — this item is no longer available.");
+          router.refresh();
+          setBusy(null);
+          return;
+        }
+        throw new Error();
+      }
       // Buy-now returns the STANDARD cart with the item added (it is the same cart
       // checkout reads). Seed the query cache before navigating: ["cart"] is fresh
       // for 30s, so without this checkout would trust a stale empty cart and render
