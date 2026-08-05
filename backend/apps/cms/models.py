@@ -84,8 +84,8 @@ class Banner(TimeStampedModel):
 
     title = models.CharField(max_length=200)
     subtitle = models.CharField(max_length=300, blank=True)
-    image = models.ImageField(upload_to="cms/banners/", blank=True)
-    mobile_image = models.ImageField(upload_to="cms/banners/", blank=True)
+    image = models.ImageField(upload_to="catalog/cms-banners/", blank=True)
+    mobile_image = models.ImageField(upload_to="catalog/cms-banners/", blank=True)
     cta_text = models.CharField(max_length=60, blank=True)
     cta_url = models.CharField(max_length=300, blank=True)
     # Landing redesign (2026-08-04, amended same day): a HERO banner may be a video.
@@ -93,7 +93,7 @@ class Banner(TimeStampedModel):
     # bucket, so marketers upload the file and django-storages puts it beside the
     # banner artwork. The storefront renders <video autoplay muted loop> with the
     # image (if any) as poster; no media-type tag is ever shown to customers.
-    video = models.FileField(upload_to="cms/banners/", blank=True)
+    video = models.FileField(upload_to="catalog/cms-banners/", blank=True)
     placement = models.CharField(max_length=20, choices=PLACEMENT_CHOICES, default=STRIP)
     sort = models.PositiveSmallIntegerField(default=0)
     starts_at = models.DateTimeField(null=True, blank=True)
