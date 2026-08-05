@@ -20,6 +20,7 @@ from apps.delivery.admin_serializers import (
     DeliveryCoverageSerializer,
     DeliveryOptionAdminSerializer,
     RegionAdminSerializer,
+    currency_mismatches,
 )
 from apps.delivery.models import DeliveryOption
 
@@ -43,6 +44,48 @@ class DeliveryOptionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     filterset_fields = ["is_active", "kind", "countries"]
     http_method_names = ["get", "post", "put", "patch", "head", "options"]
 
+    @action(detail=False, methods=["get"])
+    def preview(self, request):
+        """`GET /admin/delivery-options/preview/?country=NG&state_region=1&area_region=2`
+
+        "What would a customer HERE be offered?" answered by the real matcher
+        (`services.options_for_address`), not a client-side mirror — the mirror can
+        only ever drift. Prices are computed on an empty cart (no weight tiers, no
+        free-over), and `kind="carrier"` options are returned WITHOUT calling the
+        carrier: the admin wants coverage truth, not a live GIG quote per keystroke.
+        """
+        from decimal import Decimal
+        from types import SimpleNamespace
+
+        from apps.core.country_context import resolve_country
+        from apps.delivery.services import options_for_address
+
+        code = (request.query_params.get("country") or "").upper()
+        country = resolve_country(code)
+        if country is None:
+            return Response({"country": ["Unknown country code."]}, status=400)
+
+        def region_or_400(param):
+            raw = request.query_params.get(param)
+            if not raw:
+                return None
+            region = Region.objects.filter(id=raw).first()
+            if region is None:
+                raise ValueError(param)
+            return region
+
+        try:
+            address = SimpleNamespace(
+                country_code=code,
+                state_region=region_or_400("state_region"),
+                area_region=region_or_400("area_region"),
+            )
+        except ValueError as exc:
+            return Response({str(exc): ["Unknown region id."]}, status=400)
+
+        options = options_for_address(address, [], Decimal("0"), country)
+        return Response({"country": country.code, "options": options})
+
     @action(detail=True, methods=["put"])
     def coverage(self, request, pk=None):
         """`PUT /admin/delivery-options/{id}/coverage/` — Plan-19d.
@@ -57,11 +100,32 @@ class DeliveryOptionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         codes = serializer.validated_data.get("country_codes")
-        if codes is not None:
-            option.countries.set(Country.objects.filter(code__in=codes))
+        countries = Country.objects.filter(code__in=codes) if codes is not None else None
         region_ids = serializer.validated_data.get("region_ids")
-        if region_ids is not None:
-            option.regions.set(Region.objects.filter(id__in=region_ids))
+        regions = Region.objects.filter(id__in=region_ids) if region_ids is not None else None
+
+        # Same rule the create path enforces: coverage in a currency the option is not
+        # priced in silently never appears at checkout (services.options_for_address
+        # filters on the order currency), so the write is the only place to catch it.
+        mismatched = currency_mismatches(
+            option.currency_id,
+            countries if countries is not None else option.countries.all(),
+            regions if regions is not None else option.regions.all(),
+        )
+        if mismatched:
+            return Response(
+                {"country_codes": [
+                    f"This option is priced in {option.currency_id} but this coverage "
+                    f"includes {', '.join(mismatched)}, which sell in a different "
+                    "currency — checkout would never show it there."
+                ]},
+                status=400,
+            )
+
+        if countries is not None:
+            option.countries.set(countries)
+        if regions is not None:
+            option.regions.set(regions)
 
         option.refresh_from_db()
         return Response(DeliveryOptionAdminSerializer(option).data, status=200)

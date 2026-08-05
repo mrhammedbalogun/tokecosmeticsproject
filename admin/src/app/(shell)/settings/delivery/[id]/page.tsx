@@ -30,15 +30,18 @@ export default async function CoveragePage({ params }: { params: Promise<{ id: s
     throw e;
   }
 
+  // ALL countries' regions in one unpaginated fetch (NG's 811 plus the level-1 rows
+  // for GB/US/CA) — the picker groups them per country, so coverage is no longer an
+  // NG-only affair.
   const [regionsResult, countriesResult] = await Promise.allSettled([
-    fetchWithAuthOrBounce<RegionRow[]>("/admin/regions/?country_code=NG", path),
+    fetchWithAuthOrBounce<RegionRow[]>("/admin/regions/", path),
     fetchWithAuthOrBounce<CountryRef[]>("/meta/countries/", path),
   ]);
 
   const regions = regionsResult.status === "fulfilled" ? (regionsResult.value ?? []) : [];
   const countries =
     countriesResult.status === "fulfilled" && Array.isArray(countriesResult.value)
-      ? countriesResult.value.map((c) => ({ code: c.code, name: c.name }))
+      ? countriesResult.value
       : [];
 
   return (

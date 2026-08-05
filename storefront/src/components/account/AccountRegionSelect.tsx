@@ -117,6 +117,11 @@ export function AccountRegionSelect({
     );
   }
 
+  // Same rule as RegionSelect: the second select only exists when the chosen state
+  // actually has areas — GB/US/CA states have no seeded children.
+  const chosenState = (states ?? []).find((s) => s.id === stateValue);
+  const showAreaSelect = Boolean(chosenState?.has_children);
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div>
@@ -139,25 +144,28 @@ export function AccountRegionSelect({
           ))}
         </select>
       </div>
-      <div>
-        <label htmlFor="account-region-area" className="mb-1 block text-sm font-medium">
-          {areaLabel}
-        </label>
-        <select
-          id="account-region-area"
-          value={areaValue ?? ""}
-          onChange={handleAreaChange}
-          disabled={!stateValue || areasLoading}
-          className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm disabled:opacity-60"
-        >
-          <option value="">{areasLoading ? "Loading…" : `Select ${areaLabel.toLowerCase()}`}</option>
-          {(areas ?? []).map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {showAreaSelect && (
+        <div>
+          <label htmlFor="account-region-area" className="mb-1 block text-sm font-medium">
+            {areaLabel}
+          </label>
+          <select
+            id="account-region-area"
+            value={areaValue ?? ""}
+            onChange={handleAreaChange}
+            disabled={areasLoading}
+            required
+            className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm disabled:opacity-60"
+          >
+            <option value="">{areasLoading ? "Loading…" : `Select ${areaLabel.toLowerCase()}`}</option>
+            {(areas ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }

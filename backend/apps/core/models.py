@@ -109,7 +109,10 @@ class Country(models.Model):
     is_rest_of_world = models.BooleanField(default=False)         # the "ZZ" catch-all
     tax_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     prices_include_tax = models.BooleanField(default=True)
-    # Local name for the finest region level: "LGA" (NG), "Borough" (GB), "County" (US)…
+    # Local names for the region levels (Countries_breakdown mapping). Level 1:
+    # "State" (NG/US), "Province" (CA), "Country" (GB's constituent countries).
+    state_label = models.CharField(max_length=30, default="State")
+    # Level 2, the finest: "LGA" (NG), "District" (GB), "County" (US), "Municipality" (CA).
     area_label = models.CharField(max_length=30, default="Area")
 
     class Meta:

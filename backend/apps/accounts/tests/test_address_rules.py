@@ -13,6 +13,16 @@ def test_gb_requires_postcode():
     assert "city_text" in req
 
 
+def test_region_countries_keep_their_postcode_and_city():
+    """The trap the old if/else invited: joining REGION_COUNTRIES must never cost
+    GB/US/CA the postcode — it is the field that actually routes the parcel."""
+    for code in ("GB", "US", "CA"):
+        req = required_fields_for(code)
+        assert "state_region" in req, code
+        assert "city_text" in req, code
+        assert "postcode" in req, code
+
+
 def test_unknown_country_uses_text_no_postcode():
     req = required_fields_for("FR")
     assert "city_text" in req

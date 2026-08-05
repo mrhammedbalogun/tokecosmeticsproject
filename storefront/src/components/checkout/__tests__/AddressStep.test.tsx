@@ -86,18 +86,23 @@ afterEach(() => {
 
 describe("AddressStep", () => {
   it("renders saved addresses as cards and selecting one sets addressId and completes step 2", async () => {
+    // GB is a region country since the Countries_breakdown work, so a complete saved
+    // address carries state_region; without it the pick detours through the
+    // complete-this-address panel (tested separately below).
     mockFetch({
       "GET /api/addresses": {
         status: 200,
         body: [
           {
             id: 1, label: "Home", first_name: "Ada", phone: "0700",
-            line1: "1 Baker St", country_code: "GB", city_text: "London", postcode: "NW1",
+            line1: "1 Baker St", country_code: "GB", state_region: 11,
+            city_text: "London", postcode: "NW1",
             is_default_shipping: true, is_default_billing: true,
           },
           {
             id: 2, label: "Office", first_name: "Ada", phone: "0700",
-            line1: "2 Fleet St", country_code: "GB", city_text: "London", postcode: "EC4",
+            line1: "2 Fleet St", country_code: "GB", state_region: 11,
+            city_text: "London", postcode: "EC4",
             is_default_shipping: false, is_default_billing: false,
           },
         ],
@@ -122,14 +127,65 @@ describe("AddressStep", () => {
     expect(screen.getByTestId("addressDisplay")).toHaveTextContent("2 Fleet St, London");
   });
 
+  it("detours a saved GB address without a state through the complete-this-address panel", async () => {
+    mockFetch({
+      "GET /api/addresses": {
+        status: 200,
+        body: [
+          {
+            id: 3, label: "Home", first_name: "Ada", phone: "0700",
+            line1: "1 Baker St", country_code: "GB", state_region: null,
+            city_text: "London", postcode: "NW1",
+            is_default_shipping: true, is_default_billing: true,
+          },
+        ],
+      },
+      "GET /api/regions?country=GB": {
+        status: 200,
+        body: [{ id: 11, name: "England", level: "state", has_children: false }],
+      },
+      "PATCH /api/addresses/3": {
+        status: 200,
+        body: {
+          id: 3, label: "Home", first_name: "Ada", phone: "0700",
+          line1: "1 Baker St", country_code: "GB", state_region: 11,
+          city_text: "London", postcode: "NW1",
+          is_default_shipping: true, is_default_billing: true,
+        },
+      },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByText("1 Baker St, London")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("1 Baker St, London").closest("[role='radio']")!);
+
+    // The pick does NOT complete the step — the panel asks for the missing state.
+    await waitFor(() => expect(screen.getByText(/complete this address/i)).toBeInTheDocument());
+    expect(screen.getByTestId("completed")).toHaveTextContent("");
+
+    await waitFor(() => expect(screen.getByRole("option", { name: "England" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^country$/i), { target: { value: "11" } });
+    fireEvent.click(screen.getByRole("button", { name: /save and use this address/i }));
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("2"));
+    expect(screen.getByTestId("addressId")).toHaveTextContent("3");
+  });
+
   it("adds a new address (happy path): fills required fields, POSTs, selects it, and completes step 2", async () => {
+    // GB renders BOTH the constituent-country select (bound to state_region) and the
+    // city/postcode text fields since the Countries_breakdown work.
     mockFetch({
       "GET /api/addresses": { status: 200, body: [] },
+      "GET /api/regions?country=GB": {
+        status: 200,
+        body: [{ id: 11, name: "England", level: "state", has_children: false }],
+      },
       "POST /api/addresses": {
         status: 201,
         body: {
           id: 9, first_name: "Ada", phone: "07000000000", line1: "10 Downing St",
-          country_code: "GB", city_text: "London", postcode: "SW1A 2AA",
+          country_code: "GB", state_region: 11, city_text: "London", postcode: "SW1A 2AA",
           is_default_shipping: false, is_default_billing: false,
         },
       },
@@ -143,6 +199,12 @@ describe("AddressStep", () => {
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
     fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "07000000000" } });
     fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "10 Downing St" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "England" })).toBeInTheDocument());
+    // Two "Country" labels here: the locked cart-country input and RegionSelect's
+    // constituent-country select — target the combobox.
+    fireEvent.change(screen.getByRole("combobox", { name: /^country$/i }), {
+      target: { value: "11" },
+    });
     fireEvent.change(screen.getByLabelText(/^city\/town$/i), { target: { value: "London" } });
     fireEvent.change(screen.getByLabelText(/^postcode$/i), { target: { value: "SW1A 2AA" } });
 

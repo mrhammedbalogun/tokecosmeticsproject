@@ -1,34 +1,39 @@
 "use client";
 
 /**
- * Where a delivery option is offered — Plan-19d, the largest UI in Plan-19.
+ * Where a delivery option is offered — Plan-19d, generalised for the
+ * Countries_breakdown work (no longer hardcoded to Nigeria).
  *
- * ── 811 REGIONS, AND MIXED GRANULARITY ──────────────────────────────────────────────
+ * ── MIXED GRANULARITY ───────────────────────────────────────────────────────────────
  *
- * Nigeria has 37 states and 774 LGAs, and master-spec Decision 13 says an option may
- * cover whole countries, whole states, or individual areas IN ANY COMBINATION. So the
- * tree collapses by default and a state shows a tri-state: all, some, none. "Some" is
- * the state that matters — without it, a mixed selection would render identically to a
- * whole-state one and somebody would "tidy" it into the wrong thing.
- *
- * Ticking a state selects the STATE ROW, not its 20 areas. That is what the backend
- * matches on (`_covered_region_ids` walks an address's ancestors), and it means a new LGA
- * added to Lagos next year is covered automatically rather than silently missing.
+ * Master-spec Decision 13: an option may cover whole countries, whole states, or
+ * individual areas IN ANY COMBINATION. Each country that has a Region tree gets its own
+ * section, labelled with ITS levels ("States and LGAs" for NG, "Provinces and
+ * municipalities" for CA). Ticking a state selects the STATE ROW, not its areas — that
+ * is what the backend matches on (`_covered_region_ids` walks an address's ancestors),
+ * and it means an LGA added to Lagos next year is covered automatically rather than
+ * silently missing. The tri-state rendering lives in RegionTree, shared with the
+ * create wizard.
  *
  * ── THE TEST WIDGET IS A MIRROR, NOT THE RULE ───────────────────────────────────────
  *
  * "Would this address get this option?" is answered here by `coversAddress`, which
- * reproduces the backend's ancestor walk. The backend still decides at checkout. It earns
- * its place because coverage is otherwise invisible until a customer cannot check out.
+ * reproduces the backend's ancestor walk on UNSAVED ticks — check before committing.
+ * The backend still decides at checkout; the global tester on the delivery list asks
+ * it for real.
  */
 import { startTransition, useMemo, useState } from "react";
 import { saveCoverageAction } from "@/app/(shell)/settings/delivery/actions";
+import { RegionTree } from "@/components/config/RegionTree";
 import {
   buildTree,
   coversAddress,
-  stateSelection,
+  lowerLabel,
+  pluralLabel,
+  regionsOf,
   type RegionRow,
 } from "@/lib/regions";
+import type { CountryRef } from "@/lib/reference";
 
 const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
@@ -43,22 +48,35 @@ export function CoveragePicker({
 }: {
   optionId: number;
   optionName: string;
-  countries: { code: string; name: string }[];
+  countries: CountryRef[];
   regions: RegionRow[];
   selectedCountryCodes: string[];
   selectedRegionIds: number[];
 }) {
-  const tree = useMemo(() => buildTree(regions), [regions]);
   const [countryCodes, setCountryCodes] = useState<Set<string>>(
     new Set(selectedCountryCodes),
   );
   const [regionIds, setRegionIds] = useState<Set<number>>(new Set(selectedRegionIds));
-  const [expanded, setExpanded] = useState<Set<number>>(new Set());
   const [pending, setPending] = useState(false);
   const [saved, setSaved] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
+  // Countries that have a region tree each get a section.
+  const regionCountries = useMemo(
+    () =>
+      countries
+        .map((country) => ({
+          country,
+          tree: buildTree(regionsOf(regions, country.code)),
+        }))
+        .filter((entry) => entry.tree.length > 0),
+    [countries, regions],
+  );
+
   // The test widget's inputs.
+  const [testCountry, setTestCountry] = useState<string>(
+    regionCountries[0]?.country.code ?? "",
+  );
   const [testState, setTestState] = useState<string>("");
   const [testArea, setTestArea] = useState<string>("");
 
@@ -94,14 +112,16 @@ export function CoveragePicker({
     });
   };
 
+  const testEntry = regionCountries.find((e) => e.country.code === testCountry);
+  const testTree = testEntry?.tree ?? [];
   const testStateId = testState ? Number(testState) : null;
   const testAreaId = testArea ? Number(testArea) : null;
-  const testAreas = tree.find((n) => n.state.id === testStateId)?.areas ?? [];
+  const testAreas = testTree.find((n) => n.state.id === testStateId)?.areas ?? [];
   const testResult =
     testStateId === null
       ? null
       : coversAddress(
-          { countryCode: "NG", stateId: testStateId, areaId: testAreaId },
+          { countryCode: testCountry, stateId: testStateId, areaId: testAreaId },
           { countryCodes: [...countryCodes], regionIds },
         );
 
@@ -121,7 +141,7 @@ export function CoveragePicker({
       <section className="rounded-[var(--radius-card)] border border-line p-4">
         <h2 className="text-sm font-semibold">Whole countries</h2>
         <p className="mt-1 text-sm text-muted">
-          Ticking a country serves every address in it, whatever the states below say.
+          Ticking a country serves every address in it, whatever the regions below say.
         </p>
         <ul className="mt-3 flex flex-wrap gap-2">
           {countries.map((country) => (
@@ -140,95 +160,53 @@ export function CoveragePicker({
         </ul>
       </section>
 
-      <section className="rounded-[var(--radius-card)] border border-line p-4">
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-sm font-semibold">States and areas</h2>
-          <span className="text-xs text-muted">
-            {regionIds.size} selected of {regions.length}
-          </span>
-        </div>
-        <p className="mt-1 text-sm text-muted">
-          Ticking a state covers every area in it — including ones added later.
-        </p>
+      {regionCountries.map(({ country, tree }) => {
+        const stateLabel = country.state_label ?? "State";
+        const areaLabel = country.area_label ?? "Area";
+        const selectedHere = tree.reduce(
+          (n, node) =>
+            n +
+            (regionIds.has(node.state.id) ? 1 : 0) +
+            node.areas.filter((a) => regionIds.has(a.id)).length,
+          0,
+        );
+        return (
+          <section
+            key={country.code}
+            className="rounded-[var(--radius-card)] border border-line p-4"
+          >
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-sm font-semibold">
+                {country.name}: {capitalPlural(stateLabel)} and {pluralLabel(areaLabel)}
+              </h2>
+              <span className="text-xs text-muted">{selectedHere} selected</span>
+            </div>
+            <p className="mt-1 text-sm text-muted">
+              Ticking a {lowerLabel(stateLabel)} covers every {lowerLabel(areaLabel)}{" "}
+              in it — including ones added later.
+              {countryCodes.has(country.code) &&
+                ` All of ${country.name} is already ticked above, so these add nothing until that is unticked.`}
+            </p>
+            <div className="mt-3">
+              <RegionTree
+                tree={tree}
+                selected={regionIds}
+                onToggle={toggleRegion}
+                areaLabel={pluralLabel(areaLabel)}
+              />
+            </div>
+          </section>
+        );
+      })}
 
-        <ul className="mt-3 max-h-[28rem] divide-y divide-line overflow-y-auto rounded border border-line">
-          {tree.map((node) => {
-            const selection = stateSelection(node, regionIds);
-            const isOpen = expanded.has(node.state.id);
-            return (
-              <li key={node.state.id}>
-                <div className="flex items-center gap-2 px-3 py-2">
-                  <input
-                    type="checkbox"
-                    checked={selection === "all"}
-                    ref={(el) => {
-                      // The tri-state. Without it a partial pick looks like no pick.
-                      if (el) el.indeterminate = selection === "some";
-                    }}
-                    onChange={() => toggleRegion(node.state.id)}
-                    className="h-4 w-4 rounded border-line"
-                    aria-label={`Serve all of ${node.state.name}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpanded((current) => {
-                        const next = new Set(current);
-                        if (next.has(node.state.id)) next.delete(node.state.id);
-                        else next.add(node.state.id);
-                        return next;
-                      })
-                    }
-                    className="flex flex-1 items-center justify-between text-left text-sm hover:text-accent"
-                  >
-                    <span>
-                      {node.state.name}
-                      {selection === "some" && (
-                        <span className="ml-2 text-xs text-accent">part</span>
-                      )}
-                      {!node.state.is_active && (
-                        <span className="ml-2 text-xs text-muted">(hidden)</span>
-                      )}
-                    </span>
-                    <span className="text-xs text-muted">
-                      {node.areas.length} areas {isOpen ? "▲" : "▼"}
-                    </span>
-                  </button>
-                </div>
-                {isOpen && node.areas.length > 0 && (
-                  <ul className="bg-surface/50 pb-2 pl-9 pr-3">
-                    {node.areas.map((area) => (
-                      <li key={area.id}>
-                        <label className="flex items-center gap-2 py-0.5 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={regionIds.has(area.id) || regionIds.has(node.state.id)}
-                            disabled={regionIds.has(node.state.id)}
-                            onChange={() => toggleRegion(area.id)}
-                            className="h-4 w-4 rounded border-line"
-                          />
-                          <span className={regionIds.has(node.state.id) ? "text-muted" : ""}>
-                            {area.name}
-                          </span>
-                        </label>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-
-        <button
-          type="button"
-          onClick={save}
-          disabled={pending}
-          className="mt-3 rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
-        >
-          {pending ? "Saving…" : "Save coverage"}
-        </button>
-      </section>
+      <button
+        type="button"
+        onClick={save}
+        disabled={pending}
+        className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
+      >
+        {pending ? "Saving…" : "Save coverage"}
+      </button>
 
       <section className="rounded-[var(--radius-card)] border border-line p-4">
         <h2 className="text-sm font-semibold">Test an address</h2>
@@ -236,9 +214,27 @@ export function CoveragePicker({
           Would a customer here be offered this option? Unsaved ticks count, so you can
           check before committing.
         </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <label className="block text-xs text-muted">
-            State
+            Country
+            <select
+              value={testCountry}
+              onChange={(e) => {
+                setTestCountry(e.target.value);
+                setTestState("");
+                setTestArea("");
+              }}
+              className={`mt-1 ${FIELD}`}
+            >
+              {regionCountries.map(({ country }) => (
+                <option key={country.code} value={country.code}>
+                  {country.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs text-muted">
+            {testEntry?.country.state_label ?? "State"}
             <select
               value={testState}
               onChange={(e) => {
@@ -247,8 +243,8 @@ export function CoveragePicker({
               }}
               className={`mt-1 ${FIELD}`}
             >
-              <option value="">Choose a state…</option>
-              {tree.map((node) => (
+              <option value="">Choose…</option>
+              {testTree.map((node) => (
                 <option key={node.state.id} value={node.state.id}>
                   {node.state.name}
                 </option>
@@ -256,14 +252,16 @@ export function CoveragePicker({
             </select>
           </label>
           <label className="block text-xs text-muted">
-            Area
+            {testEntry?.country.area_label ?? "Area"}
             <select
               value={testArea}
               onChange={(e) => setTestArea(e.target.value)}
               disabled={!testAreas.length}
               className={`mt-1 ${FIELD}`}
             >
-              <option value="">Anywhere in the state</option>
+              <option value="">
+                Anywhere in the {lowerLabel(testEntry?.country.state_label ?? "state")}
+              </option>
               {testAreas.map((area) => (
                 <option key={area.id} value={area.id}>
                   {area.name}
@@ -287,4 +285,9 @@ export function CoveragePicker({
       </section>
     </div>
   );
+}
+
+/** Capitalised plural for headings: "State" -> "States", "Country" -> "Countries". */
+function capitalPlural(label: string): string {
+  return label.endsWith("y") ? `${label.slice(0, -1)}ies` : `${label}s`;
 }

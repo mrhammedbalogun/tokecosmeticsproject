@@ -276,12 +276,12 @@ def _case_region_patch(client, monkeypatch):
 
 
 def _case_delivery_option_create(client, monkeypatch):
-    from apps.core.models import Currency
-
+    # Coverage is required on create (an uncovered option matches nothing), and the
+    # currency must be the covered country's — so cover NG and price in NGN.
     return client.post(
         "/api/v1/admin/delivery-options/",
-        {"name": "Express", "price": "2500", "currency": Currency.objects.first().code,
-         "min_days": 1, "max_days": 2},
+        {"name": "Express", "price": "2500", "currency": "NGN",
+         "min_days": 1, "max_days": 2, "country_codes": ["NG"]},
         format="json",
     ), 201
 

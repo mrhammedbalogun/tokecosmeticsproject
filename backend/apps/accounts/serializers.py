@@ -120,6 +120,19 @@ class AddressSerializer(serializers.ModelSerializer):
             elif area_region.parent_id != getattr(state_region, "id", None):
                 errors["area_region"] = "That area does not belong to the selected state/region."
 
+        # 4. A NEW address whose chosen state has areas must pick one. The delivery
+        #    matcher and GIG quoting work on the area FK, so "state only" quietly
+        #    excludes the address from every area-scoped option. Enforced on create
+        #    only: old rows predate the rule, and a phone-number PATCH on one should
+        #    not demand an LGA it never had.
+        if (
+            self.instance is None
+            and state_region is not None
+            and area_region is None
+            and state_region.children.filter(is_active=True).exists()
+        ):
+            errors["area_region"] = "Select an area within the state/region."
+
         if errors:
             raise serializers.ValidationError(errors)
         return attrs

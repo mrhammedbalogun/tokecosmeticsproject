@@ -91,10 +91,66 @@ export function AddressStep() {
     })();
   }, []);
 
+  // A saved address from before its country grew a region tree (GB/US/CA since the
+  // Countries_breakdown work) has no state_region — which means only country-wide
+  // delivery options can ever match it, and the day those are retired for state-scoped
+  // ones the shopper would dead-end at the delivery step. Picking such an address
+  // detours through a one-select "complete this address" panel instead.
+  const [fixup, setFixup] = useState<Address | null>(null);
+  const [fixupRegion, setFixupRegion] = useState<{
+    state_region?: number;
+    area_region?: number;
+  }>({});
+  const [fixupSaving, setFixupSaving] = useState(false);
+  const [fixupError, setFixupError] = useState<string | null>(null);
+
   function handleSelect(addr: Address) {
+    if (fieldConfigFor(addr.country_code).useRegions && !addr.state_region) {
+      setSelectedId(addr.id);
+      setFixup(addr);
+      setFixupRegion({});
+      setFixupError(null);
+      return;
+    }
+    setFixup(null);
     setSelectedId(addr.id);
     setAddress(addr.id);
     complete(2, { addressDisplay: summarizeAddress(addr) });
+  }
+
+  async function saveFixup() {
+    if (!fixup || !fixupRegion.state_region) return;
+    setFixupSaving(true);
+    setFixupError(null);
+    try {
+      const res = await fetch(`/api/addresses/${fixup.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          state_region: fixupRegion.state_region,
+          ...(fixupRegion.area_region ? { area_region: fixupRegion.area_region } : {}),
+        }),
+      });
+      if (!res.ok) {
+        const body: AddressFieldErrors = await res.json().catch(() => ({}));
+        setFixupError(
+          body.state_region?.join(" ") ??
+            body.area_region?.join(" ") ??
+            body.detail ??
+            "The address could not be updated — please try again.",
+        );
+        return;
+      }
+      const updated: Address = await res.json();
+      setAddresses((prev) => (prev ?? []).map((a) => (a.id === updated.id ? updated : a)));
+      setFixup(null);
+      setAddress(updated.id);
+      complete(2, { addressDisplay: summarizeAddress(updated) });
+    } catch {
+      setFixupError("The address could not be updated — please try again.");
+    } finally {
+      setFixupSaving(false);
+    }
   }
 
   function updateField<K extends keyof FormValues>(key: K, value: FormValues[K]) {
@@ -117,14 +173,14 @@ export function AddressStep() {
     if (form.label.trim()) payload.label = form.label.trim();
     if (form.last_name.trim()) payload.last_name = form.last_name.trim();
     if (form.line2.trim()) payload.line2 = form.line2.trim();
+    // NOT exclusive: GB/US/CA need the structured state AND city + postcode.
     if (cfg.useRegions) {
       if (form.state_region) payload.state_region = form.state_region;
       if (form.area_region) payload.area_region = form.area_region;
-    } else {
-      for (const f of cfg.textFields) {
-        const v = form[f.name].trim();
-        if (v) payload[f.name] = v;
-      }
+    }
+    for (const f of cfg.textFields) {
+      const v = form[f.name].trim();
+      if (v) payload[f.name] = v;
     }
 
     try {
@@ -193,6 +249,51 @@ export function AddressStep() {
               </button>
             );
           })}
+        </div>
+      )}
+
+      {fixup && (
+        <div className="rounded-[var(--radius-card)] border border-accent/40 bg-accent/5 p-4">
+          <p className="text-sm font-medium">Complete this address</p>
+          <p className="mt-1 text-sm text-muted">
+            This address was saved before we asked for a{" "}
+            {(fieldConfigFor(fixup.country_code).regionLabels?.state ?? "state").toLowerCase()}{" "}
+            — adding it unlocks every delivery option for your area.
+          </p>
+          <div className="mt-3">
+            <RegionSelect
+              country={fixup.country_code}
+              stateValue={fixupRegion.state_region}
+              areaValue={fixupRegion.area_region}
+              labels={fieldConfigFor(fixup.country_code).regionLabels}
+              onChange={setFixupRegion}
+            />
+          </div>
+          {fixupError && (
+            <p role="alert" className="mt-2 text-sm text-red-700">
+              {fixupError}
+            </p>
+          )}
+          <div className="mt-3 flex items-center gap-4">
+            <button
+              type="button"
+              onClick={saveFixup}
+              disabled={fixupSaving || !fixupRegion.state_region}
+              className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {fixupSaving ? "Saving…" : "Save and use this address"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setFixup(null);
+                setSelectedId(undefined);
+              }}
+              className="text-sm text-muted underline hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -338,7 +439,9 @@ export function AddressStep() {
             />
           </div>
 
-          {cfg.useRegions ? (
+          {/* NOT exclusive: GB/US/CA render the structured state select AND
+              city + postcode text fields (mirrors apps.core.address_rules). */}
+          {cfg.useRegions && (
             <div>
               <RegionSelect
                 country={country}
@@ -360,7 +463,8 @@ export function AddressStep() {
                 </p>
               )}
             </div>
-          ) : (
+          )}
+          {cfg.textFields.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
               {cfg.textFields.map((f) => (
                 <div key={f.name}>

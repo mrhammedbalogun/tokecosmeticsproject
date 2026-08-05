@@ -36,6 +36,11 @@ export interface CountryRef {
   code: string;
   name: string;
   is_rest_of_world: boolean;
+  /** Local names for the region levels (Countries_breakdown): "State"/"Province"/
+   * "Country", and "LGA"/"County"/"Municipality"/"District". */
+  state_label?: string;
+  area_label?: string;
+  currency?: { code: string; symbol: string; decimal_places: number };
 }
 
 interface Paged<T> {

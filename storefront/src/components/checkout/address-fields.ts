@@ -56,8 +56,11 @@ export interface TextFieldDef {
 }
 
 export interface CountryFieldConfig {
-  /** NG (the only seeded Region country at launch): render RegionSelect for
-   * state_region/area_region instead of the free-text fields below. */
+  /** Region countries (NG, and GB/US/CA since the Countries_breakdown work) render
+   * RegionSelect for state_region/area_region. NOT exclusive with textFields: GB/US/CA
+   * need BOTH the structured state (the delivery matcher works on region FKs — free
+   * text never matches a region-scoped option) AND city + postcode (the postcode is
+   * what actually routes the parcel). Mirrors apps.core.address_rules. */
   useRegions: boolean;
   regionLabels?: { state: string; area: string };
   textFields: TextFieldDef[];
@@ -70,28 +73,28 @@ const NG_CONFIG: CountryFieldConfig = {
 };
 
 const GB_CONFIG: CountryFieldConfig = {
-  useRegions: false,
+  useRegions: true,
+  regionLabels: { state: "Country", area: "District" },
   textFields: [
     { name: "city_text", label: "City/Town", required: true },
-    { name: "state_text", label: "County (optional)", required: false },
     { name: "postcode", label: "Postcode", required: true },
   ],
 };
 
 const US_CONFIG: CountryFieldConfig = {
-  useRegions: false,
+  useRegions: true,
+  regionLabels: { state: "State", area: "County" },
   textFields: [
     { name: "city_text", label: "City", required: true },
-    { name: "state_text", label: "State (optional)", required: false },
     { name: "postcode", label: "ZIP code", required: true },
   ],
 };
 
 const CA_CONFIG: CountryFieldConfig = {
-  useRegions: false,
+  useRegions: true,
+  regionLabels: { state: "Province", area: "Municipality" },
   textFields: [
     { name: "city_text", label: "City", required: true },
-    { name: "state_text", label: "Province (optional)", required: false },
     { name: "postcode", label: "Postal code", required: true },
   ],
 };

@@ -39,6 +39,24 @@ export function buildTree(regions: RegionRow[]): StateNode[] {
 
 export type StateSelection = "all" | "some" | "none";
 
+/** "LGA" -> "LGAs", "County" -> "counties" — for "N counties" expander text.
+ * Acronym labels keep their case; words go lowercase mid-sentence. */
+export function pluralLabel(label: string): string {
+  if (label === label.toUpperCase()) return `${label}s`;
+  const lower = label.toLowerCase();
+  return lower.endsWith("y") ? `${lower.slice(0, -1)}ies` : `${lower}s`;
+}
+
+/** Mid-sentence form: "State" -> "state", but "LGA" stays "LGA". */
+export function lowerLabel(label: string): string {
+  return label === label.toUpperCase() ? label : label.toLowerCase();
+}
+
+/** The regions of one country, for building that country's tree. */
+export function regionsOf(regions: RegionRow[], countryCode: string): RegionRow[] {
+  return regions.filter((r) => r.country_code === countryCode);
+}
+
 /** Whether a state is fully, partly or not covered — the tri-state a parent checkbox
  *  needs. "Some" is the one that matters: it is how mixed granularity is visible at all. */
 export function stateSelection(node: StateNode, selected: Set<number>): StateSelection {

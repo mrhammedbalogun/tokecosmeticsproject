@@ -4,6 +4,188 @@
  */
 
 export interface paths {
+    "/api/v1/admin/audit/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/audit/ — filters: `actor` (email substring), `model`,
+         *     `action`, `object_id`, `after`, `before`.
+         *
+         *     READ-AUDITED, deliberately, and it is the one place in the codebase where reading a
+         *     table writes to that same table. Two reasons it is worth the strangeness. This
+         *     endpoint returns other customers' data — `changes` holds whatever an admin edit
+         *     touched — so by the Task 4 rule for PII reads it qualifies on its own merits. And
+         *     "who has been reading the audit log, and what were they searching for" is exactly
+         *     the behaviour that precedes somebody deciding which rows to try to remove.
+         *
+         *     It does not recurse: one read makes one row, and that row's `changes` holds the
+         *     query parameters, never the rows returned.
+         *
+         *     ORDERING IS NEWEST-FIRST and is declared here rather than on `Meta.ordering`,
+         *     because a default ordering on the model would silently apply to the redaction sweep
+         *     and to every future count as well, for no benefit.
+         */
+        get: operations["v1_admin_audit_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bank-accounts/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD minus delete. Deleting the row a country pays into does not disable bank
+         *     transfer — it makes `initiate()` fail for every customer in that market with nothing
+         *     to read. `is_active=False` is the switch that means "stop offering this", and it keeps
+         *     the history of what the number used to be.
+         */
+        get: operations["v1_admin_bank_accounts_list"];
+        put?: never;
+        /**
+         * @description CRUD minus delete. Deleting the row a country pays into does not disable bank
+         *     transfer — it makes `initiate()` fail for every customer in that market with nothing
+         *     to read. `is_active=False` is the switch that means "stop offering this", and it keeps
+         *     the history of what the number used to be.
+         */
+        post: operations["v1_admin_bank_accounts_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/bank-accounts/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD minus delete. Deleting the row a country pays into does not disable bank
+         *     transfer — it makes `initiate()` fail for every customer in that market with nothing
+         *     to read. `is_active=False` is the switch that means "stop offering this", and it keeps
+         *     the history of what the number used to be.
+         */
+        get: operations["v1_admin_bank_accounts_retrieve"];
+        /**
+         * @description CRUD minus delete. Deleting the row a country pays into does not disable bank
+         *     transfer — it makes `initiate()` fail for every customer in that market with nothing
+         *     to read. `is_active=False` is the switch that means "stop offering this", and it keeps
+         *     the history of what the number used to be.
+         */
+        put: operations["v1_admin_bank_accounts_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description CRUD minus delete. Deleting the row a country pays into does not disable bank
+         *     transfer — it makes `initiate()` fail for every customer in that market with nothing
+         *     to read. `is_active=False` is the switch that means "stop offering this", and it keeps
+         *     the history of what the number used to be.
+         */
+        patch: operations["v1_admin_bank_accounts_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/banners/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `marketing.manage` — see `rbac.py`: a banner announces a promotion, so it is
+         *     campaign material rather than the legally load-bearing pages `cms.manage` protects.
+         *
+         *     DELETE IS ALLOWED here, unlike pages and bank accounts. A banner addresses no URL and
+         *     nothing links to it; a finished campaign's artwork is genuinely disposable, and
+         *     forcing a growing list of dead banners on a marketer would make the live ones harder
+         *     to find — which is its own kind of risk.
+         */
+        get: operations["v1_admin_banners_list"];
+        put?: never;
+        /**
+         * @description `marketing.manage` — see `rbac.py`: a banner announces a promotion, so it is
+         *     campaign material rather than the legally load-bearing pages `cms.manage` protects.
+         *
+         *     DELETE IS ALLOWED here, unlike pages and bank accounts. A banner addresses no URL and
+         *     nothing links to it; a finished campaign's artwork is genuinely disposable, and
+         *     forcing a growing list of dead banners on a marketer would make the live ones harder
+         *     to find — which is its own kind of risk.
+         */
+        post: operations["v1_admin_banners_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/banners/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `marketing.manage` — see `rbac.py`: a banner announces a promotion, so it is
+         *     campaign material rather than the legally load-bearing pages `cms.manage` protects.
+         *
+         *     DELETE IS ALLOWED here, unlike pages and bank accounts. A banner addresses no URL and
+         *     nothing links to it; a finished campaign's artwork is genuinely disposable, and
+         *     forcing a growing list of dead banners on a marketer would make the live ones harder
+         *     to find — which is its own kind of risk.
+         */
+        get: operations["v1_admin_banners_retrieve"];
+        /**
+         * @description `marketing.manage` — see `rbac.py`: a banner announces a promotion, so it is
+         *     campaign material rather than the legally load-bearing pages `cms.manage` protects.
+         *
+         *     DELETE IS ALLOWED here, unlike pages and bank accounts. A banner addresses no URL and
+         *     nothing links to it; a finished campaign's artwork is genuinely disposable, and
+         *     forcing a growing list of dead banners on a marketer would make the live ones harder
+         *     to find — which is its own kind of risk.
+         */
+        put: operations["v1_admin_banners_update"];
+        post?: never;
+        /**
+         * @description `marketing.manage` — see `rbac.py`: a banner announces a promotion, so it is
+         *     campaign material rather than the legally load-bearing pages `cms.manage` protects.
+         *
+         *     DELETE IS ALLOWED here, unlike pages and bank accounts. A banner addresses no URL and
+         *     nothing links to it; a finished campaign's artwork is genuinely disposable, and
+         *     forcing a growing list of dead banners on a marketer would make the live ones harder
+         *     to find — which is its own kind of risk.
+         */
+        delete: operations["v1_admin_banners_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description `marketing.manage` — see `rbac.py`: a banner announces a promotion, so it is
+         *     campaign material rather than the legally load-bearing pages `cms.manage` protects.
+         *
+         *     DELETE IS ALLOWED here, unlike pages and bank accounts. A banner addresses no URL and
+         *     nothing links to it; a finished campaign's artwork is genuinely disposable, and
+         *     forcing a growing list of dead banners on a marketer would make the live ones harder
+         *     to find — which is its own kind of risk.
+         */
+        patch: operations["v1_admin_banners_partial_update"];
+        trace?: never;
+    };
     "/api/v1/admin/brands/": {
         parameters: {
             query?: never;
@@ -11,8 +193,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_brands_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_brands_create"];
         delete?: never;
         options?: never;
@@ -27,12 +247,88 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_brands_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_brands_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_brands_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_brands_partial_update"];
         trace?: never;
     };
@@ -43,8 +339,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_categories_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_categories_create"];
         delete?: never;
         options?: never;
@@ -59,12 +393,88 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_categories_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_categories_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_categories_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_categories_partial_update"];
         trace?: never;
     };
@@ -75,8 +485,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_collections_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_collections_create"];
         delete?: never;
         options?: never;
@@ -91,13 +539,585 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_collections_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_collections_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_collections_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_collections_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/coupons/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `marketing.manage` — Owner and Manager, matching the nav item that has pointed at
+         *     `/coupons` since Plan-16.
+         *
+         *     DELETE IS NOT OFFERED. `CouponRedemption` records usage by `coupon_id`, so deleting a
+         *     code that has been used detaches the ledger rows that say what discount an order got.
+         *     Deactivating stops it working and keeps the accounting.
+         */
+        get: operations["v1_admin_coupons_list"];
+        put?: never;
+        /**
+         * @description `marketing.manage` — Owner and Manager, matching the nav item that has pointed at
+         *     `/coupons` since Plan-16.
+         *
+         *     DELETE IS NOT OFFERED. `CouponRedemption` records usage by `coupon_id`, so deleting a
+         *     code that has been used detaches the ledger rows that say what discount an order got.
+         *     Deactivating stops it working and keeps the accounting.
+         */
+        post: operations["v1_admin_coupons_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/coupons/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `marketing.manage` — Owner and Manager, matching the nav item that has pointed at
+         *     `/coupons` since Plan-16.
+         *
+         *     DELETE IS NOT OFFERED. `CouponRedemption` records usage by `coupon_id`, so deleting a
+         *     code that has been used detaches the ledger rows that say what discount an order got.
+         *     Deactivating stops it working and keeps the accounting.
+         */
+        get: operations["v1_admin_coupons_retrieve"];
+        /**
+         * @description `marketing.manage` — Owner and Manager, matching the nav item that has pointed at
+         *     `/coupons` since Plan-16.
+         *
+         *     DELETE IS NOT OFFERED. `CouponRedemption` records usage by `coupon_id`, so deleting a
+         *     code that has been used detaches the ledger rows that say what discount an order got.
+         *     Deactivating stops it working and keeps the accounting.
+         */
+        put: operations["v1_admin_coupons_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description `marketing.manage` — Owner and Manager, matching the nav item that has pointed at
+         *     `/coupons` since Plan-16.
+         *
+         *     DELETE IS NOT OFFERED. `CouponRedemption` records usage by `coupon_id`, so deleting a
+         *     code that has been used detaches the ledger rows that say what discount an order got.
+         *     Deactivating stops it working and keeps the accounting.
+         */
+        patch: operations["v1_admin_coupons_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/customers/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description READ ONLY, and that is a decision rather than a stage this has not reached yet.
+         *
+         *     Nothing a staff member needs to *change* about a customer belongs here. Editing an
+         *     email would silently re-point order history and password resets; toggling `is_active`
+         *     is what the deletion flow owns, on a 30-day timer with an anonymisation sweep behind
+         *     it. A write surface here would be a second way to do both, without either's rules.
+         *     Support answers questions from this page; the customer changes their own details.
+         */
+        get: operations["v1_admin_customers_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/customers/{toke_id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description READ ONLY, and that is a decision rather than a stage this has not reached yet.
+         *
+         *     Nothing a staff member needs to *change* about a customer belongs here. Editing an
+         *     email would silently re-point order history and password resets; toggling `is_active`
+         *     is what the deletion flow owns, on a 30-day timer with an anonymisation sweep behind
+         *     it. A write surface here would be a second way to do both, without either's rules.
+         *     Support answers questions from this page; the customer changes their own details.
+         */
+        get: operations["v1_admin_customers_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-options/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD minus delete: a delivery option is named on every order that used it
+         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
+         *     match), and deactivating is what "retire this option" means.
+         */
+        get: operations["v1_admin_delivery_options_list"];
+        put?: never;
+        /**
+         * @description CRUD minus delete: a delivery option is named on every order that used it
+         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
+         *     match), and deactivating is what "retire this option" means.
+         */
+        post: operations["v1_admin_delivery_options_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-options/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD minus delete: a delivery option is named on every order that used it
+         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
+         *     match), and deactivating is what "retire this option" means.
+         */
+        get: operations["v1_admin_delivery_options_retrieve"];
+        /**
+         * @description CRUD minus delete: a delivery option is named on every order that used it
+         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
+         *     match), and deactivating is what "retire this option" means.
+         */
+        put: operations["v1_admin_delivery_options_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description CRUD minus delete: a delivery option is named on every order that used it
+         *     (`Order.delivery_option_name` is a snapshot, but the row is what future checkouts
+         *     match), and deactivating is what "retire this option" means.
+         */
+        patch: operations["v1_admin_delivery_options_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-options/{id}/coverage/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * @description `PUT /admin/delivery-options/{id}/coverage/` — Plan-19d.
+         *
+         *     A REPLACE, not a merge, and its own endpoint rather than a field on the flat
+         *     serializer. Coverage is mixed granularity (whole countries, whole states,
+         *     individual areas), and folding it into the price PATCH would let a client that
+         *     omitted the key silently clear every region.
+         */
+        put: operations["v1_admin_delivery_options_coverage_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-options/preview/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /admin/delivery-options/preview/?country=NG&state_region=1&area_region=2`
+         *
+         *     "What would a customer HERE be offered?" answered by the real matcher
+         *     (`services.options_for_address`), not a client-side mirror — the mirror can
+         *     only ever drift. Prices are computed on an empty cart (no weight tiers, no
+         *     free-over), and `kind="carrier"` options are returned WITHOUT calling the
+         *     carrier: the admin wants coverage truth, not a live GIG quote per keystroke.
+         */
+        get: operations["v1_admin_delivery_options_preview_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/google-reviews/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `marketing.manage`, like banners: featured reviews are campaign material.
+         *     DELETE allowed for the banner's reason — a retired review is disposable.
+         */
+        get: operations["v1_admin_google_reviews_list"];
+        put?: never;
+        /**
+         * @description `marketing.manage`, like banners: featured reviews are campaign material.
+         *     DELETE allowed for the banner's reason — a retired review is disposable.
+         */
+        post: operations["v1_admin_google_reviews_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/google-reviews-meta/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description GET/PUT the singleton header numbers (rating, count text, profile URL). */
+        get: operations["v1_admin_google_reviews_meta_retrieve"];
+        /** @description GET/PUT the singleton header numbers (rating, count text, profile URL). */
+        put: operations["v1_admin_google_reviews_meta_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/google-reviews/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `marketing.manage`, like banners: featured reviews are campaign material.
+         *     DELETE allowed for the banner's reason — a retired review is disposable.
+         */
+        get: operations["v1_admin_google_reviews_retrieve"];
+        /**
+         * @description `marketing.manage`, like banners: featured reviews are campaign material.
+         *     DELETE allowed for the banner's reason — a retired review is disposable.
+         */
+        put: operations["v1_admin_google_reviews_update"];
+        post?: never;
+        /**
+         * @description `marketing.manage`, like banners: featured reviews are campaign material.
+         *     DELETE allowed for the banner's reason — a retired review is disposable.
+         */
+        delete: operations["v1_admin_google_reviews_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description `marketing.manage`, like banners: featured reviews are campaign material.
+         *     DELETE allowed for the banner's reason — a retired review is disposable.
+         */
+        patch: operations["v1_admin_google_reviews_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/homepage-sections/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The homepage's running order. `marketing.manage`: the homepage IS the campaign. */
+        get: operations["v1_admin_homepage_sections_list"];
+        put?: never;
+        /** @description The homepage's running order. `marketing.manage`: the homepage IS the campaign. */
+        post: operations["v1_admin_homepage_sections_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/homepage-sections/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The homepage's running order. `marketing.manage`: the homepage IS the campaign. */
+        get: operations["v1_admin_homepage_sections_retrieve"];
+        /** @description The homepage's running order. `marketing.manage`: the homepage IS the campaign. */
+        put: operations["v1_admin_homepage_sections_update"];
+        post?: never;
+        /** @description The homepage's running order. `marketing.manage`: the homepage IS the campaign. */
+        delete: operations["v1_admin_homepage_sections_destroy"];
+        options?: never;
+        head?: never;
+        /** @description The homepage's running order. `marketing.manage`: the homepage IS the campaign. */
+        patch: operations["v1_admin_homepage_sections_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/images/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description An uploaded image, as an editable thing.
+         *
+         *     Before this existed an image could be POSTed to `products/{slug}/images/` and never
+         *     touched again — no delete, no alt text, no reorder. The 17a Images tab needs all
+         *     three, and none of them is a new capability so much as the other half of one that
+         *     already shipped.
+         *
+         *     CREATION IS NOT HERE, and that is the point of `http_method_names`. Uploading stays
+         *     on `ProductAdminViewSet.images`, which owns the multipart parsers and binds `product`
+         *     from the URL it was called on. A second create path would be a second place for the
+         *     binding rules to live, and they would drift.
+         *
+         *     PUT IS ALSO OUT. `image` is the one field this JSON route cannot write, so a PUT —
+         *     which means "here is the whole record" — would have to silently ignore the file and
+         *     keep it. Refusing is honest; 405 tells the caller to PATCH.
+         */
+        get: operations["v1_admin_images_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/images/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description An uploaded image, as an editable thing.
+         *
+         *     Before this existed an image could be POSTed to `products/{slug}/images/` and never
+         *     touched again — no delete, no alt text, no reorder. The 17a Images tab needs all
+         *     three, and none of them is a new capability so much as the other half of one that
+         *     already shipped.
+         *
+         *     CREATION IS NOT HERE, and that is the point of `http_method_names`. Uploading stays
+         *     on `ProductAdminViewSet.images`, which owns the multipart parsers and binds `product`
+         *     from the URL it was called on. A second create path would be a second place for the
+         *     binding rules to live, and they would drift.
+         *
+         *     PUT IS ALSO OUT. `image` is the one field this JSON route cannot write, so a PUT —
+         *     which means "here is the whole record" — would have to silently ignore the file and
+         *     keep it. Refusing is honest; 405 tells the caller to PATCH.
+         */
+        get: operations["v1_admin_images_retrieve"];
+        put?: never;
+        post?: never;
+        /**
+         * @description An uploaded image, as an editable thing.
+         *
+         *     Before this existed an image could be POSTed to `products/{slug}/images/` and never
+         *     touched again — no delete, no alt text, no reorder. The 17a Images tab needs all
+         *     three, and none of them is a new capability so much as the other half of one that
+         *     already shipped.
+         *
+         *     CREATION IS NOT HERE, and that is the point of `http_method_names`. Uploading stays
+         *     on `ProductAdminViewSet.images`, which owns the multipart parsers and binds `product`
+         *     from the URL it was called on. A second create path would be a second place for the
+         *     binding rules to live, and they would drift.
+         *
+         *     PUT IS ALSO OUT. `image` is the one field this JSON route cannot write, so a PUT —
+         *     which means "here is the whole record" — would have to silently ignore the file and
+         *     keep it. Refusing is honest; 405 tells the caller to PATCH.
+         */
+        delete: operations["v1_admin_images_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description An uploaded image, as an editable thing.
+         *
+         *     Before this existed an image could be POSTed to `products/{slug}/images/` and never
+         *     touched again — no delete, no alt text, no reorder. The 17a Images tab needs all
+         *     three, and none of them is a new capability so much as the other half of one that
+         *     already shipped.
+         *
+         *     CREATION IS NOT HERE, and that is the point of `http_method_names`. Uploading stays
+         *     on `ProductAdminViewSet.images`, which owns the multipart parsers and binds `product`
+         *     from the URL it was called on. A second create path would be a second place for the
+         *     binding rules to live, and they would drift.
+         *
+         *     PUT IS ALSO OUT. `image` is the one field this JSON route cannot write, so a PUT —
+         *     which means "here is the whole record" — would have to silently ignore the file and
+         *     keep it. Refusing is honest; 405 tells the caller to PATCH.
+         */
+        patch: operations["v1_admin_images_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/menu-items/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `cms.manage`: navigation is site structure, and the footer's policy links are the
+         *     content that scope exists to protect.
+         */
+        get: operations["v1_admin_menu_items_list"];
+        put?: never;
+        /**
+         * @description `cms.manage`: navigation is site structure, and the footer's policy links are the
+         *     content that scope exists to protect.
+         */
+        post: operations["v1_admin_menu_items_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/menu-items/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `cms.manage`: navigation is site structure, and the footer's policy links are the
+         *     content that scope exists to protect.
+         */
+        get: operations["v1_admin_menu_items_retrieve"];
+        /**
+         * @description `cms.manage`: navigation is site structure, and the footer's policy links are the
+         *     content that scope exists to protect.
+         */
+        put: operations["v1_admin_menu_items_update"];
+        post?: never;
+        /**
+         * @description `cms.manage`: navigation is site structure, and the footer's policy links are the
+         *     content that scope exists to protect.
+         */
+        delete: operations["v1_admin_menu_items_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description `cms.manage`: navigation is site structure, and the footer's policy links are the
+         *     content that scope exists to protect.
+         */
+        patch: operations["v1_admin_menu_items_partial_update"];
         trace?: never;
     };
     "/api/v1/admin/orders/": {
@@ -127,6 +1147,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         get: operations["v1_admin_orders_retrieve"];
         put?: never;
         post?: never;
@@ -148,6 +1194,12 @@ export interface paths {
         /**
          * @description POST /api/v1/admin/orders/{number}/confirm-payment/ — staff confirm a bank transfer
          *     landed. This is the ONLY way a bank-transfer order can ever be fulfilled.
+         *
+         *     `orders.manage`, named explicitly by Amendment 7. Bank transfer is the live gateway
+         *     for this store, so this endpoint is the point at which goods are released against
+         *     money nobody has verified but the person clicking. It can also override an amount
+         *     discrepancy and a duplicate bank reference — the two guards that stop goods shipping
+         *     twice against one transfer.
          */
         post: operations["v1_admin_orders_confirm_payment_create"];
         delete?: never;
@@ -224,6 +1276,110 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/orders/{number}/gig/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/orders/{number}/gig/ — the fulfilment panel's data: the
+         *     shipment, the cached wallet balance, and whether capture is currently legal
+         *     (with the reason when it isn't, so the UI renders a sentence, not a grey box).
+         *
+         *     `orders.view` and read-audited: the payload carries the receiver snapshot's
+         *     order linkage — same PII posture as the order detail it sits beside.
+         */
+        get: operations["v1_admin_orders_gig_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/gig/capture/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/admin/orders/{number}/gig/capture/ — create the waybill.
+         *
+         *     `orders.manage`, the money-touching scope: this call debits the GIG wallet
+         *     the full GrandTotal and dispatches a rider, irrevocably. The service refuses
+         *     ineligible states and insufficient balance BEFORE calling GIG; a timeout
+         *     parks the shipment in `create_unconfirmed` and this endpoint answers 502
+         *     with the instruction to check with GIG — never an automatic retry.
+         */
+        post: operations["v1_admin_orders_gig_capture_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/gig/label/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/admin/orders/{number}/gig/label/ — fetch the waybill label PDF.
+         *
+         *     `orders.operate`: printing a label is packing-bench work. "Not ready yet" is a
+         *     NORMAL answer (GIG generates the label only after the parcel passes through
+         *     their station), rendered as 200 + ready:false so the UI shows a sentence and
+         *     a retry button rather than an error state.
+         */
+        post: operations["v1_admin_orders_gig_label_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/invoice.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/orders/{number}/invoice.pdf — staff, and RECORDED.
+         *
+         *     THIS ROUTE IS NOT ABOUT ACCESS. `OrderInvoiceView` on the customer surface already has
+         *     a staff bypass, and `CustomerJWTAuthentication` deliberately accepts admin tokens — so
+         *     the admin app could always fetch any customer's invoice. What it could not do is leave
+         *     a trace: that route sits outside the admin prefix, where neither the surface guard nor
+         *     the audit mixin reaches.
+         *
+         *     An invoice carries the customer's name, home address and billing details. Plan-16's
+         *     ruling audits PII-bearing reads, so the version staff actually use is the audited one.
+         *
+         *     `orders.view`, not `.manage`: an invoice goes in the parcel, and packing is Support's
+         *     job. One order at a time, and written down.
+         */
+        get: operations["v1_admin_orders_invoice.pdf_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/orders/{number}/manual-refund/": {
         parameters: {
             query?: never;
@@ -237,6 +1393,10 @@ export interface paths {
          * @description POST /api/v1/admin/orders/{number}/manual-refund/ — staff record a refund they have
          *     already wired from the bank. The only refund path for a manual gateway, and the one
          *     the review flags that say "refund it" are telling staff to use.
+         *
+         *     `orders.manage`, and if anything more strongly than the gateway refund above: this
+         *     one is an unverified ASSERTION that money was wired, with no gateway to contradict
+         *     it. The only check on it is the person allowed to make it.
          */
         post: operations["v1_admin_orders_manual_refund_create"];
         delete?: never;
@@ -261,6 +1421,9 @@ export interface paths {
         /**
          * @description PATCH /api/v1/admin/orders/{number}/note/ — internal note, never shown to the
          *     customer and never a status change.
+         *
+         *     `orders.operate`. Leaving a note is the record of a phone call, which is Support's
+         *     work; the note is internal, so the worst case is an inaccurate internal record.
          */
         patch: operations["v1_admin_orders_note_partial_update"];
         trace?: never;
@@ -280,6 +1443,9 @@ export interface paths {
          *     Body: {amount, reason?, restock?, payment_id?}. `payment_id` disambiguates an order
          *     with more than one payment (e.g. a double charge being unwound); by default the
          *     collected payment is used.
+         *
+         *     `orders.manage`: money leaving the merchant account through the gateway. This is the
+         *     endpoint Amendment 7 named first, and the one Support must not hold.
          */
         post: operations["v1_admin_orders_refunds_create"];
         delete?: never;
@@ -303,6 +1469,14 @@ export interface paths {
          *     The ONLY thing that clears review_reason. Deliberately not a side-effect of any status
          *     change: shipping a double-payment order must not erase the reason someone still owes
          *     the customer a refund.
+         *
+         *     JUDGEMENT CALL: `orders.manage`, not `orders.operate`, even though clearing a flag
+         *     moves no money. `review_reason` is precisely the marker that says money went wrong on
+         *     this order — a double payment, a short RoW transfer, a refund still owed. Clearing it
+         *     does not move a naira, it DESTROYS THE RECORD that one needs to move, and the
+         *     docstring above already explains that nothing else may erase it. Judged on outcome
+         *     rather than on mechanism, dismissing a money alarm belongs with the money scope: the
+         *     person who clears it should be the person who could also settle it.
          */
         post: operations["v1_admin_orders_resolve_review_create"];
         delete?: never;
@@ -329,6 +1503,9 @@ export interface paths {
          *
          *     Only records the tracking details. The customer is told when the order is moved to
          *     `shipped`, which is what fires the email — so set tracking first, then ship.
+         *
+         *     `orders.operate`: it writes, but the write is a carrier and a consignment number.
+         *     Nothing here can move money, and recording tracking is half of what shipping means.
          */
         patch: operations["v1_admin_orders_tracking_partial_update"];
         trace?: never;
@@ -342,12 +1519,203 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** @description POST /api/v1/admin/orders/{number}/transition/ — body: {to_status, message?}. */
+        /**
+         * @description POST /api/v1/admin/orders/{number}/transition/ — body: {to_status, message?}.
+         *
+         *     THE ONE ROUTE THAT SPANS TWO SCOPES, and the reason is the dispatch below rather
+         *     than anything about permissions. Amendment 7 puts status transitions on
+         *     `orders.operate` (Support's day job: ship it, deliver it) and cancellation on
+         *     `orders.manage` (money). Both arrive here, as different values of `to_status`.
+         *
+         *     Neither single scope is honest. `orders.manage` on the whole endpoint takes shipping
+         *     away from Support, which is the exact job `orders.operate` was created to describe.
+         *     `orders.operate` on the whole endpoint lets Support cancel — freeing the stock
+         *     reservation and, on a paid order, leaving a customer who has been charged with a
+         *     cancelled order and no refund.
+         *
+         *     So the declared `permission_classes` is the FLOOR, and cancelling elevates. The check
+         *     is written inline rather than in `get_permissions()` deliberately: overriding
+         *     `get_permissions` would make the class attribute decorative, and that attribute is
+         *     what `test_admin_surface_guard.py` reads to prove the whole admin surface is bound to
+         *     a scope. A guard that inspects a lie is worse than no guard. The cost is that the
+         *     elevation is invisible to the guard — paid for by
+         *     `test_admin_role_matrix.py::test_support_cannot_issue_a_refund_but_can_ship`, which
+         *     drives it over real HTTP.
+         *
+         *     If a second status ever needs elevating, split the route instead of growing this set.
+         */
         post: operations["v1_admin_orders_transition_create"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/orders/export.csv — every order, as a file.
+         *
+         *     `orders.manage`, a scope ABOVE the order list's `orders.view`. Support works the order
+         *     desk all day and must read orders one at a time; a single file carrying every
+         *     customer's email, country and totals is a different act. Same reasoning the catalogue
+         *     export records: a whole-table dump is bulk egress whatever it contains, and this one
+         *     contains personal data outright.
+         *
+         *     Read-audited for the same reason.
+         */
+        get: operations["v1_admin_orders_export.csv_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/pages/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD minus delete, for the reason `Page`'s docstring gives: a slug is a published
+         *     URL that the storefront footer hard-codes and Plan-24's redirects will point at.
+         *     Unpublishing is how a page stops being public; deleting one 404s a live link.
+         *
+         *     NOT read-audited: page bodies are marketing copy, not personal data, so this sits with
+         *     the catalogue reads rather than the order desk (`apps/core/audit.py` draws that line).
+         */
+        get: operations["v1_admin_pages_list"];
+        put?: never;
+        /**
+         * @description CRUD minus delete, for the reason `Page`'s docstring gives: a slug is a published
+         *     URL that the storefront footer hard-codes and Plan-24's redirects will point at.
+         *     Unpublishing is how a page stops being public; deleting one 404s a live link.
+         *
+         *     NOT read-audited: page bodies are marketing copy, not personal data, so this sits with
+         *     the catalogue reads rather than the order desk (`apps/core/audit.py` draws that line).
+         */
+        post: operations["v1_admin_pages_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/pages/{slug}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD minus delete, for the reason `Page`'s docstring gives: a slug is a published
+         *     URL that the storefront footer hard-codes and Plan-24's redirects will point at.
+         *     Unpublishing is how a page stops being public; deleting one 404s a live link.
+         *
+         *     NOT read-audited: page bodies are marketing copy, not personal data, so this sits with
+         *     the catalogue reads rather than the order desk (`apps/core/audit.py` draws that line).
+         */
+        get: operations["v1_admin_pages_retrieve"];
+        /**
+         * @description CRUD minus delete, for the reason `Page`'s docstring gives: a slug is a published
+         *     URL that the storefront footer hard-codes and Plan-24's redirects will point at.
+         *     Unpublishing is how a page stops being public; deleting one 404s a live link.
+         *
+         *     NOT read-audited: page bodies are marketing copy, not personal data, so this sits with
+         *     the catalogue reads rather than the order desk (`apps/core/audit.py` draws that line).
+         */
+        put: operations["v1_admin_pages_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description CRUD minus delete, for the reason `Page`'s docstring gives: a slug is a published
+         *     URL that the storefront footer hard-codes and Plan-24's redirects will point at.
+         *     Unpublishing is how a page stops being public; deleting one 404s a live link.
+         *
+         *     NOT read-audited: page bodies are marketing copy, not personal data, so this sits with
+         *     the catalogue reads rather than the order desk (`apps/core/audit.py` draws that line).
+         */
+        patch: operations["v1_admin_pages_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/payment-gateways/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The per-market gateway list. DELETE is allowed here, unlike the bank account:
+         *     removing a row means "this market never offered this gateway", which is a coherent
+         *     thing to say and destroys no history that matters — `Payment.gateway` is a plain
+         *     CharField, so past orders keep their gateway name either way.
+         */
+        get: operations["v1_admin_payment_gateways_list"];
+        put?: never;
+        /**
+         * @description The per-market gateway list. DELETE is allowed here, unlike the bank account:
+         *     removing a row means "this market never offered this gateway", which is a coherent
+         *     thing to say and destroys no history that matters — `Payment.gateway` is a plain
+         *     CharField, so past orders keep their gateway name either way.
+         */
+        post: operations["v1_admin_payment_gateways_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/payment-gateways/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The per-market gateway list. DELETE is allowed here, unlike the bank account:
+         *     removing a row means "this market never offered this gateway", which is a coherent
+         *     thing to say and destroys no history that matters — `Payment.gateway` is a plain
+         *     CharField, so past orders keep their gateway name either way.
+         */
+        get: operations["v1_admin_payment_gateways_retrieve"];
+        /**
+         * @description The per-market gateway list. DELETE is allowed here, unlike the bank account:
+         *     removing a row means "this market never offered this gateway", which is a coherent
+         *     thing to say and destroys no history that matters — `Payment.gateway` is a plain
+         *     CharField, so past orders keep their gateway name either way.
+         */
+        put: operations["v1_admin_payment_gateways_update"];
+        post?: never;
+        /**
+         * @description The per-market gateway list. DELETE is allowed here, unlike the bank account:
+         *     removing a row means "this market never offered this gateway", which is a coherent
+         *     thing to say and destroys no history that matters — `Payment.gateway` is a plain
+         *     CharField, so past orders keep their gateway name either way.
+         */
+        delete: operations["v1_admin_payment_gateways_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description The per-market gateway list. DELETE is allowed here, unlike the bank account:
+         *     removing a row means "this market never offered this gateway", which is a coherent
+         *     thing to say and destroys no history that matters — `Payment.gateway` is a plain
+         *     CharField, so past orders keep their gateway name either way.
+         */
+        patch: operations["v1_admin_payment_gateways_partial_update"];
         trace?: never;
     };
     "/api/v1/admin/prices/": {
@@ -357,8 +1725,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_prices_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_prices_create"];
         delete?: never;
         options?: never;
@@ -373,13 +1779,122 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_prices_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_prices_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_prices_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_prices_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/prices/unpriced/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /admin/prices/unpriced/?currency=GBP` — active variants with no price in
+         *     that currency. Plan-17c Task 2.
+         *
+         *     The products list answers "what is this product missing?"; this answers the
+         *     question somebody actually has on the day a market opens: "what is not sellable
+         *     HERE yet?" A market needs a price in its currency before the product appears in it
+         *     at all, and all 121 production prices are NGN — so a naive "does it have a price"
+         *     check would report the whole catalogue ready for the UK.
+         *
+         *     An action on this viewset rather than a new view: it is the same resource and the
+         *     same `products.manage` scope, and a new class would owe the four guard
+         *     declarations for a read that this one already carries.
+         *
+         *     ACTIVE products only. A draft or archived product with no GBP price is not a gap
+         *     in the catalogue, and listing it would pad a checklist that exists to be finished.
+         */
+        get: operations["v1_admin_prices_unpriced_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/products/": {
@@ -389,8 +1904,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_products_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_products_create"];
         delete?: never;
         options?: never;
@@ -405,12 +1958,88 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_products_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_products_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_products_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_products_partial_update"];
         trace?: never;
     };
@@ -423,6 +2052,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_products_images_create"];
         delete?: never;
         options?: never;
@@ -437,6 +2085,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         get: operations["v1_admin_products_export.csv_retrieve"];
         put?: never;
         post?: never;
@@ -455,11 +2129,117 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         post: operations["v1_admin_products_import.csv_create"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/redirects/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Full CRUD including DELETE, under `cms.manage`.
+         *
+         *     Delete IS offered here, unlike `PageAdminViewSet`. The reasoning inverts: deleting a
+         *     CMS page 404s a live link, whereas deleting a redirect row only stops a *legacy* URL
+         *     being forwarded — the destination is untouched. A wrong redirect is more harmful than
+         *     a missing one, so removing it must be possible without a database console.
+         */
+        get: operations["v1_admin_redirects_list"];
+        put?: never;
+        /**
+         * @description Full CRUD including DELETE, under `cms.manage`.
+         *
+         *     Delete IS offered here, unlike `PageAdminViewSet`. The reasoning inverts: deleting a
+         *     CMS page 404s a live link, whereas deleting a redirect row only stops a *legacy* URL
+         *     being forwarded — the destination is untouched. A wrong redirect is more harmful than
+         *     a missing one, so removing it must be possible without a database console.
+         */
+        post: operations["v1_admin_redirects_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/redirects/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Full CRUD including DELETE, under `cms.manage`.
+         *
+         *     Delete IS offered here, unlike `PageAdminViewSet`. The reasoning inverts: deleting a
+         *     CMS page 404s a live link, whereas deleting a redirect row only stops a *legacy* URL
+         *     being forwarded — the destination is untouched. A wrong redirect is more harmful than
+         *     a missing one, so removing it must be possible without a database console.
+         */
+        get: operations["v1_admin_redirects_retrieve"];
+        /**
+         * @description Full CRUD including DELETE, under `cms.manage`.
+         *
+         *     Delete IS offered here, unlike `PageAdminViewSet`. The reasoning inverts: deleting a
+         *     CMS page 404s a live link, whereas deleting a redirect row only stops a *legacy* URL
+         *     being forwarded — the destination is untouched. A wrong redirect is more harmful than
+         *     a missing one, so removing it must be possible without a database console.
+         */
+        put: operations["v1_admin_redirects_update"];
+        post?: never;
+        /**
+         * @description Full CRUD including DELETE, under `cms.manage`.
+         *
+         *     Delete IS offered here, unlike `PageAdminViewSet`. The reasoning inverts: deleting a
+         *     CMS page 404s a live link, whereas deleting a redirect row only stops a *legacy* URL
+         *     being forwarded — the destination is untouched. A wrong redirect is more harmful than
+         *     a missing one, so removing it must be possible without a database console.
+         */
+        delete: operations["v1_admin_redirects_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Full CRUD including DELETE, under `cms.manage`.
+         *
+         *     Delete IS offered here, unlike `PageAdminViewSet`. The reasoning inverts: deleting a
+         *     CMS page 404s a live link, whereas deleting a redirect row only stops a *legacy* URL
+         *     being forwarded — the destination is untouched. A wrong redirect is more harmful than
+         *     a missing one, so removing it must be possible without a database console.
+         */
+        patch: operations["v1_admin_redirects_partial_update"];
         trace?: never;
     };
     "/api/v1/admin/refunds-owed/": {
@@ -474,10 +2254,378 @@ export interface paths {
          *     quote, where the customer paid and is still owed a manual goods refund. The reminder
          *     that stops a solo operator forgetting the refund cancel_quote deliberately deferred.
          *     See apps/orders/services.orders_owed_a_refund for the predicate and its rationale.
+         *
+         *     JUDGEMENT CALL: `orders.manage`, not `orders.view`, despite being a pure GET. The
+         *     naming rule only forbids a `.view` scope that writes; it does not require every read
+         *     to be `.view`. This endpoint is not a view of orders, it is a WORKLIST for one
+         *     specific money operation — its rows exist solely to be actioned by issuing a refund,
+         *     which is `orders.manage`. Handing it to Support produces a queue they can read and
+         *     cannot clear, and the predictable result is not "Support helpfully escalates" but
+         *     "two people believe the other is watching the list". Pair the worklist with the
+         *     action. Support can still see any individual order and its payments through
+         *     `orders.view`, so nothing is hidden from them — only the reminder is targeted.
          */
         get: operations["v1_admin_refunds_owed_list"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/regions/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The regions browser (Plan-19d). Read plus `is_active`, nothing else.
+         *
+         *     NO CREATE OR DELETE. The 811 rows are reference data seeded by migration — Nigeria's
+         *     37 states and 774 LGAs are not a thing an operator invents, and a typo'd extra "Lagos"
+         *     would silently never match an address. Deactivating is how a place stops being
+         *     offered.
+         */
+        get: operations["v1_admin_regions_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/regions/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The regions browser (Plan-19d). Read plus `is_active`, nothing else.
+         *
+         *     NO CREATE OR DELETE. The 811 rows are reference data seeded by migration — Nigeria's
+         *     37 states and 774 LGAs are not a thing an operator invents, and a typo'd extra "Lagos"
+         *     would silently never match an address. Deactivating is how a place stops being
+         *     offered.
+         */
+        get: operations["v1_admin_regions_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description The regions browser (Plan-19d). Read plus `is_active`, nothing else.
+         *
+         *     NO CREATE OR DELETE. The 811 rows are reference data seeded by migration — Nigeria's
+         *     37 states and 774 LGAs are not a thing an operator invents, and a typo'd extra "Lagos"
+         *     would silently never match an address. Deactivating is how a place stops being
+         *     offered.
+         */
+        patch: operations["v1_admin_regions_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/reports/{name}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/admin/reports/{name}/` — the aggregate as JSON.
+         *
+         *     NOT read-audited on screen: these are sums over orders, not a list of customers, and
+         *     the project's line is drawn at bulk egress and personal data. The one report that
+         *     names customers is audited when EXPORTED, below.
+         */
+        get: operations["v1_admin_reports_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reports/{name}/export.csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/admin/reports/{name}/export.csv`.
+         *
+         *     READ-AUDITED, and gated above the on-screen report when the rows name customers —
+         *     both by the precedent `AdminOrderCSVExportView` set. CSV rather than the spec's
+         *     openpyxl-to-S3 job: Excel opens CSV, and a signed bucket link is an export that
+         *     escapes both the scope check and this audit row.
+         */
+        get: operations["v1_admin_reports_export.csv_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/search/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/admin/search/?q=` — grouped results, gated section by section.
+         *
+         *     **`IsAdminUser` here is not the Plan-16-era single bit coming back.** It is the
+         *     ADMISSION check — every staff member may use the box — and the authorization happens
+         *     per section inside `get()`, against a scope derived from that section's own list
+         *     endpoint. `ADMIN_SURFACE` records the scope as `None` for exactly this reason, and
+         *     `test_admin_search.py::test_the_scope_matrix` is what makes the arrangement a
+         *     guarantee rather than a claim: it drives a real request per seeded role and asserts the
+         *     exact set of sections that came back.
+         *
+         *     `AdminJWTAuthentication` alone, as everywhere on this surface: a staff member's
+         *     customer-door token is not a caller with the wrong scopes, it is not a caller (401).
+         *
+         *     **THROTTLE: ~60/min, request-counted, keyed on the USER.** Every other lesson on this
+         *     branch says a request-counting cap becomes a denial button — and every one of those
+         *     concerned a SHARED or FORGEABLE key. `admin_login_ip` is one bucket for the whole staff
+         *     because the BFF calls the API server-side, so an anonymous stranger could fill it and
+         *     lock everybody out. This key is neither shared nor forgeable: it comes from the
+         *     validated admin token, so the only person a caller can throttle is themselves, for a
+         *     minute. Do not "fix" this into a failure-counting throttle — there is no failure to
+         *     count, and a search endpoint with no volume cap at all is how a ten-result cap gets
+         *     turned back into an export tool.
+         */
+        get: operations["v1_admin_search_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `/admin/staff/` — the roster: who holds an administrator account right now.
+         *
+         *     THE INVITE LIST CANNOT ANSWER THIS. An invite describes how somebody *became* staff,
+         *     and an accepted one tells you nothing about whether that account still exists, is
+         *     still active, or ever finished enrolling a second factor. Two accounts never appear
+         *     in it at all: the Owner's own, and anything made by `createsuperuser` over SSH — the
+         *     two most powerful accounts in the system.
+         *
+         *     READ-AUDITED: NO, and the reasoning is the same as the invite list's. The scope is
+         *     held by exactly one person, who already knows who the administrators are; a row here
+         *     is a colleague's name and role, not a customer's data. What matters is auditing the
+         *     acts that CHANGE the roster, and those (invite, revoke) are audited at their own
+         *     endpoints. Writing a row every time the Owner loads the staff page would bury those
+         *     events in noise generated by looking at them.
+         *
+         *     ORDERING is superusers first, then by email: the accounts that hold every scope
+         *     regardless of group are the ones worth seeing at the top of the page, and a stable
+         *     secondary key keeps pagination honest.
+         */
+        get: operations["v1_admin_staff_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff/invites/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `/admin/staff/invites/` — the Owner's staff-creation surface.
+         *
+         *     NO THROTTLE, and that is a decision rather than an omission — which is why it is
+         *     written down here instead of leaving its absence to look like one. Reaching this
+         *     endpoint requires the full admin ceremony (an admin-audience token, minted only by
+         *     `/auth/admin-token/` behind Turnstile and the failure-counting staff throttles) plus
+         *     the `staff.manage` scope, which exactly one role holds. The population that can
+         *     reach it is one person. A rate limit on top of that meters nobody: it cannot slow an
+         *     attacker, because an attacker who can reach this endpoint has already won outright,
+         *     and its only realistic effect is to 429 the owner. Decoration on a door that is
+         *     already locked.
+         *
+         *     THE LIST IS HERE BECAUSE REVOCATION NEEDS AN ID. A kill switch nobody can address is
+         *     not a kill switch, and the alternative — the Owner reading invite ids out of the
+         *     database — makes the operational answer to a mis-sent invite "SSH in".
+         *
+         *     LOGGING AT INFO. Creating an invite is an authenticated, authorised, deliberate act
+         *     by the one person entitled to perform it, so it is provenance rather than anomaly:
+         *     valuable to read later, wrong to alert on. (Sentry treats INFO and WARNING alike —
+         *     both are breadcrumbs — so the level here is about what a human greps for, not about
+         *     what pages someone.) The line carries actor, target and role because `invited_by` on
+         *     the row is the deletable half of that record and this stream is the durable half.
+         */
+        get: operations["v1_admin_staff_invites_list"];
+        put?: never;
+        /**
+         * @description `/admin/staff/invites/` — the Owner's staff-creation surface.
+         *
+         *     NO THROTTLE, and that is a decision rather than an omission — which is why it is
+         *     written down here instead of leaving its absence to look like one. Reaching this
+         *     endpoint requires the full admin ceremony (an admin-audience token, minted only by
+         *     `/auth/admin-token/` behind Turnstile and the failure-counting staff throttles) plus
+         *     the `staff.manage` scope, which exactly one role holds. The population that can
+         *     reach it is one person. A rate limit on top of that meters nobody: it cannot slow an
+         *     attacker, because an attacker who can reach this endpoint has already won outright,
+         *     and its only realistic effect is to 429 the owner. Decoration on a door that is
+         *     already locked.
+         *
+         *     THE LIST IS HERE BECAUSE REVOCATION NEEDS AN ID. A kill switch nobody can address is
+         *     not a kill switch, and the alternative — the Owner reading invite ids out of the
+         *     database — makes the operational answer to a mis-sent invite "SSH in".
+         *
+         *     LOGGING AT INFO. Creating an invite is an authenticated, authorised, deliberate act
+         *     by the one person entitled to perform it, so it is provenance rather than anomaly:
+         *     valuable to read later, wrong to alert on. (Sentry treats INFO and WARNING alike —
+         *     both are breadcrumbs — so the level here is about what a human greps for, not about
+         *     what pages someone.) The line carries actor, target and role because `invited_by` on
+         *     the row is the deletable half of that record and this stream is the durable half.
+         */
+        post: operations["v1_admin_staff_invites_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff/invites/{id}/revoke/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/admin/staff/invites/<pk>/revoke/` — the kill switch.
+         *
+         *     BUILT NOW, not "later". An outstanding invite is a live staff-creation capability;
+         *     mis-send one — wrong address, typo, wrong role — and without this the only remedy is
+         *     to wait out the whole TTL while a stranger's inbox holds the ability to become an
+         *     administrator. "Resend" is revoke + a new invite, deliberately: refreshing a token
+         *     in place would leave the old one working for whoever already has it, which is the
+         *     exact situation revocation exists to end.
+         *
+         *     Idempotent on an already-revoked invite (the state the caller wants is already
+         *     true, and an operator hammering the button should not get an error), but NOT
+         *     permitted on an accepted one: the account exists, deleting the invite row would not
+         *     un-make it, and returning success would tell the Owner they had undone something
+         *     they had not. The honest action there is to demote the staff member.
+         */
+        post: operations["v1_admin_staff_invites_revoke_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/staff/invites/accept/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/admin/staff/invites/accept/` — **deliberately PUBLIC**, and the security-critical
+         *     half of this feature.
+         *
+         *     It is public because it has to be: the person accepting has no account yet, or has a
+         *     customer account whose credentials are irrelevant here. The proof it accepts is the
+         *     token, which proves control of the invited inbox — the same proof
+         *     `/auth/password/reset/` runs on. `test_admin_surface_guard.py` carries an explicit
+         *     allowlist so this route reads as public ON PURPOSE, distinct from the
+         *     `APIRootView` that Task 2 found sitting on the admin prefix because someone forgot.
+         *
+         *     ── THE ORDER OF OPERATIONS IS THE DESIGN ──────────────────────────────────────────
+         *
+         *     1. **Turnstile**, against the admin widget's secret (`TURNSTILE_ADMIN_SECRET`,
+         *        falling back to the customer secret) — this page is served by the admin app's
+         *        hostname and Turnstile widgets are domain-scoped.
+         *     2. **Validate the body**, including password strength. Before the claim, so that a
+         *        weak password cannot burn a single-use capability on a typo and strand the new
+         *        hire.
+         *     3. **Hash the submitted token and look it up by digest** (one indexed equality
+         *        match).
+         *     4. **If it is valid: proceed, touching NO throttle bucket.**
+         *     5. **Only if it is invalid: check-and-increment the failure bucket**, then return
+         *        the uniform error.
+         *
+         *     Step 4 is the inversion, and it is the opposite of what a reviewer expects — the
+         *     full argument, including the state of the shared-egress assumption today, is in
+         *     `throttling.StaffInviteAcceptThrottle`. In one paragraph: any bucket checked BEFORE
+         *     a request proves itself is a denial button, this endpoint's traffic will arrive from
+         *     one shared Vercel egress address once the admin app exists, and the legitimate user
+         *     gets exactly one shot. Ordinary request-counting would let a stranger 429 the new
+         *     hire out of their own invite for free. Counting only invalid tokens is safe precisely
+         *     because the token is unguessable: an attacker cannot manufacture the bypass
+         *     condition without already holding the capability the bucket protects. New-hire
+         *     lockout becomes structurally impossible rather than merely unlikely.
+         *
+         *     ── WHAT IT RETURNS ────────────────────────────────────────────────────────────────
+         *
+         *     A PREAUTH token, never an admin session. See `authentication.ADMIN_PREAUTH_AUDIENCE`:
+         *     the admin audience claim means password + Turnstile + TOTP, and bootstrap is not an
+         *     exception to that. Today the preauth token reaches nothing at all, because Task 3b's
+         *     TOTP endpoints do not exist yet. That is correct and fail-closed.
+         *
+         *     ── ERRORS ─────────────────────────────────────────────────────────────────────────
+         *
+         *     Unknown, revoked and already-used share ONE message. Distinguishing them would
+         *     confirm that a token was once real, which is exactly the feedback someone who
+         *     scraped a mailbox, a proxy log or a browser history needs. EXPIRED is distinguished,
+         *     deliberately: only a holder of a genuine token can ever see it, so it leaks nothing,
+         *     and "your link expired, ask for another" is the difference between a new hire who
+         *     re-invites themselves and one who reports the admin as broken.
+         *
+         *     ── LOGGING LEVELS, chosen rather than defaulted ───────────────────────────────────
+         *
+         *     * accepted -> WARNING. A new administrator now exists, which is the most
+         *       consequential thing this endpoint can do and worth standing out in the stream. Not
+         *       ERROR: it is the expected happy path of a flow the Owner deliberately started, and
+         *       paging on expected outcomes is how alerts get ignored.
+         *     * unknown / revoked token -> ERROR, i.e. a Sentry event. There is no benign way to
+         *       reach it — the only legitimate callers hold a token out of their own inbox — and
+         *       the volume is bounded by the failure bucket above.
+         *     * expired -> INFO. A real new hire who waited too long. Alerting on it would train
+         *       whoever reads Sentry to dismiss the alert that matters.
+         *     * a 429 here stays a WARNING breadcrumb (no `log_throttling_at_error`): every
+         *       countable failure has already raised its own ERROR event, so promoting the cap
+         *       would raise a second event describing the same attack.
+         */
+        post: operations["v1_admin_staff_invites_accept_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -491,8 +2639,60 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         get: operations["v1_admin_stock_list"];
         put?: never;
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         post: operations["v1_admin_stock_create"];
         delete?: never;
         options?: never;
@@ -507,6 +2707,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         get: operations["v1_admin_stock_retrieve"];
         put?: never;
         post?: never;
@@ -525,6 +2751,32 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         post: operations["v1_admin_stock_adjust_create"];
         delete?: never;
         options?: never;
@@ -539,7 +2791,69 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         get: operations["v1_admin_stock_export.csv_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/stock/grid/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /admin/stock/grid/` — the inventory screen's data. Plan-17c Task 3.
+         *
+         *     Variant per row, active warehouse per column, and **a cell with no `StockItem` is
+         *     the point**: 122 of the 244 possible cells are empty in production and every empty
+         *     one is the UK Warehouse. `stock_item_id: null` is what the screen renders as an
+         *     actionable absence rather than a blank.
+         *
+         *     It cannot be assembled from the ordinary stock list in the browser. That endpoint
+         *     pages `StockItem` rows, so a variant with no row ANYWHERE never appears in it — and
+         *     that is exactly the variant somebody is looking for when they open this screen.
+         *     Paginating by variant is therefore a server-side job.
+         *
+         *     An action on this viewset, not a new view: same resource, same `products.manage`,
+         *     and a new class would owe the four guard declarations that this one already carries.
+         *
+         *     `?low_stock=1` keeps rows holding a cell at or below its own threshold. An ABSENT
+         *     cell is deliberately not low stock — an absence is a different problem with a
+         *     different fix, and folding the two together makes the low-stock queue unworkable.
+         */
+        get: operations["v1_admin_stock_grid_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -557,6 +2871,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description POST a stock CSV. `?dry_run=1` reports what the file WOULD do and writes nothing —
+         *     see `csv_io.import_stock_csv` for why that is the same code path rolled back.
+         *
+         *     The audit ACTION distinguishes the two, because "who changed the stock levels" must
+         *     not be answered with a row for somebody who only previewed a file. A dry-run is still
+         *     audited: uploading a customer's spreadsheet is worth recording either way, and the
+         *     row's action says plainly which it was.
+         */
         post: operations["v1_admin_stock_import.csv_create"];
         delete?: never;
         options?: never;
@@ -571,6 +2894,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
         get: operations["v1_admin_stock_movements_list"];
         put?: never;
         post?: never;
@@ -587,8 +2936,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_tags_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_tags_create"];
         delete?: never;
         options?: never;
@@ -603,12 +2990,88 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_tags_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_tags_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_tags_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_tags_partial_update"];
         trace?: never;
     };
@@ -619,8 +3082,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_variants_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_variants_create"];
         delete?: never;
         options?: never;
@@ -635,12 +3136,88 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_variants_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_variants_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_variants_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_variants_partial_update"];
         trace?: never;
     };
@@ -651,8 +3228,46 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_videos_list"];
         put?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         post: operations["v1_admin_videos_create"];
         delete?: never;
         options?: never;
@@ -667,13 +3282,196 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         get: operations["v1_admin_videos_retrieve"];
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         put: operations["v1_admin_videos_update"];
         post?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         delete: operations["v1_admin_videos_destroy"];
         options?: never;
         head?: never;
+        /**
+         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         *
+         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
+         *     added here inherits the admin-only authenticator, so even if someone forgets the
+         *     permission class the request arrives unauthenticated and answers 401 rather than
+         *     letting a customer-door token through.
+         *
+         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
+         *     audit row is written inside the same transaction as the mutation, so an unauditable
+         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
+         *     fail-closed property as the authenticator: a viewset added to this module is
+         *     audited before anybody remembers to ask for it.
+         *
+         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
+         *     catalogue carries no personal data, and an admin UI that lists products on every
+         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
+         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         */
         patch: operations["v1_admin_videos_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/warehouses/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Plan-17c Task 1. `products.manage`, consistent with the rest of inventory.
+         *
+         *     ── DELETE IS NOT OFFERED, AND THAT IS THE POINT ────────────────────────────────
+         *
+         *     `StockItem.warehouse` is `on_delete=CASCADE`. Deleting a warehouse would silently
+         *     destroy every stock row it holds and strip the context from every movement those rows
+         *     ever recorded — the ledger that says who wrote off what would start pointing at
+         *     nothing. Deactivating (`is_active=False`) takes the warehouse out of `reserve()`
+         *     without touching a single row of history, which is what "remove this warehouse"
+         *     actually means when somebody asks for it.
+         *
+         *     So `http_method_names` omits `delete` and the route answers 405. That is a deliberate
+         *     refusal rather than an unimplemented feature.
+         */
+        get: operations["v1_admin_warehouses_list"];
+        put?: never;
+        /**
+         * @description Plan-17c Task 1. `products.manage`, consistent with the rest of inventory.
+         *
+         *     ── DELETE IS NOT OFFERED, AND THAT IS THE POINT ────────────────────────────────
+         *
+         *     `StockItem.warehouse` is `on_delete=CASCADE`. Deleting a warehouse would silently
+         *     destroy every stock row it holds and strip the context from every movement those rows
+         *     ever recorded — the ledger that says who wrote off what would start pointing at
+         *     nothing. Deactivating (`is_active=False`) takes the warehouse out of `reserve()`
+         *     without touching a single row of history, which is what "remove this warehouse"
+         *     actually means when somebody asks for it.
+         *
+         *     So `http_method_names` omits `delete` and the route answers 405. That is a deliberate
+         *     refusal rather than an unimplemented feature.
+         */
+        post: operations["v1_admin_warehouses_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/warehouses/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Plan-17c Task 1. `products.manage`, consistent with the rest of inventory.
+         *
+         *     ── DELETE IS NOT OFFERED, AND THAT IS THE POINT ────────────────────────────────
+         *
+         *     `StockItem.warehouse` is `on_delete=CASCADE`. Deleting a warehouse would silently
+         *     destroy every stock row it holds and strip the context from every movement those rows
+         *     ever recorded — the ledger that says who wrote off what would start pointing at
+         *     nothing. Deactivating (`is_active=False`) takes the warehouse out of `reserve()`
+         *     without touching a single row of history, which is what "remove this warehouse"
+         *     actually means when somebody asks for it.
+         *
+         *     So `http_method_names` omits `delete` and the route answers 405. That is a deliberate
+         *     refusal rather than an unimplemented feature.
+         */
+        get: operations["v1_admin_warehouses_retrieve"];
+        /**
+         * @description Plan-17c Task 1. `products.manage`, consistent with the rest of inventory.
+         *
+         *     ── DELETE IS NOT OFFERED, AND THAT IS THE POINT ────────────────────────────────
+         *
+         *     `StockItem.warehouse` is `on_delete=CASCADE`. Deleting a warehouse would silently
+         *     destroy every stock row it holds and strip the context from every movement those rows
+         *     ever recorded — the ledger that says who wrote off what would start pointing at
+         *     nothing. Deactivating (`is_active=False`) takes the warehouse out of `reserve()`
+         *     without touching a single row of history, which is what "remove this warehouse"
+         *     actually means when somebody asks for it.
+         *
+         *     So `http_method_names` omits `delete` and the route answers 405. That is a deliberate
+         *     refusal rather than an unimplemented feature.
+         */
+        put: operations["v1_admin_warehouses_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description Plan-17c Task 1. `products.manage`, consistent with the rest of inventory.
+         *
+         *     ── DELETE IS NOT OFFERED, AND THAT IS THE POINT ────────────────────────────────
+         *
+         *     `StockItem.warehouse` is `on_delete=CASCADE`. Deleting a warehouse would silently
+         *     destroy every stock row it holds and strip the context from every movement those rows
+         *     ever recorded — the ledger that says who wrote off what would start pointing at
+         *     nothing. Deactivating (`is_active=False`) takes the warehouse out of `reserve()`
+         *     without touching a single row of history, which is what "remove this warehouse"
+         *     actually means when somebody asks for it.
+         *
+         *     So `http_method_names` omits `delete` and the route answers 405. That is a deliberate
+         *     refusal rather than an unimplemented feature.
+         */
+        patch: operations["v1_admin_warehouses_partial_update"];
         trace?: never;
     };
     "/api/v1/auth/account/delete/": {
@@ -687,6 +3485,263 @@ export interface paths {
         put?: never;
         /** @description Soft-delete: deactivate now, anonymise after 30 days (apps.accounts.tasks). */
         post: operations["v1_auth_account_delete_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/admin-me/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `/auth/admin-me/` — who am I and what may I do.
+         *
+         *     The admin shell calls this once per session to decide which nav items exist. It
+         *     returns SCOPES, not groups-as-permissions: the client must never have to know
+         *     that "Support" implies `orders.view`, or the role table would live in two
+         *     codebases and drift.
+         *
+         *     TWO FENCES, deliberately. `AdminJWTAuthentication` rejects any token that was not
+         *     minted by `/auth/admin-token/` — including a perfectly valid one belonging to the
+         *     same staff member, obtained at the customer login. `IsAdminUser` then re-reads
+         *     `is_staff` from the database, which is what makes a revoked staff account lose
+         *     access immediately instead of whenever its token expires. The claim answers "was
+         *     this token issued for the admin app?"; the DB read answers "is this person still
+         *     staff?". Listing stock `JWTAuthentication` alongside the admin class undoes the
+         *     first of those if it is listed FIRST — see the mechanism, and the ordering subtlety
+         *     behind it, in apps/accounts/authentication.py. test_admin_surface_guard.py asserts
+         *     list EQUALITY so that neither ordering can arise.
+         *
+         *     `IsAdminUser` rather than a scope: every staff member must be able to ask who
+         *     they are, including one whose role grants nothing yet. It is not an authorisation
+         *     decision — the endpoint returns only the caller's own identity, and each actual
+         *     admin endpoint re-checks its own scope.
+         */
+        get: operations["v1_auth_admin_me_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/admin-token/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/auth/admin-token/` — the staff gate. **Step one of three, and it mints nothing.**
+         *
+         *     WHAT CHANGED IN TASK 3b, because the name still says "token". This endpoint used to
+         *     return a full admin token pair for a correct staff password. It now returns a
+         *     ten-minute PREAUTH token, whether or not the caller has a confirmed TOTP enrolment,
+         *     and that token opens exactly three endpoints: TOTP enrol, TOTP confirm, and
+         *     recovery-code verification. Amendment 6's invariant — the `toke-admin` claim means
+         *     password + Turnstile + TOTP and is minted nowhere else — is only true because of
+         *     this: there is now no code path at all from a password to an admin session.
+         *
+         *     ONE BOOTSTRAP PATH, NOT TWO. Returning a session to the enrolled and a preauth to
+         *     the rest would be two credential-minting paths, and the second is where the hole
+         *     grows. `totp_enrolled` in the response tells the admin app which screen to draw; it
+         *     is not a branch in the security logic.
+         *
+         *     Four deliberate differences from `LoginView`:
+         *
+         *     **1. Staff-only, silently.** `AdminPasswordSerializer` rejects a non-staff
+         *     user with the same body as a wrong password, so the endpoint never confirms that
+         *     an address belongs to a real customer, let alone a real administrator.
+         *
+         *     **2. Turnstile'd** (Plan-16 Amendment 1, which overrides the plan's original
+         *     "Turnstile-exempt — staff URLs are not public forms"). That rationale was
+         *     rejected because the endpoint is publicly reachable and one grep of the deployed
+         *     admin bundle away from discovery; obscurity is not a control, and exempting it
+         *     would have left the HIGHER-value login with less protection than customer login
+         *     got on the same day. It verifies against `admin_turnstile_secret()`, which is the
+         *     admin widget's secret if one is configured and the customer one otherwise.
+         *
+         *     Be clear about sizing, so nobody mistakes this for the fence: Turnstile stops
+         *     dumb bots. A targeted attacker buys solver tokens for about $1/1k, and the admin
+         *     is the target worth paying for — compromise here means editing the payout bank
+         *     account and every bank-transfer order pays the attacker. The control actually sized
+         *     to that threat is the TOTP step this endpoint now hands off to.
+         *
+         *     **3. Its own throttle scopes**, far tighter than the customer rates — see
+         *     throttling.py. `AdminLoginIPThrottle` is FIRST and is not optional: listing
+         *     throttle_classes REPLACES the global defaults, and without an IP key password
+         *     spraying across many addresses touches no per-email counter at all.
+         *
+         *     **4. It hands off rather than finishing.** A successful password produces a preauth
+         *     token, and `apps/accounts/totp.py` carries the caps for the step that follows —
+         *     which are a different shape on purpose. NOTE THE ASYMMETRY, because it is the reason
+         *     the TOTP caps could be strict where these had to be loosened: an attacker who holds
+         *     the staff password produces *successful* password authentications here, so both of
+         *     these failure-counting throttles stay at zero throughout a TOTP brute-force attempt.
+         *     They cannot see that attack at all. The per-user hourly TOTP cap is what does.
+         *
+         *     LOGGING, and why it is written out rather than left to the signal: a failed admin
+         *     login logs to `apps.security` at ERROR, because Sentry's logging integration turns
+         *     ERROR records into events while INFO/WARNING become mere breadcrumbs, and a
+         *     failed staff login is worth an alert. The `user_login_failed` signal (signals.py)
+         *     ALSO fires on the wrong-password path and logs its generic "login failed" line at
+         *     WARNING — that is a breadcrumb, not a duplicate event, and its different wording
+         *     keeps the two greppable apart. The signal cannot replace this line in either
+         *     direction: it does NOT fire when a customer submits CORRECT credentials here (the
+         *     authentication succeeded; it was the staff check that refused), which is the single
+         *     most interesting event this endpoint can produce.
+         *
+         *     THE ERROR LINE AND THE FAILURE COUNTERS ARE THE SAME EVENT, so they are emitted
+         *     from the same place rather than from two independent detectors that could drift.
+         *     BOTH admin throttles count failures rather than requests (see throttling.py), which
+         *     is what stops anonymous junk from locking staff out — of one account for an hour via
+         *     the email key, or of the whole admin indefinitely via the shared-egress IP key. Only
+         *     `AuthenticationFailed` counts: a malformed or incomplete request is not a credential
+         *     guess, and letting it count hands the lockout primitive straight back.
+         *
+         *     THROTTLE REJECTIONS ON THIS VIEW ARE ALERTS, not breadcrumbs — `Throttled` is
+         *     raised in `initial()`, before this method runs, so nothing here can log it. See
+         *     `log_throttling_at_error` below and `config/exception_handler.py`.
+         */
+        post: operations["v1_auth_admin_token_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/admin-totp/confirm/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/auth/admin-totp/confirm/` — **the only place an admin-audience token is minted.**
+         *
+         *     It serves two situations with one code path, on purpose:
+         *
+         *     * an UNCONFIRMED enrolment: the code proves the authenticator app really holds the
+         *       secret, `confirmed_at` is set, and a fresh set of recovery codes is issued;
+         *     * a CONFIRMED enrolment: this is the second factor of an ordinary staff login.
+         *
+         *     Splitting them would mean two mints, and Amendment 6's whole value is that there is
+         *     one. `tests/test_admin_surface_guard.py` walks the AST of every module under `apps/`
+         *     and `config/` and asserts `mint_admin_token_pair` is called from exactly here.
+         *
+         *     ── REPLAY ──────────────────────────────────────────────────────────────────────
+         *
+         *     `last_verified_step` is advanced by an atomic conditional UPDATE — `WHERE
+         *     last_verified_step < step` — inside the same transaction that mints. The predicate
+         *     lives in the WHERE clause and NOT in Python, for the same reason `invites.claim`
+         *     does it that way: read-check-save lets two requests carrying the same code both see
+         *     an unconsumed step and both win. Here that is not merely a duplicate row, it is a
+         *     replayed second factor. A code observed over a shoulder, in a screen share or in a
+         *     phished form is therefore worthless the moment it has been used once, rather than
+         *     for the remaining 90 seconds of its window.
+         *
+         *     ── RECOVERY CODES ──────────────────────────────────────────────────────────────
+         *
+         *     Issued only on the response that CONFIRMS an enrolment, never on an ordinary login.
+         *     A fresh set every login would make whatever the staff member printed wrong within a
+         *     day, which is how printed codes come to be ignored.
+         */
+        post: operations["v1_auth_admin_totp_confirm_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/admin-totp/enrol/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/auth/admin-totp/enrol/` — hand out a secret. Returned ONCE.
+         *
+         *     The provisioning URI carries the secret in its query string, so it is never logged
+         *     and never stored; the ciphertext in the database is the only durable copy, and it is
+         *     the only copy that is any use without the environment's encryption key.
+         *
+         *     **Calling this again replaces an UNCONFIRMED secret and refuses a CONFIRMED one**,
+         *     and both halves are load-bearing:
+         *
+         *     * replacing an unconfirmed one is what stops a half-finished enrolment (scanned into
+         *       the wrong app, closed the tab) from stranding a new staff member with a secret
+         *       nobody has;
+         *     * refusing a confirmed one is what stops someone holding a stolen staff password
+         *       from simply enrolling their own phone. That would make the whole factor
+         *       decorative. The only routes back to enrolment are a recovery code and
+         *       `manage.py reset_staff_totp`, which needs root SSH by design (runbook §6).
+         *
+         *     409 rather than 403 for the refusal: it is a state conflict, not an authorisation
+         *     failure, and the admin app's next screen is different for each.
+         */
+        post: operations["v1_auth_admin_totp_enrol_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/admin-totp/recovery/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/auth/admin-totp/recovery/` — the lost-device path. **Mints nothing.**
+         *
+         *     ── SCOPE: THE FACTOR, NEVER THE CEREMONY ───────────────────────────────────────
+         *
+         *     A recovery code is accepted only from a caller who already holds a preauth token,
+         *     which means the password and Turnstile steps have already passed. There is no bare
+         *     recovery-code-to-session path anywhere, so a leaked code sheet on its own is worth
+         *     nothing — it is one factor, not a skeleton key.
+         *
+         *     ── WHY IT RETURNS NO TOKEN ─────────────────────────────────────────────────────
+         *
+         *     This is where the argument for an exception to "only TOTP-confirm mints" is
+         *     strongest, and it is refused. Consuming a code voids the old secret and the
+         *     REMAINING codes and returns the holder to enrol/confirm with a fresh secret; a new
+         *     code set issues when that confirm succeeds. It costs one extra screen and it keeps
+         *     the invariant literal, with zero exceptions, which is worth more — an invariant with
+         *     one exception is an invariant nobody can check by reading.
+         *
+         *     Voiding the remaining codes is not tidiness: a code is used because a device is
+         *     gone, and the other codes from the same set were in the same drawer, printout or
+         *     password manager. Treating one as lost and the rest as safe would be a guess.
+         *
+         *     ── LOGGING AT ERROR ────────────────────────────────────────────────────────────
+         *
+         *     A Sentry event, deliberately. A staff member losing a phone is genuinely rare and
+         *     genuinely worth knowing about — and it is also exactly what an attacker who stole a
+         *     password and a code sheet would do. There is no way to tell those apart from here,
+         *     which is precisely why a human should look.
+         */
+        post: operations["v1_auth_admin_totp_recovery_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -800,8 +3855,13 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * @description Takes a set of user credentials and returns an access and refresh JSON web
-         *     token pair to prove the authentication of those credentials.
+         * @description `/auth/token/` with throttles attached.
+         *
+         *     Stock `TokenObtainPairView` carried only the global anon rate, which was bypassable
+         *     by rotating X-Forwarded-For. Listing throttle_classes here REPLACES the global
+         *     defaults -- DRF does not merge them -- so every cap this endpoint has must appear in
+         *     this list. `LoginIPThrottle` is first and is not optional: without it, password
+         *     spraying across many addresses touches no per-email counter and is unmetered.
          */
         post: operations["v1_auth_token_create"];
         delete?: never;
@@ -977,6 +4037,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description Buy Now = add to the shopper's ordinary cart; the client then navigates to
+         *     checkout, which reads that same cart. Never clears existing lines — this cart is
+         *     the shopper's bag, and clearing it here would silently destroy it. (Originally a
+         *     separate `kind="express"` cart per Plan-08 D14, retired 2026-07-28: nothing ever
+         *     read an express cart, so Buy Now produced an empty checkout. The Cart.kind field
+         *     stays for the inert historical rows.)
+         */
         post: operations["v1_checkout_buy_now_create"];
         delete?: never;
         options?: never;
@@ -1000,6 +4068,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/checkout/gig-centres/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/checkout/gig-centres/?address_id= — the pickup picker's list:
+         *     active GIG centres sorted by distance from the address's pin (else its LGA
+         *     centroid). Own-address only, same pattern as DeliveryOptionsView; empty list
+         *     when the LGA has no active GIG coverage — the storefront then simply doesn't
+         *     offer pickup.
+         */
+        get: operations["v1_checkout_gig_centres_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/checkout/payment-methods/": {
         parameters: {
             query?: never;
@@ -1009,6 +4100,110 @@ export interface paths {
         };
         /** @description GET /api/v1/checkout/payment-methods/?country=NG — active gateways for a country. */
         get: operations["v1_checkout_payment_methods_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/quote/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Read-only totals + coupon preview (Plan-14). Never mutates. */
+        post: operations["v1_checkout_quote_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cms/homepage/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/cms/homepage/` — the ordered sections plus the banners that are live
+         *     right now.
+         *
+         *     ONE REQUEST, not three. The homepage is the most-hit page on the site and every extra
+         *     round trip to the VPS is paid on a Nigerian mobile connection.
+         *
+         *     SCHEDULING IS APPLIED HERE, not in the client: a banner outside its window must never
+         *     reach the browser, or "scheduled" would mean "hidden by CSS" and a campaign would leak
+         *     early to anyone reading the payload.
+         */
+        get: operations["v1_cms_homepage_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cms/menus/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description `GET /api/v1/cms/menus/` — header and footer links, grouped. */
+        get: operations["v1_cms_menus_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cms/pages/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/cms/pages/` — slugs and titles only, for `sitemap.ts`.
+         *
+         *     Deliberately not paginated: there are eleven of these and a sitemap wants all of them.
+         */
+        get: operations["v1_cms_pages_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cms/pages/{slug}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/cms/pages/{slug}/`.
+         *
+         *     PUBLISHED ONLY, and a draft is a 404 rather than a 403: the existence of an unpublished
+         *     page is not public information, and the storefront's job with either answer is the same.
+         */
+        get: operations["v1_cms_pages_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1151,6 +4346,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/meta/redirect/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/meta/redirect/?path=/our-story/
+         *
+         *     Public and unauthenticated, because it answers questions about public URLs and is
+         *     called for anonymous visitors arriving from Google. It reveals only what a crawler
+         *     could learn by requesting the old URL itself.
+         */
+        get: operations["v1_meta_redirect_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/meta/regions/": {
         parameters: {
             query?: never;
@@ -1255,6 +4473,31 @@ export interface paths {
         get: operations["v1_orders_invoice.pdf_retrieve"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{number}/pay/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/orders/{number}/pay/ — re-open payment on an order that is still
+         *     awaiting it, optionally switching gateway. The customer-facing escape hatch for a
+         *     declined card: placement already converted the cart, so there is no checkout to redo.
+         *
+         *     Not idempotency-tracked through begin()/finish() like CheckoutView: there is no cart
+         *     to convert and no order to duplicate here, so the Payment row's unique idempotency_key
+         *     is protection enough — a repeated key replays the same attempt (see retry_payment).
+         */
+        post: operations["v1_orders_pay_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1416,6 +4659,21 @@ export interface components {
             readonly is_default_shipping: boolean;
             readonly is_default_billing: boolean;
         };
+        /**
+         * @description Shape of `/auth/admin-me/`. Response-only — the admin shell reads it to decide
+         *     which nav items and actions to render, so `scopes` is the field that matters.
+         *
+         *     Client-side scope checks are a UI convenience and nothing more: every one of them
+         *     is re-checked server-side by `HasAdminScope`. Hiding a button is not a control.
+         */
+        AdminMe: {
+            /** Format: email */
+            readonly email: string;
+            readonly name: string;
+            readonly is_superuser: boolean;
+            readonly groups: string[];
+            readonly scopes: string[];
+        };
         AdminOrder: {
             number: string;
             status?: string;
@@ -1451,6 +4709,26 @@ export interface components {
             legacy_number?: string;
             readonly items: components["schemas"]["OrderItem"][];
             readonly events: components["schemas"]["OrderEvent"][];
+            readonly payments: components["schemas"]["AdminPayment"][];
+            /**
+             * @description The moves a PERSON may make from here, each with the scope it needs.
+             *
+             *     NOT `ALLOWED_TRANSITIONS[order.status]`, which is a superset of what this endpoint
+             *     accepts. Publishing the raw constant would have a UI render:
+             *
+             *       * `refunded` — refused since backend-v0.5.2 for any order still holding captured
+             *         money, and never a bare status flip in any case (the refund machinery owns it);
+             *       * `expired` — the sweep's move, not an operator's;
+             *       * `cancelled` — legal in the machine, but gated on `orders.manage` inside the
+             *         view, so Support would get a button that 403s.
+             *
+             *     The scope travels WITH each entry rather than the UI keeping its own copy of the
+             *     rule. A client-side table of who-may-do-what is a second source of truth, and this
+             *     one guards money.
+             */
+            readonly allowed_transitions: {
+                [key: string]: unknown;
+            }[];
         };
         AdminOrderList: {
             number: string;
@@ -1467,6 +4745,194 @@ export interface components {
             readonly grand_total_display: string;
             source?: string;
         };
+        /**
+         * @description Step ONE of the staff ceremony (`/auth/admin-token/`): password only.
+         *
+         *     IT MINTS NOTHING, and that is the change Task 3b made. It subclasses
+         *     `TokenObtainSerializer` — SimpleJWT's base, which authenticates and stops — rather
+         *     than `TokenObtainPairSerializer`, which authenticates AND issues a refresh/access
+         *     pair. Two consequences, both wanted:
+         *
+         *     * There is no code path anywhere in this project that turns a password into an
+         *       admin-audience token. Amendment 6's invariant becomes a property of the call
+         *       graph rather than a rule people follow; `apps/accounts/authentication.py`'s
+         *       `mint_admin_token_pair` is the single mint and TOTP-confirm is its single caller.
+         *     * No `OutstandingToken` row is created for a token nobody will ever hold. Before
+         *       3b the alternative shape considered here was "mint the pair and discard it",
+         *       which would have left the database quietly accumulating rows describing live
+         *       refresh tokens that do not exist.
+         *
+         *     The staff check hangs off `validate` after `super().validate()` has confirmed the
+         *     password, so a non-staff caller is refused at the same point a wrong password is.
+         *
+         *     THE ERROR IS DELIBERATELY IDENTICAL to the wrong-password path — same message, same
+         *     `no_active_account` code, same 401. Saying "not a staff account" would turn this
+         *     endpoint into an oracle: an attacker with a list of leaked customer addresses could
+         *     sort it into "real accounts" and, worse, "real staff accounts", which is precisely
+         *     the list worth phishing. The difference is recorded in the `apps.security` log
+         *     instead, where only we can read it.
+         *
+         *     `turnstile_token` is read straight off `request.data` by `require_turnstile` (as on
+         *     every other gated endpoint) and is declared here only so the generated schema tells
+         *     the admin app to send it.
+         */
+        AdminPassword: {
+            turnstile_token?: string;
+            email: string;
+            password: string;
+        };
+        /**
+         * @description One payment, its refunds, and what is left to refund against it.
+         *
+         *     ADDED IN PLAN-18a because `AdminOrderSerializer` carried no money detail at all — no
+         *     gateway, no payment status, no refunds — and all three payments admin routes are
+         *     POST-only. The payment panel had nothing to render, and the refund modal could only
+         *     learn the remaining balance from the RESPONSE to a refund, i.e. after moving money.
+         */
+        AdminPayment: {
+            readonly id: number;
+            gateway: string;
+            purpose?: components["schemas"]["PurposeEnum"];
+            /** Format: decimal */
+            amount: string;
+            currency: string;
+            status?: components["schemas"]["AdminPaymentStatusEnum"];
+            gateway_reference: string;
+            /** Format: date-time */
+            readonly created_at: string;
+            readonly refunds: components["schemas"]["AdminRefund"][];
+            /**
+             * @description Delegated to `refunds.refundable_amount`, never recomputed here.
+             *
+             *     That function is what the refund endpoint enforces against, and it counts PENDING
+             *     refunds as already spent. A second implementation would eventually disagree with
+             *     it, and the direction it would disagree in is offering an operator more headroom
+             *     than the endpoint will allow.
+             */
+            readonly refundable: string;
+        };
+        /**
+         * @description * `initiated` - Initiated
+         *     * `pending` - Pending
+         *     * `succeeded` - Succeeded
+         *     * `failed` - Failed
+         *     * `cancelled` - Cancelled
+         *     * `refunded` - Refunded
+         *     * `partially_refunded` - Partially refunded
+         * @enum {string}
+         */
+        AdminPaymentStatusEnum: "initiated" | "pending" | "succeeded" | "failed" | "cancelled" | "refunded" | "partially_refunded";
+        /**
+         * @description Response shape of `/auth/admin-token/`. Response-only; documents the schema.
+         *
+         *     `totp_enrolled` exists so the admin app knows which screen to draw next — "scan this
+         *     QR code" or "enter the code from your app". It leaks nothing: only a caller who has
+         *     already produced this account's password and a solved Turnstile token ever sees it,
+         *     and they could learn the same fact by calling enrol and reading the status code.
+         */
+        AdminPreauthResponse: {
+            readonly preauth_token: string;
+            readonly expires_in: number;
+            readonly totp_enrolled: boolean;
+        };
+        /** @description One refund against one payment, for the admin payment panel. */
+        AdminRefund: {
+            readonly id: number;
+            /** Format: decimal */
+            amount: string;
+            status?: components["schemas"]["AdminRefundStatusEnum"];
+            reason?: string;
+            gateway_reference?: string;
+            /** @default  */
+            readonly created_by_email: string;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /**
+         * @description * `pending` - Pending
+         *     * `succeeded` - Succeeded
+         *     * `failed` - Failed
+         * @enum {string}
+         */
+        AdminRefundStatusEnum: "pending" | "succeeded" | "failed";
+        /**
+         * @description Read shape for the audit log. EVERY field is read-only, twice over.
+         *
+         *     `read_only_fields = fields` is belt; the endpoint being a `ListAPIView` with no
+         *     create route is braces; `AuditLog.save()` refusing to rewrite a row is the actual
+         *     guarantee. Three fences for one property is not excessive here — the property is
+         *     that this table cannot be edited through the API, and it is the whole reason the
+         *     table is worth reading.
+         *
+         *     `actor_email` is exposed rather than the FK's current address on purpose: it is the
+         *     SNAPSHOT taken when the action happened, so a row still names who did it after that
+         *     account is deleted (`actor` goes NULL) or after they change their address.
+         */
+        AuditLog: {
+            readonly id: number;
+            /** Format: date-time */
+            readonly created_at: string;
+            readonly actor: number | null;
+            readonly actor_email: string;
+            readonly token_jti: string;
+            readonly client_ip: string;
+            readonly model_label: string;
+            readonly object_id: string;
+            readonly action: string;
+            readonly changes: unknown;
+        };
+        /**
+         * @description THE most consequential row in the system: `BankAccount`'s own docstring says "this
+         *     row IS the payment page for that country", and Plan-16 Amendment 1 names the payout
+         *     account as the highest-value target here. Hence `settings.manage` (Owner only) on the
+         *     view, and hence every field on the audit allow-list — a changed account number must be
+         *     answerable with "who, when, from what to what".
+         */
+        BankAccountAdmin: {
+            readonly id: number;
+            country: string;
+            readonly country_name: string;
+            currency: string;
+            bank_name: string;
+            account_name: string;
+            account_number: string;
+            extra?: unknown;
+            instructions?: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /**
+         * @description Every field a campaign depends on is audited: a banner that appeared or vanished at
+         *     the wrong moment is a marketing incident somebody will want explained.
+         */
+        BannerAdmin: {
+            readonly id: number;
+            title: string;
+            subtitle?: string;
+            tagline?: string;
+            /** Format: uri */
+            image?: string | null;
+            /** Format: uri */
+            mobile_image?: string | null;
+            /** Format: uri */
+            video?: string | null;
+            cta_text?: string;
+            cta_url?: string;
+            placement?: components["schemas"]["PlacementEnum"];
+            sort?: number;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            is_active?: boolean;
+            countries?: string[];
+            readonly is_live: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /** @enum {unknown} */
+        BlankEnum: "";
         Brand: {
             name: string;
             slug: string;
@@ -1508,6 +4974,7 @@ export interface components {
             image?: string | null;
             is_active?: boolean;
             sort_order?: number;
+            legacy_wp_id?: number | null;
             seo_title?: string;
             seo_description?: string;
             parent?: number | null;
@@ -1543,16 +5010,227 @@ export interface components {
             /** Format: decimal */
             tax_rate_percent?: string;
             prices_include_tax?: boolean;
+            state_label?: string;
             area_label?: string;
         };
+        /**
+         * @description Which gateways a market offers. Turning one on is what makes cards live, and it is
+         *     the switch Plan-09 left to a production DB edit.
+         */
+        CountryPaymentGatewayAdmin: {
+            readonly id: number;
+            gateway: string;
+            is_active?: boolean;
+            sort_order?: number;
+            country: string;
+        };
+        /**
+         * @description A coupon is money off, so every field that decides how much is on the audit
+         *     allow-list. `code` is stored upper-case and uniqueness is case-insensitive at the
+         *     database (`uniq_coupon_code_ci`), so it is normalised here rather than letting two
+         *     people create `SUMMER` and `summer` and discover the collision at checkout.
+         */
+        CouponAdmin: {
+            readonly id: number;
+            code: string;
+            type: components["schemas"]["CouponAdminTypeEnum"];
+            /** Format: decimal */
+            value?: string;
+            currency?: string | null;
+            /** Format: decimal */
+            min_subtotal?: string;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            usage_limit?: number | null;
+            usage_limit_per_user?: number | null;
+            applies_to_products?: number[];
+            applies_to_categories?: number[];
+            is_active?: boolean;
+            /** @default 0 */
+            readonly redemption_count: number;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /**
+         * @description * `percent` - Percentage off
+         *     * `fixed` - Fixed amount off
+         *     * `free_shipping` - Free shipping
+         * @enum {string}
+         */
+        CouponAdminTypeEnum: "percent" | "fixed" | "free_shipping";
         Currency: {
             code: string;
             symbol: string;
             decimal_places?: number;
         };
+        CustomerAddress: {
+            readonly id: number;
+            label?: string;
+            line1: string;
+            line2?: string;
+            city_text?: string;
+            state_text?: string;
+            postcode?: string;
+            country_code: string;
+            is_default_shipping?: boolean;
+            is_default_billing?: boolean;
+        };
+        /**
+         * @description The list row. Contact and status only — no aggregates.
+         *
+         *     LTV IS NOT ON THE LIST, on purpose. It is a per-row aggregate query, and a 25-row page
+         *     would fire 25 of them; the top-customers report already answers "who spends most" with
+         *     one grouped query. A number that costs a page-load to show and duplicates a report is
+         *     not worth the N+1.
+         */
+        CustomerDetail: {
+            readonly toke_id: string;
+            /** Format: email */
+            email: string;
+            readonly name: string;
+            first_name?: string;
+            last_name?: string;
+            phone?: string;
+            is_active?: boolean;
+            marketing_consent?: boolean;
+            /** Format: date-time */
+            email_verified_at?: string | null;
+            /** Format: date-time */
+            deletion_requested_at?: string | null;
+            /** Format: date-time */
+            readonly date_joined: string;
+            /** Format: date-time */
+            last_login?: string | null;
+            legacy_source?: components["schemas"]["LegacySourceEnum"] | components["schemas"]["BlankEnum"];
+            readonly addresses: components["schemas"]["CustomerAddress"][];
+            readonly legacy_identities: components["schemas"]["CustomerLegacyIdentity"][];
+            /**
+             * @description Per currency, from `analytics.queries` — never recomputed here.
+             *
+             *     Plan-20 put this in the shared layer precisely so that this page and the
+             *     top-customers report cannot drift: they share one `REVENUE_STATUSES`, and a
+             *     customer whose lifetime value disagreed with the report would make both numbers
+             *     untrustworthy without either being obviously wrong.
+             */
+            readonly totals: {
+                [key: string]: unknown;
+            }[];
+            /**
+             * @description Orders with this email and no owner — NOT added into `totals`.
+             *
+             *     Support's most common question about a migrated customer is "why can't they see
+             *     their old orders", and this is the answer: they have not verified the address yet.
+             *     Summing them into lifetime value would attribute money to somebody who has not
+             *     proved the address is theirs, which is exactly the claim `claims.py` refuses.
+             */
+            readonly unclaimed_guest_orders: number;
+        };
+        CustomerLegacyIdentity: {
+            store: components["schemas"]["StoreEnum"];
+            wp_user_id: number;
+        };
+        /**
+         * @description The list row. Contact and status only — no aggregates.
+         *
+         *     LTV IS NOT ON THE LIST, on purpose. It is a per-row aggregate query, and a 25-row page
+         *     would fire 25 of them; the top-customers report already answers "who spends most" with
+         *     one grouped query. A number that costs a page-load to show and duplicates a report is
+         *     not worth the N+1.
+         */
+        CustomerList: {
+            readonly toke_id: string;
+            /** Format: email */
+            email: string;
+            readonly name: string;
+            first_name?: string;
+            last_name?: string;
+            phone?: string;
+            is_active?: boolean;
+            marketing_consent?: boolean;
+            /** Format: date-time */
+            email_verified_at?: string | null;
+            /** Format: date-time */
+            deletion_requested_at?: string | null;
+            /** Format: date-time */
+            readonly date_joined: string;
+            /** Format: date-time */
+            last_login?: string | null;
+            legacy_source?: components["schemas"]["LegacySourceEnum"] | components["schemas"]["BlankEnum"];
+        };
+        DeliveryOptionAdmin: {
+            readonly id: number;
+            name: string;
+            kind?: components["schemas"]["KindEnum"];
+            carrier_code?: string;
+            /** Format: decimal */
+            price: string;
+            currency: string;
+            /** Format: decimal */
+            free_over?: string | null;
+            quote_required?: boolean;
+            disclaimer?: string;
+            min_days: number;
+            max_days: number;
+            is_active?: boolean;
+            sort?: number;
+            country_codes?: string[];
+            readonly region_count: number;
+            region_ids?: number[];
+        };
         EmailVerify: {
             token: string;
         };
+        /**
+         * @description Everything is audited: a fabricated five-star review on the homepage is a
+         *     reputational incident, and the trail must say who put it there.
+         */
+        GoogleReviewAdmin: {
+            readonly id: number;
+            author: string;
+            location?: string;
+            rating?: number;
+            text: string;
+            /** Format: uri */
+            review_url: string;
+            reviewed_at_text?: string;
+            sort?: number;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        HomepageSectionAdmin: {
+            readonly id: number;
+            type: components["schemas"]["HomepageSectionAdminTypeEnum"];
+            sort?: number;
+            config?: unknown;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /**
+         * @description * `hero` - Hero
+         *     * `collection_carousel` - Collection carousel
+         *     * `banner_grid` - Banner grid
+         *     * `editorial` - Editorial
+         *     * `brand_strip` - Brand strip
+         * @enum {string}
+         */
+        HomepageSectionAdminTypeEnum: "hero" | "collection_carousel" | "banner_grid" | "editorial" | "brand_strip";
+        /**
+         * @description * `manual` - Manual
+         *     * `carrier` - Carrier API
+         * @enum {string}
+         */
+        KindEnum: "manual" | "carrier";
+        /**
+         * @description * `legacy_ng` - Nigeria — current store
+         *     * `legacy_ng_old` - Nigeria — old store (dead since Nov 2025)
+         *     * `legacy_intl` - International (US/UK/CA)
+         * @enum {string}
+         */
+        LegacySourceEnum: "legacy_ng" | "legacy_ng_old" | "legacy_intl";
         /**
          * @description * `state` - State/Region
          *     * `city` - City
@@ -1571,6 +5249,21 @@ export interface components {
             phone?: string;
             marketing_consent?: boolean;
             readonly toke_id: string;
+        };
+        /**
+         * @description * `header` - Header
+         *     * `footer` - Footer
+         * @enum {string}
+         */
+        MenuEnum: "header" | "footer";
+        MenuItemAdmin: {
+            readonly id: number;
+            label: string;
+            url: string;
+            menu?: components["schemas"]["MenuEnum"];
+            parent?: number | null;
+            sort?: number;
+            is_active?: boolean;
         };
         OrderEvent: {
             type: string;
@@ -1604,6 +5297,33 @@ export interface components {
             readonly item_count: number;
             readonly items: components["schemas"]["OrderItem"][];
         };
+        /**
+         * @description `body_source` is the writable field; `body` is derived on save and read-only.
+         *
+         *     The audit allow-list deliberately omits both: a page body is prose, often long, and
+         *     `MAX_CHANGES_BYTES` would truncate the row into a `__keys__` stub anyway. What matters
+         *     for the record is WHICH page changed, its status and its URL — the body itself is
+         *     recoverable from the page, which is not deletable.
+         */
+        PageAdmin: {
+            readonly id: number;
+            title: string;
+            slug: string;
+            body_source?: string;
+            readonly body: string;
+            status?: components["schemas"]["PageAdminStatusEnum"];
+            seo_title?: string;
+            seo_description?: string;
+            sort?: number;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /**
+         * @description * `draft` - Draft
+         *     * `published` - Published
+         * @enum {string}
+         */
+        PageAdminStatusEnum: "draft" | "published";
         PaginatedAdminOrderListList: {
             /** @example 123 */
             count: number;
@@ -1618,6 +5338,51 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["AdminOrderList"][];
+        };
+        PaginatedAuditLogList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["AuditLog"][];
+        };
+        PaginatedBankAccountAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["BankAccountAdmin"][];
+        };
+        PaginatedBannerAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["BannerAdmin"][];
         };
         PaginatedBrandAdminList: {
             /** @example 123 */
@@ -1664,6 +5429,111 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["CollectionAdmin"][];
         };
+        PaginatedCountryPaymentGatewayAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["CountryPaymentGatewayAdmin"][];
+        };
+        PaginatedCouponAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["CouponAdmin"][];
+        };
+        PaginatedCustomerListList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["CustomerList"][];
+        };
+        PaginatedDeliveryOptionAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["DeliveryOptionAdmin"][];
+        };
+        PaginatedGoogleReviewAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["GoogleReviewAdmin"][];
+        };
+        PaginatedHomepageSectionAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["HomepageSectionAdmin"][];
+        };
+        PaginatedMenuItemAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["MenuItemAdmin"][];
+        };
         PaginatedOrderListList: {
             /** @example 123 */
             count: number;
@@ -1678,6 +5548,21 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["OrderList"][];
+        };
+        PaginatedPageAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["PageAdmin"][];
         };
         PaginatedPriceAdminList: {
             /** @example 123 */
@@ -1708,6 +5593,21 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["ProductAdmin"][];
+        };
+        PaginatedProductImageAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["ProductImageAdmin"][];
         };
         PaginatedProductListList: {
             /** @example 123 */
@@ -1754,6 +5654,21 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["ProductVideoAdmin"][];
         };
+        PaginatedRedirectAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["RedirectAdmin"][];
+        };
         PaginatedRefundOwedList: {
             /** @example 123 */
             count: number;
@@ -1768,6 +5683,21 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["RefundOwed"][];
+        };
+        PaginatedStaffRosterList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["StaffRoster"][];
         };
         PaginatedStockItemList: {
             /** @example 123 */
@@ -1814,6 +5744,21 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["TagAdmin"][];
         };
+        PaginatedWarehouseAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["WarehouseAdmin"][];
+        };
         PasswordChange: {
             old_password: string;
             new_password: string;
@@ -1849,6 +5794,56 @@ export interface components {
             readonly is_default_shipping?: boolean;
             readonly is_default_billing?: boolean;
         };
+        /**
+         * @description THE most consequential row in the system: `BankAccount`'s own docstring says "this
+         *     row IS the payment page for that country", and Plan-16 Amendment 1 names the payout
+         *     account as the highest-value target here. Hence `settings.manage` (Owner only) on the
+         *     view, and hence every field on the audit allow-list — a changed account number must be
+         *     answerable with "who, when, from what to what".
+         */
+        PatchedBankAccountAdmin: {
+            readonly id?: number;
+            country?: string;
+            readonly country_name?: string;
+            currency?: string;
+            bank_name?: string;
+            account_name?: string;
+            account_number?: string;
+            extra?: unknown;
+            instructions?: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
+        /**
+         * @description Every field a campaign depends on is audited: a banner that appeared or vanished at
+         *     the wrong moment is a marketing incident somebody will want explained.
+         */
+        PatchedBannerAdmin: {
+            readonly id?: number;
+            title?: string;
+            subtitle?: string;
+            tagline?: string;
+            /** Format: uri */
+            image?: string | null;
+            /** Format: uri */
+            mobile_image?: string | null;
+            /** Format: uri */
+            video?: string | null;
+            cta_text?: string;
+            cta_url?: string;
+            placement?: components["schemas"]["PlacementEnum"];
+            sort?: number;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            is_active?: boolean;
+            countries?: string[];
+            readonly is_live?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
         PatchedBrandAdmin: {
             readonly id?: number;
             /** Format: date-time */
@@ -1875,6 +5870,7 @@ export interface components {
             image?: string | null;
             is_active?: boolean;
             sort_order?: number;
+            legacy_wp_id?: number | null;
             seo_title?: string;
             seo_description?: string;
             parent?: number | null;
@@ -1894,6 +5890,93 @@ export interface components {
             rule?: components["schemas"]["RuleEnum"];
             products?: number[];
         };
+        /**
+         * @description Which gateways a market offers. Turning one on is what makes cards live, and it is
+         *     the switch Plan-09 left to a production DB edit.
+         */
+        PatchedCountryPaymentGatewayAdmin: {
+            readonly id?: number;
+            gateway?: string;
+            is_active?: boolean;
+            sort_order?: number;
+            country?: string;
+        };
+        /**
+         * @description A coupon is money off, so every field that decides how much is on the audit
+         *     allow-list. `code` is stored upper-case and uniqueness is case-insensitive at the
+         *     database (`uniq_coupon_code_ci`), so it is normalised here rather than letting two
+         *     people create `SUMMER` and `summer` and discover the collision at checkout.
+         */
+        PatchedCouponAdmin: {
+            readonly id?: number;
+            code?: string;
+            type?: components["schemas"]["CouponAdminTypeEnum"];
+            /** Format: decimal */
+            value?: string;
+            currency?: string | null;
+            /** Format: decimal */
+            min_subtotal?: string;
+            /** Format: date-time */
+            starts_at?: string | null;
+            /** Format: date-time */
+            ends_at?: string | null;
+            usage_limit?: number | null;
+            usage_limit_per_user?: number | null;
+            applies_to_products?: number[];
+            applies_to_categories?: number[];
+            is_active?: boolean;
+            /** @default 0 */
+            readonly redemption_count: number;
+            /** Format: date-time */
+            readonly created_at?: string;
+        };
+        PatchedDeliveryOptionAdmin: {
+            readonly id?: number;
+            name?: string;
+            kind?: components["schemas"]["KindEnum"];
+            carrier_code?: string;
+            /** Format: decimal */
+            price?: string;
+            currency?: string;
+            /** Format: decimal */
+            free_over?: string | null;
+            quote_required?: boolean;
+            disclaimer?: string;
+            min_days?: number;
+            max_days?: number;
+            is_active?: boolean;
+            sort?: number;
+            country_codes?: string[];
+            readonly region_count?: number;
+            region_ids?: number[];
+        };
+        /**
+         * @description Everything is audited: a fabricated five-star review on the homepage is a
+         *     reputational incident, and the trail must say who put it there.
+         */
+        PatchedGoogleReviewAdmin: {
+            readonly id?: number;
+            author?: string;
+            location?: string;
+            rating?: number;
+            text?: string;
+            /** Format: uri */
+            review_url?: string;
+            reviewed_at_text?: string;
+            sort?: number;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
+        PatchedHomepageSectionAdmin: {
+            readonly id?: number;
+            type?: components["schemas"]["HomepageSectionAdminTypeEnum"];
+            sort?: number;
+            config?: unknown;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
         PatchedMe: {
             /** Format: email */
             readonly email?: string;
@@ -1902,6 +5985,36 @@ export interface components {
             phone?: string;
             marketing_consent?: boolean;
             readonly toke_id?: string;
+        };
+        PatchedMenuItemAdmin: {
+            readonly id?: number;
+            label?: string;
+            url?: string;
+            menu?: components["schemas"]["MenuEnum"];
+            parent?: number | null;
+            sort?: number;
+            is_active?: boolean;
+        };
+        /**
+         * @description `body_source` is the writable field; `body` is derived on save and read-only.
+         *
+         *     The audit allow-list deliberately omits both: a page body is prose, often long, and
+         *     `MAX_CHANGES_BYTES` would truncate the row into a `__keys__` stub anyway. What matters
+         *     for the record is WHICH page changed, its status and its URL — the body itself is
+         *     recoverable from the page, which is not deletable.
+         */
+        PatchedPageAdmin: {
+            readonly id?: number;
+            title?: string;
+            slug?: string;
+            body_source?: string;
+            readonly body?: string;
+            status?: components["schemas"]["PageAdminStatusEnum"];
+            seo_title?: string;
+            seo_description?: string;
+            sort?: number;
+            /** Format: date-time */
+            readonly updated_at?: string;
         };
         PatchedPriceAdmin: {
             readonly id?: number;
@@ -1926,7 +6039,7 @@ export interface components {
             tags?: number[];
             description?: string;
             short_description?: string;
-            status?: components["schemas"]["StatusEnum"];
+            status?: components["schemas"]["ProductAdminStatusEnum"];
             is_featured?: boolean;
             ingredients?: string;
             directions?: string;
@@ -1939,8 +6052,32 @@ export interface components {
             seo_description?: string;
             /** Format: date-time */
             published_at?: string | null;
-            legacy_source?: string;
+            /** @default  */
+            legacy_source: string;
             legacy_wp_id?: number | null;
+            /** Format: date-time */
+            readonly updated_at?: string;
+            readonly thumbnail?: string | null;
+            readonly variant_count?: number;
+            /**
+             * @description Which currencies this product has ANY price in, so the list can flag the ones
+             *     that are invisible in a market for want of a price.
+             *
+             *     Currency-level rows only (`country is None`). A country override is a narrower
+             *     statement than "this product is priced in GBP" and reading it as the same thing
+             *     would show a product as priced for a market it is still hidden in. Overrides are
+             *     17c; production has none today, and this must not be the code that assumes so.
+             */
+            readonly priced_currencies?: string[];
+        };
+        PatchedProductImageAdmin: {
+            readonly id?: number;
+            readonly product?: number;
+            /** Format: uri */
+            image?: string;
+            alt?: string;
+            position?: number;
+            variant?: number | null;
         };
         PatchedProductVariantAdmin: {
             readonly id?: number;
@@ -1969,6 +6106,28 @@ export interface components {
             position?: number;
             product?: number;
         };
+        PatchedRedirectAdmin: {
+            readonly id?: number;
+            old_path?: string;
+            new_path?: string;
+            status_code?: number;
+            readonly hits?: number;
+            /** Format: date-time */
+            readonly created_at?: string;
+        };
+        /**
+         * @description A state or an area, flat. The TREE is assembled by the client from `parent` —
+         *     811 rows for Nigeria is one small response, and shipping it whole beats 37 requests
+         *     to expand each state.
+         */
+        PatchedRegionAdmin: {
+            readonly id?: number;
+            country_code?: string;
+            name?: string;
+            level?: components["schemas"]["LevelEnum"];
+            parent?: number | null;
+            is_active?: boolean;
+        };
         PatchedTagAdmin: {
             readonly id?: number;
             /** Format: date-time */
@@ -1978,6 +6137,51 @@ export interface components {
             name?: string;
             slug?: string;
         };
+        /**
+         * @description Plan-17c Task 1. CRUD minus delete — see the viewset for why deletion is refused.
+         *
+         *     `serves_countries` is the field to be careful with: `inventory/services.reserve()`
+         *     filters candidates on `warehouse__is_active=True, warehouse__serves_countries=country`,
+         *     so it is closer to a kill switch than to a checkbox. Unticking NG on Lagos HQ removes
+         *     the only warehouse serving Nigeria and every checkout in the only sellable market
+         *     fails, silently, until a customer tries to buy something.
+         *
+         *     It stays writable — reorganising warehouses is legitimate work, and the backend cannot
+         *     tell a mistake from step one of a two-step move. What it must not do is let the edit
+         *     look ordinary, so `countries_left_unserved` publishes the consequence for the admin to
+         *     name in its confirmation. COMPUTED here rather than asserted in the UI, because the
+         *     answer depends on every OTHER warehouse's coverage and only the server sees them all.
+         */
+        PatchedWarehouseAdmin: {
+            readonly id?: number;
+            name?: string;
+            location_country?: string;
+            serves_countries?: string[];
+            priority?: number;
+            is_active?: boolean;
+            /**
+             * @description Countries this warehouse serves that NO other active warehouse does — i.e. the
+             *     markets that lose their last supply line if this one is deactivated or stops
+             *     serving them. `is_active=False` is not cover, because `reserve()` skips it.
+             */
+            readonly countries_left_unserved?: string[];
+        };
+        /**
+         * @description * `hero` - Hero slide
+         *     * `strip` - News marquee item
+         *     * `category` - Shop-by-category tile
+         *     * `concern` - Shop-by-concern tile
+         *     * `feature` - Glow Set feature
+         *     * `feature_nature` - tokè × natural tile
+         *     * `feature_collection` - Toke Naturals tile
+         *     * `men` - Men section banner
+         *     * `women` - Women section banner
+         *     * `babies` - Babies section banner
+         *     * `tiktok` - TikTok section banner
+         *     * `trio` - Collections trio tile
+         * @enum {string}
+         */
+        PlacementEnum: "hero" | "strip" | "category" | "concern" | "feature" | "feature_nature" | "feature_collection" | "men" | "women" | "babies" | "tiktok" | "trio";
         PriceAdmin: {
             readonly id: number;
             /** Format: decimal */
@@ -2001,7 +6205,7 @@ export interface components {
             tags?: number[];
             description?: string;
             short_description?: string;
-            status?: components["schemas"]["StatusEnum"];
+            status?: components["schemas"]["ProductAdminStatusEnum"];
             is_featured?: boolean;
             ingredients?: string;
             directions?: string;
@@ -2014,9 +6218,31 @@ export interface components {
             seo_description?: string;
             /** Format: date-time */
             published_at?: string | null;
-            legacy_source?: string;
+            /** @default  */
+            legacy_source: string;
             legacy_wp_id?: number | null;
+            /** Format: date-time */
+            readonly updated_at: string;
+            readonly thumbnail: string | null;
+            readonly variant_count: number;
+            /**
+             * @description Which currencies this product has ANY price in, so the list can flag the ones
+             *     that are invisible in a market for want of a price.
+             *
+             *     Currency-level rows only (`country is None`). A country override is a narrower
+             *     statement than "this product is priced in GBP" and reading it as the same thing
+             *     would show a product as priced for a market it is still hidden in. Overrides are
+             *     17c; production has none today, and this must not be the code that assumes so.
+             */
+            readonly priced_currencies: string[];
         };
+        /**
+         * @description * `draft` - Draft
+         *     * `active` - Active
+         *     * `archived` - Archived
+         * @enum {string}
+         */
+        ProductAdminStatusEnum: "draft" | "active" | "archived";
         ProductDetail: {
             name: string;
             slug: string;
@@ -2037,6 +6263,15 @@ export interface components {
             rating_avg?: string;
             rating_count?: number;
         };
+        ProductImageAdmin: {
+            readonly id: number;
+            readonly product: number;
+            /** Format: uri */
+            image: string;
+            alt?: string;
+            position?: number;
+            variant?: number | null;
+        };
         ProductList: {
             name: string;
             slug: string;
@@ -2048,6 +6283,7 @@ export interface components {
             readonly hover_image: string;
             readonly default_variant_id: string;
             readonly default_sku: string;
+            readonly in_stock: string;
             /** Format: decimal */
             rating_avg?: string;
             rating_count?: number;
@@ -2080,6 +6316,28 @@ export interface components {
             product: number;
         };
         /**
+         * @description What the storefront renders.
+         *
+         *     `body` (sanitised) is exposed and `body_source` (raw) is NOT: the unsanitised
+         *     submission never leaves the admin surface, so no public client can be tricked into
+         *     rendering it.
+         */
+        PublicPage: {
+            title: string;
+            slug: string;
+            readonly body: string;
+            seo_title?: string;
+            seo_description?: string;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /**
+         * @description * `goods` - Goods
+         *     * `freight` - Freight
+         * @enum {string}
+         */
+        PurposeEnum: "goods" | "freight";
+        /**
          * @description * `sale` - Sale
          *     * `reservation` - Reservation
          *     * `release` - Release
@@ -2091,6 +6349,15 @@ export interface components {
          * @enum {string}
          */
         ReasonEnum: "sale" | "reservation" | "release" | "restock" | "adjustment" | "damaged" | "returned" | "migration";
+        RedirectAdmin: {
+            readonly id: number;
+            old_path: string;
+            new_path: string;
+            status_code?: number;
+            readonly hits: number;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
         /**
          * @description One row of the refunds-owed worklist. The amounts are the whole point of the
          *     screen, so they are computed here from the payment ledger, never from a cached field.
@@ -2122,6 +6389,19 @@ export interface components {
             level: components["schemas"]["LevelEnum"];
             readonly has_children: boolean;
         };
+        /**
+         * @description A state or an area, flat. The TREE is assembled by the client from `parent` —
+         *     811 rows for Nigeria is one small response, and shipping it whole beats 37 requests
+         *     to expand each state.
+         */
+        RegionAdmin: {
+            readonly id: number;
+            country_code: string;
+            name: string;
+            level: components["schemas"]["LevelEnum"];
+            parent?: number | null;
+            is_active?: boolean;
+        };
         Register: {
             /** Format: email */
             email: string;
@@ -2140,12 +6420,109 @@ export interface components {
          */
         RuleEnum: "manual" | "new_arrivals" | "best_sellers" | "trending";
         /**
-         * @description * `draft` - Draft
-         *     * `active` - Active
-         *     * `archived` - Archived
-         * @enum {string}
+         * @description READ shape. Note what is absent: `token_hash`.
+         *
+         *     Not merely uninteresting — a digest is the lookup key, so returning it to any
+         *     caller who can list invites would let them mount an offline check against a
+         *     candidate token without touching the throttled endpoint. It is excluded by an
+         *     explicit field list rather than by `exclude`, so a field added later is opt-in.
          */
-        StatusEnum: "draft" | "active" | "archived";
+        StaffInvite: {
+            readonly id: number;
+            /** Format: email */
+            readonly email: string;
+            readonly role: string;
+            readonly state: string;
+            /** Format: date-time */
+            readonly expires_at: string;
+            /** Format: email */
+            readonly invited_by: string;
+            /** Format: date-time */
+            readonly accepted_at: string | null;
+            /** Format: date-time */
+            readonly revoked_at: string | null;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /**
+         * @description WRITE shape for the PUBLIC accept endpoint.
+         *
+         *     The password is validated HERE, before the view claims the invite, so a rejected
+         *     password cannot burn a single-use capability on a typo — see
+         *     `StaffInviteAcceptView` for the ordering and why it is what it is.
+         *
+         *     `turnstile_token` is read straight off `request.data` by `require_turnstile` (same
+         *     as every other gated endpoint) and is declared here only so the generated schema
+         *     tells the admin app to send it.
+         */
+        StaffInviteAccept: {
+            token: string;
+            password: string;
+            turnstile_token?: string;
+        };
+        /**
+         * @description WRITE shape for `POST /admin/staff/invites/`.
+         *
+         *     THE TWO REFUSALS ARE THE INTERESTING PART, and both are about keeping "an invite"
+         *     a single unambiguous thing:
+         *
+         *     1. **An address that is already staff is refused.** An invite whose meaning is
+         *        sometimes-create-an-administrator and sometimes-modify-an-existing-one has no
+         *        single answer to "how did this person get this role?", which is the question the
+         *        whole invite trail exists to answer. Changing an existing staff member's role is
+         *        a group edit.
+         *     2. **A second outstanding invite for the same address is refused.** Two live tokens
+         *        for one address means the older one survives the "resend" meant to replace it —
+         *        and since accepting ALWAYS sets a password, a stale token is a silent
+         *        staff-password reset sitting in an old inbox. Resend is revoke + invite; this is
+         *        what makes that the only way to do it.
+         *
+         *     `role` is a group NAME validated against `rbac.ROLES` rather than a primary key.
+         *     Ruling 3 says views never name groups, and this endpoint is the one place that rule
+         *     cannot hold — it is *about* groups — so the constraint is enforced here instead: the
+         *     only accepted names are the four seeded roles, which means an invite can never point
+         *     at some other group that happens to exist and grants nothing.
+         */
+        StaffInviteCreate: {
+            /** Format: email */
+            email: string;
+            role: string;
+        };
+        /**
+         * @description READ shape for `/admin/staff/` — one administrator per row.
+         *
+         *     AN EXPLICIT FIELD LIST, on a `ModelSerializer` over the USER model, which is the
+         *     riskiest base class in this file: `fields = "__all__"` here would serialise
+         *     `password`. The list is therefore opt-in, and `test_no_password_material_is_ever_
+         *     serialised` asserts the outcome rather than trusting the list.
+         *
+         *     `roles` comes from group membership and is a LIST rather than a single value even
+         *     though the invite flow only ever assigns one. Django permits several, `createsuperuser`
+         *     assigns none, and a serializer that rendered `groups[0]` would silently hide the
+         *     second role on the day somebody adds one by hand.
+         *
+         *     `totp_confirmed` is derived from the related row's `confirmed_at`, never stored
+         *     twice — see the model docstring for why `confirmed_at` is the only thing that counts
+         *     as enrolled.
+         */
+        StaffRoster: {
+            readonly id: number;
+            /** Format: email */
+            readonly email: string;
+            readonly name: string;
+            readonly roles: string[];
+            readonly is_active: boolean;
+            /**
+             * Superuser status
+             * @description Designates that this user has all permissions without explicitly assigning them.
+             */
+            readonly is_superuser: boolean;
+            readonly totp_confirmed: boolean;
+            /** Format: date-time */
+            readonly last_login: string | null;
+            /** Format: date-time */
+            readonly date_joined: string;
+        };
         StockItem: {
             readonly id: number;
             variant: number;
@@ -2170,11 +6547,59 @@ export interface components {
             /** Format: date-time */
             readonly created_at: string;
         };
+        /**
+         * @description * `legacy_ng` - Nigeria — current store
+         *     * `legacy_ng_old` - Nigeria — old store (dead since Nov 2025)
+         *     * `legacy_intl` - International (US/UK/CA)
+         * @enum {string}
+         */
+        StoreEnum: "legacy_ng" | "legacy_ng_old" | "legacy_intl";
         Subscribe: {
             /** Format: email */
             email: string;
             /** @default  */
             source: string;
+        };
+        /**
+         * @description A six-digit code, or a twenty-character recovery code. One field, no validation
+         *     beyond presence: every judgement about the value belongs in
+         *     `apps/accounts/totp.py`, where the failure is counted against both caps. A
+         *     serializer-level format check would 400 before those counters ran, which is a free
+         *     guessing attempt.
+         */
+        TOTPCode: {
+            code: string;
+        };
+        /**
+         * @description Response shape of TOTP confirm — the only response in the project that carries an
+         *     admin-audience token. `recovery_codes` is present only on the response that CONFIRMS
+         *     a new enrolment, not on an ordinary login: reissuing a set every login would make
+         *     whatever the staff member printed wrong within a day.
+         */
+        TOTPConfirmResponse: {
+            readonly access: string;
+            readonly refresh: string;
+            readonly recovery_codes: string[];
+        };
+        /**
+         * @description Response shape of TOTP enrol. Returned ONCE, never stored, never logged: the
+         *     provisioning URI carries the secret in its query string, so a copy in a log line is
+         *     a copy of the second factor.
+         */
+        TOTPEnrolResponse: {
+            readonly secret: string;
+            readonly provisioning_uri: string;
+            readonly issuer: string;
+        };
+        /**
+         * @description Response shape of recovery-code verification. Note what is ABSENT: any token.
+         *     Consuming a code voids the secret and the remaining codes and returns the holder to
+         *     enrolment, which keeps "only TOTP-confirm mints an admin token" true with zero
+         *     exceptions.
+         */
+        TOTPRecoveryResponse: {
+            readonly detail: string;
+            readonly enrolment_required: boolean;
         };
         TagAdmin: {
             readonly id: number;
@@ -2195,6 +6620,35 @@ export interface components {
             readonly access: string;
             refresh: string;
         };
+        /**
+         * @description Plan-17c Task 1. CRUD minus delete — see the viewset for why deletion is refused.
+         *
+         *     `serves_countries` is the field to be careful with: `inventory/services.reserve()`
+         *     filters candidates on `warehouse__is_active=True, warehouse__serves_countries=country`,
+         *     so it is closer to a kill switch than to a checkbox. Unticking NG on Lagos HQ removes
+         *     the only warehouse serving Nigeria and every checkout in the only sellable market
+         *     fails, silently, until a customer tries to buy something.
+         *
+         *     It stays writable — reorganising warehouses is legitimate work, and the backend cannot
+         *     tell a mistake from step one of a two-step move. What it must not do is let the edit
+         *     look ordinary, so `countries_left_unserved` publishes the consequence for the admin to
+         *     name in its confirmation. COMPUTED here rather than asserted in the UI, because the
+         *     answer depends on every OTHER warehouse's coverage and only the server sees them all.
+         */
+        WarehouseAdmin: {
+            readonly id: number;
+            name: string;
+            location_country: string;
+            serves_countries?: string[];
+            priority?: number;
+            is_active?: boolean;
+            /**
+             * @description Countries this warehouse serves that NO other active warehouse does — i.e. the
+             *     markets that lose their last supply line if this one is deactivated or stops
+             *     serving them. `is_active=False` is not cover, because `reserve()` skips it.
+             */
+            readonly countries_left_unserved: string[];
+        };
     };
     responses: never;
     parameters: never;
@@ -2204,6 +6658,320 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    v1_admin_audit_list: {
+        parameters: {
+            query?: {
+                action?: string;
+                model_label?: string;
+                object_id?: string;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAuditLogList"];
+                };
+            };
+        };
+    };
+    v1_admin_bank_accounts_list: {
+        parameters: {
+            query?: {
+                country?: string;
+                is_active?: boolean;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedBankAccountAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_bank_accounts_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankAccountAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["BankAccountAdmin"];
+                "multipart/form-data": components["schemas"]["BankAccountAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankAccountAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_bank_accounts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this bank account. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankAccountAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_bank_accounts_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this bank account. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BankAccountAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["BankAccountAdmin"];
+                "multipart/form-data": components["schemas"]["BankAccountAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankAccountAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_bank_accounts_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this bank account. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedBankAccountAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedBankAccountAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedBankAccountAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BankAccountAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_banners_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /**
+                 * @description * `hero` - Hero slide
+                 *     * `strip` - News marquee item
+                 *     * `category` - Shop-by-category tile
+                 *     * `concern` - Shop-by-concern tile
+                 *     * `feature` - Glow Set feature
+                 *     * `feature_nature` - tokè × natural tile
+                 *     * `feature_collection` - Toke Naturals tile
+                 *     * `men` - Men section banner
+                 *     * `women` - Women section banner
+                 *     * `babies` - Babies section banner
+                 *     * `tiktok` - TikTok section banner
+                 *     * `trio` - Collections trio tile
+                 */
+                placement?: "babies" | "category" | "concern" | "feature" | "feature_collection" | "feature_nature" | "hero" | "men" | "strip" | "tiktok" | "trio" | "women";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedBannerAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_banners_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BannerAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["BannerAdmin"];
+                "multipart/form-data": components["schemas"]["BannerAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BannerAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_banners_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this banner. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BannerAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_banners_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this banner. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BannerAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["BannerAdmin"];
+                "multipart/form-data": components["schemas"]["BannerAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BannerAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_banners_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this banner. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_banners_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this banner. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedBannerAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedBannerAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedBannerAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BannerAdmin"];
+                };
+            };
+        };
+    };
     v1_admin_brands_list: {
         parameters: {
             query?: {
@@ -2630,6 +7398,959 @@ export interface operations {
             };
         };
     };
+    v1_admin_coupons_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description A search term. */
+                search?: string;
+                /**
+                 * @description * `percent` - Percentage off
+                 *     * `fixed` - Fixed amount off
+                 *     * `free_shipping` - Free shipping
+                 */
+                type?: "fixed" | "free_shipping" | "percent";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedCouponAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_coupons_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CouponAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["CouponAdmin"];
+                "multipart/form-data": components["schemas"]["CouponAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_coupons_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this coupon. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_coupons_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this coupon. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CouponAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["CouponAdmin"];
+                "multipart/form-data": components["schemas"]["CouponAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_coupons_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this coupon. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedCouponAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedCouponAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedCouponAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CouponAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_customers_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                /**
+                 * @description * `legacy_ng` - Nigeria — current store
+                 *     * `legacy_ng_old` - Nigeria — old store (dead since Nov 2025)
+                 *     * `legacy_intl` - International (US/UK/CA)
+                 */
+                legacy_source?: "legacy_intl" | "legacy_ng" | "legacy_ng_old";
+                marketing_consent?: boolean;
+                /** @description Which field to use when ordering the results. */
+                ordering?: string;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description A search term. */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedCustomerListList"];
+                };
+            };
+        };
+    };
+    v1_admin_customers_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                toke_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomerDetail"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_options_list: {
+        parameters: {
+            query?: {
+                countries?: string[];
+                is_active?: boolean;
+                /**
+                 * @description * `manual` - Manual
+                 *     * `carrier` - Carrier API
+                 */
+                kind?: "carrier" | "manual";
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedDeliveryOptionAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_options_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryOptionAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryOptionAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_options_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery option. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_options_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery option. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryOptionAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryOptionAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_options_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery option. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedDeliveryOptionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedDeliveryOptionAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedDeliveryOptionAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_options_coverage_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery option. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryOptionAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryOptionAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_options_preview_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_google_reviews_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedGoogleReviewAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_google_reviews_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleReviewAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["GoogleReviewAdmin"];
+                "multipart/form-data": components["schemas"]["GoogleReviewAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleReviewAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_google_reviews_meta_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_google_reviews_meta_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_google_reviews_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this google review. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleReviewAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_google_reviews_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this google review. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleReviewAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["GoogleReviewAdmin"];
+                "multipart/form-data": components["schemas"]["GoogleReviewAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleReviewAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_google_reviews_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this google review. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_google_reviews_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this google review. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedGoogleReviewAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedGoogleReviewAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedGoogleReviewAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoogleReviewAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_homepage_sections_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /**
+                 * @description * `hero` - Hero
+                 *     * `collection_carousel` - Collection carousel
+                 *     * `banner_grid` - Banner grid
+                 *     * `editorial` - Editorial
+                 *     * `brand_strip` - Brand strip
+                 */
+                type?: "banner_grid" | "brand_strip" | "collection_carousel" | "editorial" | "hero";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedHomepageSectionAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_homepage_sections_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomepageSectionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["HomepageSectionAdmin"];
+                "multipart/form-data": components["schemas"]["HomepageSectionAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomepageSectionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_homepage_sections_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this homepage section. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomepageSectionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_homepage_sections_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this homepage section. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HomepageSectionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["HomepageSectionAdmin"];
+                "multipart/form-data": components["schemas"]["HomepageSectionAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomepageSectionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_homepage_sections_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this homepage section. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_homepage_sections_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this homepage section. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedHomepageSectionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedHomepageSectionAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedHomepageSectionAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomepageSectionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_images_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                product?: number;
+                variant?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedProductImageAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_images_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this product image. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImageAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_images_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this product image. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_images_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this product image. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedProductImageAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedProductImageAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedProductImageAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProductImageAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_menu_items_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                /**
+                 * @description * `header` - Header
+                 *     * `footer` - Footer
+                 */
+                menu?: "footer" | "header";
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedMenuItemAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_menu_items_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MenuItemAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["MenuItemAdmin"];
+                "multipart/form-data": components["schemas"]["MenuItemAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuItemAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_menu_items_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this menu item. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuItemAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_menu_items_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this menu item. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MenuItemAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["MenuItemAdmin"];
+                "multipart/form-data": components["schemas"]["MenuItemAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuItemAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_menu_items_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this menu item. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_menu_items_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this menu item. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedMenuItemAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedMenuItemAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedMenuItemAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MenuItemAdmin"];
+                };
+            };
+        };
+    };
     v1_admin_orders_list: {
         parameters: {
             query?: {
@@ -2773,6 +8494,86 @@ export interface operations {
             };
         };
     };
+    v1_admin_orders_gig_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_orders_gig_capture_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_orders_gig_label_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1_admin_orders_invoice.pdf_retrieve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_admin_orders_manual_refund_create: {
         parameters: {
             query?: never;
@@ -2893,11 +8694,311 @@ export interface operations {
             };
         };
     };
-    v1_admin_prices_list: {
+    "v1_admin_orders_export.csv_retrieve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_pages_list: {
         parameters: {
             query?: {
                 /** @description A page number within the paginated result set. */
                 page?: number;
+                /** @description A search term. */
+                search?: string;
+                /**
+                 * @description * `draft` - Draft
+                 *     * `published` - Published
+                 */
+                status?: "draft" | "published";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedPageAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_pages_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PageAdmin"];
+                "multipart/form-data": components["schemas"]["PageAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_pages_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_pages_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PageAdmin"];
+                "multipart/form-data": components["schemas"]["PageAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_pages_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedPageAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedPageAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedPageAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_payment_gateways_list: {
+        parameters: {
+            query?: {
+                country?: string;
+                gateway?: string;
+                is_active?: boolean;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedCountryPaymentGatewayAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_payment_gateways_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CountryPaymentGatewayAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["CountryPaymentGatewayAdmin"];
+                "multipart/form-data": components["schemas"]["CountryPaymentGatewayAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryPaymentGatewayAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_payment_gateways_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this country payment gateway. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryPaymentGatewayAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_payment_gateways_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this country payment gateway. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CountryPaymentGatewayAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["CountryPaymentGatewayAdmin"];
+                "multipart/form-data": components["schemas"]["CountryPaymentGatewayAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryPaymentGatewayAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_payment_gateways_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this country payment gateway. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_payment_gateways_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this country payment gateway. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedCountryPaymentGatewayAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedCountryPaymentGatewayAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedCountryPaymentGatewayAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryPaymentGatewayAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_prices_list: {
+        parameters: {
+            query?: {
+                country?: string;
+                currency?: string;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                variant?: number;
+                variant__product?: number;
             };
             header?: never;
             path?: never;
@@ -3039,11 +9140,38 @@ export interface operations {
             };
         };
     };
+    v1_admin_prices_unpriced_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PriceAdmin"];
+                };
+            };
+        };
+    };
     v1_admin_products_list: {
         parameters: {
             query?: {
                 /** @description A page number within the paginated result set. */
                 page?: number;
+                /** @description A search term. */
+                search?: string;
+                /**
+                 * @description * `draft` - Draft
+                 *     * `active` - Active
+                 *     * `archived` - Archived
+                 */
+                status?: "active" | "archived" | "draft";
             };
             header?: never;
             path?: never;
@@ -3243,6 +9371,155 @@ export interface operations {
             };
         };
     };
+    v1_admin_redirects_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description A search term. */
+                search?: string;
+                status_code?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedRedirectAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_redirects_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedirectAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["RedirectAdmin"];
+                "multipart/form-data": components["schemas"]["RedirectAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedirectAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_redirects_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this redirect. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedirectAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_redirects_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this redirect. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RedirectAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["RedirectAdmin"];
+                "multipart/form-data": components["schemas"]["RedirectAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedirectAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_redirects_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this redirect. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_redirects_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this redirect. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedRedirectAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedRedirectAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedRedirectAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RedirectAdmin"];
+                };
+            };
+        };
+    };
     v1_admin_refunds_owed_list: {
         parameters: {
             query?: {
@@ -3265,12 +9542,261 @@ export interface operations {
             };
         };
     };
+    v1_admin_regions_list: {
+        parameters: {
+            query?: {
+                country_code?: string;
+                is_active?: boolean;
+                /**
+                 * @description * `state` - State/Region
+                 *     * `city` - City
+                 *     * `area` - LGA/Area
+                 */
+                level?: "area" | "city" | "state";
+                parent?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionAdmin"][];
+                };
+            };
+        };
+    };
+    v1_admin_regions_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this region. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_regions_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this region. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedRegionAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedRegionAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedRegionAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_reports_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    "v1_admin_reports_export.csv_retrieve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_search_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_staff_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedStaffRosterList"];
+                };
+            };
+        };
+    };
+    v1_admin_staff_invites_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvite"][];
+                };
+            };
+        };
+    };
+    v1_admin_staff_invites_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffInviteCreate"];
+                "application/x-www-form-urlencoded": components["schemas"]["StaffInviteCreate"];
+                "multipart/form-data": components["schemas"]["StaffInviteCreate"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvite"];
+                };
+            };
+        };
+    };
+    v1_admin_staff_invites_revoke_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffInvite"];
+                };
+            };
+        };
+    };
+    v1_admin_staff_invites_accept_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaffInviteAccept"];
+                "application/x-www-form-urlencoded": components["schemas"]["StaffInviteAccept"];
+                "multipart/form-data": components["schemas"]["StaffInviteAccept"];
+            };
+        };
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_admin_stock_list: {
         parameters: {
             query?: {
                 /** @description A page number within the paginated result set. */
                 page?: number;
                 variant?: number;
+                variant__product?: number;
                 warehouse?: number;
             };
             header?: never;
@@ -3379,6 +9905,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    v1_admin_stock_grid_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StockItem"];
+                };
             };
         };
     };
@@ -3579,8 +10124,10 @@ export interface operations {
     v1_admin_variants_list: {
         parameters: {
             query?: {
+                is_active?: boolean;
                 /** @description A page number within the paginated result set. */
                 page?: number;
+                product?: number;
             };
             header?: never;
             path?: never;
@@ -3868,6 +10415,133 @@ export interface operations {
             };
         };
     };
+    v1_admin_warehouses_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                location_country?: string;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedWarehouseAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_warehouses_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WarehouseAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["WarehouseAdmin"];
+                "multipart/form-data": components["schemas"]["WarehouseAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarehouseAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_warehouses_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this warehouse. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarehouseAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_warehouses_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this warehouse. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WarehouseAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["WarehouseAdmin"];
+                "multipart/form-data": components["schemas"]["WarehouseAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarehouseAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_warehouses_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this warehouse. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedWarehouseAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedWarehouseAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedWarehouseAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WarehouseAdmin"];
+                };
+            };
+        };
+    };
     v1_auth_account_delete_create: {
         parameters: {
             query?: never;
@@ -3889,6 +10563,119 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    v1_auth_admin_me_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminMe"];
+                };
+            };
+        };
+    };
+    v1_auth_admin_token_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPassword"];
+                "application/x-www-form-urlencoded": components["schemas"]["AdminPassword"];
+                "multipart/form-data": components["schemas"]["AdminPassword"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPreauthResponse"];
+                };
+            };
+        };
+    };
+    v1_auth_admin_totp_confirm_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TOTPCode"];
+                "application/x-www-form-urlencoded": components["schemas"]["TOTPCode"];
+                "multipart/form-data": components["schemas"]["TOTPCode"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TOTPConfirmResponse"];
+                };
+            };
+        };
+    };
+    v1_auth_admin_totp_enrol_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TOTPEnrolResponse"];
+                };
+            };
+        };
+    };
+    v1_auth_admin_totp_recovery_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TOTPCode"];
+                "application/x-www-form-urlencoded": components["schemas"]["TOTPCode"];
+                "multipart/form-data": components["schemas"]["TOTPCode"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TOTPRecoveryResponse"];
+                };
             };
         };
     };
@@ -4342,6 +11129,24 @@ export interface operations {
             };
         };
     };
+    v1_checkout_gig_centres_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_checkout_payment_methods_retrieve: {
         parameters: {
             query?: never;
@@ -4357,6 +11162,100 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    v1_checkout_quote_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_cms_homepage_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_cms_menus_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_cms_pages_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPage"][];
+                };
+            };
+        };
+    };
+    v1_cms_pages_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPage"];
+                };
             };
         };
     };
@@ -4635,6 +11534,24 @@ export interface operations {
             };
         };
     };
+    v1_meta_redirect_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_meta_regions_list: {
         parameters: {
             query?: never;
@@ -4740,6 +11657,26 @@ export interface operations {
         };
     };
     "v1_orders_invoice.pdf_retrieve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_orders_pay_create: {
         parameters: {
             query?: never;
             header?: never;

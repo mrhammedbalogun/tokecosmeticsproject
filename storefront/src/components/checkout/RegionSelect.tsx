@@ -82,6 +82,12 @@ export function RegionSelect({ country, stateValue, areaValue, onChange, labels 
     );
   }
 
+  // GB/US/CA states have no seeded children — an always-rendered "Select county"
+  // dropdown with zero options would read as broken, so the second select only exists
+  // when the chosen state actually has areas (`has_children` from the API).
+  const chosenState = (states ?? []).find((s) => s.id === stateValue);
+  const showAreaSelect = Boolean(chosenState?.has_children);
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div>
@@ -104,25 +110,28 @@ export function RegionSelect({ country, stateValue, areaValue, onChange, labels 
           ))}
         </select>
       </div>
-      <div>
-        <label htmlFor="region-area" className="mb-1 block text-sm font-medium">
-          {areaLabel}
-        </label>
-        <select
-          id="region-area"
-          value={areaValue ?? ""}
-          onChange={handleAreaChange}
-          disabled={!stateValue || areasLoading}
-          className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm disabled:opacity-60"
-        >
-          <option value="">{areasLoading ? "Loading…" : `Select ${areaLabel.toLowerCase()}`}</option>
-          {(areas ?? []).map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      </div>
+      {showAreaSelect && (
+        <div>
+          <label htmlFor="region-area" className="mb-1 block text-sm font-medium">
+            {areaLabel}
+          </label>
+          <select
+            id="region-area"
+            value={areaValue ?? ""}
+            onChange={handleAreaChange}
+            disabled={areasLoading}
+            required
+            className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm disabled:opacity-60"
+          >
+            <option value="">{areasLoading ? "Loading…" : `Select ${areaLabel.toLowerCase()}`}</option>
+            {(areas ?? []).map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }

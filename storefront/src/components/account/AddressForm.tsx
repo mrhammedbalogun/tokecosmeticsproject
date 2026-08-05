@@ -135,15 +135,15 @@ export function AddressForm({
     setOptional(payload, "label", form.label);
     setOptional(payload, "last_name", form.last_name);
     setOptional(payload, "line2", form.line2);
+    // NOT exclusive: GB/US/CA send the structured state AND city + postcode.
     if (cfg.useRegions) {
       if (form.state_region) payload.state_region = form.state_region;
       if (form.area_region) payload.area_region = form.area_region;
-    } else {
-      for (const f of cfg.textFields) {
-        const v = form[f.name].trim();
-        if (v) payload[f.name] = v;
-        else if (isEdit && !f.required) payload[f.name] = "";
-      }
+    }
+    for (const f of cfg.textFields) {
+      const v = form[f.name].trim();
+      if (v) payload[f.name] = v;
+      else if (isEdit && !f.required) payload[f.name] = "";
     }
 
     const url = isEdit ? `/api/addresses/${initial!.id}` : "/api/addresses";
@@ -316,7 +316,9 @@ export function AddressForm({
         />
       </div>
 
-      {cfg.useRegions ? (
+      {/* NOT exclusive: GB/US/CA render the structured state select AND
+          city + postcode text fields (mirrors apps.core.address_rules). */}
+      {cfg.useRegions && (
         <div>
           <AccountRegionSelect
             country={form.country_code}
@@ -338,7 +340,8 @@ export function AddressForm({
             </p>
           )}
         </div>
-      ) : (
+      )}
+      {cfg.textFields.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2">
           {cfg.textFields.map((f) => (
             <div key={f.name}>

@@ -23,8 +23,10 @@ def client():
 
 
 def _option():
+    # NGN explicitly: the coverage endpoint refuses coverage in a currency the option
+    # is not priced in, and these tests cover NG places.
     return DeliveryOption.objects.create(
-        name="Lagos Delivery", price="1500", currency=Currency.objects.first(),
+        name="Lagos Delivery", price="1500", currency=Currency.objects.get(code="NGN"),
         min_days=1, max_days=2,
     )
 
@@ -119,15 +121,19 @@ def test_an_omitted_key_leaves_that_half_alone(client):
 
 
 def test_the_price_patch_still_cannot_touch_coverage(client):
+    """A PATCH carrying coverage keys is now REFUSED outright (400) rather than
+    half-applied — the client learns it is doing something unsupported, and neither
+    the price nor the coverage moves."""
     option = _option()
     option.countries.set(Country.objects.filter(code="NG"))
 
-    client.patch(
+    response = client.patch(
         f"/api/v1/admin/delivery-options/{option.pk}/",
         {"price": "1800", "country_codes": []},
         format="json",
     )
 
+    assert response.status_code == 400
     option.refresh_from_db()
-    assert str(option.price) == "1800.00"
+    assert str(option.price) == "1500.00"
     assert list(option.countries.values_list("code", flat=True)) == ["NG"]
