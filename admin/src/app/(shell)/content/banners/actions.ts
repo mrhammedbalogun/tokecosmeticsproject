@@ -8,8 +8,16 @@ import { fetchWithAuth } from "@/lib/session";
 
 export interface BannerState {
   savedAt?: number;
+  /** The banner's id — on create, the id the API just assigned, so the editor can
+   * attach staged media to the row it has only now learned the name of. */
+  id?: number;
   fieldErrors?: Record<string, string>;
   message?: string | null;
+}
+
+/** The homepage editor lives at /home-content; /content/banners now redirects there. */
+function revalidateHome() {
+  revalidatePath("/home-content");
 }
 
 function fail(e: unknown, fallback: string): BannerState {
@@ -31,6 +39,7 @@ export async function saveBannerAction(input: {
   cta_text: string;
   cta_url: string;
   placement: string;
+  sort: number;
   starts_at: string;
   ends_at: string;
   is_active: boolean;
@@ -47,22 +56,27 @@ export async function saveBannerAction(input: {
     cta_text: input.cta_text.trim(),
     cta_url: input.cta_url.trim(),
     placement: input.placement,
+    sort: input.sort,
     starts_at: input.starts_at || null,
     ends_at: input.ends_at || null,
     is_active: input.is_active,
   };
 
+  let saved: { id: number };
   try {
     if (input.id) {
-      await fetchWithAuth(`/admin/banners/${input.id}/`, { method: "PATCH", body });
+      saved = await fetchWithAuth<{ id: number }>(`/admin/banners/${input.id}/`, {
+        method: "PATCH",
+        body,
+      });
     } else {
-      await fetchWithAuth("/admin/banners/", { method: "POST", body });
+      saved = await fetchWithAuth<{ id: number }>("/admin/banners/", { method: "POST", body });
     }
   } catch (e) {
     return fail(e, "That banner could not be saved.");
   }
-  revalidatePath("/content/banners");
-  return { savedAt: Date.now() };
+  revalidateHome();
+  return { savedAt: Date.now(), id: saved.id };
 }
 
 export async function deleteBannerAction(id: number): Promise<BannerState> {
@@ -73,15 +87,31 @@ export async function deleteBannerAction(id: number): Promise<BannerState> {
   } catch (e) {
     return fail(e, "That banner could not be removed.");
   }
-  revalidatePath("/content/banners");
+  revalidateHome();
+  return { savedAt: Date.now() };
+}
+
+/**
+ * Rewrite a placement's order in one move: `orderedIds` is the FULL lineup for that
+ * placement (live and waiting alike), and each banner's `sort` becomes its index. Sending
+ * the whole lineup rather than a swapped pair normalises legacy rows that all sat at
+ * sort 0, where a pairwise swap would be a no-op.
+ */
+export async function reorderBannersAction(orderedIds: number[]): Promise<BannerState> {
+  try {
+    for (const [index, id] of orderedIds.entries()) {
+      await fetchWithAuth(`/admin/banners/${id}/`, { method: "PATCH", body: { sort: index } });
+    }
+  } catch (e) {
+    return fail(e, "The new order could not be saved.");
+  }
+  revalidateHome();
   return { savedAt: Date.now() };
 }
 
 /** Media uploads (landing redesign 2026-08-04): image, mobile image, or VIDEO —
  * all land in the Toke S3 bucket via the backend's FileField, exactly like
- * product images. A separate action from the JSON save for the products
- * pattern's reason: media is multipart and takes effect immediately; the
- * banner's text fields save together on Save. */
+ * product images. A separate action from the JSON save because media is multipart. */
 export async function uploadBannerMediaAction(
   id: number,
   kind: "image" | "mobile_image" | "video",
@@ -110,6 +140,20 @@ export async function uploadBannerMediaAction(
     if (!(e instanceof ApiError)) throw e;
     return { message: "The upload was refused — try again." };
   }
-  revalidatePath("/content/banners");
-  return { message: "Uploaded." };
+  revalidateHome();
+  return { savedAt: Date.now() };
+}
+
+/** Detach a banner's image or video (the FileFields are blank=True, so null clears). */
+export async function clearBannerMediaAction(
+  id: number,
+  kind: "image" | "mobile_image" | "video",
+): Promise<BannerState> {
+  try {
+    await fetchWithAuth(`/admin/banners/${id}/`, { method: "PATCH", body: { [kind]: null } });
+  } catch (e) {
+    return fail(e, "The file could not be removed.");
+  }
+  revalidateHome();
+  return { savedAt: Date.now() };
 }

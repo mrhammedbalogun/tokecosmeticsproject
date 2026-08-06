@@ -1,0 +1,404 @@
+"use client";
+
+/**
+ * The tile editor modal (Home Content rework, 2026-08-06).
+ *
+ * Opened FROM a tile, never from a blank form: the caller fixes the placement and the
+ * slot, so the editor never asks "where does this go?" — the one question the old
+ * placement dropdown forced on every edit. Fields come from the placement spec, labelled
+ * the way the storefront tile uses them ("Pill label", not "title").
+ *
+ * ── EVERYTHING APPLIES ON SAVE, MEDIA INCLUDED ──────────────────────────────────────
+ *
+ * The old form saved text on Save but pushed media live the moment a file was chosen —
+ * two publish moments for one tile, on the shop's front door. Here a chosen file is
+ * STAGED (previewed from a local object URL) and uploaded after the text save succeeds,
+ * so one Save publishes one coherent tile. On create this also kills the old
+ * "save first, then the upload buttons appear" two-step: the action returns the new id
+ * and the staged files chase it immediately.
+ *
+ * A PLAIN OVERLAY, not `<dialog>`, for StockAdjustModal's reason: this renders only
+ * while open, so showModal() ceremony buys nothing. Escape and the backdrop close it.
+ */
+import { startTransition, useEffect, useRef, useState } from "react";
+import {
+  clearBannerMediaAction,
+  deleteBannerAction,
+  saveBannerAction,
+  uploadBannerMediaAction,
+} from "@/app/(shell)/content/banners/actions";
+import type { BannerField, BannerRow, PlacementSpec } from "@/lib/banners";
+
+const FIELD =
+  "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
+
+type MediaKind = "image" | "video";
+
+/** What should happen to one media slot on Save: nothing, replace with `file`, or clear. */
+interface MediaDraft {
+  file: File | null;
+  previewUrl: string | null;
+  remove: boolean;
+}
+
+const UNTOUCHED: MediaDraft = { file: null, previewUrl: null, remove: false };
+
+export function HomeBannerModal({
+  spec,
+  banner,
+  presetSort,
+  heading,
+  onClose,
+}: {
+  spec: PlacementSpec;
+  /** null = creating a new banner for this placement. */
+  banner: BannerRow | null;
+  /** Where a NEW banner lands in the lineup (existing banners keep their sort). */
+  presetSort: number;
+  /** e.g. "Shop-by-category · Tile 2" — tells the editor what they clicked. */
+  heading: string;
+  onClose: () => void;
+}) {
+  const [values, setValues] = useState<Record<BannerField, string>>({
+    title: banner?.title ?? "",
+    subtitle: banner?.subtitle ?? "",
+    tagline: banner?.tagline ?? "",
+    cta_text: banner?.cta_text ?? "",
+    cta_url: banner?.cta_url ?? "",
+  });
+  const [startsAt, setStartsAt] = useState(banner?.starts_at?.slice(0, 10) ?? "");
+  const [endsAt, setEndsAt] = useState(banner?.ends_at?.slice(0, 10) ?? "");
+  const [isActive, setIsActive] = useState(banner?.is_active ?? true);
+  const [media, setMedia] = useState<Record<MediaKind, MediaDraft>>({
+    image: UNTOUCHED,
+    video: UNTOUCHED,
+  });
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const [removeArmed, setRemoveArmed] = useState(false);
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    firstFieldRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  // Object URLs leak GPU/heap until revoked; one cleanup on unmount covers close,
+  // save-and-close and cancel alike.
+  const urlsRef = useRef<string[]>([]);
+  useEffect(() => {
+    const urls = urlsRef.current;
+    return () => urls.forEach((u) => URL.revokeObjectURL(u));
+  }, []);
+
+  const stageFile = (kind: MediaKind, file: File | null) => {
+    if (!file) return;
+    const previewUrl = URL.createObjectURL(file);
+    urlsRef.current.push(previewUrl);
+    setMedia((m) => ({ ...m, [kind]: { file, previewUrl, remove: false } }));
+  };
+
+  const stageRemove = (kind: MediaKind) => {
+    setMedia((m) => ({ ...m, [kind]: { file: null, previewUrl: null, remove: true } }));
+  };
+
+  const unstage = (kind: MediaKind) => {
+    setMedia((m) => ({ ...m, [kind]: UNTOUCHED }));
+  };
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPending(true);
+    setErrors({});
+    setMessage(null);
+    startTransition(async () => {
+      const state = await saveBannerAction({
+        id: banner?.id,
+        title: values.title,
+        subtitle: values.subtitle,
+        tagline: values.tagline,
+        cta_text: values.cta_text,
+        cta_url: values.cta_url,
+        placement: spec.value,
+        sort: banner?.sort ?? presetSort,
+        starts_at: startsAt,
+        ends_at: endsAt,
+        is_active: isActive,
+      });
+      if (!state.savedAt || !state.id) {
+        setPending(false);
+        setErrors(state.fieldErrors ?? {});
+        setMessage(state.message ?? null);
+        return;
+      }
+      // Text is saved; now let the staged media chase the id. A failed upload keeps the
+      // modal open and says so — the tile exists, its artwork just has not changed.
+      for (const kind of ["image", "video"] as MediaKind[]) {
+        const draft = media[kind];
+        let result = null;
+        if (draft.file) {
+          const formData = new FormData();
+          formData.set("file", draft.file);
+          result = await uploadBannerMediaAction(state.id, kind, formData);
+        } else if (draft.remove) {
+          result = await clearBannerMediaAction(state.id, kind);
+        }
+        if (result && !result.savedAt) {
+          setPending(false);
+          setMessage(
+            `Saved, but the ${kind === "video" ? "video" : "image"} did not go through: ${result.message ?? "try the upload again."}`,
+          );
+          return;
+        }
+      }
+      setPending(false);
+      onClose();
+    });
+  };
+
+  const remove = () => {
+    if (!banner) return;
+    if (!removeArmed) {
+      setRemoveArmed(true);
+      return;
+    }
+    setPending(true);
+    startTransition(async () => {
+      const state = await deleteBannerAction(banner.id);
+      setPending(false);
+      if (state.savedAt) onClose();
+      else setMessage(state.message ?? "That could not be removed.");
+    });
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-8"
+      role="dialog"
+      aria-modal="true"
+      aria-label={heading}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <form
+        onSubmit={submit}
+        className="w-full max-w-xl rounded-[var(--radius-card)] border border-line bg-background p-5 shadow-lg"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold">{heading}</h2>
+            <p className="mt-0.5 text-xs text-muted">{spec.guide}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded border border-line px-2 py-0.5 text-sm text-muted hover:border-accent hover:text-fg"
+          >
+            ✕
+          </button>
+        </div>
+
+        {message && (
+          <p className="mt-3 rounded border border-warn/30 bg-warn/5 p-2 text-sm text-warn" role="alert">
+            {message}
+          </p>
+        )}
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {spec.fields.map((field, i) => (
+            <label
+              key={field.key}
+              className={`block text-xs text-muted ${field.key === "tagline" || field.key === "title" ? "sm:col-span-2" : ""}`}
+            >
+              {field.label}
+              <input
+                ref={i === 0 ? firstFieldRef : undefined}
+                type="text"
+                value={values[field.key]}
+                onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                className={`mt-1 ${FIELD}`}
+              />
+              {field.hint && <span className="mt-1 block text-[11px] text-muted">{field.hint}</span>}
+              {errors[field.key] && <p className="mt-1 text-xs text-warn">{errors[field.key]}</p>}
+            </label>
+          ))}
+        </div>
+
+        {spec.media && (
+          <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-2">
+            <MediaSlot
+              label="Image"
+              kind="image"
+              accept="image/*"
+              current={banner?.image ?? null}
+              draft={media.image}
+              aspect={spec.aspect}
+              onPick={(f) => stageFile("image", f)}
+              onRemove={() => stageRemove("image")}
+              onUndo={() => unstage("image")}
+            />
+            <MediaSlot
+              label={spec.value === "hero" ? "Video (the image becomes its poster)" : "Video (optional — plays instead of the image)"}
+              kind="video"
+              accept="video/mp4,video/webm"
+              current={banner?.video ?? null}
+              draft={media.video}
+              aspect={spec.aspect}
+              onPick={(f) => stageFile("video", f)}
+              onRemove={() => stageRemove("video")}
+              onUndo={() => unstage("video")}
+            />
+          </div>
+        )}
+
+        <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-3">
+          <label className="block text-xs text-muted">
+            Starts
+            <input type="date" value={startsAt} onChange={(e) => setStartsAt(e.target.value)} className={`mt-1 ${FIELD}`} />
+          </label>
+          <label className="block text-xs text-muted">
+            Ends
+            <input type="date" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} className={`mt-1 ${FIELD}`} />
+            {errors.ends_at && <p className="mt-1 text-xs text-warn">{errors.ends_at}</p>}
+          </label>
+          <label className="flex items-end gap-2 pb-1 text-sm">
+            <input
+              type="checkbox"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+              className="h-4 w-4 rounded border-line"
+            />
+            Switched on
+          </label>
+        </div>
+        <p className="mt-2 text-[11px] text-muted">
+          Leave the dates empty to show always. Scheduling is enforced on the server — a
+          tile never appears before its start.
+        </p>
+
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            type="submit"
+            disabled={pending}
+            className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
+          >
+            {pending ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded border border-line px-3 py-1.5 text-sm hover:border-accent"
+          >
+            Cancel
+          </button>
+          {banner && (
+            <button
+              type="button"
+              onClick={remove}
+              disabled={pending}
+              className={`ml-auto rounded border px-3 py-1.5 text-sm disabled:opacity-40 ${
+                removeArmed
+                  ? "border-warn bg-warn/10 text-warn"
+                  : "border-line text-muted hover:border-warn hover:text-warn"
+              }`}
+            >
+              {removeArmed ? "Really remove?" : "Remove"}
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * One staged media slot. Three visual states: the staged pick (object URL), the current
+ * upload (S3 URL), or empty. "Remove" stages a clear; "Undo" walks either staging back.
+ */
+function MediaSlot({
+  label,
+  kind,
+  accept,
+  current,
+  draft,
+  aspect,
+  onPick,
+  onRemove,
+  onUndo,
+}: {
+  label: string;
+  kind: MediaKind;
+  accept: string;
+  current: string | null;
+  draft: MediaDraft;
+  aspect: string;
+  onPick: (file: File) => void;
+  onRemove: () => void;
+  onUndo: () => void;
+}) {
+  const showUrl = draft.previewUrl ?? (draft.remove ? null : current);
+  const staged = draft.file !== null || draft.remove;
+  return (
+    <div className="text-xs">
+      <p className="font-medium text-muted">{label}</p>
+      <div
+        className={`mt-1.5 overflow-hidden rounded border border-line bg-surface ${aspect || "aspect-video"}`}
+      >
+        {showUrl ? (
+          kind === "video" ? (
+            <video src={showUrl} preload="metadata" muted playsInline className="h-full w-full object-cover" />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail of an
+            // uploaded/staged file; next/image buys nothing here.
+            <img src={showUrl} alt="" className="h-full w-full object-cover" />
+          )
+        ) : (
+          <div className="grid h-full w-full place-items-center text-muted">
+            {draft.remove ? "will be removed" : "none yet"}
+          </div>
+        )}
+      </div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        <label className="inline-block cursor-pointer rounded border border-line px-2.5 py-1 hover:border-accent">
+          {showUrl ? "Replace" : "Choose file"}
+          <input
+            type="file"
+            accept={accept}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.currentTarget.files?.[0];
+              if (file) onPick(file);
+              e.currentTarget.value = "";
+            }}
+          />
+        </label>
+        {staged ? (
+          <button type="button" onClick={onUndo} className="rounded border border-line px-2.5 py-1 hover:border-accent">
+            Undo
+          </button>
+        ) : (
+          current && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="rounded border border-line px-2.5 py-1 text-muted hover:border-warn hover:text-warn"
+            >
+              Remove
+            </button>
+          )
+        )}
+      </div>
+      {staged && <p className="mt-1 text-[11px] text-muted">Applies when you press Save.</p>}
+    </div>
+  );
+}

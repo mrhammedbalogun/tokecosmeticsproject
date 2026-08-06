@@ -88,7 +88,7 @@ export function PagesList({ pages }: { pages: PageRow[] }) {
       </section>
 
       <p className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-        <Link href="/content/banners" className="underline underline-offset-2 hover:text-accent">
+        <Link href="/home-content" className="underline underline-offset-2 hover:text-accent">
           Banners and the homepage hero →
         </Link>
         <Link href="/content/reviews" className="underline underline-offset-2 hover:text-accent">

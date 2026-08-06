@@ -1,17 +1,296 @@
-export const PLACEMENTS: { value: string; label: string; guide: string }[] = [
-  { value: "hero", label: "Hero slide", guide: "Image 1920×1080 (or video mp4/webm, ≤60s, ≤80 MB — image becomes the poster). Title, subtitle and CTA render on the slide; 2+ slides make the slider rotate." },
-  { value: "strip", label: "News marquee item", guide: "Text only — the title scrolls in the news bar; CTA URL makes it a link. No media needed." },
-  { value: "category", label: "Shop-by-category tile", guide: "Image/video 900×1200 (3:4 portrait). Title is the pill label; CTA URL is the destination. Up to 4 tiles, ordered by sort." },
-  { value: "concern", label: "Shop-by-concern tile", guide: "Image/video 1200×525 (16:7 wide). Title is the label; CTA URL the destination. Up to 3 tiles, ordered by sort." },
-  { value: "feature", label: "Glow Set feature", guide: "Image/video 1400×1000. Title, tagline (the paragraph), CTA text + URL all show. One banner." },
-  { value: "feature_nature", label: "tokè × natural tile", guide: "Image/video 1200×600. Subtitle is the small eyebrow, title the line under it. One banner." },
-  { value: "feature_collection", label: "Toke Naturals tile", guide: "Image/video 1200×600. Subtitle eyebrow + title; CTA URL is where the tile links. One banner." },
-  { value: "men", label: "Men section banner", guide: "Image/video 1200×1100. Subtitle = eyebrow, title, tagline, CTA text + URL. Products beside it come from the ‘men’ collection." },
-  { value: "women", label: "Women section banner", guide: "Image/video 1200×1100. Same fields as Men; products from the ‘women’ collection." },
-  { value: "babies", label: "Babies section banner", guide: "Image/video 1200×1100. Same fields as Men; products from the ‘babies’ collection." },
-  { value: "tiktok", label: "TikTok section banner", guide: "Image/video 1300×900. Title, tagline, CTA text + URL. Products beside it come from best sellers." },
-  { value: "trio", label: "Collections trio tile", guide: "Image/video 900×1200 (3:4). Title, tagline, CTA text + URL. Up to 3 tiles, ordered by sort." },
+/**
+ * The homepage placement catalogue (Plan-19c, reworked for the section-mirror editor).
+ *
+ * Each spec describes one storefront tile placement WELL ENOUGH TO EDIT IT BLIND: which
+ * Banner fields the tile actually renders (with the storefront's own vocabulary — "Pill
+ * label", not "title"), the artwork shape, how many tiles the section holds, and the
+ * built-in content a slot falls back to. The specs mirror the storefront components
+ * (`storefront/src/components/home/*`); if a section's fields or defaults change there,
+ * change them here, because this file is what the admin promises the shop will show.
+ */
+
+export type BannerField = "title" | "subtitle" | "tagline" | "cta_text" | "cta_url";
+
+export interface PlacementSpec {
+  value: string;
+  /** Section / tile name as the admin shows it. */
+  label: string;
+  /** The artwork cheat-sheet shown in the editor. */
+  guide: string;
+  /** The fields this tile renders, labelled the way the tile uses them. */
+  fields: { key: BannerField; label: string; hint?: string }[];
+  /** false for the text-only news marquee. */
+  media: boolean;
+  /** Tailwind aspect class matching the storefront tile, so thumbnails keep its shape. */
+  aspect: string;
+  /**
+   * Fixed tile count (the storefront maps CMS banners onto exactly this many slots,
+   * in sort order) or null for as-many-as-you-like (hero slides, news items).
+   */
+  slots: number | null;
+  /**
+   * The storefront's built-ins. For fixed-slot sections, per slot: an empty slot keeps
+   * its own built-in. For unlimited sections the semantics differ — the built-ins show
+   * only while the section has NO live banners at all; the first live one replaces the
+   * whole set.
+   */
+  defaults: Partial<Record<BannerField, string>>[];
+}
+
+export const PLACEMENTS: PlacementSpec[] = [
+  {
+    value: "strip",
+    label: "News marquee",
+    guide: "Text only — the message scrolls in the news bar; a link makes it clickable. No artwork.",
+    fields: [
+      { key: "title", label: "Message" },
+      { key: "cta_url", label: "Link (optional)", hint: "e.g. /products?collection=best-sellers" },
+    ],
+    media: false,
+    aspect: "",
+    slots: null,
+    defaults: [
+      { title: "Free delivery in Nigeria on orders over ₦50,000" },
+      { title: "Worldwide shipping — UK · US · Canada · everywhere" },
+      { title: "Dermatologist recommended, made for melanin-rich skin" },
+      { title: "Secure worldwide checkout" },
+    ],
+  },
+  {
+    value: "hero",
+    label: "Hero slide",
+    guide: "Image 1920×1080, or video mp4/webm ≤60s ≤80 MB (the image becomes the poster). 2+ slides make the slider rotate.",
+    fields: [
+      { key: "subtitle", label: "Eyebrow", hint: "The small line above the headline." },
+      { key: "title", label: "Headline" },
+      { key: "cta_text", label: "Button text" },
+      { key: "cta_url", label: "Button link" },
+    ],
+    media: true,
+    aspect: "aspect-video",
+    slots: null,
+    defaults: [{ subtitle: "Premium African skincare", title: "Healthy Skin Begins Here." }],
+  },
+  {
+    value: "category",
+    label: "Shop-by-category tile",
+    guide: "Image/video 900×1200 (3:4 portrait).",
+    fields: [
+      { key: "title", label: "Pill label" },
+      { key: "cta_url", label: "Tile link" },
+    ],
+    media: true,
+    aspect: "aspect-[3/4]",
+    slots: 4,
+    defaults: [
+      { title: "Best Sellers", cta_url: "/products?collection=best-sellers" },
+      { title: "Skin", cta_url: "/products" },
+      { title: "Hair", cta_url: "/products?q=hair" },
+      { title: "Babies", cta_url: "/products?collection=babies" },
+    ],
+  },
+  {
+    value: "concern",
+    label: "Shop-by-concern tile",
+    guide: "Image/video 1200×525 (16:7 wide).",
+    fields: [
+      { key: "title", label: "Label" },
+      { key: "cta_url", label: "Tile link" },
+    ],
+    media: true,
+    aspect: "aspect-[16/7]",
+    slots: 3,
+    defaults: [
+      { title: "Acne", cta_url: "/products?q=acne" },
+      { title: "Hyperpigmentation", cta_url: "/products?q=brightening" },
+      { title: "Dry Skin", cta_url: "/products?q=hydrating" },
+    ],
+  },
+  {
+    value: "feature",
+    label: "Glow Set feature",
+    guide: "Image/video 1400×1000.",
+    fields: [
+      { key: "title", label: "Heading" },
+      { key: "tagline", label: "Paragraph" },
+      { key: "cta_text", label: "Button text" },
+      { key: "cta_url", label: "Button link" },
+    ],
+    media: true,
+    aspect: "aspect-[7/5]",
+    slots: 1,
+    defaults: [
+      {
+        title: "The Glow Set",
+        tagline:
+          "Brightening oil, daily facial wash and repair cream — the routine our community swears by.",
+        cta_text: "Shop the Set",
+        cta_url: "/products?collection=best-sellers",
+      },
+    ],
+  },
+  {
+    value: "feature_nature",
+    label: "tokè × natural tile",
+    guide: "Image/video 1200×600. This tile is not a link — it sets the mood beside the Glow Set.",
+    fields: [
+      { key: "subtitle", label: "Eyebrow" },
+      { key: "title", label: "Heading" },
+    ],
+    media: true,
+    aspect: "aspect-[2/1]",
+    slots: 1,
+    defaults: [{ subtitle: "tokè × natural", title: "Grown from nature, proven by science" }],
+  },
+  {
+    value: "feature_collection",
+    label: "Toke Naturals tile",
+    guide: "Image/video 1200×600.",
+    fields: [
+      { key: "subtitle", label: "Eyebrow" },
+      { key: "title", label: "Heading" },
+      { key: "cta_url", label: "Tile link" },
+    ],
+    media: true,
+    aspect: "aspect-[2/1]",
+    slots: 1,
+    defaults: [{ subtitle: "Collection", title: "Toke Naturals", cta_url: "/products?q=natural" }],
+  },
+  {
+    value: "men",
+    label: "Men section banner",
+    guide: "Image/video 1200×1100. The products beside it come from the ‘men’ collection.",
+    fields: [
+      { key: "subtitle", label: "Eyebrow" },
+      { key: "title", label: "Heading" },
+      { key: "tagline", label: "Line under the heading" },
+      { key: "cta_text", label: "Button text" },
+      { key: "cta_url", label: "Button link" },
+    ],
+    media: true,
+    aspect: "aspect-[12/11]",
+    slots: 1,
+    defaults: [
+      {
+        subtitle: "New Formulas",
+        title: "New for Men",
+        tagline: "Made for men's skin",
+        cta_text: "Shop now",
+        cta_url: "/products?collection=men",
+      },
+    ],
+  },
+  {
+    value: "women",
+    label: "Women section banner",
+    guide: "Image/video 1200×1100. The products beside it come from the ‘women’ collection.",
+    fields: [
+      { key: "subtitle", label: "Eyebrow" },
+      { key: "title", label: "Heading" },
+      { key: "tagline", label: "Line under the heading" },
+      { key: "cta_text", label: "Button text" },
+      { key: "cta_url", label: "Button link" },
+    ],
+    media: true,
+    aspect: "aspect-[12/11]",
+    slots: 1,
+    defaults: [
+      {
+        subtitle: "Radiance Rituals",
+        title: "For Women",
+        tagline: "Glow that starts with care",
+        cta_text: "Shop now",
+        cta_url: "/products?collection=women",
+      },
+    ],
+  },
+  {
+    value: "babies",
+    label: "Babies section banner",
+    guide: "Image/video 1200×1100. The products beside it come from the ‘babies’ collection.",
+    fields: [
+      { key: "subtitle", label: "Eyebrow" },
+      { key: "title", label: "Heading" },
+      { key: "tagline", label: "Line under the heading" },
+      { key: "cta_text", label: "Button text" },
+      { key: "cta_url", label: "Button link" },
+    ],
+    media: true,
+    aspect: "aspect-[12/11]",
+    slots: 1,
+    defaults: [
+      {
+        subtitle: "Gentle by Design",
+        title: "For Babies",
+        tagline: "Soft care for the softest skin",
+        cta_text: "Shop now",
+        cta_url: "/products?collection=babies",
+      },
+    ],
+  },
+  {
+    value: "tiktok",
+    label: "TikTok section banner",
+    guide: "Image/video 1300×900. The products beside it come from best sellers.",
+    fields: [
+      { key: "title", label: "Heading" },
+      { key: "tagline", label: "Line under the heading" },
+      { key: "cta_text", label: "Button text" },
+      { key: "cta_url", label: "Button link" },
+    ],
+    media: true,
+    aspect: "aspect-[13/9]",
+    slots: 1,
+    defaults: [
+      {
+        title: "TikTok Made Me Try It",
+        tagline: "The community favourites, as seen on your feed.",
+        cta_text: "Shop Now",
+        cta_url: "/products?collection=best-sellers",
+      },
+    ],
+  },
+  {
+    value: "trio",
+    label: "Collections trio tile",
+    guide: "Image/video 900×1200 (3:4 portrait).",
+    fields: [
+      { key: "title", label: "Heading" },
+      { key: "tagline", label: "Line under the heading" },
+      { key: "cta_text", label: "Button text" },
+      { key: "cta_url", label: "Button link" },
+    ],
+    media: true,
+    aspect: "aspect-[3/4]",
+    slots: 3,
+    defaults: [
+      {
+        title: "Kids' Collection",
+        tagline: "Made comfortable for growing skin.",
+        cta_text: "Explore",
+        cta_url: "/products?collection=babies",
+      },
+      {
+        title: "Men's Essentials",
+        tagline: "Built for strength, made to refresh.",
+        cta_text: "Explore",
+        cta_url: "/products?collection=men",
+      },
+      {
+        title: "Family",
+        tagline: "Together in care, together in glow.",
+        cta_text: "Explore",
+        cta_url: "/products",
+      },
+    ],
+  },
 ];
+
+export function placementSpec(value: string): PlacementSpec {
+  const spec = PLACEMENTS.find((p) => p.value === value);
+  if (!spec) throw new Error(`Unknown banner placement: ${value}`);
+  return spec;
+}
 
 /** Banner shapes and the "is it showing?" question (Plan-19c). */
 
@@ -56,4 +335,9 @@ export function livePlacement(banners: BannerRow[], placement: string, now = new
   return banners
     .filter((b) => b.placement === placement && bannerState(b, now) === "live")
     .sort((a, b) => a.sort - b.sort);
+}
+
+/** Every banner in a placement, in sort order — the lineup the editor manages. */
+export function placementBanners(banners: BannerRow[], placement: string) {
+  return banners.filter((b) => b.placement === placement).sort((a, b) => a.sort - b.sort);
 }
