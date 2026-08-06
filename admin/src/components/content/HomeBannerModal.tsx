@@ -27,12 +27,12 @@ import {
   saveBannerAction,
   uploadBannerMediaAction,
 } from "@/app/(shell)/content/banners/actions";
-import type { BannerField, BannerRow, PlacementSpec } from "@/lib/banners";
+import type { BannerField, BannerRow, CountryOption, PlacementSpec } from "@/lib/banners";
 
 const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
 
-type MediaKind = "image" | "video";
+type MediaKind = "image" | "mobile_image" | "video";
 
 /** What should happen to one media slot on Save: nothing, replace with `file`, or clear. */
 interface MediaDraft {
@@ -48,6 +48,7 @@ export function HomeBannerModal({
   banner,
   presetSort,
   heading,
+  countryOptions,
   onClose,
 }: {
   spec: PlacementSpec;
@@ -57,6 +58,8 @@ export function HomeBannerModal({
   presetSort: number;
   /** e.g. "Shop-by-category · Tile 2" — tells the editor what they clicked. */
   heading: string;
+  /** The markets the store sells into, for geo-targeting. Empty list hides the control. */
+  countryOptions: CountryOption[];
   onClose: () => void;
 }) {
   const [values, setValues] = useState<Record<BannerField, string>>({
@@ -69,8 +72,10 @@ export function HomeBannerModal({
   const [startsAt, setStartsAt] = useState(banner?.starts_at?.slice(0, 10) ?? "");
   const [endsAt, setEndsAt] = useState(banner?.ends_at?.slice(0, 10) ?? "");
   const [isActive, setIsActive] = useState(banner?.is_active ?? true);
+  const [countries, setCountries] = useState<string[]>(banner?.countries ?? []);
   const [media, setMedia] = useState<Record<MediaKind, MediaDraft>>({
     image: UNTOUCHED,
+    mobile_image: UNTOUCHED,
     video: UNTOUCHED,
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -132,6 +137,7 @@ export function HomeBannerModal({
         starts_at: startsAt,
         ends_at: endsAt,
         is_active: isActive,
+        countries,
       });
       if (!state.savedAt || !state.id) {
         setPending(false);
@@ -141,7 +147,7 @@ export function HomeBannerModal({
       }
       // Text is saved; now let the staged media chase the id. A failed upload keeps the
       // modal open and says so — the tile exists, its artwork just has not changed.
-      for (const kind of ["image", "video"] as MediaKind[]) {
+      for (const kind of ["image", "mobile_image", "video"] as MediaKind[]) {
         const draft = media[kind];
         let result = null;
         if (draft.file) {
@@ -152,9 +158,10 @@ export function HomeBannerModal({
           result = await clearBannerMediaAction(state.id, kind);
         }
         if (result && !result.savedAt) {
+          const noun = kind === "video" ? "video" : kind === "mobile_image" ? "phone image" : "image";
           setPending(false);
           setMessage(
-            `Saved, but the ${kind === "video" ? "video" : "image"} did not go through: ${result.message ?? "try the upload again."}`,
+            `Saved, but the ${noun} did not go through: ${result.message ?? "try the upload again."}`,
           );
           return;
         }
@@ -258,6 +265,17 @@ export function HomeBannerModal({
               onRemove={() => stageRemove("video")}
               onUndo={() => unstage("video")}
             />
+            <MediaSlot
+              label="Phone image (optional — small screens show it instead of the image)"
+              kind="mobile_image"
+              accept="image/*"
+              current={banner?.mobile_image ?? null}
+              draft={media.mobile_image}
+              aspect={spec.aspect}
+              onPick={(f) => stageFile("mobile_image", f)}
+              onRemove={() => stageRemove("mobile_image")}
+              onUndo={() => unstage("mobile_image")}
+            />
           </div>
         )}
 
@@ -285,6 +303,38 @@ export function HomeBannerModal({
           Leave the dates empty to show always. Scheduling is enforced on the server — a
           tile never appears before its start.
         </p>
+
+        {countryOptions.length > 0 && (
+          <div className="mt-4 border-t border-line pt-4">
+            <p className="text-xs font-medium text-muted">
+              Countries — tick none to show everywhere
+            </p>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1.5">
+              {countryOptions.map((c) => (
+                <label key={c.code} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={countries.includes(c.code)}
+                    onChange={(e) =>
+                      setCountries((prev) =>
+                        e.target.checked
+                          ? [...prev, c.code]
+                          : prev.filter((code) => code !== c.code),
+                      )
+                    }
+                    className="h-4 w-4 rounded border-line"
+                  />
+                  {c.name}
+                </label>
+              ))}
+            </div>
+            {countries.length > 0 && (
+              <p className="mt-1.5 text-[11px] text-muted">
+                Visitors outside the ticked countries will not see this tile.
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 flex items-center gap-2">
           <button

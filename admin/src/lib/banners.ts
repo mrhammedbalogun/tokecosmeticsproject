@@ -313,6 +313,12 @@ export interface BannerRow {
   updated_at: string;
 }
 
+/** A market the store sells into, as the geo-targeting picker needs it. */
+export interface CountryOption {
+  code: string;
+  name: string;
+}
+
 export type BannerState = "live" | "scheduled" | "ended" | "off";
 
 /**

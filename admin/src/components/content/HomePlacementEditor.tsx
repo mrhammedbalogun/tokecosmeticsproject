@@ -31,6 +31,7 @@ import {
   placementSpec,
   type BannerField,
   type BannerRow,
+  type CountryOption,
 } from "@/lib/banners";
 
 const STATE_STYLES: Record<string, string> = {
@@ -54,6 +55,7 @@ export function HomePlacementEditor({
   layout,
   gridClass = "grid-cols-2 md:grid-cols-3",
   itemNoun = "tile",
+  countryOptions = [],
 }: {
   placement: string;
   /** The full banner list — filtering by placement happens here. */
@@ -64,6 +66,8 @@ export function HomePlacementEditor({
   gridClass?: string;
   /** What one entry is called in buttons and headings: "tile", "slide", "news item". */
   itemNoun?: string;
+  /** Markets for the editor's geo-targeting picker. */
+  countryOptions?: CountryOption[];
 }) {
   const spec = placementSpec(placement);
   const all = placementBanners(banners, placement);
@@ -195,6 +199,7 @@ export function HomePlacementEditor({
           banner={editor.banner}
           presetSort={editor.presetSort}
           heading={editor.heading}
+          countryOptions={countryOptions}
           onClose={() => setEditor(null)}
         />
       )}

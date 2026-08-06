@@ -43,6 +43,8 @@ export async function saveBannerAction(input: {
   starts_at: string;
   ends_at: string;
   is_active: boolean;
+  /** Country codes the banner is limited to; empty means everywhere. */
+  countries: string[];
 }): Promise<BannerState> {
   if (!input.title.trim()) return { fieldErrors: { title: "A banner needs a title." } };
   if (input.starts_at && input.ends_at && input.starts_at >= input.ends_at) {
@@ -60,6 +62,7 @@ export async function saveBannerAction(input: {
     starts_at: input.starts_at || null,
     ends_at: input.ends_at || null,
     is_active: input.is_active,
+    countries: input.countries,
   };
 
   let saved: { id: number };

@@ -6,8 +6,15 @@ import {
   type ReviewRow,
   type ReviewsMeta,
 } from "@/components/content/GoogleReviewsManager";
+import {
+  RowCollectionEditor,
+  type RowCollectionOption,
+} from "@/components/content/RowCollectionEditor";
+import { StorefrontPreview } from "@/components/content/StorefrontPreview";
+import type { RowKey } from "@/app/(shell)/home-content/actions";
 import { ApiError } from "@/lib/api";
-import type { BannerRow } from "@/lib/banners";
+import type { BannerRow, CountryOption } from "@/lib/banners";
+import { storefrontUrl } from "@/lib/env";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Home Content" };
@@ -30,6 +37,13 @@ interface CollectionRow {
   is_active: boolean;
 }
 
+/** A `collection_carousel` HomepageSection — one product row's collection override. */
+interface SectionRow {
+  id: number;
+  type: string;
+  config: { row?: string; collection?: string };
+}
+
 export default async function HomeContentPage() {
   await requireAdmin(PATH);
 
@@ -37,9 +51,12 @@ export default async function HomeContentPage() {
   let reviews: ReviewRow[] = [];
   let meta: ReviewsMeta = { rating: null, review_count_text: "", profile_url: "" };
   let collections: CollectionRow[] = [];
+  let countryOptions: CountryOption[] = [];
+  let sections: SectionRow[] = [];
   let error: string | null = null;
   try {
-    const [bannerData, reviewData, metaData, collectionData] = await Promise.all([
+    const [bannerData, reviewData, metaData, collectionData, countryData, sectionData] =
+      await Promise.all([
       fetchWithAuthOrBounce<{ results: BannerRow[] } | BannerRow[]>("/admin/banners/", PATH),
       fetchWithAuthOrBounce<{ results: ReviewRow[] } | ReviewRow[]>("/admin/google-reviews/", PATH),
       fetchWithAuthOrBounce<ReviewsMeta>("/admin/google-reviews-meta/", PATH),
@@ -48,11 +65,21 @@ export default async function HomeContentPage() {
         "/admin/collections/",
         PATH,
       ).catch(() => [] as CollectionRow[]),
+      // Geo-targeting picker; the modal hides the control if this comes back empty.
+      fetchWithAuthOrBounce<CountryOption[]>("/meta/countries/", PATH).catch(
+        () => [] as CountryOption[],
+      ),
+      fetchWithAuthOrBounce<{ results: SectionRow[] } | SectionRow[]>(
+        "/admin/homepage-sections/?type=collection_carousel",
+        PATH,
+      ),
     ]);
     banners = Array.isArray(bannerData) ? bannerData : (bannerData?.results ?? []);
     reviews = Array.isArray(reviewData) ? reviewData : (reviewData?.results ?? []);
     meta = metaData ?? meta;
     collections = Array.isArray(collectionData) ? collectionData : (collectionData?.results ?? []);
+    countryOptions = countryData.map((c) => ({ code: c.code, name: c.name }));
+    sections = Array.isArray(sectionData) ? sectionData : (sectionData?.results ?? []);
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
     error =
@@ -77,6 +104,22 @@ export default async function HomeContentPage() {
     return `${n} product${n === 1 ? "" : "s"}`;
   };
 
+  const rowOptions: RowCollectionOption[] = collections.map((c) => ({
+    name: c.name,
+    slug: c.slug,
+    productCount: c.products?.length ?? 0,
+  }));
+  const rowOverride = (row: RowKey) => {
+    const section = sections.find((s) => s.type === "collection_carousel" && s.config?.row === row);
+    return {
+      sectionId: section?.id ?? null,
+      currentSlug:
+        typeof section?.config?.collection === "string" && section.config.collection
+          ? section.config.collection
+          : null,
+    };
+  };
+
   return (
     <div className="space-y-10">
       <div>
@@ -92,8 +135,10 @@ export default async function HomeContentPage() {
         </p>
       </div>
 
+      <StorefrontPreview url={storefrontUrl()} />
+
       <Section n={1} title="News marquee" blurb="The scrolling bar at the very top.">
-        <HomePlacementEditor placement="strip" banners={banners} layout="list" itemNoun="news item" />
+        <HomePlacementEditor placement="strip" banners={banners} countryOptions={countryOptions} layout="list" itemNoun="news item" />
       </Section>
 
       <Section
@@ -103,7 +148,7 @@ export default async function HomeContentPage() {
       >
         <HomePlacementEditor
           placement="hero"
-          banners={banners}
+          banners={banners} countryOptions={countryOptions}
           layout="slides"
           gridClass="sm:grid-cols-2 xl:grid-cols-3"
           itemNoun="slide"
@@ -113,7 +158,7 @@ export default async function HomeContentPage() {
       <Section n={3} title="Shop by Category" blurb="Four portrait tiles.">
         <HomePlacementEditor
           placement="category"
-          banners={banners}
+          banners={banners} countryOptions={countryOptions}
           layout="grid"
           gridClass="grid-cols-2 lg:grid-cols-4"
         />
@@ -122,7 +167,7 @@ export default async function HomeContentPage() {
       <Section n={4} title="Shop by Concern" blurb="Three wide tiles.">
         <HomePlacementEditor
           placement="concern"
-          banners={banners}
+          banners={banners} countryOptions={countryOptions}
           layout="grid"
           gridClass="md:grid-cols-3"
         />
@@ -136,34 +181,35 @@ export default async function HomeContentPage() {
         <div className="grid gap-4 lg:grid-cols-2">
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted">Glow Set feature</p>
-            <HomePlacementEditor placement="feature" banners={banners} layout="grid" gridClass="grid-cols-1" />
+            <HomePlacementEditor placement="feature" banners={banners} countryOptions={countryOptions} layout="grid" gridClass="grid-cols-1" />
           </div>
           <div className="space-y-4">
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted">tokè × natural</p>
-              <HomePlacementEditor placement="feature_nature" banners={banners} layout="grid" gridClass="grid-cols-1" />
+              <HomePlacementEditor placement="feature_nature" banners={banners} countryOptions={countryOptions} layout="grid" gridClass="grid-cols-1" />
             </div>
             <div>
               <p className="mb-1.5 text-xs font-medium text-muted">Toke Naturals</p>
-              <HomePlacementEditor placement="feature_collection" banners={banners} layout="grid" gridClass="grid-cols-1" />
+              <HomePlacementEditor placement="feature_collection" banners={banners} countryOptions={countryOptions} layout="grid" gridClass="grid-cols-1" />
             </div>
           </div>
         </div>
       </Section>
 
-      <RowSection
+      <Section
         n={6}
         title="“Loved by thousands” row"
-        slug="best-sellers"
-        status={rowStatus("best-sellers")}
-      />
+        blurb="A shelf of up to 8 products from the collection below; it hides while the collection is empty."
+      >
+        <RowCollectionEditor row="loved" defaultSlug="best-sellers" options={rowOptions} {...rowOverride("loved")} />
+      </Section>
 
       <Section
         n={7}
         title="New for Men"
         blurb={`The tall banner beside the men's products. Products come from the ‘men’ collection — ${rowStatus("men")}.`}
       >
-        <HomePlacementEditor placement="men" banners={banners} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
+        <HomePlacementEditor placement="men" banners={banners} countryOptions={countryOptions} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
       </Section>
 
       <Section
@@ -171,7 +217,7 @@ export default async function HomeContentPage() {
         title="For Women"
         blurb={`Products come from the ‘women’ collection — ${rowStatus("women")}.`}
       >
-        <HomePlacementEditor placement="women" banners={banners} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
+        <HomePlacementEditor placement="women" banners={banners} countryOptions={countryOptions} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
       </Section>
 
       <Section
@@ -179,28 +225,29 @@ export default async function HomeContentPage() {
         title="For Babies"
         blurb={`Products come from the ‘babies’ collection — ${rowStatus("babies")}.`}
       >
-        <HomePlacementEditor placement="babies" banners={banners} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
+        <HomePlacementEditor placement="babies" banners={banners} countryOptions={countryOptions} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
       </Section>
 
-      <RowSection
+      <Section
         n={10}
         title="“Natural Products” row"
-        slug="new-arrivals"
-        status={rowStatus("new-arrivals")}
-      />
+        blurb="A shelf of up to 8 products, newest first, from the collection below; it hides while the collection is empty."
+      >
+        <RowCollectionEditor row="natural" defaultSlug="new-arrivals" options={rowOptions} {...rowOverride("natural")} />
+      </Section>
 
       <Section
         n={11}
         title="TikTok section"
         blurb="The promo tile beside four best sellers."
       >
-        <HomePlacementEditor placement="tiktok" banners={banners} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
+        <HomePlacementEditor placement="tiktok" banners={banners} countryOptions={countryOptions} layout="grid" gridClass="sm:grid-cols-2 xl:grid-cols-3" />
       </Section>
 
       <Section n={12} title="Collections trio" blurb="Kids / Men's Essentials / Family.">
         <HomePlacementEditor
           placement="trio"
-          banners={banners}
+          banners={banners} countryOptions={countryOptions}
           layout="grid"
           gridClass="grid-cols-2 md:grid-cols-3"
         />
@@ -242,39 +289,5 @@ function Section({
       <p className="mb-4 mt-1 text-sm text-muted">{blurb}</p>
       {children}
     </section>
-  );
-}
-
-/** A product row is a collection, not a banner — explain, count, and link. */
-function RowSection({
-  n,
-  title,
-  slug,
-  status,
-}: {
-  n: number;
-  title: string;
-  slug: string;
-  status: string;
-}) {
-  return (
-    <Section
-      n={n}
-      title={title}
-      blurb="This row shows a collection; it hides until the collection has products."
-    >
-      <p className="rounded-[var(--radius-card)] border border-line p-3 text-sm">
-        <span className="font-mono text-xs text-muted">{slug}</span>
-        <span className={`ml-2 ${status.startsWith("collection") ? "text-muted" : "text-ok"}`}>
-          {status}
-        </span>
-        <Link
-          href="/products"
-          className="ml-3 underline underline-offset-2 hover:text-accent"
-        >
-          Manage under Products
-        </Link>
-      </p>
-    </Section>
   );
 }
