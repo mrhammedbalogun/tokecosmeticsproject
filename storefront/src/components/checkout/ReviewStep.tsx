@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
 import { useCart } from "@/hooks/useCart";
@@ -335,9 +336,9 @@ export function ReviewStep() {
         <p role="alert" className="text-sm text-red-700">
           {placeError.message}{" "}
           {placeError.cartLink && (
-            <a href="/cart" className="underline">
+            <Link href="/cart" className="underline">
               Review your cart
-            </a>
+            </Link>
           )}
         </p>
       )}

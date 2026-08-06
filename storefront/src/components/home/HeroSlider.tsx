@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { CmsBanner } from "@/lib/cms";
@@ -68,16 +68,26 @@ function slidesFrom(banners: CmsBanner[]): Slide[] {
 
 const INTERVAL_MS = 6000;
 
+const REDUCED_QUERY = "(prefers-reduced-motion: reduce)";
+const subscribeReduced = (onChange: () => void) => {
+  const media = window.matchMedia(REDUCED_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+};
+
 export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
   const slides = slidesFrom(banners);
   const [current, setCurrent] = useState(0);
-  const [reduced, setReduced] = useState(false);
+  // The media query is external state, so it is read as such — the server snapshot says
+  // "reduced" so SSR/first paint never starts a video or a timer the user asked not to
+  // have; the client corrects at hydration and follows live OS changes.
+  const reduced = useSyncExternalStore(
+    subscribeReduced,
+    () => window.matchMedia(REDUCED_QUERY).matches,
+    () => true,
+  );
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const many = slides.length > 1;
-
-  useEffect(() => {
-    setReduced(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  }, []);
 
   const show = useCallback(
     (index: number) => setCurrent((index + slides.length) % slides.length),

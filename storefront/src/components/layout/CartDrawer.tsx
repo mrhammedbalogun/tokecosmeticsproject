@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCart } from "@/hooks/useCart";
 import { formatMoney } from "@/lib/country";
 import { OverlayPortal } from "@/components/layout/OverlayPortal";
@@ -51,9 +52,11 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             <span>Subtotal</span>
             <span>{formatMoney(cart.subtotal, cart.currency, "")}</span>
           </div>
-          <a href="/checkout" className="block rounded-[var(--radius-card)] bg-accent py-3 text-center text-surface hover:bg-accent-strong transition-colors">
+          {/* onClose because client-side navigation keeps this drawer mounted — the full
+              page load of a plain <a> used to close it as a side effect. */}
+          <Link href="/checkout" onClick={onClose} className="block rounded-[var(--radius-card)] bg-accent py-3 text-center text-surface hover:bg-accent-strong transition-colors">
             Checkout
-          </a>
+          </Link>
         </footer>
       </aside>
     </div>

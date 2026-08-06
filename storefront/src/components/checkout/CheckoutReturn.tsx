@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { verifyPayment } from "@/lib/payment-verify";
 
@@ -71,9 +72,9 @@ export function CheckoutReturn({
         <p role="alert" className="text-sm text-red-700">
           Your payment didn&apos;t go through. You can try again or choose another method.
         </p>
-        <a href="/checkout" className="text-sm underline">
+        <Link href="/checkout" className="text-sm underline">
           Back to checkout
-        </a>
+        </Link>
       </div>
     );
   }

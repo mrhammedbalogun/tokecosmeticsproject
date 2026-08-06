@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
+import Link from "next/link";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { getOrderOrNotFound } from "@/lib/orders";
 import { confirmationCopy } from "@/lib/confirmation-copy";
@@ -78,12 +79,12 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
         Your account is ready — you can track this order any time.
       </p>
 
-      <a
+      <Link
         href="/products"
         className="mt-8 inline-block rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm font-medium text-surface transition-colors hover:bg-accent-strong"
       >
         Continue shopping
-      </a>
+      </Link>
     </section>
   );
 }
