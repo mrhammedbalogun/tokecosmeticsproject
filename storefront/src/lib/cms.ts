@@ -111,6 +111,26 @@ export async function getHomepage(country: string): Promise<HomepagePayload | nu
   }
 }
 
+/**
+ * Which collection feeds a homepage product row (Phase 3, 2026-08-06).
+ *
+ * The two rows ("loved" — Loved by thousands, "natural" — Natural Products) read
+ * admin-chosen collections via `HomepageSection` rows of type `collection_carousel`
+ * with `config: {row, collection}`. No section for a row means the built-in default,
+ * so an empty CMS changes nothing — the same fixture rule as everything else here.
+ */
+export function rowCollection(
+  payload: HomepagePayload | null,
+  row: "loved" | "natural",
+  fallback: string,
+): string {
+  const section = (payload?.sections ?? []).find(
+    (s) => s.type === "collection_carousel" && s.config?.row === row,
+  );
+  const slug = section?.config?.collection;
+  return typeof slug === "string" && slug ? slug : fallback;
+}
+
 /** The announcement strip's messages, falling back to the Plan-13 fixtures. */
 export interface AnnouncementItem {
   text: string;

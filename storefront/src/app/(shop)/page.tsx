@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { getProducts } from "@/lib/catalog";
-import { getHomepage } from "@/lib/cms";
+import { getHomepage, rowCollection } from "@/lib/cms";
 import { pageMetadata, organizationJsonLd, webSiteJsonLd, DEFAULT_DESCRIPTION } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { HeroSlider } from "@/components/home/HeroSlider";
@@ -29,9 +29,13 @@ export default async function HomePage() {
   const homepage = await getHomepage(country);
   const collection = (slug: string) =>
     getProducts({ collection: slug }, country).then((p) => p.results).catch(() => []);
+  // The two product rows read admin-chosen collections (Home Content screen), falling
+  // back to the slugs this page always used.
+  const lovedSlug = rowCollection(homepage, "loved", "best-sellers");
+  const naturalSlug = rowCollection(homepage, "natural", "new-arrivals");
   const [bestSellers, newArrivals, men, women, babies] = await Promise.all([
-    collection("best-sellers"),
-    getProducts({ collection: "new-arrivals", ordering: "newest" }, country)
+    collection(lovedSlug),
+    getProducts({ collection: naturalSlug, ordering: "newest" }, country)
       .then((p) => p.results)
       .catch(() => []),
     // The three feature sections read admin-curated collections and HIDE when a
@@ -54,7 +58,7 @@ export default async function HomePage() {
         title="Loved by thousands"
         eyebrow="Best Sellers"
         products={bestSellers.slice(0, 8)}
-        href="/products?collection=best-sellers"
+        href={`/products?collection=${lovedSlug}`}
         carousel
         compact
       />
@@ -90,7 +94,11 @@ export default async function HomePage() {
         title="Natural Products"
         eyebrow="New Arrivals"
         products={newArrivals.slice(0, 8)}
-        href="/products?ordering=newest"
+        href={
+          naturalSlug === "new-arrivals"
+            ? "/products?ordering=newest"
+            : `/products?collection=${naturalSlug}`
+        }
         compact
       />
       <TikTokSection banner={bannerFor(homepage?.banners ?? [], "tiktok")} products={bestSellers.slice(4, 8).length ? bestSellers.slice(4, 8) : newArrivals.slice(0, 4)} />
