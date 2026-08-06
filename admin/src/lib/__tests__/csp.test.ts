@@ -14,10 +14,18 @@ describe("the admin CSP", () => {
     expect(CSP_HEADER_NAME).toBe("Content-Security-Policy");
   });
 
-  it("allows Turnstile, the ONLY external origin the admin has", () => {
+  it("allows Turnstile, the ONLY external SCRIPT origin the admin has", () => {
     const policy = buildCsp();
     expect(directive(policy, "script-src")).toContain("https://challenges.cloudflare.com");
     expect(directive(policy, "frame-src")).toContain("https://challenges.cloudflare.com");
+  });
+
+  it("frames the storefront for the /home-content live preview, and only frames it", () => {
+    // A frame is not a script: the zero-third-party-scripts rule is untouched.
+    const policy = buildCsp();
+    expect(directive(policy, "frame-src")).toContain("http://localhost:3000");
+    expect(directive(policy, "script-src")).not.toContain("http://localhost:3000");
+    expect(directive(policy, "connect-src")).not.toContain("http://localhost:3000");
   });
 
   it("CARRIES NO PAYMENT ORIGINS — the admin takes no money", () => {

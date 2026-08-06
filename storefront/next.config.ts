@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { CSP_HEADER_NAME, buildCsp } from "./src/lib/csp";
+import { CSP_HEADER_NAME, REPORT_ONLY, buildCsp, frameAncestorsPolicy } from "./src/lib/csp";
 
 const nextConfig: NextConfig = {
   images: {
@@ -56,7 +56,20 @@ nextConfig.headers = async () => [
     source: "/:path*",
     headers: [
       { key: CSP_HEADER_NAME, value: buildCsp({ dev: process.env.NODE_ENV !== "production" }) },
-      // Belt and braces with frame-ancestors above, for anything that predates CSP.
+      // Framing protection is ENFORCED even while the full policy is report-only: this
+      // minimal policy carries only frame-ancestors ('self' + the admin's live preview).
+      // Skipped once the full policy enforces — Next's headers() would collapse two
+      // same-key entries, and the full policy carries the same directive by then.
+      ...(REPORT_ONLY
+        ? [
+            {
+              key: "Content-Security-Policy",
+              value: frameAncestorsPolicy({ dev: process.env.NODE_ENV !== "production" }),
+            },
+          ]
+        : []),
+      // Belt and braces for browsers that predate frame-ancestors; anything modern
+      // ignores this header when an enforced frame-ancestors is present.
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },

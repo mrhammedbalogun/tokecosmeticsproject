@@ -22,6 +22,11 @@ export function isProductionApi(url: string | undefined = apiUrlForDisplay()): b
   return url.replace(/\/+$/, "").toLowerCase() === PROD_API_URL;
 }
 
+/** The storefront this admin manages — framed by /home-content's live preview. */
+export function storefrontUrl(): string {
+  return process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://localhost:3000";
+}
+
 /** Short label for the badge: the API host, or "unset". */
 export function apiLabel(url: string | undefined = apiUrlForDisplay()): string {
   if (!url) return "API unset";

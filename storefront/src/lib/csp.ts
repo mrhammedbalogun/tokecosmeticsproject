@@ -50,6 +50,27 @@ function apiOrigin(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
+/** The admin app, which frames the storefront for its live homepage preview. */
+function adminOrigin(dev: boolean): string {
+  return (
+    process.env.NEXT_PUBLIC_ADMIN_ORIGIN ??
+    (dev ? "http://localhost:3001" : "https://admin.tokecosmetics.com")
+  );
+}
+
+/**
+ * Who may frame the storefront: nobody but ourselves and the admin's live preview.
+ *
+ * Served as its own ENFORCED Content-Security-Policy header (next.config.ts) even while
+ * the full policy above stays report-only: framing protection existed before this file
+ * (X-Frame-Options) and must not regress to report-only just because the admin preview
+ * needs a carve-out. Browsers that enforce frame-ancestors ignore X-Frame-Options, which
+ * is what lets the carve-out work while the legacy DENY header stays on.
+ */
+export function frameAncestorsPolicy({ dev = false }: { dev?: boolean } = {}): string {
+  return `frame-ancestors 'self' ${adminOrigin(dev)}`;
+}
+
 export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
   const scriptSrc = [
     "'self'",
@@ -74,9 +95,10 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     "connect-src": ["'self'", apiOrigin(), ...PAYSTACK, ...PAYPAL, ...TURNSTILE],
     // The payment popups and the Turnstile challenge render in iframes.
     "frame-src": [...PAYSTACK, ...PAYPAL, ...TURNSTILE],
-    // Nobody may frame us — clickjacking a checkout is the attack this stops, and it is
-    // the CSP equivalent of the X-Frame-Options header already set on the API.
-    "frame-ancestors": ["'none'"],
+    // Clickjacking a checkout is the attack this stops. 'self' plus the admin app only —
+    // the admin frames the storefront for its live homepage preview; see
+    // frameAncestorsPolicy below, which is the ENFORCED copy of this directive.
+    "frame-ancestors": ["'self'", adminOrigin(dev)],
     "base-uri": ["'self'"],
     // A CMS body is sanitised on write, but a <form> that survived would post wherever it
     // liked. This is the second layer that makes that harmless.

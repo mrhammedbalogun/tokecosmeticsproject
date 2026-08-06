@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CSP_HEADER_NAME, REPORT_ONLY, buildCsp } from "@/lib/csp";
+import { CSP_HEADER_NAME, REPORT_ONLY, buildCsp, frameAncestorsPolicy } from "@/lib/csp";
 
 function directive(policy: string, name: string): string {
   const found = policy.split("; ").find((d) => d.startsWith(`${name} `));
@@ -48,8 +48,24 @@ describe("the storefront CSP", () => {
     expect(directive(buildCsp(), "script-src")).not.toContain("'unsafe-eval'");
   });
 
-  it("REFUSES TO BE FRAMED, because clickjacking a checkout is the attack", () => {
-    expect(directive(buildCsp(), "frame-ancestors")).toBe("frame-ancestors 'none'");
+  it("REFUSES TO BE FRAMED by anyone but ourselves and the admin's live preview", () => {
+    // Clickjacking a checkout is still the attack; the admin app is the one framer the
+    // homepage preview (2026-08-06) legitimises — in production, only over https.
+    expect(directive(buildCsp(), "frame-ancestors")).toBe(
+      "frame-ancestors 'self' https://admin.tokecosmetics.com",
+    );
+    expect(directive(buildCsp({ dev: true }), "frame-ancestors")).toBe(
+      "frame-ancestors 'self' http://localhost:3001",
+    );
+  });
+
+  it("serves the SAME frame-ancestors allowlist in the always-enforced mini policy", () => {
+    // next.config.ts sends frameAncestorsPolicy as an enforced header while the full
+    // policy is report-only; the two must never disagree about who may frame us.
+    expect(frameAncestorsPolicy()).toBe(directive(buildCsp(), "frame-ancestors"));
+    expect(frameAncestorsPolicy({ dev: true })).toBe(
+      directive(buildCsp({ dev: true }), "frame-ancestors"),
+    );
   });
 
   it("pins form-action to self, which is the second layer under the CMS sanitiser", () => {

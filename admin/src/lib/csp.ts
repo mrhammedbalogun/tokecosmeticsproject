@@ -11,13 +11,23 @@
  * is ours. There is nothing here to discover by watching reports, and the admin is the
  * higher-value target — it holds every customer's PII and the order desk.
  *
- * Turnstile is the single external origin, and only on the staff login page.
+ * Turnstile is the single external SCRIPT origin, and only on the staff login page.
+ * The storefront appears in `frame-src` alone — /home-content frames the live shop as
+ * its preview (2026-08-06). A frame is not a script: nothing from the storefront runs
+ * on this origin, so the zero-third-party-scripts rule stands.
  *
  * `uqr` renders the TOTP enrolment QR code, and renders it as an inline SVG rather than
  * fetching an image — which is why no external image host appears below.
  */
 
 const TURNSTILE = ["https://challenges.cloudflare.com"];
+
+/** The storefront /home-content frames as its live preview. Kept in lockstep with
+ *  `storefrontUrl()` in lib/env.ts (imported would be nicer, but this file must stay
+ *  importable from next.config.ts without dragging app code in). */
+function storefrontOrigin(): string {
+  return process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://localhost:3000";
+}
 
 /** The Django origin the browser talks to directly. The BFF proxies most calls, but the
  *  value is public either way — it is in the page source. */
@@ -43,7 +53,7 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     "img-src": ["'self'", "data:", "blob:"],
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", apiOrigin(), ...TURNSTILE],
-    "frame-src": TURNSTILE,
+    "frame-src": [...TURNSTILE, storefrontOrigin()],
     "frame-ancestors": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
