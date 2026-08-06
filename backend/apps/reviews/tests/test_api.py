@@ -18,7 +18,7 @@ def _delivered_order_for(user, variant, status="delivered"):
 
 
 @pytest.mark.django_db
-def test_verified_purchaser_can_post_a_pending_review(django_user_model):
+def test_verified_purchaser_post_is_live_immediately(django_user_model):
     variant = ProductVariantFactory()
     product = variant.product
     user = django_user_model.objects.create_user(email="a@b.com", password="pw")
@@ -31,7 +31,14 @@ def test_verified_purchaser_can_post_a_pending_review(django_user_model):
 
     assert r.status_code == 201
     review = Review.objects.get(product=product, user=user)
-    assert review.status == "pending"
+    assert review.status == "approved"
+    # No moderation step, so the denormalised rating must move on the POST itself.
+    product.refresh_from_db()
+    assert product.rating_count == 1
+    assert str(product.rating_avg) == "5.00"
+    # And the public list serves it at once.
+    listed = APIClient().get(f"/api/v1/products/{product.slug}/reviews/")
+    assert [rv["body"] for rv in listed.data] == ["Great product"]
 
 
 @pytest.mark.django_db
@@ -80,20 +87,20 @@ def test_completed_order_also_counts_as_verified(django_user_model):
 
 
 @pytest.mark.django_db
-def test_get_lists_only_approved_reviews(django_user_model):
+def test_get_excludes_hidden_reviews(django_user_model):
     variant = ProductVariantFactory()
     product = variant.product
     u1 = django_user_model.objects.create_user(email="a@b.com", password="pw")
     u2 = django_user_model.objects.create_user(email="b@b.com", password="pw")
-    Review.objects.create(product=product, user=u1, rating=5, body="approved one",
+    Review.objects.create(product=product, user=u1, rating=5, body="visible one",
                           status="approved")
-    Review.objects.create(product=product, user=u2, rating=1, body="pending one",
-                          status="pending")
+    Review.objects.create(product=product, user=u2, rating=1, body="hidden one",
+                          status="hidden")
 
     r = APIClient().get(f"/api/v1/products/{product.slug}/reviews/")
     assert r.status_code == 200
     bodies = [rv["body"] for rv in r.data]
-    assert bodies == ["approved one"]
+    assert bodies == ["visible one"]
 
 
 @pytest.mark.django_db
@@ -170,12 +177,11 @@ def test_eligibility_reports_an_existing_review_and_its_status(django_user_model
     product = variant.product
     user = django_user_model.objects.create_user(email="a@b.com", password="pw")
     _delivered_order_for(user, variant)
-    Review.objects.create(product=product, user=user, rating=5, body="mine",
-                          status="pending")
+    Review.objects.create(product=product, user=user, rating=5, body="mine")
     c = APIClient()
     c.force_authenticate(user)
 
     r = c.get(f"/api/v1/products/{product.slug}/reviews/eligibility/")
 
     assert r.status_code == 200
-    assert r.data == {"has_reviewed": True, "review_status": "pending", "eligible": False}
+    assert r.data == {"has_reviewed": True, "review_status": "approved", "eligible": False}

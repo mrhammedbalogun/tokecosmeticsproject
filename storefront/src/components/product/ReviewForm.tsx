@@ -6,14 +6,19 @@
  *
  *   signed out      → "sign in to review" link (no probe — the server already knows)
  *   not a purchaser → one muted line; reviews here are verified purchases only
- *   already reviewed→ note, plus "awaiting approval" while it is pending
+ *   already reviewed→ note (covers hidden reviews too — no special copy for those)
  *   eligible        → the form (star radio group + title + body, Server Function submit)
+ *
+ * Reviews publish immediately: the action expires the product tag (updateTag) and
+ * the router.refresh() below re-renders the server list, so the customer sees their
+ * own review appear without a reload.
  *
  * A probe failure renders nothing: a broken nicety must not clutter a public PDP.
  * Follows LoginForm's conventions: live region present from first paint, native
  * validation on, submit disabled only while pending.
  */
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { LOGIN_PATH, withNext } from "@/lib/auth-guard";
 import type { ReviewFormState } from "@/app/(shop)/product/[slug]/actions";
 
@@ -26,14 +31,14 @@ const inputClass =
 interface Eligibility {
   eligible: boolean;
   has_reviewed: boolean;
-  review_status: "pending" | "approved" | "rejected" | null;
+  review_status: string | null;
 }
 
 type Phase =
   | { kind: "loading" }
   | { kind: "signed-out" }
   | { kind: "not-purchaser" }
-  | { kind: "reviewed"; status: Eligibility["review_status"] }
+  | { kind: "reviewed" }
   | { kind: "eligible" }
   | { kind: "hidden" };
 
@@ -60,6 +65,13 @@ export function ReviewForm({
   const [state, formAction, pending] = useActionState(action, {} as ReviewFormState);
   const [rating, setRating] = useState(0);
   const [hovered, setHovered] = useState(0);
+  const router = useRouter();
+
+  // The review is live the moment the action succeeds; refresh so the
+  // server-rendered list above this form includes it.
+  useEffect(() => {
+    if (state.submitted) router.refresh();
+  }, [state.submitted, router]);
 
   useEffect(() => {
     if (!signedIn) return;
@@ -72,7 +84,7 @@ export function ReviewForm({
         const data = (await res.json()) as Eligibility;
         if (cancelled) return;
         if (data.eligible) setPhase({ kind: "eligible" });
-        else if (data.has_reviewed) setPhase({ kind: "reviewed", status: data.review_status });
+        else if (data.has_reviewed) setPhase({ kind: "reviewed" });
         else setPhase({ kind: "not-purchaser" });
       })
       .catch(() => { if (!cancelled) setPhase({ kind: "hidden" }); });
@@ -111,7 +123,6 @@ export function ReviewForm({
       <Shell>
         <p role="status" className="text-sm text-muted">
           You&apos;ve already reviewed this product.
-          {phase.status === "pending" && " Your review is awaiting approval."}
         </p>
       </Shell>
     );
@@ -121,7 +132,7 @@ export function ReviewForm({
     return (
       <Shell>
         <p role="status" className="text-sm text-accent-strong">
-          Thank you! Your review has been submitted and will appear once it&apos;s approved.
+          Thank you! Your review is now live.
         </p>
       </Shell>
     );

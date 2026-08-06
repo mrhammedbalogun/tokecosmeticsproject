@@ -8,11 +8,12 @@ from apps.reviews.services import recompute_product_rating
 
 
 @pytest.mark.django_db
-def test_review_is_born_pending(django_user_model):
+def test_review_is_born_approved(django_user_model):
+    # Reviews publish immediately (2026-08-05 ruling); "hidden" is the only other state.
     user = django_user_model.objects.create_user(email="a@b.com", password="pw")
     product = ProductFactory()
     review = Review.objects.create(product=product, user=user, rating=5, body="Great")
-    assert review.status == "pending"
+    assert review.status == "approved"
 
 
 @pytest.mark.django_db
@@ -32,12 +33,12 @@ def test_recompute_counts_only_approved(django_user_model):
     u3 = django_user_model.objects.create_user(email="c@b.com", password="pw")
     Review.objects.create(product=product, user=u1, rating=5, body="x", status="approved")
     Review.objects.create(product=product, user=u2, rating=3, body="y", status="approved")
-    Review.objects.create(product=product, user=u3, rating=1, body="z", status="pending")
+    Review.objects.create(product=product, user=u3, rating=1, body="z", status="hidden")
 
     recompute_product_rating(product)
 
     product.refresh_from_db()
-    assert product.rating_count == 2                 # pending excluded
+    assert product.rating_count == 2                 # hidden excluded
     assert product.rating_avg == Decimal("4.00")     # (5+3)/2
 
 

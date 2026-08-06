@@ -560,6 +560,20 @@ def _case_google_review(client, monkeypatch):
     ), 201
 
 
+def _case_review_hide(client, monkeypatch):
+    from django.contrib.auth import get_user_model
+
+    from apps.reviews.models import Review
+
+    reviewer = get_user_model().objects.create_user(email="reviewer@x.com", password="pw")
+    review = Review.objects.create(
+        product=ProductFactory(slug="p-review-audit"), user=reviewer, rating=5, body="great"
+    )
+    return client.patch(
+        f"/api/v1/admin/reviews/{review.pk}/", {"status": "hidden"}, format="json"
+    ), 200
+
+
 def _case_google_reviews_meta(client, monkeypatch):
     return client.put(
         "/api/v1/admin/google-reviews-meta/",
@@ -572,6 +586,9 @@ def _case_google_reviews_meta(client, monkeypatch):
 WRITE_CASES: dict[str, tuple] = {
     "GoogleReviewAdminViewSet": (_case_google_review, "create"),
     "GoogleReviewsMetaAdminView": (_case_google_reviews_meta, "google_reviews_meta"),
+    # Like ProductImageAdminViewSet below: the only writes are PATCH and DELETE, so
+    # the action recorded is the DRF action name for the PATCH.
+    "ProductReviewAdminViewSet": (_case_review_hide, "partial_update"),
     "AdminGigCaptureView": (_case_gig_capture, "gig_capture"),
     "AdminGigLabelView": (_case_gig_label, "gig_label"),
     "ProductAdminViewSet": (_case_product, "create"),

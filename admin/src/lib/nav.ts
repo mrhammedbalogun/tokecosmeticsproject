@@ -10,10 +10,8 @@
  * endpoint behind these pages carries its own `HasAdminScope`, re-read from the database
  * on each request, which is the fence. Treat this list as ergonomics.
  *
- * `scopes` is ANY-OF. Most items name one; `Reviews` names two because review moderation
- * genuinely straddles catalogue management and content integrity, and the scope table has
- * no review-specific scope to point at. When Plan-18/19 bind those endpoints to a scope,
- * this entry should be narrowed to match whatever they choose rather than left to drift.
+ * `scopes` is ANY-OF. Every item now names exactly one — `Reviews` was a two-scope
+ * placeholder until the review endpoints landed and brought `reviews.manage` with them.
  *
  * `Settings` and `Staff` are real pages as of Task 7; every other href below is a
  * placeholder until Plans 17-19 build it. That is deliberate and matches the plan text:
@@ -37,7 +35,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Categories", href: "/categories", scopes: ["products.manage"] },
   { label: "Inventory", href: "/inventory", scopes: ["products.manage"] },
   { label: "Customers", href: "/customers", scopes: ["customers.view"] },
-  { label: "Reviews", href: "/reviews", scopes: ["products.manage", "cms.manage"] },
+  { label: "Reviews", href: "/reviews", scopes: ["reviews.manage"] },
   { label: "Coupons", href: "/coupons", scopes: ["marketing.manage"] },
   // One door for everything the landing page shows (Hammed's ask, 2026-08-05):
   // slides, news, reviews and the product-row collections, in section order.

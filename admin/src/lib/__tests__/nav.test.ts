@@ -5,12 +5,13 @@ import { NAV_ITEMS, activeHref, visibleNav } from "@/lib/nav";
 // Duplicated deliberately: if the backend table changes, this test should FAIL rather
 // than quietly agree with whatever the new table says.
 const OWNER = [
-  "orders.view", "orders.operate", "orders.manage", "products.manage", "customers.view",
-  "marketing.manage", "cms.manage", "reports.view", "staff.manage", "settings.manage",
+  "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
+  "customers.view", "marketing.manage", "cms.manage", "reports.view", "staff.manage",
+  "settings.manage",
 ];
 const MANAGER = [
-  "orders.view", "orders.operate", "orders.manage", "products.manage", "customers.view",
-  "marketing.manage", "reports.view",
+  "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
+  "customers.view", "marketing.manage", "reports.view",
 ];
 const SUPPORT = ["orders.view", "orders.operate", "customers.view"];
 const CONTENT = ["cms.manage"];
@@ -36,8 +37,8 @@ describe("the sidebar renders only what the scopes allow", () => {
     expect(labels(SUPPORT)).toEqual(["Dashboard", "Orders", "Customers"]);
   });
 
-  it("Content sees content and reviews", () => {
-    expect(labels(CONTENT)).toEqual(["Dashboard", "Reviews", "Content"]);
+  it("Content sees content only — customer reviews are shop management, not copy", () => {
+    expect(labels(CONTENT)).toEqual(["Dashboard", "Content"]);
   });
 
   it("a staff member with no scopes still sees the dashboard and nothing else", () => {

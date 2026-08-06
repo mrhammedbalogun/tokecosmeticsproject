@@ -5,9 +5,12 @@
  * form: Next's Origin/Host CSRF check comes free, and `fetchWithAuth` may run its
  * silent 401→refresh→retry here because a Server Function can write cookies.
  *
- * A fresh review is born `pending` on the backend and is invisible until approved,
- * so there is nothing to revalidate on success — the visible list is unchanged.
+ * Reviews publish immediately (admin can hide/delete after the fact), so success
+ * expires the product tag with `updateTag` — the read-your-own-writes API (bundled
+ * docs, updateTag.md): the next request WAITS for fresh data instead of serving the
+ * stale list, so the customer's own review is visible on the very next render.
  */
+import { updateTag } from "next/cache";
 import { fetchWithAuth } from "@/lib/session";
 import { ApiError } from "@/lib/api";
 import { accountErrorMessage } from "@/lib/auth-errors";
@@ -56,5 +59,6 @@ export async function submitReviewAction(
     return { error: FALLBACK };
   }
 
+  updateTag(`product:${slug}`);
   return { submitted: true };
 }

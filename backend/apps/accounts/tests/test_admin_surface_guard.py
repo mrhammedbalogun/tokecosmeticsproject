@@ -185,6 +185,10 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "GoogleReviewAdminViewSet": "marketing.manage",
     "GoogleReviewsMetaAdminView": "marketing.manage",
     "HomepageSectionAdminViewSet": "marketing.manage",
+    # CUSTOMER product reviews (hide/delete) — a different thing from the curated
+    # Google reviews above, and from orders' fraud resolve-review. Its own scope:
+    # rbac.py argues why Owner + Manager and not Content.
+    "ProductReviewAdminViewSet": "reviews.manage",
     # --- inventory ---------------------------------------------------------------
     # Warehouses are where stock physically is, and `serves_countries` on one of them
     # decides whether a market can be sold to at all. Same scope as the stock it holds.

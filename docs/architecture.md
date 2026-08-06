@@ -980,32 +980,56 @@ snapshot is blanked in the same task: `email` → the same sentinel, `phone` →
 `shipping_address`/`billing_address` → `{}`. **Plan-28 accounting must not assume a deleted
 user's orders vanish** — the rows and the link persist; only the PII is gone.
 
-### Reviews moderation — a sole writer for the rating fields
+### Reviews — publish on creation, a sole writer for the rating fields
 
-A `Review` is born `pending`; anonymous `GET` returns **approved reviews only**. A review may
-only be POSTed by a user with a **verified purchase** of that product — an `Order` for this user
-with `status in ("delivered", "completed")` containing the product (`completed` is `delivered`
-plus the elapsed return window). `unique_together(product, user)` means one review per product
-per user.
+*(Rewritten 2026-08-05: Hammed's ruling replaced Plan-11's pre-moderation with
+publish-on-create + after-the-fact admin control.)*
+
+A `Review` is born **`approved` — live immediately**; the status vocabulary is
+`approved`/`hidden` (migration 0002 mapped legacy `pending`→`approved`, `rejected`→`hidden`).
+Anonymous `GET` returns approved reviews only. A review may only be POSTed by a user with a
+**verified purchase** of that product — an `Order` for this user with
+`status in ("delivered", "completed")` containing the product (`completed` is `delivered` plus
+the elapsed return window). `unique_together(product, user)` means one review per product per
+user. That purchase gate is what makes no-pre-moderation tolerable: only paying customers can
+write, once per product.
 
 The denormalised `Product.rating_avg` / `Product.rating_count` are written by **exactly one
 function**, `apps.reviews.services.recompute_product_rating`, computed from **approved reviews
-only**. They are never writable through any serializer or admin form — treat them as derived.
-Approval happens via the Django-admin "Approve selected reviews" action now; the **approval REST
-API is Plan-18** (only the model, the admin action, and the recompute service land in Plan-11).
+only** — called on customer POST (live immediately means the rating moves immediately), on
+every admin status flip, and on delete. Never writable through any serializer — treat as derived.
 
-**PDP write flow (post-Plan-11 addition).** `GET /api/v1/products/{slug}/reviews/eligibility/`
-(authenticated) answers `{has_reviewed, review_status, eligible}` so the storefront renders the
-right state — sign-in link / "purchasers only" note / "awaiting approval" / the form — instead of
-showing every visitor a form that 403s on submit. The probe goes through a BFF Route Handler
+**Admin control** — `ProductReviewAdminViewSet` under `/api/v1/admin/reviews/`, scope
+**`reviews.manage`** (Owner + Manager; rbac.py argues why not Content). GET list with
+status/rating filters + search; PATCH `status` (`hidden` ↔ `approved`) to pull a review from /
+return it to the public list; DELETE for good (the audit row snapshots the deleted review —
+delivery's `_changes` pattern). **No create route and the customer's words are read-only** —
+staff hide or delete, never edit. The admin portal's `/reviews` screen (nav narrowed to
+`reviews.manage`) drives it; Django admin keeps hide/unhide actions as a backstop. NOT the same
+thing as the homepage's curated Google reviews (`marketing.manage`) or orders' fraud
+resolve-review — three features share the word "review".
+
+**Propagation caveat:** the storefront caches a product's review list for 300 s
+(`getReviews`, tag `product:<slug>`). A customer's own POST bypasses that via `updateTag`
+(read-your-own-writes, Server Function), but an admin hide/delete becomes visible on the
+storefront only when the tag revalidates — worst case ~5 minutes. Instant propagation arrives
+with the Plan-22 backend→storefront revalidation webhook (`/api/revalidate` exists and takes
+`product:<slug>` tags today; the admin app deliberately does not call it cross-app).
+
+**PDP write flow.** `GET /api/v1/products/{slug}/reviews/eligibility/` (authenticated) answers
+`{has_reviewed, review_status, eligible}` so the storefront renders the right state — sign-in
+link / "purchasers only" note / already-reviewed note / the form — instead of showing every
+visitor a form that 403s on submit. The probe goes through a BFF Route Handler
 (`/api/products/[slug]/reviews/eligibility`), NOT a Server-Component fetch, because only a Route
 Handler may silently refresh the 14-minute access cookie; the PDP passes a `signedIn` hint read
 from the refresh cookie (same reasoning as `src/proxy.ts`) so signed-out visitors never probe at
 all. Submission is a Server Function (`storefront/.../product/[slug]/actions.ts`) for the free
-Origin/Host CSRF check. `ReviewWriteSerializer` caps `body` at 4000 chars — the model's TextField
-is unbounded. Review bodies remain plain text rendered as escaped JSX; if they ever reach
-`dangerouslySetInnerHTML` or an email template, route them through `apps.cms.sanitize.clean_html`
-on write first (the `GoogleReview.text` precedent, `cms/models.py`).
+Origin/Host CSRF check; on success it calls `updateTag` and the form triggers `router.refresh()`
+so the customer sees their review in the list at once. `ReviewWriteSerializer` caps `body` at
+4000 chars — the model's TextField is unbounded. Review bodies remain plain text rendered as
+escaped JSX; if they ever reach `dangerouslySetInnerHTML` or an email template, route them
+through `apps.cms.sanitize.clean_html` on write first (the `GoogleReview.text` precedent,
+`cms/models.py`).
 
 ### Search sync for ratings (D2)
 

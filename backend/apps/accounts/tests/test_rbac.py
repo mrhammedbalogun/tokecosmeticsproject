@@ -32,6 +32,7 @@ OWNER = {
     "orders.operate",
     "orders.manage",
     "products.manage",
+    "reviews.manage",
     "customers.view",
     "marketing.manage",
     "cms.manage",
@@ -44,6 +45,7 @@ MANAGER = {
     "orders.operate",
     "orders.manage",
     "products.manage",
+    "reviews.manage",  # hiding a customer review is shop management — see rbac.py
     "customers.view",
     "marketing.manage",  # coupons + banners; NOT cms.manage — see rbac.py
     "reports.view",

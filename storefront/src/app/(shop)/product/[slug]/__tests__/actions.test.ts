@@ -10,6 +10,11 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
+// updateTag only exists inside the Next runtime; stub it and assert the
+// read-your-own-writes expiry happens on success (and only on success).
+const updateTagSpy = vi.fn();
+vi.mock("next/cache", () => ({ updateTag: (tag: string) => updateTagSpy(tag) }));
+
 import { submitReviewAction } from "../actions";
 
 const originalFetch = global.fetch;
@@ -19,6 +24,7 @@ beforeEach(() => {
   store.set("access", "AAA"); // signed-in session
   store.set("refresh", "RRR");
   setSpy.mockClear();
+  updateTagSpy.mockClear();
 });
 afterEach(() => { global.fetch = originalFetch; vi.restoreAllMocks(); });
 
@@ -54,6 +60,7 @@ describe("submitReviewAction", () => {
     expect(JSON.parse(String(init.body))).toEqual({
       rating: 5, title: "Love it", body: "Great product",
     });
+    expect(updateTagSpy).toHaveBeenCalledWith("product:shea-butter");
   });
 
   it("requires a star rating without calling the API", async () => {
@@ -79,6 +86,7 @@ describe("submitReviewAction", () => {
       slug: "shea-butter", rating: "5", body: "never bought it",
     }));
     expect(state.error).toBe("Only verified purchasers can review this product.");
+    expect(updateTagSpy).not.toHaveBeenCalled();
   });
 
   it("surfaces the already-reviewed 400 detail verbatim", async () => {

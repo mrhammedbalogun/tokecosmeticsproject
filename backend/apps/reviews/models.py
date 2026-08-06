@@ -6,10 +6,12 @@ from apps.core.models import TimeStampedModel
 
 
 class Review(TimeStampedModel):
-    """A verified-purchase product review. Born `pending`; only an approval (admin now,
-    API in Plan-18) makes it public and feeds the product's denormalised rating."""
+    """A verified-purchase product review. Born `approved` (live immediately — Hammed's
+    ruling of 2026-08-05 replaced pre-moderation); the admin surface can set `hidden`
+    to pull one from the public list, or delete it outright. Only `approved` rows feed
+    the product's denormalised rating."""
 
-    STATUSES = [("pending", "Pending"), ("approved", "Approved"), ("rejected", "Rejected")]
+    STATUSES = [("approved", "Approved"), ("hidden", "Hidden")]
 
     product = models.ForeignKey(
         "catalog.Product", on_delete=models.CASCADE, related_name="reviews"
@@ -28,7 +30,7 @@ class Review(TimeStampedModel):
     )
     title = models.CharField(max_length=140, blank=True)
     body = models.TextField()
-    status = models.CharField(max_length=10, default="pending", choices=STATUSES)
+    status = models.CharField(max_length=10, default="approved", choices=STATUSES)
 
     class Meta:
         # One review per customer per product — re-review edits the existing row (Plan-18).

@@ -8,6 +8,7 @@ from apps.catalog.models import Product
 from apps.orders.models import Order
 from apps.reviews.models import Review
 from apps.reviews.serializers import ReviewReadSerializer, ReviewWriteSerializer
+from apps.reviews.services import recompute_product_rating
 
 # Statuses that make a purchase "verified" — the customer has the goods in hand.
 # completed = delivered + return window elapsed (set by complete_delivered_orders).
@@ -80,4 +81,7 @@ class ProductReviewsView(APIView):
                 {"detail": "You have already reviewed this product."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        # Reviews are live on creation (no pre-moderation), so the new rating must be
+        # in the denormalised fields before the storefront re-renders the product.
+        recompute_product_rating(product)
         return Response(ReviewReadSerializer(review).data, status=status.HTTP_201_CREATED)

@@ -2400,6 +2400,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/reviews/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CUSTOMER product reviews — not the homepage's curated Google reviews
+         *     (cms.GoogleReviewAdminViewSet) and not order fraud review (orders' resolve-review;
+         *     beware the name collision). Reviews publish the moment a customer posts one, so
+         *     this surface exists for after-the-fact control: PATCH status hidden/approved to
+         *     pull one from (or return it to) the public list, or DELETE it for good. No create
+         *     route on purpose — reviews only ever come from verified purchasers.
+         */
+        get: operations["v1_admin_reviews_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/reviews/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CUSTOMER product reviews — not the homepage's curated Google reviews
+         *     (cms.GoogleReviewAdminViewSet) and not order fraud review (orders' resolve-review;
+         *     beware the name collision). Reviews publish the moment a customer posts one, so
+         *     this surface exists for after-the-fact control: PATCH status hidden/approved to
+         *     pull one from (or return it to) the public list, or DELETE it for good. No create
+         *     route on purpose — reviews only ever come from verified purchasers.
+         */
+        get: operations["v1_admin_reviews_retrieve"];
+        put?: never;
+        post?: never;
+        /**
+         * @description CUSTOMER product reviews — not the homepage's curated Google reviews
+         *     (cms.GoogleReviewAdminViewSet) and not order fraud review (orders' resolve-review;
+         *     beware the name collision). Reviews publish the moment a customer posts one, so
+         *     this surface exists for after-the-fact control: PATCH status hidden/approved to
+         *     pull one from (or return it to) the public list, or DELETE it for good. No create
+         *     route on purpose — reviews only ever come from verified purchasers.
+         */
+        delete: operations["v1_admin_reviews_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description CUSTOMER product reviews — not the homepage's curated Google reviews
+         *     (cms.GoogleReviewAdminViewSet) and not order fraud review (orders' resolve-review;
+         *     beware the name collision). Reviews publish the moment a customer posts one, so
+         *     this surface exists for after-the-fact control: PATCH status hidden/approved to
+         *     pull one from (or return it to) the public list, or DELETE it for good. No create
+         *     route on purpose — reviews only ever come from verified purchasers.
+         */
+        patch: operations["v1_admin_reviews_partial_update"];
+        trace?: never;
+    };
     "/api/v1/admin/search/": {
         parameters: {
             query?: never;
@@ -5724,6 +5788,21 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["RefundOwed"][];
         };
+        PaginatedReviewAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["ReviewAdmin"][];
+        };
         PaginatedStaffRosterList: {
             /** @example 123 */
             count: number;
@@ -6179,6 +6258,24 @@ export interface components {
             parent?: number | null;
             is_active?: boolean;
         };
+        /**
+         * @description Row for the admin Reviews screen. Only `status` is writable — the words belong
+         *     to the customer; staff hide or delete a review, they never edit one.
+         */
+        PatchedReviewAdmin: {
+            readonly id?: number;
+            readonly product_name?: string;
+            readonly product_slug?: string;
+            readonly author_name?: string;
+            /** Format: email */
+            readonly author_email?: string;
+            readonly rating?: number;
+            readonly title?: string;
+            readonly body?: string;
+            status?: components["schemas"]["ReviewAdminStatusEnum"];
+            /** Format: date-time */
+            readonly created_at?: string;
+        };
         PatchedTagAdmin: {
             readonly id?: number;
             /** Format: date-time */
@@ -6462,6 +6559,30 @@ export interface components {
             phone?: string;
             marketing_consent?: boolean;
         };
+        /**
+         * @description Row for the admin Reviews screen. Only `status` is writable — the words belong
+         *     to the customer; staff hide or delete a review, they never edit one.
+         */
+        ReviewAdmin: {
+            readonly id: number;
+            readonly product_name: string;
+            readonly product_slug: string;
+            readonly author_name: string;
+            /** Format: email */
+            readonly author_email: string;
+            readonly rating: number;
+            readonly title: string;
+            readonly body: string;
+            status?: components["schemas"]["ReviewAdminStatusEnum"];
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /**
+         * @description * `approved` - Approved
+         *     * `hidden` - Hidden
+         * @enum {string}
+         */
+        ReviewAdminStatusEnum: "approved" | "hidden";
         /**
          * @description * `manual` - Manual
          *     * `new_arrivals` - New arrivals
@@ -9728,6 +9849,107 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    v1_admin_reviews_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                rating?: number;
+                /** @description A search term. */
+                search?: string;
+                /**
+                 * @description * `approved` - Approved
+                 *     * `hidden` - Hidden
+                 */
+                status?: "approved" | "hidden";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedReviewAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_reviews_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this review. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_reviews_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this review. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_reviews_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this review. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedReviewAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedReviewAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedReviewAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReviewAdmin"];
+                };
             };
         };
     };

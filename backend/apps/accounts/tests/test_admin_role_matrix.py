@@ -98,6 +98,9 @@ MATRIX: list[Row] = [
         {"Owner", "Manager", "Support"}),
     # Campaign material: Manager can run a promotion, a copywriter cannot.
     Row("BannerAdminViewSet", "get", "/api/v1/admin/banners/", _MANAGERS),
+    # Customer product reviews: shop management (hide/delete a customer's words),
+    # so Owner + Manager — Content moderates copy, not customers.
+    Row("ProductReviewAdminViewSet", "get", "/api/v1/admin/reviews/", _MANAGERS),
     Row("GoogleReviewAdminViewSet", "get", "/api/v1/admin/google-reviews/", _MANAGERS),
     Row("GoogleReviewsMetaAdminView", "get", "/api/v1/admin/google-reviews-meta/", _MANAGERS),
     Row("HomepageSectionAdminViewSet", "get", "/api/v1/admin/homepage-sections/", _MANAGERS),

@@ -89,6 +89,11 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     "orders.operate": frozenset({"Owner", "Manager", "Support"}),
     "orders.manage": frozenset({"Owner", "Manager"}),
     "products.manage": frozenset({"Owner", "Manager"}),
+    # Customer product reviews (hide/delete). Its own scope — moderation straddles
+    # catalogue and content, and nav.ts asked for "a review-specific scope to point
+    # at". Owner + Manager: pulling a customer's words off a product page is shop
+    # management, not copywriting, so Content does not hold it.
+    "reviews.manage": frozenset({"Owner", "Manager"}),
     "customers.view": frozenset({"Owner", "Manager", "Support"}),
     "marketing.manage": frozenset({"Owner", "Manager"}),
     "cms.manage": frozenset({"Owner", "Content"}),

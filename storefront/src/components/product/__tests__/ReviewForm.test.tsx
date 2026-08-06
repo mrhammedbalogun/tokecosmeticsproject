@@ -3,6 +3,9 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ReviewForm } from "@/components/product/ReviewForm";
 import type { ReviewFormState } from "@/app/(shop)/product/[slug]/actions";
 
+const refreshSpy = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: refreshSpy }) }));
+
 const ELIGIBILITY_URL = "/api/products/shea-butter/reviews/eligibility";
 
 function mockEligibility(status: number, body: unknown) {
@@ -59,12 +62,13 @@ describe("ReviewForm", () => {
     expect(screen.queryByRole("button", { name: "Submit review" })).not.toBeInTheDocument();
   });
 
-  it("tells a customer their pending review awaits approval", async () => {
-    mockEligibility(200, { eligible: false, has_reviewed: true, review_status: "pending" });
+  it("tells a customer who already reviewed (hidden included) — no form", async () => {
+    mockEligibility(200, { eligible: false, has_reviewed: true, review_status: "hidden" });
 
     render(<ReviewForm slug="shea-butter" signedIn action={noopAction} />);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/awaiting approval/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/already reviewed/i);
+    expect(screen.queryByRole("button", { name: "Submit review" })).not.toBeInTheDocument();
   });
 
   it("falls back to the sign-in link when the probe answers 401", async () => {
@@ -75,7 +79,7 @@ describe("ReviewForm", () => {
     expect(await screen.findByRole("link", { name: "Sign in" })).toBeInTheDocument();
   });
 
-  it("replaces the form with a moderation notice after a successful submit", async () => {
+  it("replaces the form with a live notice and refreshes the list on success", async () => {
     mockEligibility(200, { eligible: true, has_reviewed: false, review_status: null });
     const action = vi.fn(
       async (_s: ReviewFormState, _fd: FormData): Promise<ReviewFormState> => ({ submitted: true }),
@@ -89,12 +93,13 @@ describe("ReviewForm", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Submit review" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/will appear once/i);
+    expect(await screen.findByRole("status")).toHaveTextContent(/review is now live/i);
     expect(action).toHaveBeenCalledTimes(1);
     const fd = action.mock.calls[0]![1];
     expect(fd.get("rating")).toBe("5");
     expect(fd.get("body")).toBe("Lovely texture.");
     expect(fd.get("slug")).toBe("shea-butter");
+    await waitFor(() => expect(refreshSpy).toHaveBeenCalled());
   });
 
   it("announces the action error in the live region", async () => {
