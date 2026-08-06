@@ -15,6 +15,7 @@ export function TileMedia({
   sizes?: string;
 }) {
   const img = mediaUrl(banner?.image ?? null);
+  const mobileImg = mediaUrl(banner?.mobile_image ?? null);
   if (banner?.video_url) {
     return (
       <video
@@ -28,8 +29,18 @@ export function TileMedia({
       />
     );
   }
-  if (img) {
-    return <Image src={img} alt="" fill sizes={sizes} className="object-cover" />;
+  // Art direction, not responsive sizing: a phone image is a different CROP, so it is a
+  // second <Image>, swapped by breakpoint. next/image cannot express this in one element.
+  if (img && mobileImg) {
+    return (
+      <>
+        <Image src={mobileImg} alt="" fill sizes="100vw" className="object-cover md:hidden" />
+        <Image src={img} alt="" fill sizes={sizes} className="hidden object-cover md:block" />
+      </>
+    );
+  }
+  if (img || mobileImg) {
+    return <Image src={(img ?? mobileImg)!} alt="" fill sizes={sizes} className="object-cover" />;
   }
   return <div aria-hidden className={`absolute inset-0 bg-gradient-to-br ${tone}`} />;
 }

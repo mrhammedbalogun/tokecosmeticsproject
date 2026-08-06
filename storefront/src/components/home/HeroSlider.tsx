@@ -27,6 +27,8 @@ interface Slide {
   headline: string;
   sub: string;
   image: string | null;
+  /** A different crop for phones, not a resize — rendered as its own <Image>. */
+  mobileImage: string | null;
   video: string;
   ctaText: string;
   ctaHref: string;
@@ -42,6 +44,7 @@ function slidesFrom(banners: CmsBanner[]): Slide[] {
       headline: b.title,
       sub: "",
       image: mediaUrl(b.image),
+      mobileImage: mediaUrl(b.mobile_image),
       video: b.video_url,
       ctaText: b.cta_text,
       ctaHref: b.cta_url,
@@ -55,6 +58,7 @@ function slidesFrom(banners: CmsBanner[]): Slide[] {
       headline: HERO.headline,
       sub: HERO.sub,
       image: HERO.image,
+      mobileImage: null,
       video: "",
       ctaText: "",
       ctaHref: "",
@@ -106,6 +110,25 @@ export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
               loop
               playsInline
             />
+          ) : slide.image && slide.mobileImage ? (
+            <>
+              <Image
+                src={slide.mobileImage}
+                alt=""
+                fill
+                priority={i === 0}
+                sizes="100vw"
+                className="object-cover md:hidden"
+              />
+              <Image
+                src={slide.image}
+                alt=""
+                fill
+                priority={i === 0}
+                sizes="100vw"
+                className="hidden object-cover md:block"
+              />
+            </>
           ) : slide.image ? (
             <Image
               src={slide.image}
