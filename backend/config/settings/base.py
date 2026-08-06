@@ -490,6 +490,12 @@ GIG_VEHICLE_TYPE = env.int("GIG_VEHICLE_TYPE", default=1)
 # Never derived from a request — a client-supplied return URL is an open-redirect vector.
 STOREFRONT_BASE_URL = env("STOREFRONT_BASE_URL", default="http://localhost:3000")
 
+# Shared secret for the storefront's POST /api/revalidate (instant cache flush on CMS
+# writes — apps/cms/revalidate.py). EMPTY DISABLES the notifier and the storefront falls
+# back to its 60-second revalidate window, so a missing secret degrades, never breaks.
+# Must match REVALIDATE_SECRET in the storefront's environment.
+REVALIDATE_SECRET = env("REVALIDATE_SECRET", default="")
+
 # --- Celery ---
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
