@@ -38,100 +38,48 @@ import { CSP_HEADER_NAME, buildCsp } from "./src/lib/csp";
  * The CSP below is the enforcement, so the rule survives a contributor who has not read
  * this comment.
  */
-const isProd = process.env.NODE_ENV === "production";
-
-/**
- * The host catalogue images are served from. In `img-src` since Plan-17a Task 2, because
- * without it every product thumbnail renders broken and the only evidence is a CSP
- * violation in the console.
- *
- * ── COMMITTED AS A DEFAULT, NOT LEFT TO A DASHBOARD ENTRY ───────────────────────────
- *
- * Same name, same value and same reasoning as `storefront/next.config.ts` (commit
- * 1f97396): the CDN hostname is PUBLIC — it appears in every product page's HTML — so
- * there is nothing to protect by hiding it in Vercel's environment, and gating on a
- * dashboard variable means a missing entry breaks every production image. That is not
- * hypothetical; it is what happened to the storefront, and hard-coding the default is
- * what fixed it. `NEXT_PUBLIC_MEDIA_HOST` still overrides, so a preview can point at a
- * different distribution.
- *
- * A BARE HOSTNAME, matching the storefront's variable exactly, so one value serves both
- * apps and nobody has to remember which of the two wants a scheme. The `https://` below
- * is added here because a CSP source expression needs one.
- *
- * ONE DIRECTIVE, ONE HOST WE CONTROL. This does NOT touch `script-src` or `connect-src`,
- * and the standing rule above — no third-party scripts on this origin, ever — is
- * unaffected: an image cannot read `location.href`, and `object-src 'none'` still forbids
- * the content types that could.
- */
-const MEDIA_HOST = process.env.NEXT_PUBLIC_MEDIA_HOST ?? "dk4ivng9pnc2t.cloudfront.net";
-
-const CSP = [
-  "default-src 'self'",
-  // Next's App Router requires inline bootstrap scripts. `unsafe-eval` is dev-only (React
-  // Refresh needs it); production gets neither it nor any host but Turnstile's.
-  `script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com${isProd ? "" : " 'unsafe-eval'"}`,
-  "style-src 'self' 'unsafe-inline'",
-  `img-src 'self' data: blob:${MEDIA_HOST ? ` https://${MEDIA_HOST}` : ""}`,
-  "font-src 'self' data:",
-  // Same-origin only: every API call goes through this app's own BFF routes or its Server
-  // Functions, never straight from the browser to Django. `ws:` is Next's dev HMR socket.
-  `connect-src 'self'${isProd ? "" : " ws: wss:"}`,
-  "frame-src https://challenges.cloudflare.com",
-  "frame-ancestors 'none'",
-  "form-action 'self'",
-  "base-uri 'self'",
-  "object-src 'none'",
-].join("; ");
-
 const NO_STORE = {
   key: "Cache-Control",
   value: "no-store, no-cache, must-revalidate, private",
 };
 
+/**
+ * Security headers (Plan-25 task 2; merged 2026-08-06). CSP is ENFORCED here, unlike
+ * the storefront — see `src/lib/csp.ts` for why the two differ, and for the media-host
+ * and storefront-preview allowances the policy carries.
+ *
+ * ONE headers() ONLY. This file briefly held two — a `nextConfig.headers = ...`
+ * assignment silently overwrote the object-literal one, which cost the app its
+ * `Cache-Control: no-store` pages and its media-host img-src for a while. If you need
+ * to change headers, change them HERE.
+ */
 const nextConfig: NextConfig = {
   async headers() {
     return [
       {
         source: "/:path*",
         headers: [
-          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet" },
-          { key: "Content-Security-Policy", value: CSP },
+          { key: CSP_HEADER_NAME, value: buildCsp({ dev: process.env.NODE_ENV !== "production" }) },
           { key: "X-Frame-Options", value: "DENY" },
           { key: "X-Content-Type-Options", value: "nosniff" },
+          // The admin must never leak a customer's Toke ID or an order number into a
+          // third-party referer header.
           { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          // The admin has no business being indexed, and the staff login page is the one
+          // URL an attacker would look for first.
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive, nosnippet" },
         ],
       },
-      // Two entries because a single `/:path(<regex>)` source requires at least one
-      // segment and so never matches "/". Both exclude `_next/static`: its chunks are
-      // content-hashed and immutable, they contain no PII, and blanket-no-storing them
-      // makes every hard page load re-download the whole bundle for nothing.
+      // Pages hold PII, so they are never stored (see the hardening comment above —
+      // `src/proxy.ts` alone loses to Next's own Cache-Control on rendered pages). Two
+      // entries because a single `/:path(<regex>)` source requires at least one segment
+      // and so never matches "/". Both exclude `_next/static` + `_next/image`: those are
+      // content-hashed, PII-free, and no-storing them re-downloads the bundle for nothing.
       { source: "/", headers: [NO_STORE] },
       { source: "/:path((?!_next/static/|_next/image).*)", headers: [NO_STORE] },
     ];
   },
 };
-
-/**
- * Security headers (Plan-25 task 2). CSP is ENFORCED here, unlike the storefront —
- * see `src/lib/csp.ts` for why the two differ.
- */
-nextConfig.headers = async () => [
-  {
-    source: "/:path*",
-    headers: [
-      { key: CSP_HEADER_NAME, value: buildCsp({ dev: process.env.NODE_ENV !== "production" }) },
-      { key: "X-Frame-Options", value: "DENY" },
-      { key: "X-Content-Type-Options", value: "nosniff" },
-      // The admin must never leak a customer's Toke ID or an order number into a
-      // third-party referer header.
-      { key: "Referrer-Policy", value: "no-referrer" },
-      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-      // The admin has no business being indexed, and the staff login page is the one URL
-      // an attacker would look for first.
-      { key: "X-Robots-Tag", value: "noindex, nofollow" },
-    ],
-  },
-];
 
 export default nextConfig;

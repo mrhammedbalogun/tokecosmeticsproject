@@ -29,6 +29,16 @@ function storefrontOrigin(): string {
   return process.env.NEXT_PUBLIC_STOREFRONT_URL ?? "http://localhost:3000";
 }
 
+/** The host catalogue and banner images are served from — in `img-src` since Plan-17a,
+ *  because without it every product and homepage thumbnail renders broken and the only
+ *  evidence is a CSP violation in the console. Committed as a default rather than left
+ *  to a dashboard entry: the CDN hostname is public (it is in every product page's
+ *  HTML), and a missing env var breaking every production image is not hypothetical —
+ *  it is what happened to the storefront. `NEXT_PUBLIC_MEDIA_HOST` still overrides. */
+function mediaHost(): string {
+  return `https://${process.env.NEXT_PUBLIC_MEDIA_HOST ?? "dk4ivng9pnc2t.cloudfront.net"}`;
+}
+
 /** The Django origin the browser talks to directly. The BFF proxies most calls, but the
  *  value is public either way — it is in the page source. */
 function apiOrigin(): string {
@@ -48,9 +58,11 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
       ...TURNSTILE,
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
-    // `data:` covers the inline QR for TOTP enrolment; no remote image host is needed
-    // because the admin renders no customer or catalogue imagery.
-    "img-src": ["'self'", "data:", "blob:"],
+    // `data:` covers the inline QR for TOTP enrolment; the media host covers catalogue
+    // and homepage-banner thumbnails, which the admin absolutely does render. The API
+    // origin is here for dev, where Django serves uploads itself (/media/…) — in
+    // production it serves none, so the entry is inert.
+    "img-src": ["'self'", "data:", "blob:", mediaHost(), apiOrigin()],
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", apiOrigin(), ...TURNSTILE],
     "frame-src": [...TURNSTILE, storefrontOrigin()],

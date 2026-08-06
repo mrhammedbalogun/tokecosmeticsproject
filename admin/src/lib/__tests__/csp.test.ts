@@ -35,11 +35,15 @@ describe("the admin CSP", () => {
     }
   });
 
-  it("allows data: images for the TOTP enrolment QR and nothing remote", () => {
+  it("allows data: images (TOTP QR) plus the media host the thumbnails need", () => {
+    // The media host was lost once already, when a second headers() assignment in
+    // next.config.ts silently overwrote the block that carried it (found 2026-08-06) —
+    // broken thumbnails whose only evidence is a console CSP violation.
     const img = directive(buildCsp(), "img-src");
     expect(img).toContain("data:");
-    expect(img).not.toContain("cloudfront");
-    expect(img).not.toContain("http://");
+    expect(img).toContain("https://dk4ivng9pnc2t.cloudfront.net");
+    // Images may come from the CDN and the API origin; scripts still may not.
+    expect(directive(buildCsp(), "script-src")).not.toContain("cloudfront");
   });
 
   it("NEVER ALLOWS unsafe-eval IN PRODUCTION", () => {
