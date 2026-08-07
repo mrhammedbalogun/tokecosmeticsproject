@@ -321,8 +321,7 @@ function TileThumb({ banner }: { banner: BannerRow }) {
   }
   if (banner.image) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail of an
-      // uploaded file; next/image buys nothing here.
+      // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail of an uploaded file; next/image buys nothing here.
       <img src={banner.image} alt="" className="absolute inset-0 h-full w-full object-cover" />
     );
   }

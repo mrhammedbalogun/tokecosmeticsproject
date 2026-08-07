@@ -5,7 +5,7 @@ Content, `admin/src/lib/nav.ts` showed a Content editor a "Content" link, and no
 in the project declared the scope. This is the first thing that role can do.
 """
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets
+from rest_framework import mixins, viewsets
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter
@@ -17,10 +17,13 @@ from apps.cms.admin_serializers import (
     GoogleReviewsMetaAdminSerializer,
     BannerAdminSerializer,
     HomepageSectionAdminSerializer,
+    MediaAssetAdminSerializer,
     MenuItemAdminSerializer,
     PageAdminSerializer,
 )
-from apps.cms.models import Banner, HomepageSection, MenuItem, Page, GoogleReview, GoogleReviewsMeta
+from apps.cms.models import (
+    Banner, HomepageSection, MediaAsset, MenuItem, Page, GoogleReview, GoogleReviewsMeta,
+)
 from apps.core.audit import AdminAuditMixin
 
 
@@ -64,6 +67,34 @@ class BannerAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = Banner.objects.prefetch_related("countries").all()
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["placement", "is_active"]
+
+
+class MediaAssetAdminViewSet(
+    AdminAuditMixin,
+    mixins.CreateModelMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
+    """The media library: list, search, upload. See `MediaAsset` for why no delete.
+
+    `marketing.manage`, like the banners the library feeds — today its only consumer.
+    When product images join, this needs an OR of scopes; that is deliberately NOT
+    `HasAdminScope(...) | HasAdminScope(...)` yet, because the surface guard
+    (`test_admin_surface_guard.py`) reads a single `.scope` off each permission and the
+    OR story should be built there first, not smuggled past it. The two scopes' holders
+    are identical today (Owner + Manager), so nothing is lost by waiting.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("marketing.manage")]
+    serializer_class = MediaAssetAdminSerializer
+    audit_serializers = (MediaAssetAdminSerializer,)
+    audit_model_label = "cms.mediaasset"
+    queryset = MediaAsset.objects.all()
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["kind"]
+    search_fields = ["original_name", "file"]
 
 
 class HomepageSectionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):

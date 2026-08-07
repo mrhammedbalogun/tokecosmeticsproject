@@ -7,6 +7,7 @@ from apps.cms.admin_views import (
     GoogleReviewAdminViewSet,
     GoogleReviewsMetaAdminView,
     HomepageSectionAdminViewSet,
+    MediaAssetAdminViewSet,
     MenuItemAdminViewSet,
     PageAdminViewSet,
 )
@@ -14,6 +15,7 @@ from apps.cms.admin_views import (
 router = SimpleRouter()
 router.register("pages", PageAdminViewSet, basename="admin-page")
 router.register("banners", BannerAdminViewSet, basename="admin-banner")
+router.register("media", MediaAssetAdminViewSet, basename="admin-media")
 router.register("homepage-sections", HomepageSectionAdminViewSet, basename="admin-homepage-section")
 router.register("menu-items", MenuItemAdminViewSet, basename="admin-menu-item")
 router.register("google-reviews", GoogleReviewAdminViewSet, basename="admin-google-review")

@@ -294,6 +294,21 @@ def _case_banner_create(client, monkeypatch):
     ), 201
 
 
+def _case_media_upload(client, monkeypatch):
+    import io
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (4, 4), "salmon").save(buf, format="PNG")
+    return client.post(
+        "/api/v1/admin/media/",
+        {"file": SimpleUploadedFile("tile.png", buf.getvalue(), "image/png")},
+        format="multipart",
+    ), 201
+
+
 def _case_homepage_section_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/homepage-sections/",
@@ -607,6 +622,7 @@ WRITE_CASES: dict[str, tuple] = {
     "ProductCSVImportView": (_case_product_csv_import, "import_csv"),
     "PageAdminViewSet": (_case_page_create, "create"),
     "BannerAdminViewSet": (_case_banner_create, "create"),
+    "MediaAssetAdminViewSet": (_case_media_upload, "create"),
     "HomepageSectionAdminViewSet": (_case_homepage_section_create, "create"),
     "MenuItemAdminViewSet": (_case_menu_item_create, "create"),
     "RedirectAdminViewSet": (_case_redirect_create, "create"),

@@ -54,6 +54,15 @@ const NO_STORE = {
  * to change headers, change them HERE.
  */
 const nextConfig: NextConfig = {
+  // Server actions default to a 1MB request-body cap, which silently rejected any
+  // banner/product media upload bigger than that (the modal hung on "Saving…" —
+  // 2026-08-07). 85mb covers the 80MB video guard in uploadBannerMediaAction plus
+  // multipart overhead. NOTE: Vercel's platform still caps function request bodies
+  // (~4.5MB), so this ceiling is only reachable when self-hosting; the upload UI
+  // downscales images client-side to stay under the platform cap.
+  experimental: {
+    serverActions: { bodySizeLimit: "85mb" },
+  },
   async headers() {
     return [
       {

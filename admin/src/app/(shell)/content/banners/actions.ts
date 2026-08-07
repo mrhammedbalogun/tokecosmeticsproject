@@ -3,6 +3,7 @@
 /** Banner writes (Plan-19c). `marketing.manage` — a banner announces a promotion, so it
  *  is campaign material rather than the legally load-bearing copy `cms.manage` protects. */
 import { revalidatePath } from "next/cache";
+import { uploadMediaAction } from "@/app/(shell)/content/media/actions";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 
@@ -112,9 +113,11 @@ export async function reorderBannersAction(orderedIds: number[]): Promise<Banner
   return { savedAt: Date.now() };
 }
 
-/** Media uploads (landing redesign 2026-08-04): image, mobile image, or VIDEO —
- * all land in the Toke S3 bucket via the backend's FileField, exactly like
- * product images. A separate action from the JSON save because media is multipart. */
+/** Media uploads (landing redesign 2026-08-04; rerouted through the media library
+ * 2026-08-07): the file is uploaded ONCE into `/admin/media/` and the banner is then
+ * attached to the new asset by id — so every upload automatically becomes reusable
+ * from the library picker. If the attach fails after the upload succeeded, the file
+ * simply sits in the library, visible and pickable: a harmless partial failure. */
 export async function uploadBannerMediaAction(
   id: number,
   kind: "image" | "mobile_image" | "video",
@@ -125,7 +128,8 @@ export async function uploadBannerMediaAction(
     return { message: "Choose a file to upload." };
   }
   // Hero videos autoplay on the shop's front door; a wrong file here is customer-facing
-  // within a minute. Cheap guards, clear sentences.
+  // within a minute. Cheap guards with clear sentences — the API re-checks by sniffing
+  // the bytes, so these only exist to answer faster.
   if (kind === "video" && !file.type.startsWith("video/")) {
     return { message: "That is not a video file (mp4 or webm)." };
   }
@@ -136,12 +140,26 @@ export async function uploadBannerMediaAction(
     return { message: "Keep uploads under 80 MB — compress the video first." };
   }
   const body = new FormData();
-  body.set(kind, file);
+  body.set("file", file);
+  const uploaded = await uploadMediaAction(body);
+  if (!uploaded.asset) return { message: uploaded.message ?? "The upload was refused — try again." };
+  return attachBannerMediaAction(id, kind, uploaded.asset.id);
+}
+
+/** Point a banner slot at an EXISTING library asset — no bytes move; the two rows
+ * share one S3 object. The API refuses a kind mismatch (a video into an image slot). */
+export async function attachBannerMediaAction(
+  id: number,
+  kind: "image" | "mobile_image" | "video",
+  assetId: number,
+): Promise<BannerState> {
   try {
-    await fetchWithAuth(`/admin/banners/${id}/`, { method: "PATCH", body });
+    await fetchWithAuth(`/admin/banners/${id}/`, {
+      method: "PATCH",
+      body: { [`${kind}_asset`]: assetId },
+    });
   } catch (e) {
-    if (!(e instanceof ApiError)) throw e;
-    return { message: "The upload was refused — try again." };
+    return fail(e, "That file could not be attached.");
   }
   revalidateHome();
   return { savedAt: Date.now() };

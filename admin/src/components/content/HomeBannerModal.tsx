@@ -22,26 +22,39 @@
  */
 import { startTransition, useEffect, useRef, useState } from "react";
 import {
+  attachBannerMediaAction,
   clearBannerMediaAction,
   deleteBannerAction,
   saveBannerAction,
   uploadBannerMediaAction,
 } from "@/app/(shell)/content/banners/actions";
+import { MediaLibraryModal } from "@/components/content/MediaLibraryModal";
 import type { BannerField, BannerRow, CountryOption, PlacementSpec } from "@/lib/banners";
+import { downscaleImage } from "@/lib/image";
+import type { MediaAssetRow } from "@/lib/media";
 
 const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
 
 type MediaKind = "image" | "mobile_image" | "video";
 
-/** What should happen to one media slot on Save: nothing, replace with `file`, or clear. */
+/** What should happen to one media slot on Save: nothing, replace with `file`, attach
+ * the library `asset`, or clear. */
 interface MediaDraft {
   file: File | null;
   previewUrl: string | null;
+  asset: MediaAssetRow | null;
   remove: boolean;
 }
 
-const UNTOUCHED: MediaDraft = { file: null, previewUrl: null, remove: false };
+const UNTOUCHED: MediaDraft = { file: null, previewUrl: null, asset: null, remove: false };
+
+/** What a slot holds, for the library modal's heading. */
+const SLOT_NOUN: Record<MediaKind, string> = {
+  image: "Image",
+  mobile_image: "Phone image",
+  video: "Video",
+};
 
 export function HomeBannerModal({
   spec,
@@ -82,6 +95,8 @@ export function HomeBannerModal({
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [removeArmed, setRemoveArmed] = useState(false);
+  /** Which slot's library picker is open, if any. */
+  const [libraryFor, setLibraryFor] = useState<MediaKind | null>(null);
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -89,12 +104,16 @@ export function HomeBannerModal({
   }, []);
 
   useEffect(() => {
+    // One document listener owns Escape for both layers: two stacked listeners cannot
+    // stop each other, so Escape with the library open would close the whole editor.
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (libraryFor) setLibraryFor(null);
+      else onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, libraryFor]);
 
   // Object URLs leak GPU/heap until revoked; one cleanup on unmount covers close,
   // save-and-close and cancel alike.
@@ -104,15 +123,24 @@ export function HomeBannerModal({
     return () => urls.forEach((u) => URL.revokeObjectURL(u));
   }, []);
 
-  const stageFile = (kind: MediaKind, file: File | null) => {
+  const stageFile = async (kind: MediaKind, file: File | null) => {
     if (!file) return;
-    const previewUrl = URL.createObjectURL(file);
+    // Images are downscaled BEFORE staging, so the preview shows the file that will
+    // actually upload — and so the upload fits the platform's request-body cap.
+    const staged = kind === "video" ? file : await downscaleImage(file);
+    const previewUrl = URL.createObjectURL(staged);
     urlsRef.current.push(previewUrl);
-    setMedia((m) => ({ ...m, [kind]: { file, previewUrl, remove: false } }));
+    setMedia((m) => ({ ...m, [kind]: { file: staged, previewUrl, asset: null, remove: false } }));
+  };
+
+  /** A library pick — previewed straight from its hosted URL, applied on Save. */
+  const stageAsset = (kind: MediaKind, asset: MediaAssetRow) => {
+    setMedia((m) => ({ ...m, [kind]: { file: null, previewUrl: asset.file, asset, remove: false } }));
+    setLibraryFor(null);
   };
 
   const stageRemove = (kind: MediaKind) => {
-    setMedia((m) => ({ ...m, [kind]: { file: null, previewUrl: null, remove: true } }));
+    setMedia((m) => ({ ...m, [kind]: { file: null, previewUrl: null, asset: null, remove: true } }));
   };
 
   const unstage = (kind: MediaKind) => {
@@ -125,49 +153,61 @@ export function HomeBannerModal({
     setErrors({});
     setMessage(null);
     startTransition(async () => {
-      const state = await saveBannerAction({
-        id: banner?.id,
-        title: values.title,
-        subtitle: values.subtitle,
-        tagline: values.tagline,
-        cta_text: values.cta_text,
-        cta_url: values.cta_url,
-        placement: spec.value,
-        sort: banner?.sort ?? presetSort,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        is_active: isActive,
-        countries,
-      });
-      if (!state.savedAt || !state.id) {
-        setPending(false);
-        setErrors(state.fieldErrors ?? {});
-        setMessage(state.message ?? null);
-        return;
-      }
-      // Text is saved; now let the staged media chase the id. A failed upload keeps the
-      // modal open and says so — the tile exists, its artwork just has not changed.
-      for (const kind of ["image", "mobile_image", "video"] as MediaKind[]) {
-        const draft = media[kind];
-        let result = null;
-        if (draft.file) {
-          const formData = new FormData();
-          formData.set("file", draft.file);
-          result = await uploadBannerMediaAction(state.id, kind, formData);
-        } else if (draft.remove) {
-          result = await clearBannerMediaAction(state.id, kind);
-        }
-        if (result && !result.savedAt) {
-          const noun = kind === "video" ? "video" : kind === "mobile_image" ? "phone image" : "image";
+      // The try/catch is load-bearing: a server action whose REQUEST is rejected (a
+      // body over the size limit, a network drop) rejects the promise on the client —
+      // without the catch, `pending` stays true and the modal says "Saving…" forever.
+      try {
+        const state = await saveBannerAction({
+          id: banner?.id,
+          title: values.title,
+          subtitle: values.subtitle,
+          tagline: values.tagline,
+          cta_text: values.cta_text,
+          cta_url: values.cta_url,
+          placement: spec.value,
+          sort: banner?.sort ?? presetSort,
+          starts_at: startsAt,
+          ends_at: endsAt,
+          is_active: isActive,
+          countries,
+        });
+        if (!state.savedAt || !state.id) {
           setPending(false);
-          setMessage(
-            `Saved, but the ${noun} did not go through: ${result.message ?? "try the upload again."}`,
-          );
+          setErrors(state.fieldErrors ?? {});
+          setMessage(state.message ?? null);
           return;
         }
+        // Text is saved; now let the staged media chase the id. A failed upload keeps the
+        // modal open and says so — the tile exists, its artwork just has not changed.
+        for (const kind of ["image", "mobile_image", "video"] as MediaKind[]) {
+          const draft = media[kind];
+          let result = null;
+          if (draft.file) {
+            const formData = new FormData();
+            formData.set("file", draft.file);
+            result = await uploadBannerMediaAction(state.id, kind, formData);
+          } else if (draft.asset) {
+            result = await attachBannerMediaAction(state.id, kind, draft.asset.id);
+          } else if (draft.remove) {
+            result = await clearBannerMediaAction(state.id, kind);
+          }
+          if (result && !result.savedAt) {
+            const noun = kind === "video" ? "video" : kind === "mobile_image" ? "phone image" : "image";
+            setPending(false);
+            setMessage(
+              `Saved, but the ${noun} did not go through: ${result.message ?? "try the upload again."}`,
+            );
+            return;
+          }
+        }
+        setPending(false);
+        onClose();
+      } catch {
+        setPending(false);
+        setMessage(
+          "The save did not reach the server. If you attached a large file (over about 4 MB), compress it and try again — otherwise check the connection and retry.",
+        );
       }
-      setPending(false);
-      onClose();
     });
   };
 
@@ -179,10 +219,15 @@ export function HomeBannerModal({
     }
     setPending(true);
     startTransition(async () => {
-      const state = await deleteBannerAction(banner.id);
-      setPending(false);
-      if (state.savedAt) onClose();
-      else setMessage(state.message ?? "That could not be removed.");
+      try {
+        const state = await deleteBannerAction(banner.id);
+        setPending(false);
+        if (state.savedAt) onClose();
+        else setMessage(state.message ?? "That could not be removed.");
+      } catch {
+        setPending(false);
+        setMessage("The removal did not reach the server — check the connection and retry.");
+      }
     });
   };
 
@@ -251,6 +296,7 @@ export function HomeBannerModal({
               draft={media.image}
               aspect={spec.aspect}
               onPick={(f) => stageFile("image", f)}
+              onLibrary={() => setLibraryFor("image")}
               onRemove={() => stageRemove("image")}
               onUndo={() => unstage("image")}
             />
@@ -262,6 +308,7 @@ export function HomeBannerModal({
               draft={media.video}
               aspect={spec.aspect}
               onPick={(f) => stageFile("video", f)}
+              onLibrary={() => setLibraryFor("video")}
               onRemove={() => stageRemove("video")}
               onUndo={() => unstage("video")}
             />
@@ -273,6 +320,7 @@ export function HomeBannerModal({
               draft={media.mobile_image}
               aspect={spec.aspect}
               onPick={(f) => stageFile("mobile_image", f)}
+              onLibrary={() => setLibraryFor("mobile_image")}
               onRemove={() => stageRemove("mobile_image")}
               onUndo={() => unstage("mobile_image")}
             />
@@ -367,13 +415,24 @@ export function HomeBannerModal({
           )}
         </div>
       </form>
+
+      {libraryFor && (
+        <MediaLibraryModal
+          kind={libraryFor === "video" ? "video" : "image"}
+          heading={`${SLOT_NOUN[libraryFor]} — choose from the library`}
+          onPick={(asset) => stageAsset(libraryFor, asset)}
+          onClose={() => setLibraryFor(null)}
+        />
+      )}
     </div>
   );
 }
 
 /**
- * One staged media slot. Three visual states: the staged pick (object URL), the current
- * upload (S3 URL), or empty. "Remove" stages a clear; "Undo" walks either staging back.
+ * One staged media slot. The preview shows the staged pick (a chosen file's object URL
+ * or a library asset's hosted URL), else the current upload, else empty. "Library"
+ * opens the picker so an earlier upload can be reused; "Remove" stages a clear; "Undo"
+ * walks any staging back.
  */
 function MediaSlot({
   label,
@@ -383,6 +442,7 @@ function MediaSlot({
   draft,
   aspect,
   onPick,
+  onLibrary,
   onRemove,
   onUndo,
 }: {
@@ -393,11 +453,12 @@ function MediaSlot({
   draft: MediaDraft;
   aspect: string;
   onPick: (file: File) => void;
+  onLibrary: () => void;
   onRemove: () => void;
   onUndo: () => void;
 }) {
   const showUrl = draft.previewUrl ?? (draft.remove ? null : current);
-  const staged = draft.file !== null || draft.remove;
+  const staged = draft.file !== null || draft.asset !== null || draft.remove;
   return (
     <div className="text-xs">
       <p className="font-medium text-muted">{label}</p>
@@ -408,8 +469,7 @@ function MediaSlot({
           kind === "video" ? (
             <video src={showUrl} preload="metadata" muted playsInline className="h-full w-full object-cover" />
           ) : (
-            // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail of an
-            // uploaded/staged file; next/image buys nothing here.
+            // eslint-disable-next-line @next/next/no-img-element -- admin thumbnail of an uploaded/staged file; next/image buys nothing here.
             <img src={showUrl} alt="" className="h-full w-full object-cover" />
           )
         ) : (
@@ -432,6 +492,13 @@ function MediaSlot({
             }}
           />
         </label>
+        <button
+          type="button"
+          onClick={onLibrary}
+          className="rounded border border-line px-2.5 py-1 hover:border-accent"
+        >
+          Library
+        </button>
         {staged ? (
           <button type="button" onClick={onUndo} className="rounded border border-line px-2.5 py-1 hover:border-accent">
             Undo

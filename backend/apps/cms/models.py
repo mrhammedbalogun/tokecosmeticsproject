@@ -3,11 +3,51 @@
 Plan-19a ships `Page` only. Banner, HomepageSection and MenuItem arrive in 19c — see the
 plan for why the homepage builder is sequenced behind the things with launch consequences.
 """
+from django.conf import settings
 from django.db import models
 from django.utils.text import slugify
 
 from apps.cms.sanitize import clean_html
 from apps.core.models import TimeStampedModel
+
+
+class MediaAsset(TimeStampedModel):
+    """One reusable file in the media library (2026-08-07).
+
+    Before this model, every upload was born attached to one banner and reusing an image
+    meant uploading it again — the library makes an upload a fact of its own that any
+    number of tiles can point at. Files land under `catalog/library/` because Hammed's
+    standing ruling is that all media lives in the Toke S3 bucket and CloudFront serves
+    only the `catalog/` prefix.
+
+    `kind` is derived SERVER-SIDE at upload (Pillow sniff for images), never taken from
+    the client's Content-Type — it is what lets banner attachment refuse an .mp4 behind
+    an `<img>`. NO DELETE in v1: banners reference assets with `on_delete=PROTECT`, so
+    when deletion arrives it can refuse "still in use" by construction instead of by
+    string-scanning media columns. Nothing here (or anywhere in the project) deletes the
+    underlying S3 object, so two rows sharing one file is safe.
+    """
+
+    IMAGE = "image"
+    VIDEO = "video"
+    KIND_CHOICES = [(IMAGE, "Image"), (VIDEO, "Video")]
+
+    file = models.FileField(upload_to="catalog/library/", max_length=300)
+    kind = models.CharField(max_length=5, choices=KIND_CHOICES)
+    # What the uploader called it — `file.name` gets uniqued by storage, and the picker
+    # searches on the human name.
+    original_name = models.CharField(max_length=255, blank=True)
+    size = models.PositiveBigIntegerField(default=0)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="media_assets",
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.original_name or self.file.name} ({self.kind})"
 
 
 class Page(TimeStampedModel):
@@ -112,6 +152,25 @@ class Banner(TimeStampedModel):
     # banner artwork. The storefront renders <video autoplay muted loop> with the
     # image (if any) as poster; no media-type tag is ever shown to customers.
     video = models.FileField(upload_to="catalog/cms-banners/", blank=True)
+    # Media-library bindings (2026-08-07). The FileFields above remain what the
+    # storefront renders; these record WHERE the file came from when it was a library
+    # pick, so "which tiles use this asset?" is a reverse relation rather than a string
+    # scan, and future asset deletion can refuse "still in use" via PROTECT. The
+    # serializer keeps pair and file in sync — a direct upload clears the binding, an
+    # attach copies the asset's key into the FileField. NULL simply means "not a
+    # library pick" (uploaded directly, or predates the library).
+    image_asset = models.ForeignKey(
+        MediaAsset, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="banners_as_image",
+    )
+    mobile_image_asset = models.ForeignKey(
+        MediaAsset, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="banners_as_mobile_image",
+    )
+    video_asset = models.ForeignKey(
+        MediaAsset, null=True, blank=True, on_delete=models.PROTECT,
+        related_name="banners_as_video",
+    )
     # The third text some tiles need (a section tagline, the feature paragraph).
     # Plain text like everything else here — React escapes it.
     tagline = models.CharField(max_length=300, blank=True)

@@ -181,6 +181,10 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # load-bearing copy — rbac.py argues the split. A content editor must not be able to
     # override a live campaign's placement.
     "BannerAdminViewSet": "marketing.manage",
+    # The media library feeds the banner tiles, its only consumer today. When product
+    # images join, this becomes an OR of scopes — see the viewset docstring for why
+    # that is a change to THIS guard first.
+    "MediaAssetAdminViewSet": "marketing.manage",
     # Landing redesign: featured Google reviews are campaign material, like banners.
     "GoogleReviewAdminViewSet": "marketing.manage",
     "GoogleReviewsMetaAdminView": "marketing.manage",

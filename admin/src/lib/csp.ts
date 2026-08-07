@@ -63,6 +63,10 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     // origin is here for dev, where Django serves uploads itself (/media/…) — in
     // production it serves none, so the entry is inert.
     "img-src": ["'self'", "data:", "blob:", mediaHost(), apiOrigin()],
+    // The tile editor and media library preview VIDEOS too: uploaded ones from the
+    // media host (dev: Django), staged ones from blob: object URLs. Without this
+    // directive they fall back to default-src 'self' and every preview is blocked.
+    "media-src": ["'self'", "blob:", mediaHost(), apiOrigin()],
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", apiOrigin(), ...TURNSTILE],
     "frame-src": [...TURNSTILE, storefrontOrigin()],
