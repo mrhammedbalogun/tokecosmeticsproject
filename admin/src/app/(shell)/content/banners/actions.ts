@@ -46,6 +46,8 @@ export async function saveBannerAction(input: {
   is_active: boolean;
   /** Country codes the banner is limited to; empty means everywhere. */
   countries: string[];
+  /** How an attached video plays on the storefront. */
+  video_mode: "loop" | "click";
 }): Promise<BannerState> {
   if (!input.title.trim()) return { fieldErrors: { title: "A banner needs a title." } };
   if (input.starts_at && input.ends_at && input.starts_at >= input.ends_at) {
@@ -64,6 +66,7 @@ export async function saveBannerAction(input: {
     ends_at: input.ends_at || null,
     is_active: input.is_active,
     countries: input.countries,
+    video_mode: input.video_mode,
   };
 
   let saved: { id: number };

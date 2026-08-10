@@ -1,10 +1,13 @@
 import Image from "next/image";
+import { ClickToPlayVideo } from "@/components/home/ClickToPlayVideo";
 import type { CmsBanner } from "@/lib/cms";
 import { mediaUrl } from "@/lib/media";
 
-/** The one media layer every homepage tile shares: the banner's video (autoplay,
- * muted, looped, image as poster) beats its image beats the tile's built-in
- * brand-gradient tone. Absolutely positioned — the parent owns size and overlay. */
+/** The one media layer every homepage tile shares: the banner's video beats its image
+ * beats the tile's built-in brand-gradient tone. How a video plays is the banner's
+ * `video_mode`: "loop" autoplays muted with the image as poster; "click" shows the
+ * poster with a play button and downloads nothing until it is pressed. Absolutely
+ * positioned — the parent owns size and overlay. */
 export function TileMedia({
   banner,
   tone,
@@ -17,6 +20,15 @@ export function TileMedia({
   const img = mediaUrl(banner?.image ?? null);
   const mobileImg = mediaUrl(banner?.mobile_image ?? null);
   if (banner?.video_url) {
+    if (banner.video_mode === "click") {
+      return (
+        <ClickToPlayVideo
+          src={banner.video_url}
+          poster={img}
+          label={`Play the video${banner.title ? `: ${banner.title}` : ""}`}
+        />
+      );
+    }
     return (
       <video
         className="absolute inset-0 h-full w-full object-cover"
@@ -26,6 +38,9 @@ export function TileMedia({
         muted
         loop
         playsInline
+        // Without this the browser eagerly downloads the whole file on every visit —
+        // it was missing until 2026-08-09.
+        preload="metadata"
       />
     );
   }

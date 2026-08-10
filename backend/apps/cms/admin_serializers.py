@@ -10,7 +10,11 @@ from apps.cms.models import (
 # the caps that actually hold. Values match what the surfaces need: no homepage image
 # should be anywhere near 15MB, and 80MB mirrors the long-standing video guidance.
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
-MAX_VIDEO_BYTES = 80 * 1024 * 1024
+# 128MB since 2026-08-09. The presigned path reads this for its S3 policy condition and
+# again when re-checking what actually landed; the legacy multipart path still reads it
+# too. ONE constant — a second copy is how `next.config.ts`'s unreachable 85MB ended up
+# looking authoritative.
+MAX_VIDEO_BYTES = 128 * 1024 * 1024
 VIDEO_EXTENSIONS = (".mp4", ".webm")
 
 
@@ -103,7 +107,8 @@ class BannerAdminSerializer(serializers.ModelSerializer):
     audit_allowlist = (
         "title", "subtitle", "tagline", "cta_text", "cta_url", "placement", "sort",
         "starts_at", "ends_at", "is_active", "countries",
-        "image", "mobile_image", "video", "image_asset", "mobile_image_asset", "video_asset",
+        "image", "mobile_image", "video", "video_mode",
+        "image_asset", "mobile_image_asset", "video_asset",
     )
 
     # Media slot ←→ library binding, kept in sync both ways in validate().
@@ -118,7 +123,8 @@ class BannerAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Banner
         fields = [
-            "id", "title", "subtitle", "tagline", "image", "mobile_image", "video", "cta_text",
+            "id", "title", "subtitle", "tagline", "image", "mobile_image", "video",
+            "video_mode", "cta_text",
             "cta_url", "placement", "sort", "starts_at", "ends_at", "is_active",
             "countries", "is_live", "updated_at",
             "image_asset", "mobile_image_asset", "video_asset",
@@ -241,3 +247,32 @@ class GoogleReviewsMetaAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = GoogleReviewsMeta
         fields = ["rating", "review_count_text", "profile_url", "updated_at"]
+
+
+class VideoTicketRequestSerializer(serializers.Serializer):
+    """What the browser asks for. Note what is NOT here: the destination key. The client
+    does not get to influence where its bytes land."""
+
+    audit_allowlist = ("filename", "size", "container")
+
+    filename = serializers.CharField(max_length=255)
+    size = serializers.IntegerField(min_value=1)
+    container = serializers.ChoiceField(choices=["mp4", "webm"])
+
+    def validate_size(self, size):
+        if size > MAX_VIDEO_BYTES:
+            raise serializers.ValidationError(
+                f"Keep videos under {MAX_VIDEO_BYTES // (1024 * 1024)} MB — "
+                "re-encode at 720p and about 2 Mbps, which is plenty for the web."
+            )
+        return size
+
+
+class VideoFinalizeSerializer(serializers.Serializer):
+    """`key` is echoed back from the ticket. It is re-validated server-side rather than
+    trusted — see `s3_uploads.assert_incoming`."""
+
+    audit_allowlist = ("key", "original_name")
+
+    key = serializers.CharField(max_length=300)
+    original_name = serializers.CharField(max_length=255, allow_blank=True, default="")

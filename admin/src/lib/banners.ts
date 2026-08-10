@@ -59,9 +59,9 @@ export const PLACEMENTS: PlacementSpec[] = [
   {
     value: "hero",
     label: "Hero slide",
-    // The video ceiling is the platform's ~4 MB request cap (see lib/image.ts), not the
-    // API's 80 MB guard — that one is only reachable when self-hosting.
-    guide: "Image 1920×1080, or a short mp4/webm under 4 MB (the image becomes the poster). 2+ slides make the slider rotate.",
+    // Videos bypass the platform's request cap entirely (direct-to-S3, 2026-08-09), so
+    // the ceiling is the API's 128 MB guard — see lib/video.ts.
+    guide: "Image 1920×1080, or mp4/webm up to 128 MB (the image becomes the poster). A looping video should be under 6 MB — it downloads for every visitor. 2+ slides make the slider rotate.",
     fields: [
       { key: "subtitle", label: "Eyebrow", hint: "The small line above the headline." },
       { key: "title", label: "Headline" },
@@ -303,6 +303,9 @@ export interface BannerRow {
   image: string | null;
   mobile_image: string | null;
   video: string | null;
+  /** "loop" autoplays silently on the storefront; "click" shows the poster with a play
+   * button. The server defaults to loop, so older rows behave as they always did. */
+  video_mode: "loop" | "click";
   tagline: string;
   cta_text: string;
   cta_url: string;

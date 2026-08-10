@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { bannerState, livePlacement, type BannerRow } from "@/lib/banners";
 
 const banner = (over: Partial<BannerRow> = {}): BannerRow => ({
-  id: 1, title: "Sale", subtitle: "", image: null, mobile_image: null, video: null, tagline: "",
+  id: 1, title: "Sale", subtitle: "", image: null, mobile_image: null, video: null,
+  video_mode: "loop", tagline: "",
   cta_text: "", cta_url: "", placement: "strip", sort: 0,
   starts_at: null, ends_at: null, is_active: true, countries: [], updated_at: "",
   ...over,

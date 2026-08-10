@@ -2,15 +2,17 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { ClickToPlayVideo } from "@/components/home/ClickToPlayVideo";
 import type { CmsBanner } from "@/lib/cms";
 import { HERO } from "@/lib/home-content";
 import { mediaUrl } from "@/lib/media";
 
 /** The hero SLIDER (landing redesign, approved 2026-08-04). Full-bleed, square
  * corners, the Plan-13 hero's min-h-[78vh]. Slides are CMS hero banners in sort
- * order; each is an image banner or — when `video_url` is set — an autoplaying
- * muted looping video with the image as poster. No media-type is ever labelled
- * for the customer (Hammed's ruling).
+ * order; each is an image banner or — when `video_url` is set — a video whose
+ * `video_mode` decides playback: "loop" autoplays muted with the image as poster,
+ * "click" shows the poster with a play button and fetches nothing until pressed.
+ * No media-type is ever labelled for the customer (Hammed's ruling).
  *
  * Chrome mirrors the production site's slider, upgraded: numbered title tabs
  * (01/02/03) that are clickable, an autoplay progress bar on the active tab,
@@ -30,6 +32,8 @@ interface Slide {
   /** A different crop for phones, not a resize — rendered as its own <Image>. */
   mobileImage: string | null;
   video: string;
+  /** "loop" autoplays muted; "click" waits for the visitor and shows controls. */
+  videoMode: "loop" | "click";
   ctaText: string;
   ctaHref: string;
 }
@@ -46,6 +50,7 @@ function slidesFrom(banners: CmsBanner[]): Slide[] {
       image: mediaUrl(b.image),
       mobileImage: mediaUrl(b.mobile_image),
       video: b.video_url,
+      videoMode: b.video_mode,
       ctaText: b.cta_text,
       ctaHref: b.cta_url,
     }));
@@ -60,6 +65,7 @@ function slidesFrom(banners: CmsBanner[]): Slide[] {
       image: HERO.image,
       mobileImage: null,
       video: "",
+      videoMode: "loop",
       ctaText: "",
       ctaHref: "",
     },
@@ -110,7 +116,15 @@ export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
           className={`${i === current ? "opacity-100" : "pointer-events-none opacity-0"} absolute inset-0 transition-opacity duration-700 motion-reduce:transition-none`}
           aria-hidden={i !== current}
         >
-          {slide.video && !reduced ? (
+          {slide.video && slide.videoMode === "click" ? (
+            // Click-to-play never autoplays, so reduced motion has nothing to protect
+            // against — no `!reduced` guard here.
+            <ClickToPlayVideo
+              src={slide.video}
+              poster={slide.image}
+              label={`Play the video${slide.headline ? `: ${slide.headline}` : ""}`}
+            />
+          ) : slide.video && !reduced ? (
             <video
               className="absolute inset-0 h-full w-full object-cover"
               src={slide.video}
@@ -119,6 +133,9 @@ export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
               muted
               loop
               playsInline
+              // Without this the browser eagerly downloads the whole file on every
+              // visit — it was missing until 2026-08-09.
+              preload="metadata"
             />
           ) : slide.image && slide.mobileImage ? (
             <>
