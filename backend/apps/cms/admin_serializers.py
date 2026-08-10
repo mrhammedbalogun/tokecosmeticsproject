@@ -103,7 +103,8 @@ class BannerAdminSerializer(serializers.ModelSerializer):
     audit_allowlist = (
         "title", "subtitle", "tagline", "cta_text", "cta_url", "placement", "sort",
         "starts_at", "ends_at", "is_active", "countries",
-        "image", "mobile_image", "video", "image_asset", "mobile_image_asset", "video_asset",
+        "image", "mobile_image", "video", "video_mode",
+        "image_asset", "mobile_image_asset", "video_asset",
     )
 
     # Media slot ←→ library binding, kept in sync both ways in validate().
@@ -118,7 +119,8 @@ class BannerAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Banner
         fields = [
-            "id", "title", "subtitle", "tagline", "image", "mobile_image", "video", "cta_text",
+            "id", "title", "subtitle", "tagline", "image", "mobile_image", "video",
+            "video_mode", "cta_text",
             "cta_url", "placement", "sort", "starts_at", "ends_at", "is_active",
             "countries", "is_live", "updated_at",
             "image_asset", "mobile_image_asset", "video_asset",

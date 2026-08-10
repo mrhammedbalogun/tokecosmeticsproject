@@ -152,6 +152,14 @@ class Banner(TimeStampedModel):
     # banner artwork. The storefront renders <video autoplay muted loop> with the
     # image (if any) as poster; no media-type tag is ever shown to customers.
     video = models.FileField(upload_to="catalog/cms-banners/", blank=True)
+    # 2026-08-09. Until now playback was hardcoded to autoplay+loop in the storefront,
+    # so a long film could not be offered without every visitor downloading it. LOOP is
+    # the default because it is what every existing banner already does — the migration
+    # must not change how the live homepage behaves.
+    LOOP = "loop"
+    CLICK = "click"
+    VIDEO_MODE_CHOICES = [(LOOP, "Loop silently"), (CLICK, "Play on click")]
+    video_mode = models.CharField(max_length=5, choices=VIDEO_MODE_CHOICES, default=LOOP)
     # Media-library bindings (2026-08-07). The FileFields above remain what the
     # storefront renders; these record WHERE the file came from when it was a library
     # pick, so "which tiles use this asset?" is a reverse relation rather than a string

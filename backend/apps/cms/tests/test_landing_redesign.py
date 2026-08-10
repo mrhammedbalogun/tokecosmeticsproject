@@ -55,3 +55,24 @@ def test_reviews_meta_is_a_singleton():
     GoogleReviewsMeta(rating=Decimal("4.9"), review_count_text="350+").save()
     assert GoogleReviewsMeta.objects.count() == 1
     assert GoogleReviewsMeta.objects.get().review_count_text == "350+"
+
+
+@pytest.mark.django_db
+def test_banner_video_mode_defaults_to_loop_and_reaches_the_wire():
+    """A banner made before this field existed must keep behaving exactly as it did."""
+    banner = Banner.objects.create(title="Hero", placement="hero", is_active=True)
+    assert banner.video_mode == "loop"
+
+    r = APIClient().get("/api/v1/cms/homepage/")
+    assert r.status_code == 200
+    hero = next(b for b in r.json()["banners"] if b["placement"] == "hero")
+    assert hero["video_mode"] == "loop"
+
+
+@pytest.mark.django_db
+def test_banner_video_mode_accepts_click():
+    banner = Banner.objects.create(
+        title="Film", placement="hero", is_active=True, video_mode="click",
+    )
+    banner.full_clean()
+    assert banner.video_mode == "click"
