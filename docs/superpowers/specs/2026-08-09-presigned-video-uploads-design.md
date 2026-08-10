@@ -2,7 +2,13 @@
 
 **Date:** 2026-08-09
 **Status:** design approved, awaiting implementation plan
-**Scope:** the upload transport for video only. Images are not touched.
+**Scope:** the upload transport for video only, plus a per-banner loop / click-to-play
+choice. Images are not touched.
+
+**Amended 2026-08-09 after review.** Two additions at the owner's request: banners gain a
+`video_mode` (loop or click-to-play), and the two storefront video elements gain the
+`preload` attribute they are currently missing. This means the build now touches the
+storefront, which the first draft said it would not - see "Video playback mode".
 
 ## The problem
 
@@ -164,7 +170,9 @@ codebase, not a new trick - see `admin_serializers.py:186` ("A string assigns th
 | `backend/apps/cms/admin_serializers.py` | Ticket request/response serializers; video magic-byte sniff. Existing image validation untouched. |
 | `admin/src/lib/upload.ts` *(new)* | XHR upload with progress and abort. XHR rather than `fetch` because `fetch` reports no upload progress. |
 | `admin/src/app/(shell)/content/media/actions.ts` | Two new server actions. |
-| `MediaLibraryModal.tsx`, `HomeBannerModal.tsx` | Video slots rewired to the new path. Image slots unchanged. |
+| `MediaLibraryModal.tsx`, `HomeBannerModal.tsx` | Video slots rewired to the new path. Image slots unchanged. Adds the `video_mode` radio. |
+| `backend/apps/cms/models.py` + migration | `Banner.video_mode`, default `loop`. |
+| `storefront/.../TileMedia.tsx`, `HeroSlider.tsx` | Honour `video_mode`; add the missing `preload`. |
 
 ## Security hardening
 
@@ -181,7 +189,14 @@ Each of these is mandatory, and each exists for a specific failure:
 5. **Ceiling re-checked from `head_object`**, never trusted from the ticket request.
 6. **Lifecycle rule with an explicit `Filter.Prefix = "incoming/"`**, read back with
    `get-bucket-lifecycle-configuration` after creation and shown to the owner. Covers both
-   current and noncurrent versions, since versioning is on.
+   current and noncurrent versions (versioning is on) and aborts incomplete multipart
+   uploads. **This is the only lifecycle rule this project creates** - see below.
+
+   Two footguns, called out because this bucket holds the only off-box database backups:
+   an **empty filter applies to the whole bucket**, which would expire every product image
+   under `catalog/` and every dump under `backups/`; and
+   `PutBucketLifecycleConfiguration` **replaces the entire configuration rather than
+   merging**, so any rule added later must resend this one or it silently disappears.
 7. **Audit parity.** Both endpoints audit explicitly; they bypass the serializer whose
    `audit_allowlist` provides it today.
 
@@ -220,11 +235,42 @@ weaken anything, because it enforces the same ceiling from the same constant and
 `sniff_kind` is strictly weaker only on the extension question, which the admin UI no
 longer relies on.
 
-The hero loop needs a *different* limit and for a different reason. The film is
-click-to-play, so its bytes are opt-in; the hero loop downloads automatically for every
-homepage visitor, many on Nigerian mobile data. A 25 MB loop is not a loop. Target 3-5 MB
-(10-15s, 720p, muted, no audio track). The editor warns above ~6 MB on a hero placement -
-a warning, not a block.
+A looping video needs a *different* limit and for a different reason. A click-to-play film's
+bytes are opt-in; a loop downloads automatically for every visitor, many on Nigerian mobile
+data. A 25 MB loop is not a loop. Target 3-5 MB (10-15s, 720p, muted, no audio track).
+
+**The warning keys off `video_mode`, not off the placement.** Loop -> warn above ~6 MB.
+Click-to-play -> allow the full ceiling. This is more accurate than a placement rule: what
+costs the customer is autoplay, not which tile the video sits in. A warning, not a block.
+
+## Video playback mode
+
+Today playback is hardcoded. Both render sites -
+`storefront/src/components/home/TileMedia.tsx:21-29` and
+`storefront/src/components/home/HeroSlider.tsx:114-122` - emit
+`autoPlay muted loop playsInline`, so there is no way to have a video that is not an
+autoplaying loop.
+
+**New field `Banner.video_mode`**, choices `loop` (default) and `click`. The default
+preserves today's behaviour byte for byte, so the migration changes nothing visible.
+
+| Mode | Storefront render |
+|---|---|
+| `loop` | current element, unchanged, plus `preload="metadata"` |
+| `click` | poster image with a play control; the video element is only mounted on press, so a visitor who never presses play downloads no video bytes |
+
+Admin: a radio in the tile editor's media section, shown only once a video is attached.
+
+`HeroSlider` already falls back to the still image under `prefers-reduced-motion`
+(`slide.video && !reduced`). That behaviour is preserved for `loop` and is irrelevant for
+`click`, which never autoplays.
+
+### A live bug this fixes
+
+Neither video element sets `preload`, so browsers default to eager loading. **The current
+hero video is fully downloaded on every homepage visit**, before any visitor chooses to
+watch anything. Adding `preload="metadata"` to the loop path is a small change with an
+immediate mobile-data benefit, independent of everything else in this spec.
 
 ## Failure handling
 
@@ -295,6 +341,15 @@ today's extension check gets wrong).
 each error sentence; and a regression test pinning the duplicate-banner fix through the
 video slot's three-step flow.
 
+**Video mode (both suites):**
+- the migration defaults existing banners to `loop`, so nothing on the live homepage
+  changes appearance - asserted against a banner created before the migration
+- `loop` renders an autoplaying element **with `preload="metadata"`**
+- `click` renders **no `<video>` element at all** until the control is pressed - the whole
+  point is that a visitor who never presses play downloads no video bytes
+- `prefers-reduced-motion` still falls back to the still image under `loop`
+- the ~6 MB warning fires for `loop` and does **not** fire for `click`
+
 **Live verification before this is called done:**
 
 1. Upload a real ~50 MB video end-to-end through the admin
@@ -308,11 +363,32 @@ video slot's three-step flow.
 
 - **Product gallery video** - needs a product model field, admin gallery work and PDP
   rendering. Its own spec.
-- **The homepage film section** - a new placement, poster handling and a storefront
-  section. Its own spec. This upload path unblocks it.
-- **Backups sharing the media bucket.** Versioning is on, so the acute danger is lower
-  than feared, but there is no lifecycle rule anywhere and noncurrent versions accumulate
-  indefinitely for any overwritten key. This is the parked
-  `project_tokecosmetics_s3_backup_risk.md` in new clothing, and this design has now
-  collided with it twice. Recommend splitting backups into their own bucket with a
-  least-privilege credential, as a separate piece of work.
+- **The homepage film section** - a dedicated placement with its own layout and copy. Its
+  own spec. Note the amendment above pulls the *playback* half forward: with
+  `video_mode = click` any existing placement can already hold a click-to-play film, so
+  what remains deferred is the section's design, not the capability.
+- **Backups sharing the media bucket.** Investigated 2026-08-09 when the owner asked which
+  prefix a retention rule should target. The answer is **none, for now** - and the earlier
+  "noncurrent versions accumulate forever" worry does **not** apply to backups:
+
+  - `backups/postgres/` holds 67 objects totalling **5.37 MB**, growing ~100 KB a day.
+  - Every dump has a unique date-stamped key (`toke-20260810-023001.sql.gz`), so backups
+    **never overwrite** and generate no noncurrent versions at all.
+  - At that rate ten years of history costs about a cent a month. An expiration rule would
+    delete the only off-box copies of the database to save a rounding error.
+
+  More importantly, **a lifecycle rule does not address the actual risk.** The risk is that
+  the Django `web` container holds a credential that can *delete* the dumps; lifecycle
+  rules govern object age, not permissions. Adding one would leave the risk untouched while
+  looking like it had been handled. The real fix remains a separate IAM user scoped to
+  `s3:PutObject` on `backups/postgres/*` with no `DeleteObject` - step 3 of
+  `project_tokecosmetics_s3_backup_risk.md`, still open, still the one that matters.
+
+  If a retention rule is wanted anyway: prefix `backups/postgres/`, expiration 365 days,
+  noncurrent expiration 30 days - subject to both footguns in hardening item 6.
+
+- **`cms/` prefix.** `cms/banners/` holds sample artwork including
+  `sample-hero-video.mp4`. The bucket policy grants CloudFront `catalog/*` only, so
+  nothing under `cms/` is servable through the CDN - it is either dead seed data or
+  something quietly broken. Not touched here; worth investigating before anything deletes
+  it.
