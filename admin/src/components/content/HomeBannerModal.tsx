@@ -36,10 +36,16 @@ import {
   saveBannerAction,
   uploadBannerMediaAction,
 } from "@/app/(shell)/content/banners/actions";
+import {
+  finalizeVideoAction,
+  requestVideoTicketAction,
+} from "@/app/(shell)/content/media/actions";
 import { MediaLibraryModal } from "@/components/content/MediaLibraryModal";
 import type { BannerField, BannerRow, CountryOption, PlacementSpec } from "@/lib/banners";
 import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
 import type { MediaAssetRow } from "@/lib/media";
+import { uploadToS3 } from "@/lib/upload";
+import { LOOP_WARN_BYTES, VIDEO_CAP_BYTES, fileSizeMb as videoSizeMb } from "@/lib/video";
 
 const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
@@ -107,9 +113,12 @@ export function HomeBannerModal({
     mobile_image: UNTOUCHED,
     video: UNTOUCHED,
   });
+  const [videoMode, setVideoMode] = useState<"loop" | "click">(banner?.video_mode ?? "loop");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  /** Percent while a video streams to S3 on Save; null otherwise. */
+  const [videoProgress, setVideoProgress] = useState<number | null>(null);
   const [removeArmed, setRemoveArmed] = useState(false);
   /** Which slot's library picker is open, if any. */
   const [libraryFor, setLibraryFor] = useState<MediaKind | null>(null);
@@ -148,16 +157,29 @@ export function HomeBannerModal({
   const stageFile = async (kind: MediaKind, file: File | null) => {
     if (!file) return;
     setMessage(null);
-    // Images are downscaled BEFORE staging, so the preview shows the file that will
+    // Videos go straight to S3 on Save (see lib/upload.ts), so the platform's ~4 MB
+    // request cap does not apply to them — only the API's 128 MB ceiling does. Images
+    // are still downscaled BEFORE staging, so the preview shows the file that will
     // actually upload — and so the upload fits the platform's request-body cap.
-    const staged = kind === "video" ? file : await downscaleImage(file);
+    if (kind === "video") {
+      if (file.size > VIDEO_CAP_BYTES) {
+        setMessage(
+          `That video is ${fileSizeMb(file)} — the limit is 128 MB. Re-encode it at 720p ` +
+            `and about 2 Mbps (ffmpeg -crf 28 -movflags +faststart) and choose it again.`,
+        );
+        return;
+      }
+      const previewUrl = URL.createObjectURL(file);
+      urlsRef.current.push(previewUrl);
+      setMedia((m) => ({ ...m, video: { file, previewUrl, asset: null, remove: false } }));
+      return;
+    }
+    const staged = await downscaleImage(file);
     if (staged.size > UPLOAD_CAP_BYTES) {
       // Refused HERE, not at save: a request this size dies at the platform edge, so
       // saving would fail wholesale with nothing to say. Nothing is staged.
       setMessage(
-        kind === "video"
-          ? `That video is ${fileSizeMb(staged)} — uploads over about 4 MB cannot reach the server. Compress it (720p, shorter, or a lower bitrate) and choose it again.`
-          : `That image is ${fileSizeMb(staged)} even after shrinking — uploads over about 4 MB cannot reach the server. Export it as JPEG or resize it smaller, then choose it again.`,
+        `That image is ${fileSizeMb(staged)} even after shrinking — uploads over about 4 MB cannot reach the server. Export it as JPEG or resize it smaller, then choose it again.`,
       );
       return;
     }
@@ -207,6 +229,7 @@ export function HomeBannerModal({
           ends_at: endsAt,
           is_active: isActive,
           countries,
+          video_mode: videoMode,
         });
         if (!state.savedAt || !state.id) {
           setPending(false);
@@ -230,7 +253,11 @@ export function HomeBannerModal({
         const noun = kind === "video" ? "video" : kind === "mobile_image" ? "phone image" : "image";
         let result = null;
         try {
-          if (draft.file) {
+          if (draft.file && kind === "video") {
+            // Straight to S3, not through a server action: Vercel kills request bodies
+            // over ~4.5MB at its edge, and a real video is far bigger than that.
+            result = await uploadVideoSlot(id, draft.file);
+          } else if (draft.file) {
             const formData = new FormData();
             formData.set("file", draft.file);
             result = await uploadBannerMediaAction(id, kind, formData);
@@ -260,6 +287,34 @@ export function HomeBannerModal({
       setPending(false);
       onClose();
     });
+  };
+
+  /** Ticket → direct-to-S3 upload with progress → finalize → attach. Returns the same
+   * shape as the other slot actions so the save loop treats every slot alike. */
+  const uploadVideoSlot = async (
+    id: number,
+    file: File,
+  ): Promise<{ savedAt?: number; message?: string | null }> => {
+    const container = file.name.toLowerCase().endsWith(".webm") ? "webm" : "mp4";
+    const { ticket, message: ticketMessage } = await requestVideoTicketAction({
+      filename: file.name,
+      size: file.size,
+      container,
+    });
+    if (!ticket) return { message: ticketMessage ?? "the upload could not start." };
+
+    setVideoProgress(0);
+    try {
+      await uploadToS3(ticket, file, setVideoProgress).promise;
+    } catch (e) {
+      return { message: `${(e as Error).message} Large videos can't resume — choose it again.` };
+    } finally {
+      setVideoProgress(null);
+    }
+
+    const done = await finalizeVideoAction({ key: ticket.key, originalName: file.name });
+    if (!done.asset) return { message: done.message ?? "the upload could not be verified." };
+    return attachBannerMediaAction(id, "video", done.asset.id);
   };
 
   const remove = () => {
@@ -317,6 +372,12 @@ export function HomeBannerModal({
           </p>
         )}
 
+        {videoProgress !== null && (
+          <p className="mt-3 text-xs tabular-nums text-muted" aria-live="polite">
+            Uploading video… {videoProgress}%
+          </p>
+        )}
+
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {spec.fields.map((field, i) => (
             <label
@@ -363,6 +424,43 @@ export function HomeBannerModal({
               onRemove={() => stageRemove("video")}
               onUndo={() => unstage("video")}
             />
+            {(media.video.file ||
+              media.video.asset ||
+              (banner?.video && !media.video.remove)) && (
+              <fieldset className="text-xs sm:col-span-2">
+                <legend className="font-medium text-muted">Video playback</legend>
+                <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1.5">
+                  <label className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="radio"
+                      name="video_mode"
+                      checked={videoMode === "loop"}
+                      onChange={() => setVideoMode("loop")}
+                      className="h-4 w-4 border-line"
+                    />
+                    Loop silently
+                  </label>
+                  <label className="flex items-center gap-1.5 text-sm">
+                    <input
+                      type="radio"
+                      name="video_mode"
+                      checked={videoMode === "click"}
+                      onChange={() => setVideoMode("click")}
+                      className="h-4 w-4 border-line"
+                    />
+                    Play on click
+                  </label>
+                </div>
+                {videoMode === "loop" &&
+                  (media.video.file?.size ?? media.video.asset?.size ?? 0) > LOOP_WARN_BYTES && (
+                    <p role="status" className="mt-1.5 rounded border border-warn/30 bg-warn/5 p-2 text-warn">
+                      At {videoSizeMb({ size: media.video.file?.size ?? media.video.asset?.size ?? 0 })},
+                      this loop downloads for every visitor — many on mobile data. Under 6 MB
+                      is a better target, or switch to Play on click.
+                    </p>
+                  )}
+              </fieldset>
+            )}
             <MediaSlot
               label="Phone image (optional — small screens show it instead of the image)"
               kind="mobile_image"
