@@ -30,6 +30,14 @@ import type { StockRow } from "@/lib/product-stock";
  *  source. */
 const CURRENCIES = ["NGN", "GBP", "USD", "CAD"] as const;
 
+/** The concrete wait from DRF's throttle detail ("… Expected available in 58 seconds."),
+ *  or the honest vague version when the shape ever changes. */
+function throttleWait(error: ApiError): string {
+  const detail = (error.data as { detail?: unknown } | null)?.detail;
+  const seconds = typeof detail === "string" ? /in (\d+) second/.exec(detail)?.[1] : undefined;
+  return seconds ? `Wait ${seconds} seconds` : "Wait a minute";
+}
+
 export const metadata: Metadata = { title: "Edit product" };
 
 type Params = Promise<{ slug: string }>;
@@ -74,7 +82,12 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
       <p className="rounded-[var(--radius-card)] border border-warn/30 bg-warn/5 p-4 text-sm text-warn">
         {error.status === 403
           ? "Your role does not include managing products."
-          : "That product could not be loaded."}
+          : error.status === 429
+            ? // Named honestly, because this replaced the whole editor mid-session on
+              // 2026-08-10 and read as a crash. The product is fine; the API is
+              // metering. DRF's detail carries the actual wait, so prefer it.
+              `The server is rate-limiting this session. ${throttleWait(error)}, then refresh — nothing was lost on the server.`
+            : "That product could not be loaded."}
       </p>
     );
   }
@@ -121,6 +134,15 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
     if (result.status === "rejected" && !(result.reason instanceof ApiError)) throw result.reason;
   }
 
+  // A THROTTLED SECONDARY FETCH MUST SAY SO. The catch-to-empty below is right for a
+  // genuinely broken endpoint ("each failure costs one tab, never the page") — but a
+  // 429'd variants or prices fetch rendered a real product with apparently ZERO
+  // variants and prices, which reads as data loss and invites someone to recreate
+  // them. Same incident as the product-fetch 429 above, worse costume.
+  const throttled = [imagesResult, variantsResult, stockResult, pricesResult].some(
+    (result) => result.status === "rejected" && (result.reason as ApiError).status === 429,
+  );
+
   const images = imagesResult.status === "fulfilled" ? (imagesResult.value.results ?? []) : [];
   // `fetchAllPages` for these three, not a single request: DRF pages at 24, and a product
   // with more variants or a fuller price matrix than today's would otherwise be silently
@@ -155,6 +177,14 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
           </p>
         </div>
       </div>
+
+      {throttled && (
+        <p className="mt-4 rounded-[var(--radius-card)] border border-warn/30 bg-warn/5 p-3 text-sm text-warn">
+          The server is rate-limiting this session, so parts of this page (variants,
+          prices, stock or images) may look empty when they are not. Nothing is lost —
+          wait a minute, then refresh before editing.
+        </p>
+      )}
 
       <div className="mt-6">
         <ProductEditor

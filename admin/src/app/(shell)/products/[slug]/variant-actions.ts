@@ -15,7 +15,6 @@
  * historical order lines; the builder lists combinations that fall outside the matrix and
  * leaves them alone.
  */
-import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 
@@ -35,6 +34,10 @@ export type VariantCreateResult =
 
 function message(e: unknown): string {
   if (!(e instanceof ApiError)) throw e;
+  // A 401 HERE MEANS THE SESSION IS DEAD: fetchWithAuth only rethrows 401 after its
+  // silent refresh also failed. Left to the fallback message this read as a retryable
+  // save failure, and people retried into the void instead of logging in again.
+  if (e.status === 401) return "Your session has expired — sign in again, then retry.";
   if (e.status === 403) return "Your role does not include managing products.";
   const data = e.data as Record<string, unknown> | null;
   if (data && typeof data === "object") {
@@ -84,9 +87,12 @@ export async function createVariantAction(input: {
         is_default: input.makeDefault,
       },
     });
-    // The products list shows a variant count; the editor page is deliberately NOT
-    // revalidated, or it would remount and discard unsaved text in another tab.
-    revalidatePath("/products");
+    // NO revalidatePath. This runs in a LOOP (one call per generated variant), and in
+    // Next 16 any revalidatePath in a Server Function refreshes the current route too —
+    // so each call re-rendered the whole editor page (~13 API GETs), and applying a
+    // matrix burned ~13× the requests it looked like, against the per-user throttle
+    // (measured 2026-08-10). The list's variant count needs nothing from us: the list
+    // page is fully dynamic and refetches on every visit.
     return { ok: true, variant };
   } catch (e) {
     return { ok: false, error: message(e) };
@@ -127,7 +133,6 @@ export async function updateVariantAction(input: {
       method: "PATCH",
       body,
     });
-    revalidatePath("/products");
     return { ok: true, variant };
   } catch (e) {
     return { ok: false, error: message(e) };

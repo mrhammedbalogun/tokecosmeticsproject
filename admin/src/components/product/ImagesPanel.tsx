@@ -10,10 +10,14 @@
  *
  * ── A FAILED UPLOAD MUST NOT COST THE REST OF THE FORM ──────────────────────────────
  *
- * Named in the spec, and the reason nothing here calls `revalidatePath` on the editor
- * page: re-rendering the Server Component would remount the editor and discard whatever
- * unsaved text is sitting in Details or Content, which is work nobody can recover. Errors
- * are rendered inline and the failed file stays selected so Retry is one click.
+ * Named in the spec. This comment used to justify "no revalidatePath" with "a refresh
+ * would remount the editor and discard unsaved text" — that is mechanically FALSE: a
+ * route refresh re-renders Server Components and PRESERVES client component state
+ * (the Save action has always revalidated the editor's own path without eating
+ * drafts). The real reason image writes don't revalidate is cost: in Next 16 any
+ * revalidatePath in a Server Function refreshes the current route too, ~13 API GETs
+ * against the per-user throttle per write (see image-actions.ts). Errors are rendered
+ * inline and the failed file stays selected so Retry is one click.
  *
  * PRESENTATIONAL-ISH: it owns no product state. The image LIST lives in `ProductEditor`,
  * because this panel unmounts whenever another tab is shown and state here would not

@@ -12,7 +12,6 @@
  * row. There is no upsert endpoint, and inventing one client-side by POSTing and retrying
  * on the unique-constraint 400 would write an audit row for the failed attempt.
  */
-import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 
@@ -33,6 +32,10 @@ export interface PriceWriteResult {
 
 function message(e: unknown, fallback: string): string {
   if (!(e instanceof ApiError)) throw e;
+  // A 401 HERE MEANS THE SESSION IS DEAD: fetchWithAuth only rethrows 401 after its
+  // silent refresh also failed. Left to the fallback message this read as a retryable
+  // save failure, and people retried into the void instead of logging in again.
+  if (e.status === 401) return "Your session has expired — sign in again, then retry.";
   if (e.status === 403) return "Your role does not include managing products.";
   if (e.status === 404) return "That price no longer exists.";
   const data = e.data as Record<string, unknown> | null;
@@ -76,10 +79,15 @@ export async function savePriceAction(input: {
           : { variant: variantId, currency, country: null, amount },
       },
     );
-    // The products list's "Unpriced in" column is now stale. The EDITOR page is
-    // deliberately not revalidated — that would remount the editor and discard unsaved
-    // text in Details or Content, same rule as the image writes.
-    revalidatePath("/products");
+    // NO revalidatePath — not even for the list's "Unpriced in" column. In Next 16 a
+    // revalidatePath in a Server Function refreshes the CURRENT route too, so the old
+    // revalidatePath("/products") here re-rendered the whole editor page (~13
+    // authenticated API GETs) on EVERY cell blur — which is how one person pricing one
+    // product hit the API's 120/min per-user throttle (measured 2026-08-10). The list
+    // is fully dynamic (`no-store`, staleTimes.dynamic=0), so any NAVIGATION to it
+    // refetches. The accepted residue: browser Back/Forward serves the router's
+    // back/forward cache regardless of staleTimes, so Back to an already-open list can
+    // briefly show a stale "Unpriced in" until the next real navigation.
     return { ok: true, price };
   } catch (e) {
     return { ok: false, error: message(e, "That price could not be saved.") };

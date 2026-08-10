@@ -19,14 +19,18 @@
  * refuses POST for exactly this reason — two create paths for one model is how the binding
  * rules drift apart.
  *
- * NONE OF THESE REVALIDATE THE EDITOR PAGE. A `revalidatePath` here would re-render the
- * Server Component and remount the editor, discarding whatever unsaved text is sitting in
- * the Details or Content tab — the spec names that as the thing an image failure must not
- * do, and a SUCCESS must not do it either. The client updates its own list from the
- * returned row. `/products` is revalidated because its thumbnail column is now stale and
- * nothing there can be lost.
+ * NONE OF THESE CALL `revalidatePath` — NOT EVEN FOR `/products`. This file used to
+ * revalidate `/products` on every write ("the thumbnail column is stale and nothing
+ * there can be lost"), on the belief that only that path re-rendered. Next 16 does not
+ * work that way: ANY `revalidatePath` in a Server Function makes the client refresh the
+ * CURRENT route too, so every image write triggered a full editor-page re-render —
+ * ~13 authenticated API GETs — invisible on screen but counted by the API's per-user
+ * throttle. Measured 2026-08-10: one person pricing one product hit 120/min and the
+ * admin 429'd for a minute. The list page needs no revalidation anyway: every fetch is
+ * `no-store` and `staleTimes.dynamic` is 0, so `/products` refetches on every
+ * navigation (browser Back/Forward can briefly serve a stale copy — accepted).
+ * The client updates its own list from the returned row.
  */
-import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 
@@ -49,6 +53,10 @@ const isId = (id: number) => Number.isInteger(id) && id > 0;
 
 function message(e: unknown, fallback: string): string {
   if (!(e instanceof ApiError)) throw e;
+  // A 401 HERE MEANS THE SESSION IS DEAD: fetchWithAuth only rethrows 401 after its
+  // silent refresh also failed. Left to the fallback message this read as a retryable
+  // save failure, and people retried into the void instead of logging in again.
+  if (e.status === 401) return "Your session has expired — sign in again, then retry.";
   if (e.status === 403) return "Your role does not include managing products.";
   if (e.status === 404) return "That image no longer exists.";
   if (e.status === 413) return "That file is too large.";
@@ -80,7 +88,6 @@ export async function uploadImageAction(
       `/admin/products/${slug}/images/`,
       { method: "POST", body: formData },
     );
-    revalidatePath("/products");
     return { ok: true, value: image };
   } catch (e) {
     return { ok: false, error: message(e, "That image could not be uploaded.") };
@@ -98,7 +105,6 @@ export async function updateImageAction(
       method: "PATCH",
       body: patch,
     });
-    revalidatePath("/products");
     return { ok: true, value: image };
   } catch (e) {
     return { ok: false, error: message(e, "That change could not be saved.") };
@@ -110,7 +116,6 @@ export async function deleteImageAction(id: number): Promise<ImageResult<null>> 
 
   try {
     await fetchWithAuth(`/admin/images/${id}/`, { method: "DELETE" });
-    revalidatePath("/products");
     return { ok: true, value: null };
   } catch (e) {
     return { ok: false, error: message(e, "That image could not be deleted.") };

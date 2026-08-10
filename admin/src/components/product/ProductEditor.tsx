@@ -85,6 +85,13 @@ export interface SaveResult {
   errors?: { fields: Partial<Record<EditableField, string>>; banner?: string };
 }
 
+/** What a write that never reached the server should say — a dropped connection, a
+ *  request the platform refused, a mid-flight abort. Every awaited Server Function in
+ *  this file must be wrapped so a rejection becomes this message rather than an
+ *  unhandled rejection: with no error boundary catch, that unmounts the whole editor
+ *  and takes the unsaved tabs with it (the "crash" of 2026-08-10). */
+const UNREACHABLE = "That did not reach the server — check the connection and retry.";
+
 const TABS = [
   { id: "details", label: "Details" },
   { id: "availability", label: "Availability" },
@@ -194,7 +201,7 @@ export function ProductEditor({
       try {
         setImageError(await work());
       } catch {
-        setImageError("That did not reach the server — check the connection and retry.");
+        setImageError(UNREACHABLE);
       }
     });
   };
@@ -305,14 +312,21 @@ export function ProductEditor({
         if (!row || row.status === "created") continue;
 
         setRows((current) => ({ ...current, [key]: { ...current[key], status: "creating" } }));
-        const res: VariantCreateResult = await createVariant({
-          productId: product.id,
-          sku: row.sku,
-          name: row.name,
-          optionValues: combination,
-          // Only ever true for a product that has none at all — see variant-actions.ts.
-          makeDefault: variantCount === 0,
-        });
+        let res: VariantCreateResult;
+        try {
+          res = await createVariant({
+            productId: product.id,
+            sku: row.sku,
+            name: row.name,
+            optionValues: combination,
+            // Only ever true for a product that has none at all — see variant-actions.ts.
+            makeDefault: variantCount === 0,
+          });
+        } catch {
+          // A dropped request marks THIS row failed and lets the loop continue, same as
+          // a server-side refusal — not an unhandled rejection that strands every row.
+          res = { ok: false, error: UNREACHABLE };
+        }
 
         if (res.ok) {
           variantCount += 1;
@@ -357,7 +371,12 @@ export function ProductEditor({
     startImageTransition(async () => {
       let changed = 0;
       for (const target of targets) {
-        const res = await updateVariant({ variantId: target.id, ...target.patch });
+        let res: VariantCreateResult;
+        try {
+          res = await updateVariant({ variantId: target.id, ...target.patch });
+        } catch {
+          res = { ok: false, error: UNREACHABLE };
+        }
         if (!res.ok) {
           setTidyError(`${res.error} ${changed} of ${targets.length} were changed.`);
           setTidyBusy(false);
@@ -421,7 +440,12 @@ export function ProductEditor({
     setAdjustErrors({});
     setAdjustMessage(null);
     startImageTransition(async () => {
-      const res = await adjustStock({ stockItemId: adjustTarget.id, ...values });
+      let res: AdjustResult;
+      try {
+        res = await adjustStock({ stockItemId: adjustTarget.id, ...values });
+      } catch {
+        res = { ok: false, error: UNREACHABLE };
+      }
       if (!res.ok) {
         setAdjustErrors(res.fieldErrors ?? {});
         setAdjustMessage(res.error ?? null);
@@ -447,9 +471,14 @@ export function ProductEditor({
   const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
   const [busyCell, setBusyCell] = useState<string | null>(null);
 
+  // `allVariants`, NOT the `variants` server prop. The prop only updates on a route
+  // refresh, and nothing triggers one any more (the per-cell actions' revalidatePath
+  // was what did, at ~13 API requests a call — removed 2026-08-10). Built from the
+  // prop, a variant created on the Variants tab this session had NO row here, and the
+  // create→price flow ended at an empty grid until a manual reload.
   const grid = useMemo(
-    () => buildPriceGrid(variants, prices, currencies),
-    [variants, prices, currencies],
+    () => buildPriceGrid(allVariants, prices, currencies),
+    [allVariants, prices, currencies],
   );
 
   const onPriceDraft = (key: string, value: string) => {
@@ -478,13 +507,22 @@ export function ProductEditor({
 
     setBusyCell(key);
     startImageTransition(async () => {
-      const res = await savePrice({
-        priceId: cell.price?.id ?? null,
-        variantId,
-        currency,
-        amount: typed.trim(),
-        productSlug: baseline.slug,
-      });
+      // The same load-bearing catch as `runImageWrite`: a rejected REQUEST (network
+      // drop, platform refusal) otherwise skips setBusyCell(null) and unmounts the
+      // editor as an unhandled rejection. This path shipped without one and a dropped
+      // price write took the whole page down.
+      let res: PriceWriteResult;
+      try {
+        res = await savePrice({
+          priceId: cell.price?.id ?? null,
+          variantId,
+          currency,
+          amount: typed.trim(),
+          productSlug: baseline.slug,
+        });
+      } catch {
+        res = { ok: false, error: UNREACHABLE };
+      }
       setBusyCell(null);
       if (!res.ok || !res.price) {
         setPriceErrors((current) => ({
@@ -545,7 +583,12 @@ export function ProductEditor({
 
   const onSave = () => {
     startTransition(async () => {
-      const next = await save(baseline.slug, values);
+      let next: SaveResult;
+      try {
+        next = await save(baseline.slug, values);
+      } catch {
+        next = { errors: { fields: {}, banner: UNREACHABLE } };
+      }
       setResult(next);
       if (next.savedSlug) {
         // The saved values become the new baseline, so the bar clears without a refetch.

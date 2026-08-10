@@ -329,6 +329,22 @@ describe("ProductEditor", () => {
     expect(screen.getByText("Nothing was saved.")).toBeInTheDocument();
   });
 
+  it("SURVIVES A SAVE THAT NEVER REACHES THE SERVER, keeping the edits", async () => {
+    // Same rescue as the price cells: a rejected request becomes a banner, not an
+    // unhandled rejection that unmounts the editor with the unsaved form in it.
+    const save = vi.fn().mockRejectedValue(new Error("fetch failed"));
+    setup({}, save);
+
+    fireEvent.click(featured());
+    fireEvent.click(saveButton());
+
+    await waitFor(() =>
+      expect(screen.getByText(/did not reach the server/i)).toBeInTheDocument(),
+    );
+    // The edit is still armed — nothing was silently lost or falsely marked saved.
+    expect(screen.getByText(/unsaved changes/i)).toBeInTheDocument();
+  });
+
   it("drops a stale error as soon as the field is edited again", async () => {
     // Left on screen an old error reads as "still wrong", and people re-fix a field that
     // is already fine.
@@ -831,6 +847,29 @@ describe("ProductEditor", () => {
     await waitFor(() => expect(screen.getByText("Nope.")).toBeInTheDocument());
   });
 
+  it("SURVIVES A PRICE WRITE THAT NEVER REACHES THE SERVER", async () => {
+    // A rejected Server Function request (network drop, platform refusal) used to be an
+    // unhandled rejection here, and with no error boundary in the app it unmounted the
+    // whole editor — the "page crashed" of 2026-08-10. It must land in the cell like any
+    // other failure.
+    const savePrice = vi.fn<(input: PriceInput) => Promise<PriceResult>>(async () => {
+      throw new Error("fetch failed");
+    });
+    withCatalogue({ variants: [variantRow(1, "TC-1")], savePrice });
+
+    fireEvent.click(tab("Prices"));
+    const cell = screen.getByLabelText("TC-1 price in NGN");
+    fireEvent.change(cell, { target: { value: "1500" } });
+    fireEvent.blur(cell);
+
+    await waitFor(() =>
+      expect(screen.getByText(/did not reach the server/i)).toBeInTheDocument(),
+    );
+    // The editor survived, and the cell is not stuck on the busy state the rejection
+    // used to skip past.
+    expect(screen.getByLabelText("TC-1 price in NGN")).not.toBeDisabled();
+  });
+
   it("MAKES A COUNTRY-OVERRIDE CELL READ-ONLY AND SAYS WHY", async () => {
     // Production has zero overrides, so this path only exists under test — which is
     // exactly why it is tested. Editing the plain row while a narrower one governs GB
@@ -1220,6 +1259,39 @@ describe("ProductEditor", () => {
     expect(screen.getByText("Created")).toBeInTheDocument();
   });
 
+  it("CARRIES ON AFTER A ROW THAT NEVER REACHED THE SERVER, same as a refusal", async () => {
+    // A rejected request mid-loop used to be an unhandled rejection: the row stuck on
+    // "Creating…", the rest stranded, the editor unmounted. It must cost one row.
+    let call = 0;
+    const createVariant = vi.fn<(i: CreateVariantInput) => Promise<CreateVariantResult>>(
+      async (i) => {
+        call += 1;
+        if (call === 1) throw new Error("fetch failed");
+        return {
+          ok: true,
+          variant: {
+            ...variantRow(900 + call, i.sku),
+            name: i.name,
+            option_values: i.optionValues,
+          },
+        };
+      },
+    );
+    withCatalogue({ variants: [], createVariant });
+    openMatrix();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add an option" }));
+    fireEvent.change(screen.getByLabelText("Option 1 name"), { target: { value: "Size" } });
+    addValue(1, "100ml");
+    addValue(1, "250ml");
+    generate();
+    fireEvent.click(screen.getByRole("button", { name: /Create 2 variants/ }));
+
+    await waitFor(() => expect(createVariant).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/did not reach the server/i)).toBeInTheDocument();
+    expect(screen.getByText("Created")).toBeInTheDocument();
+  });
+
   it("WARNS WHEN ADDING AN AXIS ORPHANS EVERY EXISTING VARIANT", () => {
     // diffMatrix matches on the exact key set, so {Size: 100ml} does not match
     // {Size: 100ml, Shade: Fair}. Applying blind gives four variants where two were meant.
@@ -1283,6 +1355,28 @@ describe("ProductEditor", () => {
     generate();
 
     expect(saveButton()).toBeDisabled();
+  });
+
+  it("SHOWS A CREATED VARIANT IN THE PRICE GRID WITHOUT A RELOAD", async () => {
+    // Pins the create→price flow. The grid must be built from the MERGED variant list,
+    // not the server prop: nothing refreshes the prop any more (the per-cell actions'
+    // revalidatePath is gone), and built from the prop this grid was EMPTY for a
+    // product whose variants were created this session — the exact flow that
+    // motivated 2026-08-10's throttle fix.
+    withCatalogue({ variants: [] });
+    openMatrix();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add an option" }));
+    fireEvent.change(screen.getByLabelText("Option 1 name"), { target: { value: "Size" } });
+    addValue(1, "100ml");
+    generate();
+    fireEvent.click(screen.getByRole("button", { name: /Create 1 variant/ }));
+    await screen.findByText("Created");
+
+    fireEvent.click(tab("Prices"));
+    expect(
+      screen.getByLabelText("carrot-shea-butter-100ml price in NGN"),
+    ).toBeInTheDocument();
   });
   // --- renaming and tidying (17b task 4) --------------------------------------------
 

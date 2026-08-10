@@ -16,7 +16,6 @@
  * DRF action name over the HTTP verb — which is the whole reason the endpoint is shaped
  * this way.
  */
-import { revalidatePath } from "next/cache";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 import type { StockRow } from "@/lib/product-stock";
@@ -55,13 +54,17 @@ export async function adjustStockAction(input: {
       method: "POST",
       body: { quantity, reason, note },
     });
-    // The products list is untouched by stock, but the storefront's availability is not —
-    // and the EDITOR page is deliberately not revalidated, or it would remount and discard
-    // unsaved text in Details or Content. Same rule as the image and price writes.
-    revalidatePath("/products");
+    // NO revalidatePath — same rule as the image, price and variant writes: in Next 16
+    // it would refresh the CURRENT editor page too (~13 API GETs against the per-user
+    // throttle), and the admin's pages are all dynamic/no-store so nothing needs it.
     return { ok: true, item };
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
+    // Post-refresh 401 = the session is dead, not a retryable failure — same mapping
+    // as the other action files' message() helpers.
+    if (e.status === 401) {
+      return { ok: false, error: "Your session has expired — sign in again, then retry." };
+    }
     if (e.status === 403) {
       return { ok: false, error: "Your role does not include managing products." };
     }
