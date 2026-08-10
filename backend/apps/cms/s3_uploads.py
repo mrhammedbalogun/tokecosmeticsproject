@@ -14,6 +14,7 @@ real bytes and only then copies into `catalog/library/`, where the CDN can see i
 import uuid
 
 import boto3
+from botocore.config import Config
 from django.conf import settings
 
 from apps.cms.video_sniff import VIDEO_EXTENSIONS
@@ -73,7 +74,18 @@ SNIFF_BYTES = 262_144
 
 
 def _client():
-    return boto3.client("s3", region_name=settings.AWS_S3_REGION_NAME)
+    """SigV4 + virtual-host addressing, EXPLICITLY. Left to defaults (measured live
+    2026-08-10), the client minted presigned POSTs against the GLOBAL endpoint
+    (`https://<bucket>.s3.amazonaws.com/`) with SigV2 fields — S3 answers those with a
+    307 to the regional host, and the admin's CSP `connect-src` (pinned to the
+    eu-west-1 host) blocks the first hop before it leaves the browser."""
+    region = settings.AWS_S3_REGION_NAME
+    return boto3.client(
+        "s3",
+        region_name=region,
+        endpoint_url=f"https://s3.{region}.amazonaws.com",
+        config=Config(signature_version="s3v4", s3={"addressing_style": "virtual"}),
+    )
 
 
 def _bucket() -> str:

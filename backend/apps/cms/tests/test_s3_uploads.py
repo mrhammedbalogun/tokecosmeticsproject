@@ -108,6 +108,15 @@ def test_mint_video_post_pins_the_key_exactly_and_bounds_the_size(s3):
     ), "a starts-with key condition would let the client choose where bytes land"
 
 
+def test_mint_video_post_uses_the_regional_virtual_host_url(s3):
+    """Found live 2026-08-10: the default client minted `https://<bucket>.s3.amazonaws.com/`
+    (global endpoint, SigV2), which S3 307-redirects — and which the admin's CSP
+    `connect-src` (pinned to the eu-west-1 host) blocks before the request even leaves
+    the browser. The ticket URL must be the exact host the CSP allows."""
+    ticket = mint_video_post(new_incoming_key("mp4"), max_bytes=1000)
+    assert ticket["url"].startswith(f"https://{BUCKET}.s3.eu-west-1.amazonaws.com"), ticket["url"]
+
+
 def test_head_incoming_returns_real_size_and_etag(s3):
     key = new_incoming_key("mp4")
     s3.put_object(Bucket=BUCKET, Key=key, Body=b"x" * 1234)
