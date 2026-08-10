@@ -10,6 +10,7 @@
 import { ApiError } from "@/lib/api";
 import type { MediaAssetRow } from "@/lib/media";
 import { fetchWithAuth } from "@/lib/session";
+import type { UploadTicket } from "@/lib/upload-types";
 
 export interface MediaSearchResult {
   items: MediaAssetRow[];
@@ -56,5 +57,45 @@ export async function uploadMediaAction(formData: FormData): Promise<MediaUpload
     const data = e.data as Record<string, unknown> | undefined;
     const detail = Array.isArray(data?.file) ? data.file[0] : undefined;
     return { message: typeof detail === "string" ? detail : "The upload was refused — try again." };
+  }
+}
+
+/** Video takes a different route from images (2026-08-09): the browser uploads straight
+ * to S3 because Vercel rejects request bodies over ~4.5MB at its edge, before this
+ * action would ever run. These two calls are small JSON either side of that upload. */
+export async function requestVideoTicketAction(input: {
+  filename: string;
+  size: number;
+  container: "mp4" | "webm";
+}): Promise<{ ticket?: UploadTicket; message?: string }> {
+  try {
+    const ticket = await fetchWithAuth<UploadTicket>("/admin/media/video-ticket/", {
+      method: "POST",
+      body: input,
+    });
+    return { ticket };
+  } catch (e) {
+    if (!(e instanceof ApiError)) return { message: "The API is not responding." };
+    const data = e.data as Record<string, unknown> | undefined;
+    const detail = Array.isArray(data?.size) ? data.size[0] : undefined;
+    return { message: typeof detail === "string" ? detail : "Could not start the upload." };
+  }
+}
+
+export async function finalizeVideoAction(input: {
+  key: string;
+  originalName: string;
+}): Promise<{ asset?: MediaAssetRow; warning?: string; message?: string }> {
+  try {
+    const asset = await fetchWithAuth<MediaAssetRow & { warning?: string }>(
+      "/admin/media/video-finalize/",
+      { method: "POST", body: { key: input.key, original_name: input.originalName } },
+    );
+    return { asset, warning: asset.warning };
+  } catch (e) {
+    if (!(e instanceof ApiError)) return { message: "The API is not responding." };
+    const data = e.data as Record<string, unknown> | undefined;
+    const detail = Array.isArray(data?.key) ? data.key[0] : undefined;
+    return { message: typeof detail === "string" ? detail : "The upload could not be verified." };
   }
 }

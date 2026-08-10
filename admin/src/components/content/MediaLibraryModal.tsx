@@ -15,9 +15,16 @@
  * modals at once.
  */
 import { useEffect, useRef, useState, useTransition } from "react";
-import { searchMediaAction, uploadMediaAction } from "@/app/(shell)/content/media/actions";
+import {
+  finalizeVideoAction,
+  requestVideoTicketAction,
+  searchMediaAction,
+  uploadMediaAction,
+} from "@/app/(shell)/content/media/actions";
 import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
 import type { MediaAssetRow } from "@/lib/media";
+import { uploadToS3 } from "@/lib/upload";
+import { VIDEO_CAP_BYTES } from "@/lib/video";
 
 export function MediaLibraryModal({
   kind,
@@ -38,6 +45,10 @@ export function MediaLibraryModal({
   const [message, setMessage] = useState<string | null>(null);
   const [loading, startLoading] = useTransition();
   const [uploading, setUploading] = useState(false);
+  // Percent while a video streams to S3; null otherwise. Images never set this — their
+  // whole upload is one small server-action call with nothing worth a bar.
+  const [progress, setProgress] = useState<number | null>(null);
+  const abortRef = useRef<(() => void) | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -67,14 +78,16 @@ export function MediaLibraryModal({
     setUploading(true);
     setMessage(null);
     try {
-      const staged = kind === "video" ? file : await downscaleImage(file);
+      if (kind === "video") {
+        await uploadVideo(file);
+        return;
+      }
+      const staged = await downscaleImage(file);
       if (staged.size > UPLOAD_CAP_BYTES) {
         // A request this size dies at the platform edge before the server can refuse
         // it politely — so refuse it here, with the reason, and send nothing.
         setMessage(
-          kind === "video"
-            ? `That video is ${fileSizeMb(staged)} — uploads over about 4 MB cannot reach the server. Compress it (720p, shorter, or a lower bitrate) and try again.`
-            : `That image is ${fileSizeMb(staged)} even after shrinking — uploads over about 4 MB cannot reach the server. Export it as JPEG or resize it smaller and try again.`,
+          `That image is ${fileSizeMb(staged)} even after shrinking — uploads over about 4 MB cannot reach the server. Export it as JPEG or resize it smaller and try again.`,
         );
         return;
       }
@@ -90,6 +103,50 @@ export function MediaLibraryModal({
     } finally {
       setUploading(false);
     }
+  };
+
+  /** Videos bypass the server action entirely: ticket → straight-to-S3 POST with
+   * progress → finalize. See lib/upload.ts for why. */
+  const uploadVideo = async (file: File) => {
+    if (file.size > VIDEO_CAP_BYTES) {
+      setMessage(
+        `That video is ${fileSizeMb(file)} — the limit is 128 MB. Re-encode it at 720p ` +
+          `and about 2 Mbps (ffmpeg -crf 28 -movflags +faststart) and try again.`,
+      );
+      return;
+    }
+    const container = file.name.toLowerCase().endsWith(".webm") ? "webm" : "mp4";
+    const { ticket, message: ticketMessage } = await requestVideoTicketAction({
+      filename: file.name,
+      size: file.size,
+      container,
+    });
+    if (!ticket) {
+      setMessage(ticketMessage ?? "Could not start the upload.");
+      return;
+    }
+
+    setProgress(0);
+    const handle = uploadToS3(ticket, file, setProgress);
+    abortRef.current = handle.abort;
+    try {
+      await handle.promise;
+    } catch (e) {
+      // Large videos cannot resume; say so rather than implying a silent retry works.
+      setMessage(`${(e as Error).message} Large videos can't resume — choose it again.`);
+      return;
+    } finally {
+      abortRef.current = null;
+      setProgress(null);
+    }
+
+    const done = await finalizeVideoAction({ key: ticket.key, originalName: file.name });
+    if (!done.asset) {
+      setMessage(done.message ?? "The upload could not be verified.");
+      return;
+    }
+    if (done.warning) setMessage(done.warning);
+    onPick(done.asset);
   };
 
   return (
@@ -147,6 +204,25 @@ export function MediaLibraryModal({
             />
           </label>
         </div>
+
+        {progress !== null && (
+          <div className="mt-3 flex items-center gap-3" role="status" aria-label="Upload progress">
+            <div className="h-2 flex-1 overflow-hidden rounded bg-surface">
+              <div
+                className="h-full rounded bg-accent transition-[width]"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-xs tabular-nums text-muted">{progress}%</span>
+            <button
+              type="button"
+              onClick={() => abortRef.current?.()}
+              className="rounded border border-line px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-fg"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
 
         {message && (
           <p className="mt-3 rounded border border-warn/30 bg-warn/5 p-2 text-sm text-warn" role="alert">
