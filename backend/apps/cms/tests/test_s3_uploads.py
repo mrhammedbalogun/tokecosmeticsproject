@@ -132,3 +132,61 @@ def test_every_s3_helper_refuses_a_backups_key(s3):
             fn("backups/postgres/dump.sql.gz")
     with pytest.raises(UnsafeKeyError):
         mint_video_post("backups/postgres/dump.sql.gz", max_bytes=10)
+
+
+from unittest.mock import patch
+
+from apps.cms.s3_uploads import discard_incoming, publish_incoming
+
+
+def test_publish_copies_into_the_library_and_sets_our_own_content_type(s3):
+    key = new_incoming_key("mp4")
+    s3.put_object(Bucket=BUCKET, Key=key, Body=b"\x00\x00\x00\x20ftypisom",
+                  ContentType="text/html")  # the client lied
+    _, etag = head_incoming(key)
+
+    dest = publish_incoming(key, etag=etag, content_type="video/mp4")
+
+    assert dest == library_key_for(key)
+    landed = s3.head_object(Bucket=BUCKET, Key=dest)
+    assert landed["ContentType"] == "video/mp4", "the client's Content-Type must not survive"
+    assert "immutable" in landed["CacheControl"]
+
+
+def test_publish_is_idempotent(s3):
+    key = new_incoming_key("mp4")
+    s3.put_object(Bucket=BUCKET, Key=key, Body=b"\x00\x00\x00\x20ftypisom")
+    _, etag = head_incoming(key)
+
+    first = publish_incoming(key, etag=etag, content_type="video/mp4")
+    second = publish_incoming(key, etag=etag, content_type="video/mp4")
+    assert first == second
+
+
+def test_publish_sends_the_safety_kwargs():
+    """Asserted on the CALL, not through moto: the TOCTOU defence must not rest on how
+    faithfully a simulator implements conditional copy."""
+    key = new_incoming_key("mp4")
+    with patch("apps.cms.s3_uploads._client") as client:
+        publish_incoming(key, etag="abc123", content_type="video/mp4")
+        kwargs = client.return_value.copy_object.call_args.kwargs
+
+    assert kwargs["CopySourceIfMatch"] == "abc123"
+    assert kwargs["MetadataDirective"] == "REPLACE"
+    assert kwargs["ContentType"] == "video/mp4"
+    assert kwargs["Key"] == library_key_for(key)
+
+
+def test_publish_refuses_a_source_outside_the_quarantine():
+    with pytest.raises(UnsafeKeyError):
+        publish_incoming("backups/postgres/dump.sql.gz", etag="x", content_type="video/mp4")
+
+
+def test_discard_refuses_a_backups_key():
+    with pytest.raises(UnsafeKeyError):
+        discard_incoming("backups/postgres/dump.sql.gz")
+
+
+def test_discard_survives_an_already_gone_object(s3):
+    """Finalize's cleanup must never turn a successful publish into a failed request."""
+    discard_incoming(new_incoming_key("mp4"))  # never uploaded; must not raise

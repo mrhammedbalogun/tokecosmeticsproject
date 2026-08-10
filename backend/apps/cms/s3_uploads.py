@@ -116,3 +116,48 @@ def read_incoming_head(key: str, length: int = SNIFF_BYTES) -> bytes:
     assert_incoming(key)
     obj = _client().get_object(Bucket=_bucket(), Key=key, Range=f"bytes=0-{length - 1}")
     return obj["Body"].read()
+
+
+# Keys are unique forever, so the object at one is immutable by construction.
+PUBLISHED_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+
+def publish_incoming(key: str, etag: str, content_type: str) -> str:
+    """Copy a VERIFIED object into the library prefix. Returns the destination key.
+
+    `CopySourceIfMatch` is the load-bearing argument: the presigned ticket stays valid
+    while finalize runs, so without it a holder could replace the bytes between the sniff
+    and the copy and publish something we never inspected. With it the copy fails
+    atomically instead.
+
+    `MetadataDirective="REPLACE"` is equally load-bearing and easy to omit: without it S3
+    copies the SOURCE's metadata, including the Content-Type the client chose — which
+    would hand back exactly the "served as active content" problem the sniff exists to
+    prevent.
+    """
+    assert_incoming(key)
+    dest = library_key_for(key)
+    _client().copy_object(
+        Bucket=_bucket(),
+        Key=dest,
+        CopySource={"Bucket": _bucket(), "Key": key},
+        CopySourceIfMatch=etag,
+        MetadataDirective="REPLACE",
+        ContentType=content_type,
+        CacheControl=PUBLISHED_CACHE_CONTROL,
+    )
+    return dest
+
+
+def discard_incoming(key: str) -> None:
+    """Best-effort cleanup of a quarantined object.
+
+    Never raises for a missing object, and callers must not let a failure here fail the
+    request: once the copy has succeeded the upload HAS worked, and the lifecycle rule on
+    `incoming/` reclaims anything left behind.
+    """
+    assert_incoming(key)
+    try:
+        _client().delete_object(Bucket=_bucket(), Key=key)
+    except Exception:  # noqa: BLE001 - cleanup must never mask a successful publish
+        pass
