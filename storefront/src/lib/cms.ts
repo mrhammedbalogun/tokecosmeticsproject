@@ -58,6 +58,9 @@ export interface CmsBanner {
   cta_url: string;
   /** Landing redesign: a hero banner may be a video; the image is its poster. */
   video_url: string;
+  /** "loop" autoplays silently; "click" waits for the visitor. Defaults to loop
+   * server-side, so a banner from before this field behaves exactly as it always did. */
+  video_mode: "loop" | "click";
   tagline: string;
   placement: "hero" | "strip" | "category";
   sort: number;
