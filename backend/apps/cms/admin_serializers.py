@@ -247,3 +247,32 @@ class GoogleReviewsMetaAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = GoogleReviewsMeta
         fields = ["rating", "review_count_text", "profile_url", "updated_at"]
+
+
+class VideoTicketRequestSerializer(serializers.Serializer):
+    """What the browser asks for. Note what is NOT here: the destination key. The client
+    does not get to influence where its bytes land."""
+
+    audit_allowlist = ("filename", "size", "container")
+
+    filename = serializers.CharField(max_length=255)
+    size = serializers.IntegerField(min_value=1)
+    container = serializers.ChoiceField(choices=["mp4", "webm"])
+
+    def validate_size(self, size):
+        if size > MAX_VIDEO_BYTES:
+            raise serializers.ValidationError(
+                f"Keep videos under {MAX_VIDEO_BYTES // (1024 * 1024)} MB — "
+                "re-encode at 720p and about 2 Mbps, which is plenty for the web."
+            )
+        return size
+
+
+class VideoFinalizeSerializer(serializers.Serializer):
+    """`key` is echoed back from the ticket. It is re-validated server-side rather than
+    trusted — see `s3_uploads.assert_incoming`."""
+
+    audit_allowlist = ("key", "original_name")
+
+    key = serializers.CharField(max_length=300)
+    original_name = serializers.CharField(max_length=255, allow_blank=True, default="")

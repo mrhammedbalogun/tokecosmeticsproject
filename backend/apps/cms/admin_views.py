@@ -4,14 +4,17 @@ Until this module existed, `accounts/rbac.py:94` granted `cms.manage` to Owner a
 Content, `admin/src/lib/nav.ts` showed a Content editor a "Content" link, and no endpoint
 in the project declared the scope. This is the first thing that role can do.
 """
+from botocore.exceptions import ClientError
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, serializers, viewsets
+from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.filters import SearchFilter
 
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
+from apps.cms import admin_serializers, s3_uploads
 from apps.cms.admin_serializers import (
     GoogleReviewAdminSerializer,
     GoogleReviewsMetaAdminSerializer,
@@ -20,7 +23,10 @@ from apps.cms.admin_serializers import (
     MediaAssetAdminSerializer,
     MenuItemAdminSerializer,
     PageAdminSerializer,
+    VideoFinalizeSerializer,
+    VideoTicketRequestSerializer,
 )
+from apps.cms.video_sniff import VIDEO_CONTENT_TYPES, is_faststart, sniff_video_container
 from apps.cms.models import (
     Banner, HomepageSection, MediaAsset, MenuItem, Page, GoogleReview, GoogleReviewsMeta,
 )
@@ -89,12 +95,104 @@ class MediaAssetAdminViewSet(
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("marketing.manage")]
     serializer_class = MediaAssetAdminSerializer
-    audit_serializers = (MediaAssetAdminSerializer,)
+    audit_serializers = (
+        MediaAssetAdminSerializer, VideoTicketRequestSerializer, VideoFinalizeSerializer,
+    )
     audit_model_label = "cms.mediaasset"
     queryset = MediaAsset.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ["kind"]
     search_fields = ["original_name", "file"]
+
+    @action(detail=False, methods=["post"], url_path="video-ticket")
+    def video_ticket(self, request):
+        """Mint a one-shot S3 POST form. The bytes bypass this server entirely.
+
+        WHY THIS EXISTS: Vercel rejects function request bodies over ~4.5MB at its edge
+        before Next runs (measured 2026-08-09: 3.91MB passes, 4.30MB 413s), so a video
+        relayed through the admin's server actions cannot arrive. Images still take the
+        old path — they are downscaled under 4MB in the browser and their full-byte
+        Pillow check is worth keeping.
+        """
+        body = VideoTicketRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        key = s3_uploads.new_incoming_key(body.validated_data["container"])
+        ticket = s3_uploads.mint_video_post(
+            key, max_bytes=admin_serializers.MAX_VIDEO_BYTES,
+        )
+        return Response({"url": ticket["url"], "fields": ticket["fields"], "key": key})
+
+    @action(detail=False, methods=["post"], url_path="video-finalize")
+    def video_finalize(self, request):
+        """Verify what landed, publish it, and record the asset.
+
+        Order matters: copy BEFORE the row is written. The inverse would leave a row
+        pointing at nothing, which a banner could then attach to.
+        """
+        body = VideoFinalizeSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        key = body.validated_data["key"]
+
+        try:
+            s3_uploads.assert_incoming(key)
+        except s3_uploads.UnsafeKeyError:
+            raise serializers.ValidationError({"key": "That upload key is not valid."}) from None
+
+        try:
+            size, etag = s3_uploads.head_incoming(key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") not in ("404", "NoSuchKey"):
+                raise
+            # A retry of a finalize that already succeeded: the quarantine copy was
+            # cleaned up, but the published asset exists. Answer as if nothing happened
+            # twice — that is what makes double-clicking Save harmless.
+            existing = MediaAsset.objects.filter(file=s3_uploads.library_key_for(key)).first()
+            if existing is not None:
+                return Response(MediaAssetAdminSerializer(existing).data, status=200)
+            raise serializers.ValidationError(
+                {"key": "That upload has expired or was never completed. Choose the "
+                        "file again."}
+            ) from None
+
+        # Read the cap off the module, not a from-import: the "ticket lied" test shrinks
+        # it at runtime to prove this re-check is real.
+        max_bytes = admin_serializers.MAX_VIDEO_BYTES
+        if size > max_bytes:
+            s3_uploads.discard_incoming(key)
+            raise serializers.ValidationError(
+                {"key": f"That video is {size // (1024 * 1024)} MB — the limit is "
+                        f"{max_bytes // (1024 * 1024)} MB."}
+            )
+
+        head = s3_uploads.read_incoming_head(key)
+        container = sniff_video_container(head)
+        if container is None:
+            s3_uploads.discard_incoming(key)
+            raise serializers.ValidationError(
+                {"key": "That file isn't an mp4 or webm video."}
+            )
+
+        dest = s3_uploads.publish_incoming(
+            key, etag=etag, content_type=VIDEO_CONTENT_TYPES[container],
+        )
+        asset, created = MediaAsset.objects.get_or_create(
+            file=dest,
+            defaults={
+                "kind": MediaAsset.VIDEO,
+                "original_name": body.validated_data["original_name"][:255],
+                "size": size,
+                "uploaded_by": request.user,
+            },
+        )
+        s3_uploads.discard_incoming(key)
+
+        payload = MediaAssetAdminSerializer(asset).data
+        if not is_faststart(head):
+            payload["warning"] = (
+                "This video is not faststart-encoded, so browsers must download all of "
+                "it before playing. Re-encode with ffmpeg's -movflags +faststart."
+            )
+        return Response(payload, status=201 if created else 200)
 
 
 class HomepageSectionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
