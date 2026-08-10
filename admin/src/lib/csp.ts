@@ -45,6 +45,14 @@ function apiOrigin(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
+/** The S3 endpoint the browser POSTs video straight to (2026-08-09). NOT the CloudFront
+ *  host: uploads go to the bucket, reads come back through the CDN. Empty when unset —
+ *  filtered out below — so dev without the var simply has no direct-to-S3 origin. */
+function uploadHost(): string {
+  const bucket = process.env.NEXT_PUBLIC_UPLOAD_BUCKET_HOST;
+  return bucket ? `https://${bucket}` : "";
+}
+
 export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
@@ -68,7 +76,7 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     // directive they fall back to default-src 'self' and every preview is blocked.
     "media-src": ["'self'", "blob:", mediaHost(), apiOrigin()],
     "font-src": ["'self'", "data:"],
-    "connect-src": ["'self'", apiOrigin(), ...TURNSTILE],
+    "connect-src": ["'self'", apiOrigin(), uploadHost(), ...TURNSTILE].filter(Boolean),
     "frame-src": [...TURNSTILE, storefrontOrigin()],
     "frame-ancestors": ["'none'"],
     "base-uri": ["'self'"],
