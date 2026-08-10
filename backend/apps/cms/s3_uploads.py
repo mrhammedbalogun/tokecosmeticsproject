@@ -13,6 +13,9 @@ real bytes and only then copies into `catalog/library/`, where the CDN can see i
 """
 import uuid
 
+import boto3
+from django.conf import settings
+
 from apps.cms.video_sniff import VIDEO_EXTENSIONS
 
 INCOMING_PREFIX = "incoming/"
@@ -58,3 +61,58 @@ def library_key_for(incoming_key: str) -> str:
     twice copies to the same key and `get_or_create` finds the same row."""
     assert_incoming(incoming_key)
     return LIBRARY_PREFIX + incoming_key[len(INCOMING_PREFIX):]
+
+
+# Ticket lifetime. Generous on purpose: the key is pinned into a prefix the CDN cannot
+# serve, so a long window costs nothing, while a short one punishes an admin who picks a
+# file and takes a phone call.
+TICKET_TTL_SECONDS = 30 * 60
+# How much of the object finalize reads to identify it. Large enough for any container
+# header and the moov/mdat question; small enough to be one quick ranged GET.
+SNIFF_BYTES = 262_144
+
+
+def _client():
+    return boto3.client("s3", region_name=settings.AWS_S3_REGION_NAME)
+
+
+def _bucket() -> str:
+    return settings.AWS_STORAGE_BUCKET_NAME
+
+
+def mint_video_post(key: str, max_bytes: int) -> dict:
+    """A one-shot S3 POST form for exactly `key`, refusing anything over `max_bytes`.
+
+    Presigned POST rather than PUT specifically for `content-length-range`: a presigned
+    PUT can pin the key but cannot bound the body, and this bucket holds the database
+    backups — an unbounded write into it is not a risk worth taking for a simpler call.
+    """
+    assert_incoming(key)
+    conditions: list = [
+        {"key": key},                          # EXACT match, never starts-with
+        ["content-length-range", 1, max_bytes],
+    ]
+    post = _client().generate_presigned_post(
+        Bucket=_bucket(),
+        Key=key,
+        Fields={"key": key},
+        Conditions=conditions,
+        ExpiresIn=TICKET_TTL_SECONDS,
+    )
+    # `_conditions` is echoed back for the tests that pin the policy shape; it is not
+    # sent to the browser (the serializer picks the fields it exposes).
+    return {"url": post["url"], "fields": post["fields"], "key": key, "_conditions": conditions}
+
+
+def head_incoming(key: str) -> tuple[int, str]:
+    """(size, etag) of what ACTUALLY landed. The ticket's claimed size is not evidence."""
+    assert_incoming(key)
+    meta = _client().head_object(Bucket=_bucket(), Key=key)
+    return int(meta["ContentLength"]), meta["ETag"].strip('"')
+
+
+def read_incoming_head(key: str, length: int = SNIFF_BYTES) -> bytes:
+    """The first `length` bytes, via a ranged GET — never the whole object."""
+    assert_incoming(key)
+    obj = _client().get_object(Bucket=_bucket(), Key=key, Range=f"bytes=0-{length - 1}")
+    return obj["Body"].read()

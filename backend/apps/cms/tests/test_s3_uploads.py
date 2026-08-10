@@ -69,3 +69,66 @@ def test_library_key_is_deterministic():
 def test_library_key_refuses_a_non_incoming_source():
     with pytest.raises(UnsafeKeyError):
         library_key_for("backups/postgres/dump.sql.gz")
+
+
+import boto3
+from moto import mock_aws
+
+from apps.cms.s3_uploads import head_incoming, mint_video_post, read_incoming_head
+
+BUCKET = "test-bucket"
+
+
+@pytest.fixture
+def s3(settings):
+    """A live-enough S3. `settings` is pytest-django's fixture."""
+    settings.AWS_STORAGE_BUCKET_NAME = BUCKET
+    settings.AWS_S3_REGION_NAME = "eu-west-1"
+    with mock_aws():
+        client = boto3.client("s3", region_name="eu-west-1")
+        client.create_bucket(
+            Bucket=BUCKET,
+            CreateBucketConfiguration={"LocationConstraint": "eu-west-1"},
+        )
+        yield client
+
+
+def test_mint_video_post_pins_the_key_exactly_and_bounds_the_size(s3):
+    key = new_incoming_key("mp4")
+    ticket = mint_video_post(key, max_bytes=1000)
+
+    assert ticket["key"] == key
+    # The key travels as a FIELD, which S3 matches exactly — not a starts-with condition.
+    assert ticket["fields"]["key"] == key
+    conditions = ticket["_conditions"]
+    assert ["content-length-range", 1, 1000] in conditions
+    assert not any(
+        isinstance(c, list) and c and c[0] == "starts-with" and c[1] == "$key"
+        for c in conditions
+    ), "a starts-with key condition would let the client choose where bytes land"
+
+
+def test_head_incoming_returns_real_size_and_etag(s3):
+    key = new_incoming_key("mp4")
+    s3.put_object(Bucket=BUCKET, Key=key, Body=b"x" * 1234)
+
+    size, etag = head_incoming(key)
+    assert size == 1234
+    assert etag and '"' not in etag  # normalised, ready for CopySourceIfMatch
+
+
+def test_read_incoming_head_reads_only_the_front(s3):
+    key = new_incoming_key("mp4")
+    s3.put_object(Bucket=BUCKET, Key=key, Body=b"HEAD" + b"z" * 500_000)
+
+    head = read_incoming_head(key, length=16)
+    assert head.startswith(b"HEAD")
+    assert len(head) == 16, "a ranged read must not pull the whole object"
+
+
+def test_every_s3_helper_refuses_a_backups_key(s3):
+    for fn in (head_incoming, read_incoming_head):
+        with pytest.raises(UnsafeKeyError):
+            fn("backups/postgres/dump.sql.gz")
+    with pytest.raises(UnsafeKeyError):
+        mint_video_post("backups/postgres/dump.sql.gz", max_bytes=10)
