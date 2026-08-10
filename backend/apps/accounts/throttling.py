@@ -1,4 +1,4 @@
-"""Rate limiting for the public auth endpoints.
+"""Rate limiting: the global request throttles and the public auth endpoints' own.
 
 WHY THIS MODULE EXISTS. DRF's `BaseThrottle.get_ident` (rest_framework/throttling.py)
 falls back to the *entire* X-Forwarded-For chain joined into one string when
@@ -78,7 +78,45 @@ class AnonRateThrottle(CloudflareIdentMixin, throttling.AnonRateThrottle):
 
 
 class UserRateThrottle(CloudflareIdentMixin, throttling.UserRateThrottle):
-    """Global authenticated throttle; keyed on pk when authenticated, IP otherwise."""
+    """Global authenticated throttle; keyed on pk when authenticated, IP otherwise.
+
+    STAFF GET THEIR OWN SCOPE (`user_staff`, 300/min vs 120/min — the number's own
+    justification, including why not higher, lives on the rate in base.py). The customer rate
+    throttled a single staff member doing ordinary admin work (2026-08-10): one editor
+    page render is ~13 authenticated GETs, and the admin's server actions used to add a
+    full re-render per write on top. This is safe where the same idea on the admin LOGIN
+    throttles was a lockout button, because the key here is `request.user.pk` from a
+    token `AdminJWTAuthentication` already validated — per-person and unforgeable, so
+    the only session a caller can exhaust is their own.
+
+    The swap happens per-request in `allow_request` rather than in `__init__`:
+    `SimpleRateThrottle.__init__` parses the rate before any request exists, and DRF
+    instantiates a fresh throttle per request (`APIView.get_throttles`), so mutating
+    `self` here cannot leak one request's rate into another's. `wait()` reads
+    `self.duration` after the swap, so a 429's Retry-After answers from the staff
+    window, not the customer one.
+
+    THE RE-PARSE IS THE MECHANISM, NOT CEREMONY. `__init__` already resolved
+    `num_requests`/`duration` from the `user` scope before the request existed, so a
+    "simplified" version that swaps only `self.scope` changes nothing but the cache
+    key — staff would stay at 120/min under a bucket labelled user_staff, silently.
+    The unit tests assert the post-swap numbers for exactly this reason.
+
+    Keyed on `is_staff` alone, not on the token's audience: a staff member shopping
+    the storefront with a customer token also gets the staff rate. Accepted — it is
+    the same person, and the alternative couples this module to the audience claim
+    for no security gain.
+    """
+
+    staff_scope = "user_staff"
+
+    def allow_request(self, request, view):
+        user = getattr(request, "user", None)
+        if user is not None and user.is_authenticated and user.is_staff:
+            self.scope = self.staff_scope
+            self.rate = self.get_rate()
+            self.num_requests, self.duration = self.parse_rate(self.rate)
+        return super().allow_request(request, view)
 
 
 class _EmailKeyedThrottle(CloudflareIdentMixin, throttling.SimpleRateThrottle):

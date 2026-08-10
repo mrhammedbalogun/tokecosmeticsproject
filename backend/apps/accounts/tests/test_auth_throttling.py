@@ -247,3 +247,61 @@ def test_email_key_is_case_and_whitespace_insensitive(rf):
     a.data = {"email": "Victim@Example.com"}
     b.data = {"email": "  victim@example.com  "}
     assert _T().get_cache_key(a, view=None) == _T().get_cache_key(b, view=None)
+
+
+# --- the staff rate ----------------------------------------------------------
+# One admin page render is ~13 authenticated GETs, so the 120/min customer rate
+# throttled a single staff member pricing one product (measured 2026-08-10). Staff
+# swap to `user_staff` inside allow_request; these pin the swap and its absence.
+
+
+class _FakeUser:
+    def __init__(self, pk, is_staff):
+        self.pk = pk
+        self.is_staff = is_staff
+        self.is_authenticated = True
+
+
+def _run_throttle(user):
+    from rest_framework.test import APIRequestFactory
+
+    from apps.accounts.throttling import UserRateThrottle
+
+    throttle = UserRateThrottle()
+    request = APIRequestFactory().get("/")
+    request.user = user
+    allowed = throttle.allow_request(request, view=None)
+    return throttle, allowed
+
+
+def test_staff_swap_to_the_staff_scope_and_rate():
+    # The post-swap NUMBERS, not just the scope: a swap that skips the re-parse
+    # changes only the cache key and silently leaves staff at the customer rate.
+    throttle, allowed = _run_throttle(_FakeUser(pk=7, is_staff=True))
+    assert allowed
+    assert throttle.scope == "user_staff"
+    assert (throttle.num_requests, throttle.duration) == (300, 60)
+
+
+def test_customer_keeps_the_customer_rate():
+    throttle, allowed = _run_throttle(_FakeUser(pk=7, is_staff=False))
+    assert allowed
+    assert throttle.scope == "user"
+    assert (throttle.num_requests, throttle.duration) == (120, 60)
+
+
+def test_staff_and_customer_counts_are_separate_buckets(rf):
+    from apps.accounts.throttling import UserRateThrottle
+
+    staff_request = rf.get("/")
+    staff_request.user = _FakeUser(pk=7, is_staff=True)
+    customer_request = rf.get("/")
+    customer_request.user = _FakeUser(pk=7, is_staff=False)
+
+    staff = UserRateThrottle()
+    staff.allow_request(staff_request, view=None)
+    customer = UserRateThrottle()
+    customer.allow_request(customer_request, view=None)
+    assert staff.get_cache_key(staff_request, view=None) != customer.get_cache_key(
+        customer_request, view=None
+    )

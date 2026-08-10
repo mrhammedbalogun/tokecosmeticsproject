@@ -225,6 +225,22 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/min",
         "user": "120/min",
+        # Staff. A separate, higher bucket (see UserRateThrottle.allow_request): one
+        # admin page render costs ~13 authenticated GETs (product + variants + stock +
+        # prices + images + countries + admin-me + paged tags/categories), so 120/min
+        # throttled a single person doing ordinary catalogue work — measured live
+        # 2026-08-10 while one staff member priced one product. The key is
+        # request.user.pk from a validated JWT: unforgeable and unshared, so the only
+        # session a runaway tab can starve is its own.
+        #
+        # 300 AND NOT MORE, because this number is also the exfiltration budget of a
+        # stolen staff session: the customer and order LIST endpoints sit under this
+        # rate, at PAGE_SIZE 24 rows a request — the same threat `admin_search` below
+        # is capped at 60/min for. The worst legitimate minute observed is ~100
+        # requests (an editor load ~13 GETs + a 16-variant Apply + price typing);
+        # 300 covers that 3× over while holding the exfil budget to 2.5× what the
+        # old rate allowed. Raise it only with that trade-off named.
+        "user_staff": "300/min",
         "search": "30/min",
         "suggest": "60/min",
         "cart": "120/min",
