@@ -10,7 +10,11 @@ from apps.cms.models import (
 # the caps that actually hold. Values match what the surfaces need: no homepage image
 # should be anywhere near 15MB, and 80MB mirrors the long-standing video guidance.
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
-MAX_VIDEO_BYTES = 80 * 1024 * 1024
+# 128MB since 2026-08-09. The presigned path reads this for its S3 policy condition and
+# again when re-checking what actually landed; the legacy multipart path still reads it
+# too. ONE constant — a second copy is how `next.config.ts`'s unreachable 85MB ended up
+# looking authoritative.
+MAX_VIDEO_BYTES = 128 * 1024 * 1024
 VIDEO_EXTENSIONS = (".mp4", ".webm")
 
 
