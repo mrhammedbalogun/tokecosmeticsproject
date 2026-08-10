@@ -1,0 +1,20 @@
+{
+  "Rules": [
+    {
+      "ID": "Toke_LifeCycle",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "backups/postgres/" },
+      "Expiration": { "ExpiredObjectDeleteMarker": true },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 182 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 182 }
+    },
+    {
+      "ID": "expire-unfinalized-uploads",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "incoming/" },
+      "Expiration": { "Days": 1 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 1 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 1 }
+    }
+  ]
+}
