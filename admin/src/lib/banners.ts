@@ -59,7 +59,9 @@ export const PLACEMENTS: PlacementSpec[] = [
   {
     value: "hero",
     label: "Hero slide",
-    guide: "Image 1920×1080, or video mp4/webm ≤60s ≤80 MB (the image becomes the poster). 2+ slides make the slider rotate.",
+    // The video ceiling is the platform's ~4 MB request cap (see lib/image.ts), not the
+    // API's 80 MB guard — that one is only reachable when self-hosting.
+    guide: "Image 1920×1080, or a short mp4/webm under 4 MB (the image becomes the poster). 2+ slides make the slider rotate.",
     fields: [
       { key: "subtitle", label: "Eyebrow", hint: "The small line above the headline." },
       { key: "title", label: "Headline" },

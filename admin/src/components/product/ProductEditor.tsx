@@ -44,7 +44,7 @@ import type { AdjustResult } from "@/app/(shell)/products/[slug]/stock-actions";
 import type { AdjustErrors } from "@/lib/stock-adjust";
 import type { ImageResult, ProductImage } from "@/app/(shell)/products/[slug]/image-actions";
 import type { PriceWriteResult } from "@/app/(shell)/products/[slug]/price-actions";
-import { downscaleImage } from "@/lib/image";
+import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
 import { positionWrites, reorder, sortImages } from "@/lib/product-images";
 import {
   amountChanged,
@@ -203,8 +203,14 @@ export function ProductEditor({
     runImageWrite(async () => {
       const formData = new FormData();
       // Downscaled before it leaves the browser — a camera photo is routinely bigger
-      // than the platform's request-body cap, and no PDP needs a 4000px original.
-      formData.append("image", await downscaleImage(file));
+      // than the platform's request-body cap, and no PDP needs a 4000px original. A
+      // file that STILL does not fit is refused here with the reason: the platform
+      // kills an oversized request before the server can refuse it politely.
+      const staged = await downscaleImage(file);
+      if (staged.size > UPLOAD_CAP_BYTES) {
+        return `That image is ${fileSizeMb(staged)} even after shrinking — uploads over about 4 MB cannot reach the server. Export it as JPEG or resize it smaller and try again.`;
+      }
+      formData.append("image", staged);
       if (alt) formData.append("alt", alt);
       const res = await imageActions.upload(baseline.slug, formData);
       if (!res.ok) return res.error;

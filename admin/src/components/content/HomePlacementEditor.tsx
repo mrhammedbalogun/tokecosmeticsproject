@@ -45,6 +45,9 @@ type Defaults = Partial<Record<BannerField, string>>;
 
 interface EditorTarget {
   banner: BannerRow | null;
+  /** On create: the built-in content the clicked slot currently shows, so the editor
+   * opens pre-filled with what the customer is seeing rather than blank. */
+  defaults: Defaults | null;
   presetSort: number;
   heading: string;
 }
@@ -107,9 +110,9 @@ export function HomePlacementEditor({
   };
 
   const openEdit = (banner: BannerRow, position: string) =>
-    setEditor({ banner, presetSort: banner.sort, heading: `${spec.label} · ${position}` });
-  const openCreate = (position: string) =>
-    setEditor({ banner: null, presetSort: nextSort, heading: `${spec.label} · ${position}` });
+    setEditor({ banner, defaults: null, presetSort: banner.sort, heading: `${spec.label} · ${position}` });
+  const openCreate = (position: string, defaults: Defaults | null = null) =>
+    setEditor({ banner: null, defaults, presetSort: nextSort, heading: `${spec.label} · ${position}` });
 
   return (
     <div className="space-y-3">
@@ -142,7 +145,15 @@ export function HomePlacementEditor({
                       key="add"
                       aspect={spec.aspect}
                       label={`Add ${itemNoun}`}
-                      onClick={() => openCreate(`${itemNoun} ${live.length + 1}`)}
+                      onClick={() =>
+                        // The first slide replaces the shop's built-in one, so it opens
+                        // pre-filled with that content; later slides are additions and
+                        // start blank.
+                        openCreate(
+                          `${itemNoun} ${live.length + 1}`,
+                          live.length === 0 ? (spec.defaults[0] ?? null) : null,
+                        )
+                      }
                     />
                   );
                 }
@@ -166,7 +177,7 @@ export function HomePlacementEditor({
                     showPosition={(spec.slots ?? 2) > 1 || layout === "slides"}
                     disabled={reordering}
                     onEdit={() =>
-                      occupant ? openEdit(occupant, position) : openCreate(position)
+                      occupant ? openEdit(occupant, position) : openCreate(position, fallback)
                     }
                     onLeft={occupant && i > 0 ? () => swapLive(i, i - 1) : undefined}
                     onRight={
@@ -197,6 +208,7 @@ export function HomePlacementEditor({
         <HomeBannerModal
           spec={spec}
           banner={editor.banner}
+          defaults={editor.defaults}
           presetSort={editor.presetSort}
           heading={editor.heading}
           countryOptions={countryOptions}

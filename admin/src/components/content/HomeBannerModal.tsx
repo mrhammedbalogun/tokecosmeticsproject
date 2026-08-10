@@ -19,6 +19,14 @@
  *
  * A PLAIN OVERLAY, not `<dialog>`, for StockAdjustModal's reason: this renders only
  * while open, so showModal() ceremony buys nothing. Escape and the backdrop close it.
+ *
+ * ── OVERSIZED FILES ARE REFUSED AT PICK TIME ────────────────────────────────────────
+ *
+ * The platform kills any request over ~4.5MB before the server sees it, so a too-big
+ * file cannot be refused politely at save time — the whole save just dies. Images are
+ * downscaled to fit on staging; a file that still cannot fit (a long video, an
+ * undecodable format) is refused the moment it is chosen, with the reason, instead of
+ * being staged for a save that is guaranteed to fail.
  */
 import { startTransition, useEffect, useRef, useState } from "react";
 import {
@@ -30,7 +38,7 @@ import {
 } from "@/app/(shell)/content/banners/actions";
 import { MediaLibraryModal } from "@/components/content/MediaLibraryModal";
 import type { BannerField, BannerRow, CountryOption, PlacementSpec } from "@/lib/banners";
-import { downscaleImage } from "@/lib/image";
+import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
 import type { MediaAssetRow } from "@/lib/media";
 
 const FIELD =
@@ -59,6 +67,7 @@ const SLOT_NOUN: Record<MediaKind, string> = {
 export function HomeBannerModal({
   spec,
   banner,
+  defaults = null,
   presetSort,
   heading,
   countryOptions,
@@ -67,6 +76,13 @@ export function HomeBannerModal({
   spec: PlacementSpec;
   /** null = creating a new banner for this placement. */
   banner: BannerRow | null;
+  /**
+   * The built-in content the clicked slot is showing right now (create only). It seeds
+   * the fields, because "Replace" on a tile that reads "Toke Naturals" must open an
+   * editor that says "Toke Naturals" — the admin edits what the shop shows, they don't
+   * retype it from memory.
+   */
+  defaults?: Partial<Record<BannerField, string>> | null;
   /** Where a NEW banner lands in the lineup (existing banners keep their sort). */
   presetSort: number;
   /** e.g. "Shop-by-category · Tile 2" — tells the editor what they clicked. */
@@ -76,11 +92,11 @@ export function HomeBannerModal({
   onClose: () => void;
 }) {
   const [values, setValues] = useState<Record<BannerField, string>>({
-    title: banner?.title ?? "",
-    subtitle: banner?.subtitle ?? "",
-    tagline: banner?.tagline ?? "",
-    cta_text: banner?.cta_text ?? "",
-    cta_url: banner?.cta_url ?? "",
+    title: banner?.title ?? defaults?.title ?? "",
+    subtitle: banner?.subtitle ?? defaults?.subtitle ?? "",
+    tagline: banner?.tagline ?? defaults?.tagline ?? "",
+    cta_text: banner?.cta_text ?? defaults?.cta_text ?? "",
+    cta_url: banner?.cta_url ?? defaults?.cta_url ?? "",
   });
   const [startsAt, setStartsAt] = useState(banner?.starts_at?.slice(0, 10) ?? "");
   const [endsAt, setEndsAt] = useState(banner?.ends_at?.slice(0, 10) ?? "");
@@ -97,6 +113,12 @@ export function HomeBannerModal({
   const [removeArmed, setRemoveArmed] = useState(false);
   /** Which slot's library picker is open, if any. */
   const [libraryFor, setLibraryFor] = useState<MediaKind | null>(null);
+  /**
+   * The id the row has NOW — which on create is only learned when the first save
+   * returns. Without this, "save succeeded but the image upload failed → press Save
+   * again" would POST a second banner instead of PATCHing the one just made.
+   */
+  const savedIdRef = useRef<number | undefined>(banner?.id);
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -125,9 +147,20 @@ export function HomeBannerModal({
 
   const stageFile = async (kind: MediaKind, file: File | null) => {
     if (!file) return;
+    setMessage(null);
     // Images are downscaled BEFORE staging, so the preview shows the file that will
     // actually upload — and so the upload fits the platform's request-body cap.
     const staged = kind === "video" ? file : await downscaleImage(file);
+    if (staged.size > UPLOAD_CAP_BYTES) {
+      // Refused HERE, not at save: a request this size dies at the platform edge, so
+      // saving would fail wholesale with nothing to say. Nothing is staged.
+      setMessage(
+        kind === "video"
+          ? `That video is ${fileSizeMb(staged)} — uploads over about 4 MB cannot reach the server. Compress it (720p, shorter, or a lower bitrate) and choose it again.`
+          : `That image is ${fileSizeMb(staged)} even after shrinking — uploads over about 4 MB cannot reach the server. Export it as JPEG or resize it smaller, then choose it again.`,
+      );
+      return;
+    }
     const previewUrl = URL.createObjectURL(staged);
     urlsRef.current.push(previewUrl);
     setMedia((m) => ({ ...m, [kind]: { file: staged, previewUrl, asset: null, remove: false } }));
@@ -153,12 +186,16 @@ export function HomeBannerModal({
     setErrors({});
     setMessage(null);
     startTransition(async () => {
-      // The try/catch is load-bearing: a server action whose REQUEST is rejected (a
+      // The try/catches are load-bearing: a server action whose REQUEST is rejected (a
       // body over the size limit, a network drop) rejects the promise on the client —
-      // without the catch, `pending` stays true and the modal says "Saving…" forever.
+      // without them, `pending` stays true and the modal says "Saving…" forever. Text
+      // and media get separate catches because they fail differently: a failed text
+      // save saved nothing, a failed media request comes AFTER the tile's text saved,
+      // and telling the admin "the save did not reach the server" then would be a lie
+      // that invites a retype.
       try {
         const state = await saveBannerAction({
-          id: banner?.id,
+          id: savedIdRef.current,
           title: values.title,
           subtitle: values.subtitle,
           tagline: values.tagline,
@@ -177,37 +214,51 @@ export function HomeBannerModal({
           setMessage(state.message ?? null);
           return;
         }
-        // Text is saved; now let the staged media chase the id. A failed upload keeps the
-        // modal open and says so — the tile exists, its artwork just has not changed.
-        for (const kind of ["image", "mobile_image", "video"] as MediaKind[]) {
-          const draft = media[kind];
-          let result = null;
+        savedIdRef.current = state.id;
+      } catch {
+        setPending(false);
+        setMessage("The save did not reach the server — check the connection and retry.");
+        return;
+      }
+      const id = savedIdRef.current;
+      // Text is saved; now let the staged media chase the id. A failed upload keeps the
+      // modal open and says so — the tile exists, its artwork just has not changed. A
+      // slot that succeeds stops being staged (its preview stays), so retrying after a
+      // later slot fails does not upload the same file twice.
+      for (const kind of ["image", "mobile_image", "video"] as MediaKind[]) {
+        const draft = media[kind];
+        const noun = kind === "video" ? "video" : kind === "mobile_image" ? "phone image" : "image";
+        let result = null;
+        try {
           if (draft.file) {
             const formData = new FormData();
             formData.set("file", draft.file);
-            result = await uploadBannerMediaAction(state.id, kind, formData);
+            result = await uploadBannerMediaAction(id, kind, formData);
           } else if (draft.asset) {
-            result = await attachBannerMediaAction(state.id, kind, draft.asset.id);
+            result = await attachBannerMediaAction(id, kind, draft.asset.id);
           } else if (draft.remove) {
-            result = await clearBannerMediaAction(state.id, kind);
+            result = await clearBannerMediaAction(id, kind);
           }
-          if (result && !result.savedAt) {
-            const noun = kind === "video" ? "video" : kind === "mobile_image" ? "phone image" : "image";
-            setPending(false);
-            setMessage(
-              `Saved, but the ${noun} did not go through: ${result.message ?? "try the upload again."}`,
-            );
-            return;
-          }
+        } catch {
+          setPending(false);
+          setMessage(
+            `The text is saved, but the ${noun} did not reach the server — usually a file over about 4 MB, otherwise a dropped connection. Compress it and try again.`,
+          );
+          return;
         }
-        setPending(false);
-        onClose();
-      } catch {
-        setPending(false);
-        setMessage(
-          "The save did not reach the server. If you attached a large file (over about 4 MB), compress it and try again — otherwise check the connection and retry.",
-        );
+        if (result && !result.savedAt) {
+          setPending(false);
+          setMessage(
+            `Saved, but the ${noun} did not go through: ${result.message ?? "try the upload again."}`,
+          );
+          return;
+        }
+        if (result) {
+          setMedia((m) => ({ ...m, [kind]: { ...m[kind], file: null, asset: null, remove: false } }));
+        }
       }
+      setPending(false);
+      onClose();
     });
   };
 

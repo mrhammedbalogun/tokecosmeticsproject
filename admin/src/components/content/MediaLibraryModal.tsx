@@ -16,7 +16,7 @@
  */
 import { useEffect, useRef, useState, useTransition } from "react";
 import { searchMediaAction, uploadMediaAction } from "@/app/(shell)/content/media/actions";
-import { downscaleImage } from "@/lib/image";
+import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
 import type { MediaAssetRow } from "@/lib/media";
 
 export function MediaLibraryModal({
@@ -68,6 +68,16 @@ export function MediaLibraryModal({
     setMessage(null);
     try {
       const staged = kind === "video" ? file : await downscaleImage(file);
+      if (staged.size > UPLOAD_CAP_BYTES) {
+        // A request this size dies at the platform edge before the server can refuse
+        // it politely — so refuse it here, with the reason, and send nothing.
+        setMessage(
+          kind === "video"
+            ? `That video is ${fileSizeMb(staged)} — uploads over about 4 MB cannot reach the server. Compress it (720p, shorter, or a lower bitrate) and try again.`
+            : `That image is ${fileSizeMb(staged)} even after shrinking — uploads over about 4 MB cannot reach the server. Export it as JPEG or resize it smaller and try again.`,
+        );
+        return;
+      }
       const formData = new FormData();
       formData.set("file", staged);
       const result = await uploadMediaAction(formData);
