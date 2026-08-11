@@ -223,6 +223,10 @@ class AdminGigShipmentView(AdminAuditMixin, APIView):
                 "capture_api_id": shipment.capture_api_id,
                 "last_scan": shipment.last_scan,
                 "last_tracked_at": shipment.last_tracked_at,
+                # Centre-pickup snapshot (32b slice 5): {} for door shipments. The
+                # packing desk needs to see WHERE the parcel is routed before pressing
+                # the button that debits the wallet.
+                "centre": shipment.centre,
             },
             # "unknown" is honest: the sandbox account has no wallet record, and a
             # stale/absent cache is not a zero.

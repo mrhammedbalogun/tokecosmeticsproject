@@ -14,10 +14,22 @@
 
 {% include "email/_order_items.html" %}
 
+{% if pickup_centre %}
+<p style="margin:24px 0 4px;font-weight:600;">Collect from</p>
+<p style="margin:0;color:#555;">
+  {{ pickup_centre.name }}<br>
+  {{ pickup_centre.address }}
+</p>
+<p style="margin:8px 0 0;color:#555;">
+  We&rsquo;ll let you know when it&rsquo;s ready — bring your order number
+  (<strong>{{ number }}</strong>) and a photo ID when you collect.
+</p>
+{% else %}
 <p style="margin:24px 0 4px;font-weight:600;">Delivering to</p>
 <p style="margin:0;color:#555;">
   {% include "email/_address.html" with address=shipping_address %}
 </p>
+{% endif %}
 
 <p style="margin:24px 0 0;">
   <a href="{{ tracking_url }}"

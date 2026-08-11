@@ -34,7 +34,11 @@ def create_quoted_shipment(order, chosen: dict, charged, *, centre=None) -> GigS
         logger.warning("gig quote cache miss at placement for order %s", order.number)
     snapshot = (
         {"id": centre.gig_centre_id, "station_id": centre.gig_station_id,
-         "name": centre.name, "address": centre.address}
+         "name": centre.name, "address": centre.address,
+         # Capture ships these as ReceiverLocation (slice 5) — snapshotted so the
+         # waybill goes where the customer CHOSE even if the centre row moves.
+         "latitude": float(centre.latitude) if centre.latitude is not None else None,
+         "longitude": float(centre.longitude) if centre.longitude is not None else None}
         if centre is not None
         else {}
     )

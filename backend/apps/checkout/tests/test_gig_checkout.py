@@ -213,7 +213,8 @@ def test_pickup_placement_requotes_the_chosen_centre_and_snapshots_it(django_use
     assert order.shipping_total == Decimal("5150.00")  # the CHOSEN centre's price
     shipment = order.gig_shipment
     assert shipment.centre == {"id": 202, "station_id": 4, "name": "GIG Victoria Island",
-                               "address": "1 Adeola Odeku, VI"}
+                               "address": "1 Adeola Odeku, VI",
+                               "latitude": 6.428, "longitude": 3.421}
     assert shipment.quote["breakdown"]["GrandTotal"] == 5150.00
 
     # The customer surface names the centre from the snapshot, waybill or not.

@@ -5,8 +5,14 @@ Order {{ number }}
 Tracking: {{ tracking_carrier }} — {{ tracking_number }}
 {% endif %}
 {% include "email/_order_items.txt" %}
-Delivering to:
-{% include "email/_address.txt" with address=shipping_address %}
+{% if pickup_centre %}Collect from:
+  {{ pickup_centre.name }}
+  {{ pickup_centre.address }}
+
+We'll let you know when it's ready — bring your order number ({{ number }}) and a
+photo ID when you collect.
+{% else %}Delivering to:
+{% include "email/_address.txt" with address=shipping_address %}{% endif %}
 
 Track your order:
   {{ tracking_url }}

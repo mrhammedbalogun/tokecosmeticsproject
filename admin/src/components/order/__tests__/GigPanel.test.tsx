@@ -102,3 +102,17 @@ describe("GigPanel", () => {
     expect(screen.getByText(/MAHD/)).toBeInTheDocument();
   });
 });
+
+describe("GigPanel pickup centre (32b slice 5)", () => {
+  it("shows the pickup centre snapshot when the shipment has one", () => {
+    setup(data({}, { centre: { id: 540, name: "GIG Alausa", address: "Plot Y, Mobolaji Johnson, Alausa Ikeja" } }));
+    expect(screen.getByText("Pickup centre")).toBeInTheDocument();
+    expect(screen.getByText("GIG Alausa")).toBeInTheDocument();
+    expect(screen.getByText(/Mobolaji Johnson/)).toBeInTheDocument();
+  });
+
+  it("renders no centre row for door shipments", () => {
+    setup();
+    expect(screen.queryByText("Pickup centre")).toBeNull();
+  });
+});

@@ -29,7 +29,7 @@ from django.db import transaction
 
 from apps.core.models import Region
 from apps.delivery.gig import client
-from apps.delivery.models import GigShipment
+from apps.delivery.models import GigCentre, GigShipment
 from apps.orders.state import record_event
 
 logger = logging.getLogger(__name__)
@@ -112,7 +112,37 @@ def capture_shipment(order, *, actor) -> GigShipment:
             f"Order is '{order.status}' — capture only after payment (processing).",
         )
 
-    region = _receiver_region(order)
+    # Centre pickup vs door (32b slice 5): a shipment with a centre snapshot is a
+    # pickup — the parcel travels to the CENTRE, so the receiver coordinates/address
+    # come from the snapshot and the LGA region plays no part (a pickup-only LGA
+    # must never be blocked by door-delivery mapping issues).
+    centre_snap = shipment.centre or {}
+    is_pickup = bool(centre_snap)
+    if is_pickup:
+        centre_id = centre_snap.get("id")
+        # MEASURED (research §2g): GIG accepts ANY DestinationServiceCenterId without
+        # validation and mints a waybill. This refusal is the only fence — never guess.
+        if not isinstance(centre_id, int) or centre_id <= 0:
+            raise CaptureRefused(
+                "centre_snapshot_invalid",
+                "This pickup shipment's centre snapshot is malformed — resolve with GIG "
+                "support before capturing; do NOT capture as door delivery.",
+            )
+        pickup_lat, pickup_lng = centre_snap.get("latitude"), centre_snap.get("longitude")
+        if pickup_lat is None or pickup_lng is None:
+            # Old snapshot without coordinates: the live centre row is the fallback.
+            live = GigCentre.objects.filter(gig_centre_id=centre_id).exclude(
+                latitude=None).exclude(longitude=None).first()
+            if live is None:
+                raise CaptureRefused(
+                    "centre_coordinates_missing",
+                    "No coordinates for this pickup centre (snapshot and sync both) — "
+                    "re-run the centre sync or resolve with GIG before capturing.",
+                )
+            pickup_lat, pickup_lng = float(live.latitude), float(live.longitude)
+        region = None
+    else:
+        region = _receiver_region(order)
     expected_cost = Decimal(
         str((shipment.quote.get("breakdown") or {}).get("GrandTotal", 0))
     ).quantize(TWO_DP)
@@ -138,19 +168,25 @@ def capture_shipment(order, *, actor) -> GigShipment:
         )
 
     snap = order.shipping_address or {}
-    # The snapshot pin when the customer set one (door coordinates for the rider —
-    # Plan-32b ruling 2), else the LGA centroid. The SNAPSHOT, not the live Address
-    # row: the address may have been edited since placement. Pair-wise on purpose —
-    # half a pin (impossible via the serializer, but snapshots outlive rules) must
-    # never mix a pin latitude with a centroid longitude.
-    receiver_lat, receiver_lng = snap.get("latitude"), snap.get("longitude")
-    if receiver_lat is None or receiver_lng is None:
-        receiver_lat, receiver_lng = float(region.latitude), float(region.longitude)
+    if is_pickup:
+        # The parcel's destination is the centre; the customer (who collects) stays
+        # the named receiver so GIG's SMS/calls reach them.
+        receiver_lat, receiver_lng = pickup_lat, pickup_lng
+        receiver_address = centre_snap.get("address") or centre_snap.get("name") or ""
+    else:
+        # The snapshot pin when the customer set one (door coordinates for the rider —
+        # Plan-32b ruling 2), else the LGA centroid. The SNAPSHOT, not the live Address
+        # row: the address may have been edited since placement. Pair-wise on purpose —
+        # half a pin (impossible via the serializer, but snapshots outlive rules) must
+        # never mix a pin latitude with a centroid longitude.
+        receiver_lat, receiver_lng = snap.get("latitude"), snap.get("longitude")
+        if receiver_lat is None or receiver_lng is None:
+            receiver_lat, receiver_lng = float(region.latitude), float(region.longitude)
+        receiver_address = ", ".join(
+            part for part in (snap.get("line1"), snap.get("line2"), snap.get("area"), snap.get("state"))
+            if part
+        )
     receiver_name = f"{snap.get('first_name', '')} {snap.get('last_name', '')}".strip() or order.email
-    receiver_address = ", ".join(
-        part for part in (snap.get("line1"), snap.get("line2"), snap.get("area"), snap.get("state"))
-        if part
-    )
     body = {
         "SenderDetails": {
             "SenderName": settings.GIG_SENDER_NAME,
@@ -169,6 +205,11 @@ def capture_shipment(order, *, actor) -> GigShipment:
             "ReceiverAddress": receiver_address,
             "InputtedReceiverAddress": receiver_address,
             "ReceiverLocation": {"Latitude": receiver_lat, "Longitude": receiver_lng},
+            # MEASURED shape (research §2g): this field — HERE, in ReceiverDetails —
+            # is what makes the shipment a centre pickup ("PickupOptions":
+            # "SERVICECENTER" on the tracked shipment). Every other placement, or a
+            # PickUpOptions flag in any spelling, is a Joi 400.
+            **({"DestinationServiceCenterId": centre_snap["id"]} if is_pickup else {}),
         },
         "ShipmentDetails": {
             "VehicleType": settings.GIG_VEHICLE_TYPE,

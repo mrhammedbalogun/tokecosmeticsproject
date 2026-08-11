@@ -27,6 +27,8 @@ export interface GigShipmentData {
   capture_api_id: string;
   last_scan: Record<string, unknown>;
   last_tracked_at: string | null;
+  /** Centre-pickup snapshot from placement (32b slice 5); {} for door shipments. */
+  centre?: { id?: number; name?: string; address?: string };
 }
 
 export interface GigPanelData {
@@ -90,6 +92,19 @@ export function GigPanel({
           <div className="flex justify-between gap-4">
             <dt className="text-muted">Waybill</dt>
             <dd className="font-mono">{shipment.waybill}</dd>
+          </div>
+        )}
+        {shipment.centre?.name && (
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted">Pickup centre</dt>
+            {/* Routing, not preference: capture sends this centre's id to GIG, and
+                GIG does NOT validate it — what you see here is where the parcel goes. */}
+            <dd className="text-right">
+              {shipment.centre.name}
+              {shipment.centre.address && (
+                <span className="block text-xs text-muted">{shipment.centre.address}</span>
+              )}
+            </dd>
           </div>
         )}
         <div className="flex justify-between gap-4">

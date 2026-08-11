@@ -156,12 +156,32 @@ order page show the same. Verified: pickup E2E tests incl. near/far re-quote pro
 the email copy switch; full suites green. Still dark: the option row stays inactive
 until the go-live runbook flips it.
 
+### Task 0 + slices 5–6 — DONE 2026-08-11 (PLAN COMPLETE except go-live itself)
+
+**Task 0 answered by sandbox probe** (research §2g): the pickup capture field is
+`ReceiverDetails.DestinationServiceCenterId` — every other placement, and PickUpOptions
+in any spelling, is a Joi 400. The tracked shipment then reads
+`PickupOptions: "SERVICECENTER"`. **GIG does not validate the id** (999999 minted a
+waybill) — our placement validation + snapshot are the only fence, so capture refuses
+malformed snapshots (`centre_snapshot_invalid` / `centre_coordinates_missing`) and
+never falls back to door.
+
+**Slice 5 shipped**: pickup-aware capture (snapshot coords → ReceiverLocation, centre
+address as receiver address, region/centroid not needed — pickup-only LGAs can't be
+blocked by door mapping), snapshot now carries centre coordinates, shipped email says
+"Collect from" (same block as confirmation; ruling 6 complete), admin panel + GigPanel
+show the centre with a routing warning. **E2E verified against the LIVE sandbox through
+the real capture code**: waybill 1349113400, tracked as SERVICECENTER, ₦3,136.76
+(dev-DB artifact order TC-TASK0E2E kept, like TC-GIGLIVE1).
+
+**Slice 6 shipped**: go-live runbook step 8 now flips BOTH rows with a production
+pickup price-check + centre-sync precondition; UAT pickup scenarios recorded in the
+runbook's Plan-26 section.
+
 ### Left to do
 
 | # | Work | Gated on |
 |---|---|---|
-| 32b task 0 + slice 5 | Learn `capture/preshipment` shape for centre delivery (sandbox experiment or GIG's WhatsApp answer, question queued in the draft); then pickup capture + pickup-flavoured emails + admin centre display | GIG's answer OR one sandbox session |
-| 32b slice 6 | UAT scenarios + go-live runbook addendum (flip BOTH rows, verify production pickup pricing) | slices 3–5 |
 | 32a go-live | `docs/runbooks/gig-golive.md` steps 1–9 | Hammed: send the WhatsApp asks (final draft in chat 2026-08-03); GIG: production creds, webhook, Bike + pickup-hours confirmations; wallet funding |
 
 ### Loose ends worth remembering

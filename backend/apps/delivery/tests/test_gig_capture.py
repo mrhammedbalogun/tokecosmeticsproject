@@ -266,3 +266,76 @@ def test_wallet_balance_caches_and_reports_unknown_honestly():
         return_value=httpx.Response(200, json=_company(None))
     )
     assert wallet_balance() is None  # unknown is unknown, not zero
+
+
+# --- Centre-pickup capture (32b slice 5; shape measured in research §2g) ---
+
+def _make_pickup(quoted, centre_snap):
+    quoted.centre = centre_snap
+    quoted.save(update_fields=["centre"])
+    return quoted
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_pickup_capture_sends_destination_centre_and_centre_coordinates(order, quoted, django_user_model):
+    actor = django_user_model.objects.get(email="cap@x.com")
+    _make_pickup(quoted, {"id": 540, "station_id": 4, "name": "GIG Alausa",
+                          "address": "Plot Y, Mobolaji Johnson, Alausa Ikeja",
+                          "latitude": 6.6078944, "longitude": 3.3693221})
+    # A pickup-only LGA: kill the region centroid to prove capture no longer needs it.
+    Region.objects.filter(name="Ikeja").update(latitude=None, longitude=None)
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(50000))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope({"Waybill": "1349113394"}))
+    )
+    shipment = capture_shipment(order, actor=actor)
+    assert shipment.status == "created"
+
+    import json as jsonlib
+    body = jsonlib.loads(route.calls[0].request.content)
+    rd = body["ReceiverDetails"]
+    assert rd["DestinationServiceCenterId"] == 540  # the measured field, measured place
+    assert rd["ReceiverLocation"] == {"Latitude": 6.6078944, "Longitude": 3.3693221}
+    assert rd["ReceiverAddress"] == "Plot Y, Mobolaji Johnson, Alausa Ikeja"
+    assert rd["ReceiverName"] == "Ada O"  # the COLLECTOR stays the named receiver
+    assert "DestinationServiceCenterId" not in body.get("ShipmentDetails", {})
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_pickup_capture_refuses_malformed_or_coordinateless_snapshots(order, quoted, django_user_model):
+    """GIG accepts ANY DestinationServiceCenterId without validation (measured:
+    999999 minted a waybill) — so a bad snapshot must refuse, never guess, and
+    NEVER quietly fall back to door delivery."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(50000))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment")
+
+    _make_pickup(quoted, {"name": "GIG Alausa", "address": "x"})  # no id
+    with pytest.raises(CaptureRefused) as exc:
+        capture_shipment(order, actor=actor)
+    assert exc.value.code == "centre_snapshot_invalid"
+
+    # Old snapshot without coordinates and no synced row either → refuse.
+    _make_pickup(quoted, {"id": 540, "name": "GIG Alausa", "address": "x"})
+    with pytest.raises(CaptureRefused) as exc:
+        capture_shipment(order, actor=actor)
+    assert exc.value.code == "centre_coordinates_missing"
+
+    # Same snapshot, but the nightly sync knows the centre → capture proceeds on
+    # the live coordinates.
+    from apps.delivery.models import GigCentre
+    GigCentre.objects.create(gig_centre_id=540, gig_station_id=4, name="GIG Alausa",
+                             address="x", latitude="6.607894", longitude="3.369322",
+                             is_active=True, synced_at=timezone.now())
+    route.mock(return_value=httpx.Response(200, json=_envelope({"Waybill": "WB-PICKUP"})))
+    shipment = capture_shipment(order, actor=actor)
+    assert shipment.waybill == "WB-PICKUP"
+    import json as jsonlib
+    rd = jsonlib.loads(route.calls[-1].request.content)["ReceiverDetails"]
+    assert rd["ReceiverLocation"] == {"Latitude": 6.607894, "Longitude": 3.369322}

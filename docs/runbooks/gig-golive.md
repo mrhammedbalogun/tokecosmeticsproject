@@ -121,11 +121,18 @@ treat it as the live payment tests in Plan-26: one deliberate, small, verified. 
 rider arrives, tracking scans appear on the order page, the wallet dropped by exactly the
 stored cost, the label appears.
 
-## 8. Flip it on
+## 8. Flip it on — BOTH rows (32b slice 6 addendum)
 
-Admin → Settings → Delivery options → activate `Door Delivery (GIG)` (rename to taste —
-the name is customer-facing). Decide `free_over` policy (charges the customer ₦0 above
-the threshold; GIG still debits the full cost — the shipment row stores both).
+Admin → Settings → Delivery options → activate **`Door Delivery (GIG)`** AND
+**`Pickup at GIG Centre`** (rename to taste — the names are customer-facing). Decide
+`free_over` policy per row (charges the customer ₦0 above the threshold; GIG still
+debits the full cost — the shipment row stores both).
+
+Before flipping pickup, ONE production pickup price-check (the sandbox priced pickup
+CHEAPER than door — ₦3,899 vs ₦4,175 — verify production agrees, from the VPS):
+run the step-6 smoke with `quote_centre_pickup` against a synced centre and sanity-check
+the figure. Production centres arrive via `sync_gig_centres` (nightly; run it once
+manually first — the picker is empty until it has rows).
 
 Keep **Lagos Delivery / Nationwide Delivery active** — they are the fallback when GIG is
 down or an LGA is uncovered, by design.
@@ -146,3 +153,18 @@ Add to `docs/uat-checklist.md`: covered-LGA checkout shows GIG priced beside the
 options; uncovered-LGA checkout shows flat options only; GIG-down (unplug `GIG_BASE_URL`)
 checkout still completes on a flat option; admin capture → wallet debit → rider; customer
 order page shows scans; wallet below threshold → one email, none while it stays low.
+
+**Pickup scenarios (32b slice 6):**
+- Pickup-only LGA (active, no home delivery): checkout offers Pickup but NOT GIG door.
+- Clicking Pickup opens the centre picker (nearest first); the step cannot complete
+  without a centre; switching to a door option clears the centre.
+- Review totals re-price to the CHOSEN centre (pick the far one — the number changes).
+- Placement snapshots the centre; confirmation email says "Collect from <centre>" with
+  order number + photo-ID line and NO "Delivering to"; order page shows the centre.
+- Admin order panel shows the pickup centre; capture creates a waybill that GIG tracks
+  with `PickupOptions: SERVICECENTER` (verified on sandbox waybill 1349113400 through
+  the real capture code, 2026-08-11).
+- Address rebuild: a Places-pick address saves a pin; a free-text address with a
+  hand-dropped pin saves it; a no-pin checkout still completes (centroid fallback).
+- Centre-vanishes case: deactivate a centre after placement — the order page and
+  emails still name it (snapshot), and a NEW checkout no longer offers it.

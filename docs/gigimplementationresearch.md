@@ -382,6 +382,24 @@ the items below and the runbook's Hammed-side steps (sender env, wallet funding)
     `POST /api/v1/webhooks/gig/` (decryption IS the auth), registration command
     `register_gig_webhook`, both paths converging on `tracking.apply_scan`.
 
+## 2g. 2026-08-11 — TASK 0 ANSWERED (sandbox): the centre-pickup capture shape
+
+Measured by probing `/capture/preshipment` with the strict-Joi error messages as the
+guide (sandbox waybills 1349113394, 1349113397 — probe artifacts, harmless):
+
+- **The field is `ReceiverDetails.DestinationServiceCenterId`** (value =
+  `ServiceCentreId` from `serviceCentresByStation`). `PickUpOptions` — in ANY spelling,
+  at ANY nesting — is `"not allowed"` on capture, as is `DestinationServiceCenterId` at
+  top level or inside `ShipmentDetails`. Everything else stays the door-capture body;
+  `ReceiverLocation` = the centre's own coordinates.
+- **Proof it registers as pickup**: the tracked shipment carries
+  `"PickupOptions": "SERVICECENTER"` and priced differently from door (₦3,136.76 vs
+  ₦4,175.20 for the same parcel).
+- **GIG does NOT validate the id**: `DestinationServiceCenterId: 999999` was accepted
+  and produced waybill 1349113397. OUR placement-time check (active GigCentre row) and
+  the snapshot are the only fence — capture must never send anything but the snapshot's
+  id, and a malformed snapshot must refuse, not guess.
+
 **New gap: production `/companyDetails/get?Email=...` answers 401 "Company not found."**
 for `ECO078703` (tried lower/upper-case email and the account code; login and token are
 fine). Sandbox merely reported `WalletAmount: null`; production cannot find the record at

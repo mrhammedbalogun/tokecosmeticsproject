@@ -88,3 +88,18 @@ def test_an_international_address_skips_what_it_does_not_have(settings):
     delivering = body.split("Delivering to:")[1].split("Track your order")[0]
     assert not [line for line in delivering.splitlines() if line.strip() == ","]
     assert "  \n  \n" not in delivering
+
+
+@pytest.mark.parametrize("template", ["order_confirmation", "order_shipped"])
+def test_pickup_orders_say_collect_from_not_delivering_to(settings, template):
+    """32b ruling 6: pickup changes the words everywhere — a centre order must never
+    print doorstep language, and the collect instructions carry number + ID."""
+    settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+    body = _body(template, tracking_carrier="GIG", tracking_number="GIG-1",
+                 pickup_centre={"id": 540, "name": "GIG Alausa",
+                                "address": "Plot Y, Mobolaji Johnson, Alausa Ikeja"})
+    assert "Collect from" in body
+    assert "GIG Alausa" in body
+    assert "photo ID" in body
+    assert "TC-100044" in body
+    assert "Delivering to" not in body
