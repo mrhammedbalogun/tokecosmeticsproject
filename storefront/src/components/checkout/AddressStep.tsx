@@ -2,7 +2,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
 import { useCart } from "@/hooks/useCart";
-import { RegionSelect } from "@/components/checkout/RegionSelect";
+import { RegionSelect, type Region } from "@/components/checkout/RegionSelect";
+import { AddressAutocompleteInput } from "@/components/address/AddressAutocompleteInput";
+import { LgaMismatchNudge } from "@/components/address/LgaMismatchNudge";
+import { PinConfirmMap, type LatLng } from "@/components/address/PinConfirmMap";
+import { detectLgaMismatch } from "@/components/address/lgaMismatch";
+import type { PlacePick } from "@/lib/googleMaps";
 import {
   fieldConfigFor,
   summarizeAddress,
@@ -66,6 +71,24 @@ export function AddressStep() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<AddressFieldErrors>({});
+
+  // Plan-32b slice 3: the pin (committed door coordinates), the LGA name Google
+  // attached to the last Places pick (feeds the mismatch nudge), and the loaded
+  // LGA objects (names + centroids) mirrored out of RegionSelect.
+  const [pin, setPin] = useState<LatLng | null>(null);
+  const [pickedLga, setPickedLga] = useState<string | null>(null);
+  const [areas, setAreas] = useState<Region[]>([]);
+
+  function handlePlacePick(p: PlacePick) {
+    setForm((prev) => ({ ...prev, line1: p.line1 }));
+    setPin({ lat: p.lat, lng: p.lng }); // a pick IS door coordinates — commit it
+    setPickedLga(p.lgaName);
+  }
+
+  function resetPinState() {
+    setPin(null);
+    setPickedLga(null);
+  }
 
   // One-shot mount load, mirroring SignInStep's checkedRef guard. All setState calls
   // below happen after the awaited fetch, not synchronously in the effect body.
@@ -182,6 +205,10 @@ export function AddressStep() {
       const v = form[f.name].trim();
       if (v) payload[f.name] = v;
     }
+    if (pin) {
+      payload.latitude = pin.lat.toFixed(6);
+      payload.longitude = pin.lng.toFixed(6);
+    }
 
     try {
       const res = await fetch("/api/addresses", {
@@ -194,6 +221,7 @@ export function AddressStep() {
         setAddresses((prev) => [...(prev ?? []), created]);
         setShowForm(false);
         setForm(EMPTY_FORM);
+        resetPinState();
         handleSelect(created);
         return;
       }
@@ -409,15 +437,28 @@ export function AddressStep() {
             <label htmlFor="addr-line1" className="mb-1 block text-sm font-medium">
               Street address
             </label>
-            <input
-              id="addr-line1"
-              type="text"
-              value={form.line1}
-              onChange={(e) => updateField("line1", e.target.value)}
-              required
-              autoComplete="address-line1"
-              className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
-            />
+            {country === "NG" ? (
+              // The Places assist (NG only, ruling 8). Free text stays valid —
+              // the same field, just with suggestions layered on.
+              <AddressAutocompleteInput
+                id="addr-line1"
+                value={form.line1}
+                onChangeText={(v) => updateField("line1", v)}
+                onPick={handlePlacePick}
+                required
+                className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+              />
+            ) : (
+              <input
+                id="addr-line1"
+                type="text"
+                value={form.line1}
+                onChange={(e) => updateField("line1", e.target.value)}
+                required
+                autoComplete="address-line1"
+                className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+              />
+            )}
             {fieldErrors.line1 && (
               <p role="alert" className="mt-1 text-sm text-red-700">
                 {fieldErrors.line1.join(" ")}
@@ -451,6 +492,7 @@ export function AddressStep() {
                 onChange={(v) =>
                   setForm((prev) => ({ ...prev, state_region: v.state_region, area_region: v.area_region }))
                 }
+                onAreasLoaded={setAreas}
               />
               {fieldErrors.state_region && (
                 <p role="alert" className="mt-1 text-sm text-red-700">
@@ -462,6 +504,24 @@ export function AddressStep() {
                   {fieldErrors.area_region.join(" ")}
                 </p>
               )}
+              {(() => {
+                const mismatch = detectLgaMismatch(pickedLga, form.area_region, areas);
+                const selected = areas.find((a) => a.id === form.area_region);
+                if (!mismatch || !selected) return null;
+                return (
+                  <div className="mt-3">
+                    <LgaMismatchNudge
+                      suggested={mismatch}
+                      selectedName={selected.name}
+                      onAccept={(region) => {
+                        updateField("area_region", region.id);
+                        setPickedLga(null);
+                      }}
+                      onDismiss={() => setPickedLga(null)}
+                    />
+                  </div>
+                );
+              })()}
             </div>
           )}
           {cfg.textFields.length > 0 && (
@@ -489,6 +549,34 @@ export function AddressStep() {
             </div>
           )}
 
+          {/* The confirm-your-pin map (ruling 2): opens once we have ANY anchor —
+              a Places pick (precise) or the chosen LGA's centroid (approximate).
+              NG only; degrades to nothing when neither exists yet. */}
+          {country === "NG" &&
+            (() => {
+              const selectedArea = areas.find((a) => a.id === form.area_region);
+              const centroid =
+                selectedArea?.latitude != null && selectedArea?.longitude != null
+                  ? {
+                      lat: parseFloat(selectedArea.latitude),
+                      lng: parseFloat(selectedArea.longitude),
+                    }
+                  : null;
+              const center = pin ?? centroid;
+              if (!center || Number.isNaN(center.lat) || Number.isNaN(center.lng)) return null;
+              return (
+                <div>
+                  <span className="mb-1 block text-sm font-medium">Delivery pin</span>
+                  <PinConfirmMap
+                    center={center}
+                    precise={pin !== null}
+                    value={pin}
+                    onChange={setPin}
+                  />
+                </div>
+              );
+            })()}
+
           <div className="flex items-center gap-4">
             <button
               type="submit"
@@ -503,6 +591,7 @@ export function AddressStep() {
                 onClick={() => {
                   setShowForm(false);
                   setForm(EMPTY_FORM);
+                  resetPinState();
                   setFormError(null);
                   setFieldErrors({});
                 }}

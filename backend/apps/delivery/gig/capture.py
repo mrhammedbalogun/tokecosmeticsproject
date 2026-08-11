@@ -138,6 +138,14 @@ def capture_shipment(order, *, actor) -> GigShipment:
         )
 
     snap = order.shipping_address or {}
+    # The snapshot pin when the customer set one (door coordinates for the rider —
+    # Plan-32b ruling 2), else the LGA centroid. The SNAPSHOT, not the live Address
+    # row: the address may have been edited since placement. Pair-wise on purpose —
+    # half a pin (impossible via the serializer, but snapshots outlive rules) must
+    # never mix a pin latitude with a centroid longitude.
+    receiver_lat, receiver_lng = snap.get("latitude"), snap.get("longitude")
+    if receiver_lat is None or receiver_lng is None:
+        receiver_lat, receiver_lng = float(region.latitude), float(region.longitude)
     receiver_name = f"{snap.get('first_name', '')} {snap.get('last_name', '')}".strip() or order.email
     receiver_address = ", ".join(
         part for part in (snap.get("line1"), snap.get("line2"), snap.get("area"), snap.get("state"))
@@ -160,10 +168,7 @@ def capture_shipment(order, *, actor) -> GigShipment:
             "ReceiverPhoneNumber": snap.get("phone") or order.phone or "",
             "ReceiverAddress": receiver_address,
             "InputtedReceiverAddress": receiver_address,
-            "ReceiverLocation": {
-                "Latitude": float(region.latitude),
-                "Longitude": float(region.longitude),
-            },
+            "ReceiverLocation": {"Latitude": receiver_lat, "Longitude": receiver_lng},
         },
         "ShipmentDetails": {
             "VehicleType": settings.GIG_VEHICLE_TYPE,

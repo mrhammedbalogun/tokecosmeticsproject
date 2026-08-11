@@ -10,6 +10,12 @@
  */
 import { useState } from "react";
 import { AccountRegionSelect } from "@/components/account/AccountRegionSelect";
+import { AddressAutocompleteInput } from "@/components/address/AddressAutocompleteInput";
+import { LgaMismatchNudge } from "@/components/address/LgaMismatchNudge";
+import { PinConfirmMap, type LatLng } from "@/components/address/PinConfirmMap";
+import { detectLgaMismatch } from "@/components/address/lgaMismatch";
+import type { Region } from "@/components/checkout/RegionSelect";
+import type { PlacePick } from "@/lib/googleMaps";
 import {
   fieldConfigFor,
   type Address,
@@ -89,6 +95,22 @@ export function AddressForm({
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<AddressFieldErrors>({});
 
+  // Plan-32b slice 3 — mirrors AddressStep: the pin (prefilled from a saved
+  // address in edit mode), the picked LGA name for the nudge, the loaded LGAs.
+  const [pin, setPin] = useState<LatLng | null>(() =>
+    initial?.latitude != null && initial?.longitude != null
+      ? { lat: parseFloat(initial.latitude), lng: parseFloat(initial.longitude) }
+      : null,
+  );
+  const [pickedLga, setPickedLga] = useState<string | null>(null);
+  const [areas, setAreas] = useState<Region[]>([]);
+
+  function handlePlacePick(p: PlacePick) {
+    setForm((prev) => ({ ...prev, line1: p.line1 }));
+    setPin({ lat: p.lat, lng: p.lng }); // a pick IS door coordinates — commit it
+    setPickedLga(p.lgaName);
+  }
+
   function updateField<K extends keyof FormValues>(key: K, value: FormValues[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -102,6 +124,10 @@ export function AddressForm({
       city_text: "", state_text: "", postcode: "",
       state_region: undefined, area_region: undefined,
     }));
+    // The pin anchors a street in the old country.
+    setPin(null);
+    setPickedLga(null);
+    setAreas([]);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -144,6 +170,13 @@ export function AddressForm({
       const v = form[f.name].trim();
       if (v) payload[f.name] = v;
       else if (isEdit && !f.required) payload[f.name] = "";
+    }
+    // The pin: send when set. Never sent as a lone half (the backend enforces the
+    // pairing) and never cleared implicitly — editing a phone number must not drop
+    // a saved pin, which PATCH-omission guarantees.
+    if (pin) {
+      payload.latitude = pin.lat.toFixed(6);
+      payload.longitude = pin.lng.toFixed(6);
     }
 
     const url = isEdit ? `/api/addresses/${initial!.id}` : "/api/addresses";
@@ -286,15 +319,26 @@ export function AddressForm({
         <label htmlFor="addr-form-line1" className="mb-1 block text-sm font-medium">
           Street address
         </label>
-        <input
-          id="addr-form-line1"
-          type="text"
-          value={form.line1}
-          onChange={(e) => updateField("line1", e.target.value)}
-          required
-          autoComplete="address-line1"
-          className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
-        />
+        {form.country_code === "NG" ? (
+          <AddressAutocompleteInput
+            id="addr-form-line1"
+            value={form.line1}
+            onChangeText={(v) => updateField("line1", v)}
+            onPick={handlePlacePick}
+            required
+            className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+          />
+        ) : (
+          <input
+            id="addr-form-line1"
+            type="text"
+            value={form.line1}
+            onChange={(e) => updateField("line1", e.target.value)}
+            required
+            autoComplete="address-line1"
+            className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+          />
+        )}
         {fieldErrors.line1 && (
           <p role="alert" className="mt-1 text-sm text-red-700">
             {fieldErrors.line1.join(" ")}
@@ -328,6 +372,7 @@ export function AddressForm({
             onChange={(v) =>
               setForm((prev) => ({ ...prev, state_region: v.state_region, area_region: v.area_region }))
             }
+            onAreasLoaded={setAreas}
           />
           {fieldErrors.state_region && (
             <p role="alert" className="mt-1 text-sm text-red-700">
@@ -339,8 +384,43 @@ export function AddressForm({
               {fieldErrors.area_region.join(" ")}
             </p>
           )}
+          {(() => {
+            const mismatch = detectLgaMismatch(pickedLga, form.area_region, areas);
+            const selected = areas.find((a) => a.id === form.area_region);
+            if (!mismatch || !selected) return null;
+            return (
+              <div className="mt-3">
+                <LgaMismatchNudge
+                  suggested={mismatch}
+                  selectedName={selected.name}
+                  onAccept={(region) => {
+                    updateField("area_region", region.id);
+                    setPickedLga(null);
+                  }}
+                  onDismiss={() => setPickedLga(null)}
+                />
+              </div>
+            );
+          })()}
         </div>
       )}
+      {/* The confirm-your-pin map — same rules as checkout's AddressStep. */}
+      {form.country_code === "NG" &&
+        (() => {
+          const selectedArea = areas.find((a) => a.id === form.area_region);
+          const centroid =
+            selectedArea?.latitude != null && selectedArea?.longitude != null
+              ? { lat: parseFloat(selectedArea.latitude), lng: parseFloat(selectedArea.longitude) }
+              : null;
+          const center = pin ?? centroid;
+          if (!center || Number.isNaN(center.lat) || Number.isNaN(center.lng)) return null;
+          return (
+            <div>
+              <span className="mb-1 block text-sm font-medium">Delivery pin</span>
+              <PinConfirmMap center={center} precise={pin !== null} value={pin} onChange={setPin} />
+            </div>
+          );
+        })()}
       {cfg.textFields.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2">
           {cfg.textFields.map((f) => (

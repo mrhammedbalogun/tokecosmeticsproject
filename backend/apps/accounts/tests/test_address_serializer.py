@@ -103,3 +103,62 @@ def test_unknown_country_needs_city_but_no_postcode():
         "country_code": "FR", "city_text": "Paris",
     })
     assert s.is_valid(), s.errors
+
+
+# --- The pin (Plan-32b slice 3) ---
+
+def _ng_lga():
+    lagos = Region.objects.create(country_code="NG", name="Lagos", level="state")
+    ikeja = Region.objects.create(country_code="NG", name="Ikeja", level="area", parent=lagos)
+    return lagos, ikeja
+
+
+def _ng_payload(lagos, ikeja, **extra):
+    return {
+        "first_name": "Ada", "phone": "08012345678", "line1": "1 Allen Ave",
+        "country_code": "NG", "state_region": lagos.id, "area_region": ikeja.id,
+        **extra,
+    }
+
+
+@pytest.mark.django_db
+def test_pin_round_trips_and_stays_optional():
+    lagos, ikeja = _ng_lga()
+    no_pin = AddressSerializer(data=_ng_payload(lagos, ikeja))
+    assert no_pin.is_valid(), no_pin.errors  # null pin is normal and permanent
+
+    s = AddressSerializer(data=_ng_payload(lagos, ikeja, latitude="6.618570", longitude="3.342590"))
+    assert s.is_valid(), s.errors
+    from django.contrib.auth import get_user_model
+    addr = s.save(user=get_user_model().objects.create_user(email="pin@x.com", password="pw"))
+    assert str(addr.latitude) == "6.618570"
+    assert AddressSerializer(addr).data["longitude"] == "3.342590"
+
+
+@pytest.mark.django_db
+def test_half_a_pin_is_rejected_on_create_and_patch():
+    lagos, ikeja = _ng_lga()
+    s = AddressSerializer(data=_ng_payload(lagos, ikeja, latitude="6.618570"))
+    assert not s.is_valid()
+    assert "longitude" in s.errors
+
+    # PATCH cannot strand one half either: clearing only the longitude of a
+    # pinned address must fail against the merged values.
+    from django.contrib.auth import get_user_model
+    full = AddressSerializer(data=_ng_payload(lagos, ikeja, latitude="6.6", longitude="3.3"))
+    assert full.is_valid(), full.errors
+    addr = full.save(user=get_user_model().objects.create_user(email="pin2@x.com", password="pw"))
+    patch = AddressSerializer(addr, data={"longitude": None}, partial=True)
+    assert not patch.is_valid()
+    assert "longitude" in patch.errors  # the error names the missing half
+    # While clearing BOTH is a legitimate "remove my pin".
+    clear = AddressSerializer(addr, data={"latitude": None, "longitude": None}, partial=True)
+    assert clear.is_valid(), clear.errors
+
+
+@pytest.mark.django_db
+def test_pin_out_of_range_is_rejected():
+    lagos, ikeja = _ng_lga()
+    s = AddressSerializer(data=_ng_payload(lagos, ikeja, latitude="91", longitude="3.3"))
+    assert not s.is_valid()
+    assert "latitude" in s.errors

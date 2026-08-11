@@ -327,4 +327,42 @@ describe("AddressForm", () => {
     expect(body).not.toHaveProperty("line2");
     expect(body).not.toHaveProperty("last_name");
   });
+
+  it("prefills the saved pin in edit mode and keeps it in the PATCH (Plan-32b)", async () => {
+    // No googleMaps mock on purpose: without a key the map degrades to its
+    // fallback line, and the pin must still round-trip from the saved address.
+    const pinned: Address = {
+      id: 7, label: "Home", first_name: "Ada", phone: "0800", line1: "12 Allen Ave",
+      line2: "", country_code: "NG", state_region: 1, area_region: 11,
+      latitude: "6.601840", longitude: "3.351490",
+      is_default_shipping: false, is_default_billing: false,
+    };
+    const f = mockFetch({
+      "GET /api/regions?country=NG": {
+        status: 200,
+        body: [{ id: 1, name: "Lagos", level: "state", has_children: true }],
+      },
+      "GET /api/regions?parent=1": {
+        status: 200,
+        body: [{ id: 11, name: "Ikeja", level: "area", has_children: false,
+                 latitude: "6.601800", longitude: "3.351000" }],
+      },
+      "PATCH /api/addresses/7": { status: 200, body: pinned },
+    });
+    const onSaved = vi.fn();
+    render(<AddressForm initial={pinned} onSaved={onSaved} onCancel={vi.fn()} />);
+
+    // The pin renders its map section (fallback copy, since no key in tests).
+    await waitFor(() =>
+      expect(screen.getByText(/map could not load/i)).toBeInTheDocument()
+    );
+
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "0900" } });
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+
+    const body = JSON.parse(lastCall(f).init!.body as string);
+    expect(body.latitude).toBe("6.601840");
+    expect(body.longitude).toBe("3.351490");
+  });
 });

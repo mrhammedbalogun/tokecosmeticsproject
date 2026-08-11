@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
@@ -84,9 +86,16 @@ class AddressSerializer(serializers.ModelSerializer):
             "id", "label", "first_name", "last_name", "phone",
             "line1", "line2", "country_code",
             "state_region", "area_region", "city_text", "state_text", "postcode",
+            "latitude", "longitude",
             "is_default_shipping", "is_default_billing",
         ]
         read_only_fields = ["id", "is_default_shipping", "is_default_billing"]
+        extra_kwargs = {
+            # The pin (Plan-32b slice 3). Always optional — free-text addresses without
+            # one fall back to the LGA centroid everywhere (model comment).
+            "latitude": {"min_value": Decimal("-90"), "max_value": Decimal("90")},
+            "longitude": {"min_value": Decimal("-180"), "max_value": Decimal("180")},
+        }
 
     def validate_country_code(self, value):
         return (value or "").upper()
@@ -132,6 +141,14 @@ class AddressSerializer(serializers.ModelSerializer):
             and state_region.children.filter(is_active=True).exists()
         ):
             errors["area_region"] = "Select an area within the state/region."
+
+        # 5. The pin is both coordinates or neither — a lone latitude is meaningless
+        #    and receiver_point() (gig/quotes.py) treats half a pin as no pin. Checked
+        #    against the merged (PATCH-aware) values so a partial update cannot strand
+        #    one half.
+        if (get("latitude") is None) != (get("longitude") is None):
+            half = "longitude" if get("longitude") is None else "latitude"
+            errors[half] = "Set both latitude and longitude, or neither."
 
         if errors:
             raise serializers.ValidationError(errors)

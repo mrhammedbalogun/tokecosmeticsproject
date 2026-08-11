@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Region } from "@/components/checkout/RegionSelect";
 
 interface AccountRegionSelectProps {
@@ -8,6 +8,9 @@ interface AccountRegionSelectProps {
   areaValue?: number;
   onChange: (v: { state_region?: number; area_region?: number }) => void;
   labels?: { state: string; area: string };
+  /** Same contract as RegionSelect's: the loaded area objects for the pin map
+   * and mismatch nudge. Fires from the edit-mode prefill fetch too. */
+  onAreasLoaded?: (areas: Region[]) => void;
 }
 
 /**
@@ -31,7 +34,7 @@ interface AccountRegionSelectProps {
  * states) is copied verbatim from RegionSelect.
  */
 export function AccountRegionSelect({
-  country, stateValue, areaValue, onChange, labels,
+  country, stateValue, areaValue, onChange, labels, onAreasLoaded,
 }: AccountRegionSelectProps) {
   const [states, setStates] = useState<Region[] | null>(null);
   const [areas, setAreas] = useState<Region[] | null>(null);
@@ -46,6 +49,14 @@ export function AccountRegionSelect({
 
   const stateLabel = labels?.state ?? "State";
   const areaLabel = labels?.area ?? "LGA";
+
+  // Ref'd so the prefill effect can call the latest callback without putting an
+  // unstable function identity in its dependency array (which would refetch on
+  // every parent render). Synced in an effect — the lint forbids ref writes in render.
+  const onAreasLoadedRef = useRef(onAreasLoaded);
+  useEffect(() => {
+    onAreasLoadedRef.current = onAreasLoaded;
+  }, [onAreasLoaded]);
 
   useEffect(() => {
     let cancelled = false;
@@ -72,7 +83,11 @@ export function AccountRegionSelect({
       try {
         const res = await fetch(`/api/regions?parent=${prefillState}`);
         const data = res.ok ? await res.json().catch(() => []) : [];
-        if (!cancelled) setAreas(Array.isArray(data) ? data : []);
+        if (!cancelled) {
+          const list = Array.isArray(data) ? data : [];
+          setAreas(list);
+          onAreasLoadedRef.current?.(list);
+        }
       } catch {
         if (!cancelled) setAreas([]);
       } finally {
@@ -88,14 +103,18 @@ export function AccountRegionSelect({
     const id = e.target.value ? Number(e.target.value) : undefined;
     onChange({ state_region: id, area_region: undefined });
     setAreas(null);
+    onAreasLoaded?.([]);
     if (!id) return;
     setAreasLoading(true);
     try {
       const res = await fetch(`/api/regions?parent=${id}`);
       const data = res.ok ? await res.json().catch(() => []) : [];
-      setAreas(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setAreas(list);
+      onAreasLoaded?.(list);
     } catch {
       setAreas([]);
+      onAreasLoaded?.([]);
     } finally {
       setAreasLoading(false);
     }

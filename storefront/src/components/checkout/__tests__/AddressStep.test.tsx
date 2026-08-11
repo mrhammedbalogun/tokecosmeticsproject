@@ -4,6 +4,24 @@ import { CheckoutProvider, useCheckout } from "@/components/checkout/CheckoutCon
 import { AddressStep } from "@/components/checkout/AddressStep";
 import type { Cart } from "@/lib/cart-types";
 
+// Plan-32b slice 3: the Places assist is mocked at its one seam. Configured ON so the
+// NG pin test below can exercise pick → pin → payload; the map loader resolves null,
+// which must degrade to the "map could not load" fallback without breaking anything.
+vi.mock("@/lib/googleMaps", () => ({
+  mapsConfigured: vi.fn(() => true),
+  loadGoogleMaps: vi.fn(async () => null),
+  fetchStreetSuggestions: vi.fn(async () => [
+    { id: "p1", mainText: "12 Allen Avenue", secondaryText: "Ikeja, Lagos" },
+  ]),
+  resolveSuggestion: vi.fn(async () => ({
+    line1: "12 Allen Avenue",
+    lat: 6.60184,
+    lng: 3.35149,
+    lgaName: "Agege Local Government Area",
+    stateName: "Lagos",
+  })),
+}));
+
 /** AddressStep reads the shopping country from useCart().cart.country — mock it the
  * same way CartView.test.tsx does so each test can pin the country independently. */
 let mockCart: Cart;
@@ -258,5 +276,65 @@ describe("AddressStep", () => {
     await waitFor(() => expect(screen.getByLabelText(/^state$/i)).toBeInTheDocument());
     expect(screen.queryByLabelText(/^city\/town$/i)).toBeNull();
     await waitFor(() => expect(screen.getByRole("option", { name: "Lagos" })).toBeInTheDocument());
+  });
+
+  it("NG pick sets the pin, mismatch nudges (never overrides), and the POST carries coordinates", async () => {
+    mockCart = makeCart({ country: "NG" });
+    const fetchMock = mockFetch({
+      "GET /api/addresses": { status: 200, body: [] },
+      "GET /api/regions?country=NG": {
+        status: 200,
+        body: [{ id: 1, name: "Lagos", level: "state", has_children: true }],
+      },
+      "GET /api/regions?parent=1": {
+        status: 200,
+        body: [
+          { id: 2, name: "Ikeja", level: "area", has_children: false,
+            latitude: "6.601800", longitude: "3.351000" },
+          { id: 3, name: "Agege", level: "area", has_children: false,
+            latitude: "6.625000", longitude: "3.320000" },
+        ],
+      },
+      "POST /api/addresses": {
+        status: 201,
+        body: {
+          id: 9, first_name: "Ada", phone: "08000000000", line1: "12 Allen Avenue",
+          country_code: "NG", state_region: 1, area_region: 3,
+          latitude: "6.601840", longitude: "3.351490",
+          is_default_shipping: false, is_default_billing: false,
+        },
+      },
+    });
+
+    renderHarness();
+    await waitFor(() => expect(screen.getByLabelText(/street address/i)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "08000000000" } });
+
+    // Type → debounced suggestion → pick. The pick commits the pin.
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "12 Allen" } });
+    fireEvent.click(await screen.findByText("12 Allen Avenue"));
+
+    // Structured selection stays the source of truth: pick Lagos → Ikeja.
+    await waitFor(() => expect(screen.getByRole("option", { name: "Lagos" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^state$/i), { target: { value: "1" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "Ikeja" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^lga$/i), { target: { value: "2" } });
+
+    // Google said Agege, the customer said Ikeja → a nudge, not an override.
+    await waitFor(() => expect(screen.getByText(/Google places this address/i)).toBeInTheDocument());
+    expect(screen.getByLabelText(/^lga$/i)).toHaveValue("2");
+    fireEvent.click(screen.getByRole("button", { name: /use agege/i }));
+    expect(screen.getByLabelText(/^lga$/i)).toHaveValue("3");
+
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("2"));
+
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    const body = JSON.parse(post[1]!.body as string);
+    expect(body.latitude).toBe("6.601840");
+    expect(body.longitude).toBe("3.351490");
+    expect(body.area_region).toBe(3);
   });
 });

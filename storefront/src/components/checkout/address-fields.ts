@@ -25,6 +25,9 @@ export interface Address {
   city_text?: string;
   state_text?: string;
   postcode?: string;
+  /** The pin (Plan-32b slice 3): decimal strings from DRF, null when never set. */
+  latitude?: string | null;
+  longitude?: string | null;
   is_default_shipping: boolean;
   is_default_billing: boolean;
 }
@@ -44,7 +47,9 @@ export type AddressFieldErrors = Partial<
     | "area_region"
     | "city_text"
     | "state_text"
-    | "postcode",
+    | "postcode"
+    | "latitude"
+    | "longitude",
     string[]
   >
 > & { detail?: string };

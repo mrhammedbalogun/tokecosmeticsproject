@@ -38,6 +38,16 @@ export const REPORT_ONLY = true;
 const PAYSTACK = ["https://js.paystack.co", "https://checkout.paystack.com"];
 const PAYPAL = ["https://www.paypal.com", "https://*.paypal.com"];
 const TURNSTILE = ["https://challenges.cloudflare.com"];
+// Google Maps JS (Plan-32b slice 3: Places autocomplete + confirm-your-pin map),
+// loaded by lib/googleMaps.ts. The origins follow Google's own published CSP
+// allowlist for the Maps JS API: the script and data calls hit maps.googleapis.com,
+// raster tiles and marker sprites come from *.googleapis.com/*.gstatic.com, and the
+// library injects a fonts.googleapis.com stylesheet (hence the style/font entries).
+const GMAPS_SCRIPT = ["https://maps.googleapis.com"];
+const GMAPS_IMG = ["https://*.googleapis.com", "https://*.gstatic.com"];
+const GMAPS_CONNECT = ["https://maps.googleapis.com"];
+const GMAPS_STYLE = ["https://fonts.googleapis.com"];
+const GMAPS_FONT = ["https://fonts.gstatic.com"];
 
 /** The media host is public and appears in every product page's HTML anyway. */
 function mediaHost(): string {
@@ -83,16 +93,17 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     ...PAYSTACK,
     ...PAYPAL,
     ...TURNSTILE,
+    ...GMAPS_SCRIPT,
   ];
 
   const directives: Record<string, string[]> = {
     "default-src": ["'self'"],
     "script-src": scriptSrc,
     // Tailwind and Next both emit inline style attributes.
-    "style-src": ["'self'", "'unsafe-inline'"],
-    "img-src": ["'self'", "data:", "blob:", mediaHost()],
-    "font-src": ["'self'", "data:"],
-    "connect-src": ["'self'", apiOrigin(), ...PAYSTACK, ...PAYPAL, ...TURNSTILE],
+    "style-src": ["'self'", "'unsafe-inline'", ...GMAPS_STYLE],
+    "img-src": ["'self'", "data:", "blob:", mediaHost(), ...GMAPS_IMG],
+    "font-src": ["'self'", "data:", ...GMAPS_FONT],
+    "connect-src": ["'self'", apiOrigin(), ...PAYSTACK, ...PAYPAL, ...TURNSTILE, ...GMAPS_CONNECT],
     // The payment popups and the Turnstile challenge render in iframes.
     "frame-src": [...PAYSTACK, ...PAYPAL, ...TURNSTILE],
     // Clickjacking a checkout is the attack this stops. 'self' plus the admin app only —

@@ -168,6 +168,29 @@ def test_successful_capture_stamps_everything(order, quoted, django_user_model):
 
 @override_settings(**SETTINGS)
 @respx.mock
+def test_snapshot_pin_replaces_the_centroid_in_receiver_location(order, quoted, django_user_model):
+    """Plan-32b ruling 2: with a pin, the WAYBILL ships door coordinates — read from
+    the placement snapshot, not the live Address row."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    order.shipping_address = {**order.shipping_address, "latitude": 6.601838, "longitude": 3.351486}
+    order.save(update_fields=["shipping_address"])
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(50000))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope({"Waybill": "1349113097"}))
+    )
+    capture_shipment(order, actor=actor)
+    import json as jsonlib
+
+    body = jsonlib.loads(route.calls[0].request.content)
+    assert body["ReceiverDetails"]["ReceiverLocation"] == {
+        "Latitude": 6.601838, "Longitude": 3.351486,
+    }
+
+
+@override_settings(**SETTINGS)
+@respx.mock
 def test_company_not_found_precheck_does_not_block_capture(order, quoted, django_user_model):
     """Production (measured 2026-08-11): /companyDetails/get answers 401 "Company not
     found." for our account while the shipment endpoints work. The pre-check is

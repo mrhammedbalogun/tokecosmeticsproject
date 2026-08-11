@@ -121,11 +121,28 @@ INACTIVE until that runbook runs.
   sandbox: pickup ₦3,899.27 vs door ₦4,175.20, genuinely cheaper. Pin overrides centroid
   for door delivery. `/api/v1/checkout/gig-centres/?address_id=` feeds the picker.
 
+### Slice 3 — DONE 2026-08-11
+
+Keys created by Hammed per `docs/runbooks/google-apis-setup.md` and live-verified.
+Shipped: headless Places autocomplete on the street field (New Places JS classes,
+session tokens, NG only, free text always valid), confirm-your-pin map (pin committed
+only on a pick or a map interaction — an untouched centroid is never saved as a door),
+LGA-mismatch nudge (prompt, never override; quiet when Google names an LGA we can't
+price), in checkout AND the address book. Pin round-trips the address API
+(`AddressSerializer` lat/long, both-or-neither rule, ±90/±180 bounds), rides the
+placement snapshot, and the WAYBILL now ships snapshot-pin coordinates
+(capture.py) with pair-wise centroid fallback. `RegionSerializer` exposes centroids
+for the map prefill. CSP grew Google's Maps allowlist (report-only as before).
+All Google traffic goes through the one seam `lib/googleMaps.ts`, mocked in tests.
+Verified: 2,300 backend + 793+ storefront tests, lint/typecheck clean, and a REAL
+browser walkthrough (Playwright, live Google key): suggestion pick saved door
+coordinates for Allen Avenue; free text + hand-dropped pin saved clicked
+coordinates near the Agege centroid; both cleaned up after.
+
 ### Left to do
 
 | # | Work | Gated on |
 |---|---|---|
-| 32b slice 3 | Storefront address rebuild: Places autocomplete assist + confirm-your-pin map + LGA-mismatch nudge, checkout AND address book | **Hammed: Google Maps API key** (guide given 2026-08-03; `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` into storefront/.env.local + Vercel) |
 | 32b slice 4 | Centre picker UI in checkout; placement carries the chosen centre; order/GigShipment snapshot it; placement re-quotes the chosen centre server-side | slice 3 (same surface) — picker itself could start earlier if needed |
 | 32b task 0 + slice 5 | Learn `capture/preshipment` shape for centre delivery (sandbox experiment or GIG's WhatsApp answer, question queued in the draft); then pickup capture + pickup-flavoured emails + admin centre display | GIG's answer OR one sandbox session |
 | 32b slice 6 | UAT scenarios + go-live runbook addendum (flip BOTH rows, verify production pickup pricing) | slices 3–5 |

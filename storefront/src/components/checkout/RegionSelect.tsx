@@ -6,6 +6,9 @@ export interface Region {
   name: string;
   level: string;
   has_children: boolean;
+  /** LGA centroid (Plan-32b): decimal strings from the API, null when unseeded. */
+  latitude?: string | null;
+  longitude?: string | null;
 }
 
 interface RegionSelectProps {
@@ -14,6 +17,10 @@ interface RegionSelectProps {
   areaValue?: number;
   onChange: (v: { state_region?: number; area_region?: number }) => void;
   labels?: { state: string; area: string };
+  /** Fires with the freshly-loaded area list whenever a state's LGAs arrive —
+   * the address forms need the objects (names + centroids) for the pin map and
+   * the mismatch nudge, while onChange stays ids-only for existing callers. */
+  onAreasLoaded?: (areas: Region[]) => void;
 }
 
 /** Two dependent `<select>`s for NG-style State → LGA addressing (Plan-14 Task 7).
@@ -22,7 +29,7 @@ interface RegionSelectProps {
  * previously-picked area (an old area id would no longer belong to the new state).
  * Fully controlled: this component holds no address-form state of its own, it only
  * emits ids via `onChange` — AddressStep owns the actual form values. */
-export function RegionSelect({ country, stateValue, areaValue, onChange, labels }: RegionSelectProps) {
+export function RegionSelect({ country, stateValue, areaValue, onChange, labels, onAreasLoaded }: RegionSelectProps) {
   const [states, setStates] = useState<Region[] | null>(null);
   const [areas, setAreas] = useState<Region[] | null>(null);
   const [areasLoading, setAreasLoading] = useState(false);
@@ -53,14 +60,18 @@ export function RegionSelect({ country, stateValue, areaValue, onChange, labels 
     const id = e.target.value ? Number(e.target.value) : undefined;
     onChange({ state_region: id, area_region: undefined });
     setAreas(null);
+    onAreasLoaded?.([]);
     if (!id) return;
     setAreasLoading(true);
     try {
       const res = await fetch(`/api/regions?parent=${id}`);
       const data = res.ok ? await res.json().catch(() => []) : [];
-      setAreas(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setAreas(list);
+      onAreasLoaded?.(list);
     } catch {
       setAreas([]);
+      onAreasLoaded?.([]);
     } finally {
       setAreasLoading(false);
     }

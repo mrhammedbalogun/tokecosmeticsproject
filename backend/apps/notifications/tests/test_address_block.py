@@ -60,6 +60,10 @@ def test_the_snapshot_keys_are_what_the_templates_expect():
     assert produced == {
         "first_name", "last_name", "phone", "line1", "line2",
         "country_code", "state", "area", "postcode",
+        # The pin (Plan-32b): MACHINE data for the GIG waybill (capture.py reads it
+        # from the snapshot), deliberately NOT rendered in any email — coordinates
+        # in a customer email are noise, so the render test above excludes them.
+        "latitude", "longitude",
     }
 
 

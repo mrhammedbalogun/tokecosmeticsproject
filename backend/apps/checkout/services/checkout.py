@@ -51,6 +51,11 @@ def _address_snapshot(addr: Address) -> dict:
         "state": addr.state_region.name if addr.state_region else addr.state_text,
         "area": addr.area_region.name if addr.area_region else addr.city_text,
         "postcode": addr.postcode,
+        # The pin rides into the snapshot so the waybill ships door coordinates even
+        # if the customer edits the address after placing (Plan-32b ruling 2). Floats:
+        # the snapshot is JSON and 6dp survives float round-tripping.
+        "latitude": float(addr.latitude) if addr.latitude is not None else None,
+        "longitude": float(addr.longitude) if addr.longitude is not None else None,
     }
 
 
