@@ -119,7 +119,17 @@ def capture_shipment(order, *, actor) -> GigShipment:
 
     # Live wallet check, never the cache: the debit is about to happen. A balance GIG
     # reports as null (sandbox) does not block — the capture itself is then the check.
-    balance = wallet_balance(refresh=True)
+    # The lookup FAILING doesn't block either: production answers 401 "Company not
+    # found." on /companyDetails/get for our account (measured 2026-08-11) even while
+    # login and the shipment endpoints work, and an advisory pre-check must not turn
+    # that into a capture outage. GIG's own insufficient-balance refusal stays the fence.
+    try:
+        balance = wallet_balance(refresh=True)
+    except client.GigUnavailable:
+        raise  # GIG unreachable: never point a money-moving call at an API that's down
+    except client.GigError as exc:
+        logger.warning("gig wallet pre-check unavailable, capturing anyway: %s", exc)
+        balance = None
     if balance is not None and expected_cost and balance < expected_cost:
         raise CaptureRefused(
             "wallet_insufficient",

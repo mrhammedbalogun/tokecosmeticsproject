@@ -168,6 +168,41 @@ def test_successful_capture_stamps_everything(order, quoted, django_user_model):
 
 @override_settings(**SETTINGS)
 @respx.mock
+def test_company_not_found_precheck_does_not_block_capture(order, quoted, django_user_model):
+    """Production (measured 2026-08-11): /companyDetails/get answers 401 "Company not
+    found." for our account while the shipment endpoints work. The pre-check is
+    advisory — it must degrade to balance-unknown, exactly like the sandbox's null."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(401, json=_envelope(None, status=401, message="Company not found."))
+    )
+    # The client's 401 re-login path runs for reads; feed it a token.
+    respx.post(f"{BASE}/login").mock(
+        return_value=httpx.Response(200, json=_envelope({"access-token": "jwt-2"}))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope({"Waybill": "1349113096"}))
+    )
+    shipment = capture_shipment(order, actor=actor)
+    assert route.call_count == 1
+    assert shipment.status == "created"
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_gig_unreachable_precheck_still_refuses_capture(order, quoted, django_user_model):
+    actor = django_user_model.objects.get(email="cap@x.com")
+    respx.get(f"{BASE}/companyDetails/get").mock(side_effect=httpx.ConnectError("down"))
+    route = respx.post(f"{BASE}/capture/preshipment")
+    with pytest.raises(client.GigUnavailable):
+        capture_shipment(order, actor=actor)
+    assert route.call_count == 0  # money-moving call never attempted at a down API
+    quoted.refresh_from_db()
+    assert quoted.status == "quoted"
+
+
+@override_settings(**SETTINGS)
+@respx.mock
 def test_label_not_ready_is_none_and_success_stores_the_url(order, quoted):
     quoted.status, quoted.waybill = "created", "1349113095"
     quoted.save(update_fields=["status", "waybill"])

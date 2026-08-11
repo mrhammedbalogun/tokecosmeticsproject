@@ -137,6 +137,9 @@ export function GigPanel({
               <p className="text-xs">
                 This debits <span className="font-medium">₦{quoteTotal}</span> from the GIG
                 wallet and dispatches a rider to collect. It cannot be cancelled or amended.
+                {/* Cutoff confirmed by GIG 2026-08-11 (runbook §2). */}
+                {" "}GIG&rsquo;s cutoff is 3&nbsp;pm — waybills created later are picked up
+                the next day.
               </p>
               <div className="mt-2 flex gap-2">
                 <button

@@ -52,16 +52,18 @@ def _newest_scan(scans: list[dict]) -> dict:
         return scans[-1] if scans else {}
 
 
-def _apply(shipment: GigShipment, entry: dict, now) -> str:
-    scans = entry.get("MobileShipmentTrackings") or []
-    scan = _newest_scan(scans)
-    code = str(scan.get("Status", ""))
+def apply_scan(shipment: GigShipment, *, code: str, scan: dict, now, label_url: str = "") -> str:
+    """The state rules, shared by the poll and the webhook receiver (webhook.py).
 
+    `code` is the GIG status code; `scan` is stored verbatim as `last_scan`
+    (the poll passes a MobileShipmentTrackings entry, the webhook the decrypted
+    event — both carry the Status/Location/DateTime-ish fields the UIs render).
+    """
     shipment.last_scan = scan
     shipment.last_tracked_at = now
     updates = ["last_scan", "last_tracked_at", "updated_at"]
-    if not shipment.label_url and entry.get("WaybillLabel"):
-        shipment.label_url = entry["WaybillLabel"]
+    if label_url and not shipment.label_url:
+        shipment.label_url = label_url
         updates.append("label_url")
 
     outcome = "scan_only"
@@ -87,6 +89,18 @@ def _apply(shipment: GigShipment, entry: dict, now) -> str:
             shipment.order.refresh_from_db()
         _move_order(shipment, "delivered", f"GIG scan {code} — delivered")
     return outcome
+
+
+def _apply(shipment: GigShipment, entry: dict, now) -> str:
+    """Adapt one batch-tracking entry to apply_scan."""
+    scan = _newest_scan(entry.get("MobileShipmentTrackings") or [])
+    return apply_scan(
+        shipment,
+        code=str(scan.get("Status", "")),
+        scan=scan,
+        now=now,
+        label_url=entry.get("WaybillLabel") or "",
+    )
 
 
 def _move_order(shipment: GigShipment, to_status: str, message: str) -> None:

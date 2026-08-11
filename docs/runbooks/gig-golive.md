@@ -23,16 +23,27 @@ Facial Wash) · `TC-WP-2812` (Kids Shampoo) · `TC-WP-4013` (Rinse Off Condition
 
 ## 2. Ask GIG for (WhatsApp, before cutover)
 
-- [ ] **Production API credentials** (email + password) and confirmation of the
+- [x] **Production API credentials** (email + password) and confirmation of the
       production base URL (`https://thirdpartynode.theagilitysystems.com`).
-- [ ] **The tracking webhook** they promised at go-live: give them our endpoint when we
-      build the receiver (post-go-live is fine — the 2h poll carries until then and
-      remains the fallback after).
-- [ ] Confirm **Bike (VehicleType 1)** as the right value for sub-1 kg cosmetics parcels.
-- [ ] Confirm **rider pickup hours** — waybill creation dispatches a rider immediately,
-      so the packing desk needs to know the cutoff after which capture waits for morning.
+      **2026-08-10:** issued (`ECO078703` / `tokefactory1@gmail.com`, stored commented in
+      dev `backend/.env`). **2026-08-11:** the Third Party Role is GRANTED — production
+      `/login` succeeds and returns a token. Steps 3+ are unblocked.
+- [x] **The tracking webhook** — GIG sent their Notion docs 2026-08-11; the receiver is
+      built (`apps/delivery/gig/webhook.py`, `POST /api/v1/webhooks/gig/`) and the docs
+      are mirrored in `docs/gigimplementationresearch.md` §2f. Registration is step 4b
+      below. The 2h poll stays on as the fallback either way.
+- [x] Confirm **Bike (VehicleType 1)** — confirmed 2026-08-11: the enum is
+      `{Car: 0, Bike: 1, Van: 2, Truck: 3}`, matching what we measured and ship.
+- [x] Confirm **rider pickup hours** — confirmed 2026-08-11: **the cutoff is 3 pm**;
+      waybills created after it are pushed to the next day. Packing desk rule: capture
+      before 3 pm for same-day rider dispatch.
 - [ ] The **insufficient-balance error** shape from `capture/preshipment` (we pre-check
       the balance regardless; this only tightens the error copy).
+- [ ] **NEW 2026-08-11: `companyDetails/get` answers 401 "Company not found."** on
+      production for `ECO078703` (login works). Ask GIG to fix the company record — until
+      then the wallet balance is invisible to us: the low-balance monitor cannot arm and
+      the capture pre-check degrades to "unknown" (capture still works; GIG's own
+      insufficient-balance refusal is the fence).
 
 ## 3. Environment (backend/.env on the VPS, then restart)
 
@@ -61,6 +72,19 @@ lat/long is first in the menu). Wrong sender coordinates mis-price EVERY quote.
       real-LGA stragglers in admin (GigLga → region); ignore street-zone rows.
 - [ ] Verify the beat schedule is live on the VPS (celery beat logs show
       `sync-gig-coverage`, `poll-gig-tracking`, `monitor-gig-wallet`).
+
+### 4b. Register the tracking webhook (once, from the VPS)
+
+```
+manage.py register_gig_webhook https://<api host>/api/v1/webhooks/gig/
+```
+
+It prints the `secret` GIG issues; put it in `backend/.env` as `GIG_WEBHOOK_SECRET`
+and set `GIG_WEBHOOK_API_BASE=https://prod-agilitythirdpartyapi.theagilitysystems.com`
+(their docs' dev-→prod- convention — if registration 404s on that host, confirm the
+production hostname with GIG), then restart. Until the secret is set the receiver
+answers 503, which keeps GIG retrying rather than dropping events. The receiver is
+authenticated by decryption: only a body encrypted with our secret is accepted.
 
 ## 5. Fund the wallet
 

@@ -20,6 +20,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from apps.core.views import healthz
+from apps.delivery.views import GigWebhookView
 
 urlpatterns = [
     path("django-admin/", admin.site.urls),
@@ -36,6 +37,9 @@ urlpatterns = [
     path("api/v1/", include("apps.search.urls")),
     path("api/v1/", include("apps.carts.urls")),
     path("api/v1/", include("apps.checkout.urls")),
+    # MUST precede payments.urls: its `webhooks/<str:gateway>/` would otherwise
+    # swallow /webhooks/gig/ and 404 it as an unknown payment gateway.
+    path("api/v1/webhooks/gig/", GigWebhookView.as_view(), name="gig-webhook"),
     path("api/v1/", include("apps.payments.urls")),
     path("api/v1/", include("apps.orders.urls")),
     path("api/v1/cms/", include("apps.cms.urls")),

@@ -326,6 +326,71 @@ rows computed once at implementation time.)
 
 ---
 
+## 2e. LIVE CREDENTIALS 2026-08-10 — issued, verified, awaiting access grant
+
+GIG issued production credentials (account code `ECO078703`, login email
+`tokefactory1@gmail.com`; stored commented-out in `backend/.env` as `LIVE_GIG_*` — they go
+live only via the runbook, on the VPS, as `GIG_EMAIL`/`GIG_PASSWORD`).
+
+Verified against `https://thirdpartynode.theagilitysystems.com` with read-only calls:
+
+1. **The login identifier is the bare email.** The combined string GIG sent
+   (`ECO078703/TOKEFACTORY1@GMAIL.COM`) gets "User not registered with us."; the account
+   code alone fails email validation.
+2. **The password as first transcribed was wrong** (trailing `I` vs `l`) — corrected by
+   Hammed, and the error moved from 401 "Invalid Login Details" to:
+3. **401 "This User does not have Third Party Role!"** — authentication now succeeds, but
+   the account lacks the third-party API role the sandbox account had
+   (`ThirdPartyCustomers`). This is GIG-side configuration; their developer confirmed
+   (2026-08-10, WhatsApp) they are **finishing up the access grants**.
+
+**Status: blocked on GIG.** When they confirm the grant, the retest is one login call,
+then the go-live runbook (`docs/runbooks/gig-golive.md`) proceeds from step 3 —
+`companyDetails/get` (does production report a real `WalletAmount`?), wallet funding,
+production coverage sync, smoke quote, one staff end-to-end order, flip the option on.
+The runbook §2 questions (Bike default, pickup hours, insufficient-balance error shape,
+webhook) remain open and should ride along in the same WhatsApp thread.
+
+## 2f. 2026-08-11 — role granted; §2 answers; webhook scheme; company-record gap
+
+**The Third Party Role is granted.** Production `/login` with the §2e credentials now
+returns 200 + token (retested 2026-08-11). Go-live is unblocked from our side except for
+the items below and the runbook's Hammed-side steps (sender env, wallet funding).
+
+**GIG's answers (WhatsApp, transcribed from Downloads/GIGresponse.txt):**
+
+- Vehicle enum: `{Car: 0, Bike: 1, Van: 2, Truck: 3}` — confirms `GIG_VEHICLE_TYPE=1`.
+- Cutoff: **3 pm**; waybills after it push to the next day (packing-desk rule).
+- Webhook docs: their Notion page "Webhooks Documentation"
+  (neon-drifter-c92.notion.site/...1b67e991991f80768f47e164005452c1). Mirrored here
+  because Notion links rot:
+  - Register: `POST {webhook api base}/api/webhook/add-webhook-user` body `{"url": ...}`
+    → response carries a per-account `secret`. Dev host
+    `dev-agilitythirdpartyapi.theagilitysystems.com`; "moving to live, change the dev- to
+    prod-". NOTE: a different host from the third-party node.
+  - Delivery: POST to our URL; the body is ONE base64 string =
+    `salt[16] + iv[16] + AES-256-CBC ciphertext`, key =
+    PBKDF2-HMAC-SHA1(secret, salt, 10000 iterations, 32 bytes) (their .NET/Node samples).
+  - Decrypted event (their example, verbatim): `{"Waybill":"1349104478",
+    "SenderAddress":..., "ReceiverAddress":..., "Location":null,
+    "Status":"SHIPMENT CREATED BY CUSTOMER", "UserId":..., "ChannelCode":"IND298636",
+    "StatusCode":"MCRT"}` — **`Status` is human text here; the code lives in
+    `StatusCode`**, the reverse of the tracking poll's scan entries.
+  - Ack: 200 + `{"status":"success","message":"Webhook received successfully"}`;
+    non-200 is retried.
+  - Built the same day: receiver `apps/delivery/gig/webhook.py` +
+    `POST /api/v1/webhooks/gig/` (decryption IS the auth), registration command
+    `register_gig_webhook`, both paths converging on `tracking.apply_scan`.
+
+**New gap: production `/companyDetails/get?Email=...` answers 401 "Company not found."**
+for `ECO078703` (tried lower/upper-case email and the account code; login and token are
+fine). Sandbox merely reported `WalletAmount: null`; production cannot find the record at
+all. Until GIG fixes it: the wallet monitor sees no number, and the capture pre-check
+treats lookup failure as balance-unknown rather than blocking captures (capture.py,
+measured-dated comment). Raised as a runbook §2 item for the WhatsApp thread.
+
+---
+
 ## 3. The two flows — original analysis, superseded by §2b
 
 ### Flow A — PreShipment Mobile (GIG collects from us)

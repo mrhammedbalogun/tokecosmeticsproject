@@ -499,8 +499,25 @@ GIG_SENDER_NAME = env("GIG_SENDER_NAME", default="Toke Cosmetics")
 GIG_SENDER_PHONE = env("GIG_SENDER_PHONE", default="")
 GIG_SENDER_ADDRESS = env("GIG_SENDER_ADDRESS", default="Gbagada, Lagos")
 GIG_SENDER_LOCALITY = env("GIG_SENDER_LOCALITY", default="Gbagada")
-# 0=Car 1=Bike 2=Van 3=Truck (measured enum). Bike is the small-parcel default.
+# 0=Car 1=Bike 2=Van 3=Truck (confirmed by GIG's developer 2026-08-11, matching
+# the measured enum). Bike is the small-parcel default.
 GIG_VEHICLE_TYPE = env.int("GIG_VEHICLE_TYPE", default=1)
+# Tracking webhook (gig/webhook.py). The secret comes from the one-time
+# `register_gig_webhook` command; empty = not registered, receiver answers 503.
+# The registration API lives on a DIFFERENT host from the third-party node;
+# production swaps the dev- prefix for prod- (their docs' stated convention).
+GIG_WEBHOOK_SECRET = env("GIG_WEBHOOK_SECRET", default="")
+GIG_WEBHOOK_API_BASE = env(
+    "GIG_WEBHOOK_API_BASE", default="https://dev-agilitythirdpartyapi.theagilitysystems.com"
+)
+
+# --- Google Places: homepage reviews header refresh (runbooks/google-apis-setup.md) ---
+# The SERVER key (IP-locked to the VPS, Places API (New) only) — never the browser key
+# and never NEXT_PUBLIC anything. Empty = the refresh task skips, admin numbers stand.
+GOOGLE_PLACES_API_KEY = env("GOOGLE_PLACES_API_KEY", default="")
+# The shop's Google Business listing (not a secret; verified live 2026-08-11:
+# "Toke Cosmetics", Igbogbo Ikorodu, rating 4.6 / 49 ratings at time of writing).
+GOOGLE_PLACE_ID = env("GOOGLE_PLACE_ID", default="ChIJj1450kjsOxARhI16Z0jVX-c")
 
 # Storefront origin, used ONLY to build the gateway return URL (Flutterwave redirect).
 # Never derived from a request — a client-supplied return URL is an open-redirect vector.
@@ -562,6 +579,10 @@ CELERY_BEAT_SCHEDULE = {
     "monitor-gig-wallet": {
         "task": "apps.delivery.tasks.monitor_gig_wallet",
         "schedule": 21600.0,  # every 6h — the wallet drains at fulfilment speed, not checkout speed
+    },
+    "refresh-google-reviews-meta": {
+        "task": "apps.cms.tasks.refresh_google_reviews_meta",
+        "schedule": 86400.0,  # daily — review counts move on human timescales
     },
 }
 
