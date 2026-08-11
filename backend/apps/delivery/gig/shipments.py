@@ -16,7 +16,7 @@ from apps.delivery.models import GigShipment
 logger = logging.getLogger(__name__)
 
 
-def create_quoted_shipment(order, chosen: dict, charged) -> GigShipment:
+def create_quoted_shipment(order, chosen: dict, charged, *, centre=None) -> GigShipment:
     """Snapshot the checkout quote onto the order, same transaction as placement.
 
     The quote payload comes from the cache under the option's `carrier_quote_key`
@@ -24,11 +24,23 @@ def create_quoted_shipment(order, chosen: dict, charged) -> GigShipment:
     If it expired in the microseconds since, the shipment is still created (the
     order IS going out via GIG; that fact must not depend on a cache) with an
     empty quote and a log line, and capture re-quotes before debiting.
+
+    `centre` is the customer's chosen GigCentre for pickup orders (32b ruling 4):
+    name, address and GIG ids are snapshotted, not FK'd — the row must answer
+    "where do I collect" even after the centre vanishes from a nightly sync.
     """
     quote = cache.get(chosen.get("carrier_quote_key", "")) or {}
     if not quote:
         logger.warning("gig quote cache miss at placement for order %s", order.number)
-    return GigShipment.objects.create(order=order, status="quoted", quote=quote, charged=charged)
+    snapshot = (
+        {"id": centre.gig_centre_id, "station_id": centre.gig_station_id,
+         "name": centre.name, "address": centre.address}
+        if centre is not None
+        else {}
+    )
+    return GigShipment.objects.create(
+        order=order, status="quoted", quote=quote, charged=charged, centre=snapshot
+    )
 
 
 def abandon_quoted_shipment(order_pk: int) -> None:

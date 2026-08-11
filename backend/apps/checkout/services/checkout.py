@@ -61,7 +61,7 @@ def _address_snapshot(addr: Address) -> dict:
 
 def place_order(*, user, country, key: str, cart_id, address_id, delivery_option_id,
                 payment_gateway: str, billing_address_id=None, coupon_code: str = "",
-                notes: str = "", expected_total=None) -> CheckoutResult:
+                notes: str = "", expected_total=None, gig_centre_id=None) -> CheckoutResult:
     # Durable backstop: a payment already exists for this key.
     existing = Payment.objects.filter(idempotency_key=key, order__user=user).select_related("order").first()
     if existing:
@@ -94,11 +94,26 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
                                     extra={"sku": variant.sku})
 
         # Server-side delivery re-match — never trust the client's option list.
+        # The chosen pickup centre (32b slice 4) resolves FIRST so the pickup row is
+        # priced to the centre the parcel will actually travel to, not the nearest.
+        centre = None
+        if gig_centre_id is not None:
+            from apps.delivery.models import GigCentre
+
+            centre = GigCentre.objects.filter(gig_centre_id=gig_centre_id, is_active=True).first()
+            if centre is None:
+                raise CheckoutError("centre_invalid", "That pickup centre is not available.")
         subtotal_preview = compute_totals(lines, country).subtotal
-        options = priced_options_for_address(address, lines, subtotal_preview, country)
+        options = priced_options_for_address(
+            address, lines, subtotal_preview, country, pickup_centre=centre
+        )
         chosen = next((o for o in options if o["id"] == delivery_option_id), None)
         if chosen is None:
             raise CheckoutError("delivery_option_invalid", "Delivery option not valid for this address.")
+        is_pickup = chosen.get("carrier_service") == "pickup" and chosen.get("carrier_code") == "gig"
+        if is_pickup and centre is None:
+            # The picker is not optional for pickup: "which centre" is the address.
+            raise CheckoutError("centre_required", "Choose a pickup centre for this delivery option.")
 
         # Gateway must be active for the country, and a manual gateway needs a configured
         # account BEFORE we reserve stock: failing at initiate() (phase 2, post-commit)
@@ -165,7 +180,10 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             # fulfilment learns this order ships via GIG, so it is born with the order.
             from apps.delivery.gig.shipments import create_quoted_shipment
 
-            create_quoted_shipment(order, chosen, charged=totals.delivery)
+            create_quoted_shipment(
+                order, chosen, charged=totals.delivery,
+                centre=centre if is_pickup else None,
+            )
         for variant, qty in lines:
             rp = resolve_price(variant, country)
             OrderItem.objects.create(

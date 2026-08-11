@@ -45,8 +45,15 @@ def nearest_centre(address):
     return best
 
 
-def priced_options_for_address(address, lines, subtotal: Decimal, country) -> list[dict]:
-    """`options_for_address`, with carrier options live-priced or omitted."""
+def priced_options_for_address(
+    address, lines, subtotal: Decimal, country, *, pickup_centre=None
+) -> list[dict]:
+    """`options_for_address`, with carrier options live-priced or omitted.
+
+    `pickup_centre` (slice 4): the customer's CHOSEN GigCentre — placement and the
+    totals preview pass it so the pickup row is priced to the centre the parcel
+    will actually travel to. The options LIST (no centre chosen yet) prices to
+    the nearest centre as a representative figure, same as before."""
     options = options_for_address(address, lines, subtotal, country)
     if not any(o["kind"] == "carrier" for o in options):
         return options
@@ -60,7 +67,7 @@ def priced_options_for_address(address, lines, subtotal: Decimal, country) -> li
         if option["carrier_code"] != "gig":  # only GIG is wired up (DHL: Plan-32c)
             continue
         if option.get("carrier_service") == "pickup":
-            centre = nearest_centre(address)
+            centre = pickup_centre or nearest_centre(address)
             quote = quote_centre_pickup(address, weight_g, declared_value=subtotal, centre=centre)
         else:
             quote = quote_home_delivery(address, weight_g, declared_value=subtotal)

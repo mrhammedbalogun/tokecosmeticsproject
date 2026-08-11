@@ -10,3 +10,6 @@ class QuoteRequestSerializer(serializers.Serializer):
     coupon_code = serializers.CharField(required=False, allow_blank=True, default="")
     address_id = serializers.IntegerField(required=False)
     delivery_option_id = serializers.IntegerField(required=False)
+    # The chosen pickup centre (32b slice 4) — keeps the preview priced to the same
+    # centre place_order will re-quote, so expected_total can't mismatch on pickup.
+    gig_centre_id = serializers.IntegerField(required=False)

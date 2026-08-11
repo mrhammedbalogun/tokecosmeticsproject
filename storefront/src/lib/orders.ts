@@ -36,6 +36,9 @@ export interface OrderDetail {
     last_scan: Record<string, unknown>;
     last_tracked_at: string | null;
   } | null;
+  /** Centre-pickup snapshot from placement (32b slice 4), or null for door
+   * delivery. Known before any waybill exists — render "collect from" on it. */
+  pickup_centre?: { id: number; station_id?: number; name: string; address: string } | null;
 }
 
 /**

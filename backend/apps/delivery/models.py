@@ -143,6 +143,11 @@ class GigShipment(TimeStampedModel):
     label_url = models.URLField(blank=True)
     last_scan = models.JSONField(default=dict)  # newest raw tracking entry, verbatim
     last_tracked_at = models.DateTimeField(null=True, blank=True)
+    # Centre pickup (32b ruling 4): the CHOSEN centre snapshotted at placement —
+    # {"id": gig_centre_id, "name", "address"} — because centres close and move, and
+    # "where do I collect my parcel" must answer from the order forever. Empty dict
+    # for door-delivery shipments.
+    centre = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = "GIG shipment"

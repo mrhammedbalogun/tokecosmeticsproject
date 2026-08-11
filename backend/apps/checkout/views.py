@@ -95,7 +95,18 @@ class QuoteView(APIView):
             address = get_object_or_404(Address, pk=v["address_id"], user=request.user)
             lines = _cart_lines(cart)
             totals = compute_totals(lines, request.country)
-            opts = priced_options_for_address(address, lines, totals.subtotal, request.country)
+            # Same non-authoritative posture as below: an unknown/inactive centre id
+            # just means the pickup row prices to the nearest centre (or is omitted).
+            centre = None
+            if v.get("gig_centre_id") is not None:
+                from apps.delivery.models import GigCentre
+
+                centre = GigCentre.objects.filter(
+                    gig_centre_id=v["gig_centre_id"], is_active=True
+                ).first()
+            opts = priced_options_for_address(
+                address, lines, totals.subtotal, request.country, pickup_centre=centre
+            )
             chosen = next((o for o in opts if o["id"] == v["delivery_option_id"] and o["price"] is not None), None)
             # Intentional silent fallback: an option id that doesn't match this address
             # (or is quote_required) just leaves delivery at 0.00 rather than erroring —
@@ -124,6 +135,7 @@ class CheckoutView(APIView):
             "delivery_option_id": request.data.get("delivery_option_id"),
             "coupon_code": request.data.get("coupon_code", ""),
             "payment_gateway": request.data.get("payment_gateway"),
+            "gig_centre_id": request.data.get("gig_centre_id"),
         }
         request_hash = hash_payload(payload)
         try:
@@ -145,6 +157,7 @@ class CheckoutView(APIView):
                 coupon_code=payload["coupon_code"],
                 notes=request.data.get("notes", ""),
                 expected_total=request.data.get("expected_total"),
+                gig_centre_id=payload["gig_centre_id"],
             )
         except CheckoutError as exc:
             body = {"error": exc.code, "detail": exc.detail, **exc.extra}

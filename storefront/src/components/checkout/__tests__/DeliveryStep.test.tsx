@@ -151,3 +151,113 @@ describe("DeliveryStep", () => {
     );
   });
 });
+
+/** URL-routed fetch mock for the pickup flow — options AND centres endpoints. */
+function mockRoutedFetch(routes: Record<string, unknown>) {
+  const f = vi.fn((input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    const key = Object.keys(routes).find((k) => url.startsWith(k));
+    if (!key) return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    return Promise.resolve(
+      new Response(JSON.stringify(routes[key]), {
+        status: 200, headers: { "content-type": "application/json" },
+      })
+    );
+  });
+  global.fetch = f as unknown as typeof fetch;
+  return f;
+}
+
+describe("DeliveryStep centre pickup (32b slice 4)", () => {
+  const OPTIONS = [
+    { id: 7, name: "Door Delivery (GIG)", price: "4175.20", min_days: 1, max_days: 3,
+      quote_required: false, carrier_code: "gig", carrier_service: "home" },
+    { id: 8, name: "Pickup at GIG Centre", price: "3899.27", min_days: 1, max_days: 3,
+      quote_required: false, carrier_code: "gig", carrier_service: "pickup" },
+  ];
+  const CENTRES = [
+    { id: 101, name: "GIG Oregun", address: "52 Oregun Rd, Ikeja", distance_km: 2.4 },
+    { id: 202, name: "GIG Victoria Island", address: "1 Adeola Odeku, VI", distance_km: 21.7 },
+  ];
+
+  function GigHarness({ addressId }: { addressId?: number }) {
+    const { completed, selections, setAddress } = useCheckout();
+    useEffect(() => {
+      if (addressId !== undefined) setAddress(addressId);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return (
+      <div>
+        <p data-testid="completed">{[...completed].sort().join(",")}</p>
+        <p data-testid="deliveryOptionId">{String(selections.deliveryOptionId ?? "")}</p>
+        <p data-testid="gigCentreId">{String(selections.gigCentreId ?? "")}</p>
+        <p data-testid="deliveryDisplay">{selections.deliveryDisplay ?? ""}</p>
+        <DeliveryStep />
+      </div>
+    );
+  }
+
+  it("clicking pickup opens the picker instead of completing; picking a centre completes with it", async () => {
+    mockCart = makeCart({ country: "NG", currency: "NGN" });
+    mockRoutedFetch({
+      "/api/checkout/delivery-options": OPTIONS,
+      "/api/checkout/gig-centres": CENTRES,
+    });
+    render(
+      <CheckoutProvider>
+        <GigHarness addressId={5} />
+      </CheckoutProvider>
+    );
+
+    fireEvent.click(await screen.findByRole("radio", { name: /pickup at gig centre/i }));
+    // Not completed yet — pickup without a centre is not a delivery choice.
+    expect(screen.getByTestId("completed")).toHaveTextContent("");
+    expect(await screen.findByText(/choose your pickup centre/i)).toBeInTheDocument();
+
+    const centre = await screen.findByRole("radio", { name: /gig oregun/i });
+    expect(screen.getByText("52 Oregun Rd, Ikeja")).toBeInTheDocument();
+    expect(screen.getByText("2.4 km")).toBeInTheDocument();
+    fireEvent.click(centre);
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("3"));
+    expect(screen.getByTestId("deliveryOptionId")).toHaveTextContent("8");
+    expect(screen.getByTestId("gigCentreId")).toHaveTextContent("101");
+    expect(screen.getByTestId("deliveryDisplay")).toHaveTextContent("Pickup at GIG Centre · GIG Oregun");
+  });
+
+  it("switching to a door option clears the centre", async () => {
+    mockCart = makeCart({ country: "NG", currency: "NGN" });
+    mockRoutedFetch({
+      "/api/checkout/delivery-options": OPTIONS,
+      "/api/checkout/gig-centres": CENTRES,
+    });
+    render(
+      <CheckoutProvider>
+        <GigHarness addressId={5} />
+      </CheckoutProvider>
+    );
+    fireEvent.click(await screen.findByRole("radio", { name: /pickup at gig centre/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /gig oregun/i }));
+    await waitFor(() => expect(screen.getByTestId("gigCentreId")).toHaveTextContent("101"));
+
+    fireEvent.click(screen.getByRole("radio", { name: /door delivery/i }));
+    await waitFor(() => expect(screen.getByTestId("deliveryOptionId")).toHaveTextContent("7"));
+    expect(screen.getByTestId("gigCentreId")).toHaveTextContent("");
+  });
+
+  it("an empty centre list explains itself instead of dead-ending silently", async () => {
+    mockCart = makeCart({ country: "NG", currency: "NGN" });
+    mockRoutedFetch({
+      "/api/checkout/delivery-options": OPTIONS,
+      "/api/checkout/gig-centres": [],
+    });
+    render(
+      <CheckoutProvider>
+        <GigHarness addressId={5} />
+      </CheckoutProvider>
+    );
+    fireEvent.click(await screen.findByRole("radio", { name: /pickup at gig centre/i }));
+    expect(await screen.findByText(/no pickup centres serve this address/i)).toBeInTheDocument();
+    expect(screen.getByTestId("completed")).toHaveTextContent("");
+  });
+});

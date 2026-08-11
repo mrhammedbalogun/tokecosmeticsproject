@@ -16,6 +16,10 @@ export interface CheckoutSelections {
    * `complete(3, { deliveryDisplay })`'s patch, mirroring `addressDisplay`. Purely
    * cosmetic; place-order only needs `deliveryOptionId`. */
   deliveryDisplay?: string;
+  /** The chosen GIG pickup centre (32b slice 4) — GIG's centre id, set only when
+   * the selected delivery option is centre pickup; rides the quote and the
+   * place-order payloads so the server prices the customer's actual centre. */
+  gigCentreId?: number;
   paymentGateway?: string;
   note: string;
 }
@@ -72,7 +76,11 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setAddress = useCallback((addressId: number) => {
-    setSelections((prev) => ({ ...prev, addressId, deliveryOptionId: undefined }));
+    // A new address invalidates the delivery choice AND the pickup centre — the
+    // centre list is sorted for (and priced from) the old address.
+    setSelections((prev) => ({
+      ...prev, addressId, deliveryOptionId: undefined, gigCentreId: undefined,
+    }));
     setCompleted((prev) => {
       if (!prev.has(3)) return prev;
       const next = new Set(prev);

@@ -81,6 +81,7 @@ class OrderListSerializer(_BaseOrderSerializer):
 class OrderSerializer(_BaseOrderSerializer):
     payment_gateway = serializers.SerializerMethodField()
     gig_tracking = serializers.SerializerMethodField()
+    pickup_centre = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
@@ -89,7 +90,13 @@ class OrderSerializer(_BaseOrderSerializer):
                   "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",
                   "tracking_carrier", "tracking_number", "payment_gateway",
-                  "gig_tracking", "items")
+                  "gig_tracking", "pickup_centre", "items")
+
+    def get_pickup_centre(self, order):
+        """The placement-time centre snapshot for pickup orders (32b ruling 4) —
+        known from placement, so it renders before any waybill exists. None for
+        door delivery, so the page can simply not render the block."""
+        return getattr(getattr(order, "gig_shipment", None), "centre", None) or None
 
     def get_gig_tracking(self, order):
         """The parcel's latest GIG scan, verbatim, for the account order page.

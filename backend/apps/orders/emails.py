@@ -45,6 +45,9 @@ def _context(order: Order) -> dict:
         "grand_total": money(order.grand_total),
         "delivery_option_name": order.delivery_option_name,
         "shipping_address": order.shipping_address,
+        # Centre pickup (32b ruling 6): the snapshot from placement, or None for
+        # door delivery — templates switch "Delivering to" ↔ "Collect from" on it.
+        "pickup_centre": getattr(getattr(order, "gig_shipment", None), "centre", None) or None,
         "tracking_carrier": order.tracking_carrier,
         "tracking_number": order.tracking_number,
     }

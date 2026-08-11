@@ -76,6 +76,13 @@ export default async function OrderDetailPage({
         <div>
           <h2 className="font-display text-lg">Delivery method</h2>
           <p className="mt-2 text-sm text-muted">{order.delivery_option_name ?? "—"}</p>
+          {order.pickup_centre && (
+            <p className="mt-2 text-sm text-muted">
+              Collect from <span className="font-medium text-foreground">{order.pickup_centre.name}</span>
+              {order.pickup_centre.address && <>, {order.pickup_centre.address}</>} — bring your
+              order number and a photo ID.
+            </p>
+          )}
         </div>
       </div>
 

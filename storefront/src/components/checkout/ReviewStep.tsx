@@ -47,6 +47,9 @@ function mapPlaceOrderError(data: { error?: string; detail?: string } | null): {
   if (code === "delivery_option_invalid") {
     return { message: "That delivery option is no longer valid for this address — please choose again.", cartLink: false };
   }
+  if (code === "centre_required" || code === "centre_invalid") {
+    return { message: "Please choose a pickup centre for this delivery option.", cartLink: false };
+  }
   if (code === "address_invalid") {
     return { message: "That address is no longer valid — please choose or add another.", cartLink: false };
   }
@@ -63,6 +66,7 @@ interface QuoteFetchResult {
   cartId: string;
   addressId: number;
   deliveryOptionId: number;
+  gigCentreId?: number;
   couponCode: string;
   totals: Totals | null;
   couponError: string | null;
@@ -94,6 +98,7 @@ export function ReviewStep() {
 
   const addressId = selections.addressId;
   const deliveryOptionId = selections.deliveryOptionId;
+  const gigCentreId = selections.gigCentreId;
   const cartId = cart.id;
 
   // Lazy useState initializer — computed exactly once on mount, stable for the
@@ -130,6 +135,7 @@ export function ReviewStep() {
             cart_id: cartId,
             address_id: addressId,
             delivery_option_id: deliveryOptionId,
+            gig_centre_id: gigCentreId,
             coupon_code: appliedCoupon,
           }),
         });
@@ -137,7 +143,7 @@ export function ReviewStep() {
         if (cancelled) return;
         if (!res.ok || !data?.totals) {
           setResult({
-            cartId, addressId, deliveryOptionId, couponCode: appliedCoupon,
+            cartId, addressId, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
             totals: null, couponError: null,
             error: "Couldn't load your order total — please try again.",
           });
@@ -145,13 +151,13 @@ export function ReviewStep() {
         }
         const couponError = appliedCoupon && !data.coupon?.ok ? data.coupon?.error_code ?? "" : null;
         setResult({
-          cartId, addressId, deliveryOptionId, couponCode: appliedCoupon,
+          cartId, addressId, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
           totals: data.totals as Totals, couponError, error: null,
         });
       } catch {
         if (cancelled) return;
         setResult({
-          cartId, addressId, deliveryOptionId, couponCode: appliedCoupon,
+          cartId, addressId, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
           totals: null, couponError: null,
           error: "Couldn't load your order total — please try again.",
         });
@@ -160,13 +166,14 @@ export function ReviewStep() {
     return () => {
       cancelled = true;
     };
-  }, [cartId, addressId, deliveryOptionId, appliedCoupon]);
+  }, [cartId, addressId, deliveryOptionId, gigCentreId, appliedCoupon]);
 
   const stale =
     !result ||
     result.cartId !== cartId ||
     result.addressId !== addressId ||
     result.deliveryOptionId !== deliveryOptionId ||
+    result.gigCentreId !== gigCentreId ||
     result.couponCode !== appliedCoupon;
   const totals = stale ? null : result.totals;
   const quoteError = stale ? null : result.error;
@@ -194,6 +201,7 @@ export function ReviewStep() {
           cart_id: cartId,
           address_id: addressId,
           delivery_option_id: deliveryOptionId,
+          gig_centre_id: gigCentreId,
           payment_gateway: selections.paymentGateway,
           coupon_code: appliedCoupon,
           notes: selections.note,

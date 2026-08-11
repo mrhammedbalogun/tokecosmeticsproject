@@ -15,6 +15,18 @@ export interface DeliveryOption {
    * "undefined days" on every delivery option. */
   id: number; name: string; price: string | null;
   min_days: number; max_days: number; quote_required: boolean;
+  /** Present on carrier rows (delivery/services.py): "gig" + "pickup" marks the
+   * centre-pickup option, which reveals the centre picker (32b slice 4). */
+  carrier_code?: string;
+  carrier_service?: string;
+}
+
+/** One row of GET /api/checkout/gig-centres — `id` is GIG's centre id (not a PK). */
+export interface GigCentreOption {
+  id: number;
+  name: string;
+  address: string;
+  distance_km: number;
 }
 export interface PaymentMethod { gateway: string; sort_order: number }
 
