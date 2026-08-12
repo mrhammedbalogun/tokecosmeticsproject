@@ -23,13 +23,17 @@ describe("the sidebar renders only what the scopes allow", () => {
     expect(labels(OWNER)).toEqual(NAV_ITEMS.map((i) => i.label));
   });
 
-  it("Manager sees the trading surfaces but neither Staff nor Settings nor Content", () => {
+  it("Manager sees the trading surfaces plus Settings, but neither Staff nor Content", () => {
     expect(labels(MANAGER)).toEqual([
       // Categories carries `products.manage`, the same scope as Products — editing the
       // tree is editing the catalogue, and it is what the storefront nav is built from.
       "Dashboard", "Orders", "Products", "Categories", "Inventory", "Customers", "Reviews",
       "Coupons",
       "Home Content", "Reports",
+      // Settings is any-of `settings.manage` / `products.manage`: the Delivery section
+      // runs on `products.manage`, so a Manager gets the door. The index page then shows
+      // only Delivery; Payments and Audit stay behind `settings.manage`.
+      "Settings",
     ]);
   });
 
@@ -46,9 +50,11 @@ describe("the sidebar renders only what the scopes allow", () => {
     expect(visibleNav(undefined).map((i) => i.label)).toEqual(["Dashboard"]);
   });
 
-  it("Staff and Settings are Owner-only — the two surfaces that escalate or move money", () => {
+  it("Staff stays Owner-only, and Settings opens to nobody below Manager", () => {
     for (const scopes of [MANAGER, SUPPORT, CONTENT]) {
       expect(labels(scopes)).not.toContain("Staff");
+    }
+    for (const scopes of [SUPPORT, CONTENT]) {
       expect(labels(scopes)).not.toContain("Settings");
     }
   });

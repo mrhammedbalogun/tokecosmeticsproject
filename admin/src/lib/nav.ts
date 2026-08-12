@@ -10,8 +10,12 @@
  * endpoint behind these pages carries its own `HasAdminScope`, re-read from the database
  * on each request, which is the fence. Treat this list as ergonomics.
  *
- * `scopes` is ANY-OF. Every item now names exactly one — `Reviews` was a two-scope
- * placeholder until the review endpoints landed and brought `reviews.manage` with them.
+ * `scopes` is ANY-OF. Every item names exactly one except `Settings`, which is a door to
+ * sections with different owners: Payments and the audit log are `settings.manage`
+ * (Owner-only), while Delivery is `products.manage` — the scope the delivery endpoints
+ * actually check, because a delivery price is an operational number, not a money-routing
+ * decision (see `backend/apps/delivery/admin_views.py`). A Manager therefore gets the
+ * door; `/settings` itself then shows only the sections the visitor's scopes cover.
  *
  * `Settings` and `Staff` are real pages as of Task 7; every other href below is a
  * placeholder until Plans 17-19 build it. That is deliberate and matches the plan text:
@@ -42,7 +46,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Home Content", href: "/home-content", scopes: ["marketing.manage"] },
   { label: "Content", href: "/content", scopes: ["cms.manage"] },
   { label: "Reports", href: "/reports", scopes: ["reports.view"] },
-  { label: "Settings", href: "/settings", scopes: ["settings.manage"] },
+  { label: "Settings", href: "/settings", scopes: ["settings.manage", "products.manage"] },
   { label: "Staff", href: "/staff", scopes: ["staff.manage"] },
 ];
 

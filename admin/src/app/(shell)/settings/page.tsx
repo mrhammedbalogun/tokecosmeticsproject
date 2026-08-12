@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { getAdminMeOrNull } from "@/lib/admin-me";
 import { requireAdmin } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -11,6 +12,13 @@ export const metadata: Metadata = { title: "Settings" };
  * without this page the link beside it would 404 — the one broken link in a shell whose
  * whole job is to prove the shell works.
  *
+ * SECTIONS ARE SCOPE-FILTERED, same contract as the sidebar (`lib/nav.ts`): any-of,
+ * ergonomics not authorization. The door is no longer Owner-only — a Manager holds
+ * `products.manage` and Delivery runs on it (`backend/apps/delivery/admin_views.py`
+ * reasoned this out: a delivery price is operational, the payout account is not) — so
+ * showing a Manager the Payments and Audit cards would just be two doors into 403s.
+ * The real fence stays `HasAdminScope` on every endpoint behind each card.
+ *
  * Thin on purpose: Plan-19 and Plan-20 add the rest. Listing only what is BUILT, rather
  * than greying out a menu of future pages, keeps this honest about what exists today.
  */
@@ -19,29 +27,37 @@ const SECTIONS = [
     href: "/settings/payments",
     title: "Payments",
     blurb: "The bank account customers pay into, and which methods each market offers.",
+    scopes: ["settings.manage"],
   },
   {
     href: "/settings/delivery",
     title: "Delivery",
     blurb: "Delivery options, their prices and how long they take.",
+    scopes: ["products.manage"],
   },
   {
     href: "/settings/audit",
     title: "Audit log",
     blurb: "Every write on the admin surface, and the reads that touch personal data.",
+    scopes: ["settings.manage"],
   },
 ];
 
 export default async function SettingsPage() {
   await requireAdmin("/settings");
 
+  // Same degradation as the shell: if `admin-me` fails, no card is offered that we
+  // cannot confirm the person may use.
+  const held = new Set((await getAdminMeOrNull())?.scopes ?? []);
+  const sections = SECTIONS.filter((s) => s.scopes.some((scope) => held.has(scope)));
+
   return (
     <div>
       <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
-      <p className="mt-1 text-sm text-muted">Owner-only configuration and records.</p>
+      <p className="mt-1 text-sm text-muted">Shop configuration and records.</p>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {SECTIONS.map((section) => (
+        {sections.map((section) => (
           <Link
             key={section.href}
             href={section.href}
