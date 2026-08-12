@@ -1,30 +1,36 @@
 import { describe, it, expect } from "vitest";
-import { suggestionFor } from "@/lib/geo";
+import { welcomeFor } from "@/lib/geo";
 
 const MARKETS = ["NG", "GB", "US", "CA", "ZZ"];
 
-describe("suggestionFor", () => {
-  it("suggests nothing when the user already has a country cookie", () => {
-    expect(suggestionFor("GB", "NG", MARKETS)).toBeNull();
+describe("welcomeFor", () => {
+  it("confirms when geo matches the market the visitor is already on (geo-seeded cookie)", () => {
+    expect(welcomeFor("CA", "CA", MARKETS)).toEqual({ kind: "confirm", market: "CA" });
   });
-  it("keeps the existing cookie even when geo points at a different real market", () => {
-    // Isolates the cookie guard: geo is a valid, non-default market, so only the
-    // existing-cookie short-circuit can produce null here.
-    expect(suggestionFor("US", "GB", MARKETS)).toBeNull();
+
+  it("confirms ZZ for an unknown geo country whose cookie was seeded ZZ", () => {
+    // A French visitor: the proxy seeded ZZ, and FR resolves to ZZ — same market, confirm.
+    expect(welcomeFor("ZZ", "FR", MARKETS)).toEqual({ kind: "confirm", market: "ZZ" });
   });
-  it("suggests the geo market when it is a real market and differs from the default", () => {
-    expect(suggestionFor(undefined, "GB", MARKETS)).toBe("GB");
+
+  it("offers a switch when the cookie disagrees with geo (pre-geo-seeding visitors)", () => {
+    expect(welcomeFor("NG", "CA", MARKETS)).toEqual({ kind: "offer", market: "CA" });
   });
-  it("suggests nothing when geo equals the NG default", () => {
-    expect(suggestionFor(undefined, "NG", MARKETS)).toBeNull();
+
+  it("offers ZZ when an unknown geo country disagrees with the cookie", () => {
+    expect(welcomeFor("NG", "FR", MARKETS)).toEqual({ kind: "offer", market: "ZZ" });
   });
-  it("suggests ZZ for an unknown geo country (international)", () => {
-    expect(suggestionFor(undefined, "FR", MARKETS)).toBe("ZZ");
+
+  it("says nothing when geo resolves to the NG home default", () => {
+    expect(welcomeFor("NG", "NG", MARKETS)).toBeNull();
   });
+
+  it("says nothing when geo is absent", () => {
+    expect(welcomeFor("NG", undefined, MARKETS)).toBeNull();
+    expect(welcomeFor("NG", "", MARKETS)).toBeNull();
+  });
+
   it("uppercases a lowercase geo code before matching", () => {
-    expect(suggestionFor(undefined, "gb", MARKETS)).toBe("GB");
-  });
-  it("suggests nothing when geo is absent", () => {
-    expect(suggestionFor(undefined, undefined, MARKETS)).toBeNull();
+    expect(welcomeFor("GB", "gb", MARKETS)).toEqual({ kind: "confirm", market: "GB" });
   });
 });

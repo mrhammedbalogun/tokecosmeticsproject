@@ -81,6 +81,17 @@ html[data-scrolled] header[data-site-header] .site-logo { transform: scale(0.85)
 }
 @keyframes heroTab { from { width: 0; } to { width: 100%; } }
 
+/* Currency welcome popup: backdrop fades, card rises like a lid lifting. Mount-only
+   keyframes (no exit animation — dismissal should feel instant). The global
+   prefers-reduced-motion catch-all above neutralises both. */
+.welcome-backdrop { animation: welcomeFade 0.25s ease-out both; }
+.welcome-card { animation: welcomeRise 0.35s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both; }
+@keyframes welcomeFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes welcomeRise {
+  from { opacity: 0; transform: translateY(24px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
 /* The landing artifact's .wrap, verbatim (docs/design/landing-redesign-v1.html:12-13):
    "full-bleed layout: content runs edge to edge with breathing room, no centered
    column". The homepage sections, header and footer use THIS, never mx-auto max-w-*

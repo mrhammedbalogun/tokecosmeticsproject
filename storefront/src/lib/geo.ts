@@ -20,23 +20,25 @@ export function dismissGeoSuggestion(): void {
 }
 
 /**
- * What (if anything) to SUGGEST to a visitor. Never forces — the caller only shows a
- * dismissable banner. Returns null when there is nothing worth suggesting.
- *  - existing cookie present -> null (their choice is set; leave it alone)
- *  - geo absent -> null
- *  - geo is the NG default -> null (already correct)
- *  - geo is another real market -> that market
- *  - geo is an unknown country -> ZZ (international)
+ * The proxy now seeds a first-time visitor's country cookie FROM geo, so the popup's job
+ * splits into two variants:
+ *  - "confirm": geo resolves to the market the visitor is already on — announce the
+ *    auto-set currency and offer a way out ("We've set prices to CAD. OK / Change").
+ *  - "offer": geo resolves to a DIFFERENT market than the cookie (e.g. a pre-existing
+ *    visitor whose cookie was seeded NG before geo-seeding shipped) — ask before switching.
+ * Returns null when there is nothing to say: no geo, or geo resolves to the NG home
+ * default (the store's own market needs no announcement).
  */
-export function suggestionFor(
-  existingCookie: string | undefined,
+export type GeoWelcome = { kind: "confirm" | "offer"; market: string };
+
+export function welcomeFor(
+  currentCountry: string,
   geoCountry: string | undefined,
   validCodes: string[],
-): string | null {
-  if (existingCookie) return null;
+): GeoWelcome | null {
   if (!geoCountry) return null;
-  // Reuse the backend-mirroring resolver (uppercase -> known market -> ZZ). Nothing to
-  // suggest when it resolves to the NG default — the visitor is already on the right market.
+  // Reuse the backend-mirroring resolver (uppercase -> known market -> ZZ).
   const resolved = normalizeCountry(geoCountry, validCodes);
-  return resolved === DEFAULT_COUNTRY ? null : resolved;
+  if (resolved === DEFAULT_COUNTRY) return null;
+  return { kind: resolved === currentCountry ? "confirm" : "offer", market: resolved };
 }

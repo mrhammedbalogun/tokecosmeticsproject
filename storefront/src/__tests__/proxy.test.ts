@@ -15,13 +15,37 @@ function location(res: ReturnType<typeof proxy>) {
 }
 
 describe("proxy country + geo", () => {
-  it("seeds the NG default cookie when none is present", () => {
+  it("seeds the NG default cookie when no cookie and no geo are present", () => {
     const res = run();
     expect(res.cookies.get("country")?.value).toBe("NG");
   });
 
-  it("does not overwrite an existing country cookie", () => {
-    const res = run({ cookie: "country=US" });
+  it("seeds the visitor's own market from geo on the first request", () => {
+    const res = run({ "x-vercel-ip-country": "CA" });
+    expect(res.cookies.get("country")?.value).toBe("CA");
+  });
+
+  it("seeds ZZ (international) for a geo country that is not a market", () => {
+    const res = run({ "x-vercel-ip-country": "FR" });
+    expect(res.cookies.get("country")?.value).toBe("ZZ");
+  });
+
+  it("injects the seeded market into the forwarded request cookies for the first render", () => {
+    // Without this, every cookies() reader falls back to NG for the very first paint —
+    // the visitor's true market would only apply from their second request on.
+    const res = run({ "x-vercel-ip-country": "CA" });
+    expect(res.headers.get("x-middleware-request-cookie")).toContain("country=CA");
+  });
+
+  it("preserves other request cookies when injecting the seed", () => {
+    const res = run({ "x-vercel-ip-country": "CA", cookie: "cart=abc123" });
+    const forwarded = res.headers.get("x-middleware-request-cookie");
+    expect(forwarded).toContain("cart=abc123");
+    expect(forwarded).toContain("country=CA");
+  });
+
+  it("does not overwrite an existing country cookie, even when geo disagrees", () => {
+    const res = run({ cookie: "country=US", "x-vercel-ip-country": "CA" });
     // No Set-Cookie is emitted when the visitor already has a choice.
     expect(res.cookies.get("country")?.value).toBeUndefined();
   });
