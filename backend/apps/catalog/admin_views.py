@@ -202,8 +202,22 @@ class ProductImageAdminViewSet(AdminBaseViewSet):
 
 
 class ProductVideoAdminViewSet(AdminBaseViewSet):
+    """Attach/reorder/detach library videos on a product (Videos tab).
+
+    Unlike images there is no multipart create action on the product viewset: the bytes
+    go straight to S3 through the cms ticket/finalize pair, so the create here is plain
+    JSON and carries `product` in the body. The UPLOAD half of the flow lives behind
+    `marketing.manage` (see `MediaAssetAdminViewSet`) — `test_admin_videos.py` pins that
+    every `products.manage` role also holds it, so the Videos tab cannot half-break.
+    """
+
     serializer_class = ProductVideoAdminSerializer
-    queryset = ProductVideo.objects.all()
+    # `select_related`, mirroring the serializer's `asset.file` read — without it the
+    # editor's list costs one query per row.
+    queryset = ProductVideo.objects.select_related("asset")
+    # The editor asks for ONE product's videos; unfiltered this returns the whole
+    # catalogue's. Same reasoning as variants/images above.
+    filterset_fields = ["product"]
 
 
 class PriceAdminViewSet(AdminBaseViewSet):

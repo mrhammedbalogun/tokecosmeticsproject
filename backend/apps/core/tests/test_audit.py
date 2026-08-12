@@ -204,10 +204,13 @@ def _case_product_image(client, monkeypatch):
 
 
 def _case_video(client, monkeypatch):
+    from apps.cms.models import MediaAsset
+
     product = ProductFactory(slug="p-video")
+    asset = MediaAsset.objects.create(file="catalog/library/v.mp4", kind=MediaAsset.VIDEO)
     return client.post(
         "/api/v1/admin/videos/",
-        {"product": product.id, "url": "https://example.test/v.mp4"},
+        {"product": product.id, "asset": asset.id},
         format="json",
     ), 201
 

@@ -13,6 +13,7 @@ import { JsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumbs } from "@/components/plp/Breadcrumbs";
 import { PdpProvider } from "@/components/product/PdpContext";
 import { ProductGallery } from "@/components/product/ProductGallery";
+import { ProductVideos } from "@/components/product/ProductVideos";
 import { BuyBox } from "@/components/product/BuyBox";
 import { PdpAccordions } from "@/components/product/PdpAccordions";
 import { ReviewList } from "@/components/product/ReviewList";
@@ -102,7 +103,10 @@ export default async function ProductPage({ params }: { params: Params }) {
       <Breadcrumbs crumbs={crumbs} />
       <PdpProvider variants={product.variants}>
         <div className="mt-6 grid gap-10 lg:grid-cols-2">
-          <ProductGallery product={product} />
+          <div>
+            <ProductGallery product={product} />
+            <ProductVideos product={product} />
+          </div>
           <div>
             <BuyBox product={product} deliveryLine={deliveryLine} />
           </div>

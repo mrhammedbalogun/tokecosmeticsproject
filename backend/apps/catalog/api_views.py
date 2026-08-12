@@ -1,5 +1,5 @@
 from django.core.cache import cache as _cache
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 
@@ -10,7 +10,7 @@ from apps.catalog.api_serializers import (
     ProductDetailSerializer,
     ProductListSerializer,
 )
-from apps.catalog.models import Brand, Category, Collection, Product
+from apps.catalog.models import Brand, Category, Collection, Product, ProductVideo
 from apps.catalog.services import (
     CATALOG_CACHE_TTL,
     annotate_in_stock,
@@ -103,7 +103,14 @@ class ProductDetailView(CatalogCacheMixin, generics.RetrieveAPIView):
         return (
             Product.objects.filter(status="active")
             .select_related("brand")
-            .prefetch_related("images", "variants", "related__images")
+            .prefetch_related(
+                "images",
+                "variants",
+                "related__images",
+                # select_related inside the prefetch: the serializer reads
+                # `v.asset.file` per video, which would otherwise be a query per row.
+                Prefetch("videos", queryset=ProductVideo.objects.select_related("asset")),
+            )
         )
 
     def get_object(self):

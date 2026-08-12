@@ -40,12 +40,18 @@ import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
 import { StockAdjustModal } from "@/components/product/StockAdjustModal";
 import { VariantsPanel } from "@/components/product/VariantsPanel";
+import { VideosPanel } from "@/components/product/VideosPanel";
 import type { AdjustResult } from "@/app/(shell)/products/[slug]/stock-actions";
 import type { AdjustErrors } from "@/lib/stock-adjust";
 import type { ImageResult, ProductImage } from "@/app/(shell)/products/[slug]/image-actions";
 import type { PriceWriteResult } from "@/app/(shell)/products/[slug]/price-actions";
+import type { ProductVideo, VideoResult } from "@/app/(shell)/products/[slug]/video-actions";
 import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
+import type { MediaAssetRow } from "@/lib/media";
 import { positionWrites, reorder, sortImages } from "@/lib/product-images";
+import { uploadToS3 } from "@/lib/upload";
+import type { UploadTicket } from "@/lib/upload-types";
+import { VIDEO_CAP_BYTES } from "@/lib/video";
 import {
   amountChanged,
   buildPriceGrid,
@@ -99,6 +105,7 @@ const TABS = [
   { id: "prices", label: "Prices" },
   { id: "content", label: "Content" },
   { id: "images", label: "Images" },
+  { id: "videos", label: "Videos" },
   { id: "seo", label: "SEO" },
 ] as const;
 
@@ -111,6 +118,29 @@ export interface ImageActions {
   remove: (id: number) => Promise<ImageResult<null>>;
 }
 
+/** All five injected, like `ImageActions`, so the component is testable without a
+ *  server. `ticket`/`finalize` are the media library's own actions (the S3 leg between
+ *  them runs in the browser — lib/upload.ts); `attach`/`update`/`remove` are the
+ *  product-video bindings. */
+export interface VideoActions {
+  ticket: (input: {
+    filename: string;
+    size: number;
+    container: "mp4" | "webm";
+  }) => Promise<{ ticket?: UploadTicket; message?: string }>;
+  finalize: (input: {
+    key: string;
+    originalName: string;
+  }) => Promise<{ asset?: MediaAssetRow; warning?: string; message?: string }>;
+  attach: (input: {
+    productId: number;
+    assetId: number;
+    position: number;
+  }) => Promise<VideoResult<ProductVideo>>;
+  update: (id: number, patch: { position?: number }) => Promise<VideoResult<ProductVideo>>;
+  remove: (id: number) => Promise<VideoResult<null>>;
+}
+
 type TabId = (typeof TABS)[number]["id"];
 
 export function ProductEditor({
@@ -121,6 +151,8 @@ export function ProductEditor({
   siteUrl,
   initialImages,
   imageActions,
+  initialVideos,
+  videoActions,
   variants,
   createVariant,
   updateVariant,
@@ -139,6 +171,8 @@ export function ProductEditor({
   siteUrl: string;
   initialImages: ProductImage[];
   imageActions: ImageActions;
+  initialVideos: ProductVideo[];
+  videoActions: VideoActions;
   variants: VariantRow[];
   createVariant: (input: {
     productId: number;
@@ -240,6 +274,102 @@ export function ProductEditor({
       const res = await imageActions.remove(id);
       if (!res.ok) return res.error;
       setImages((current) => current.filter((i) => i.id !== id));
+      return null;
+    });
+  };
+
+  // --- videos --------------------------------------------------------------------------
+  //
+  // Same shape as images (state here, panel presentational, immediate writes), with two
+  // differences: the file's own bytes go browser → S3 between `ticket` and `finalize`
+  // (Vercel kills bodies over ~4.5MB, so no video can ride a Server Function), and the
+  // upload gets ITS OWN transition — sharing the images' would light "Working…" on the
+  // Images tab for the minutes a 100MB file takes to climb.
+  const [videos, setVideos] = useState<ProductVideo[]>(() => sortImages(initialVideos));
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const [videoWarning, setVideoWarning] = useState<string | null>(null);
+  const [videoProgress, setVideoProgress] = useState<number | null>(null);
+  const [videoBusy, startVideoTransition] = useTransition();
+
+  const runVideoWrite = (work: () => Promise<string | null>) => {
+    setVideoError(null);
+    startVideoTransition(async () => {
+      // The same load-bearing catch as `runImageWrite`: a rejected request must become
+      // a message, not an unhandled rejection that unmounts the whole editor.
+      try {
+        setVideoError(await work());
+      } catch {
+        setVideoError(UNREACHABLE);
+      }
+    });
+  };
+
+  const onVideoUpload = (file: File) => {
+    setVideoWarning(null);
+    runVideoWrite(async () => {
+      if (file.size > VIDEO_CAP_BYTES) {
+        return `That video is ${fileSizeMb(file)} — the limit is 128 MB. Re-encode it at 720p and about 2 Mbps (ffmpeg -crf 28 -movflags +faststart) and choose it again.`;
+      }
+      const container = file.name.toLowerCase().endsWith(".webm") ? "webm" : "mp4";
+      const { ticket, message } = await videoActions.ticket({
+        filename: file.name,
+        size: file.size,
+        container,
+      });
+      if (!ticket) return message ?? "The upload could not start.";
+
+      setVideoProgress(0);
+      try {
+        await uploadToS3(ticket, file, setVideoProgress).promise;
+      } catch (e) {
+        return `${(e as Error).message} Large videos can't resume — choose it again.`;
+      } finally {
+        setVideoProgress(null);
+      }
+
+      const done = await videoActions.finalize({ key: ticket.key, originalName: file.name });
+      if (!done.asset) return done.message ?? "The upload could not be verified.";
+      // Non-fatal ("not faststart-encoded, browsers must download all of it before
+      // playing") — the attach still proceeds, but silence here would hide the one
+      // fact that explains a video that "never starts" on the storefront.
+      if (done.warning) setVideoWarning(done.warning);
+
+      const res = await videoActions.attach({
+        productId: product.id,
+        assetId: done.asset.id,
+        position: videos.length,
+      });
+      if (!res.ok) return res.error;
+      setVideos((current) => sortImages([...current, res.value]));
+      return null;
+    });
+  };
+
+  const onVideoMove = (from: number, to: number) => {
+    const next = reorder(videos, from, to);
+    const writes = positionWrites(videos, next);
+    if (!writes.length) return;
+
+    // Optimistic then reconciled, exactly like image reordering.
+    const previous = videos;
+    setVideos(next);
+    runVideoWrite(async () => {
+      for (const write of writes) {
+        const res = await videoActions.update(write.id, { position: write.position });
+        if (!res.ok) {
+          setVideos(previous);
+          return res.error;
+        }
+      }
+      return null;
+    });
+  };
+
+  const onVideoDelete = (id: number) => {
+    runVideoWrite(async () => {
+      const res = await videoActions.remove(id);
+      if (!res.ok) return res.error;
+      setVideos((current) => current.filter((v) => v.id !== id));
       return null;
     });
   };
@@ -732,6 +862,18 @@ export function ProductEditor({
             onAlt={onAlt}
             onMove={onMove}
             onDelete={onDelete}
+          />
+        )}
+        {tab === "videos" && (
+          <VideosPanel
+            videos={videos}
+            busy={videoBusy}
+            progress={videoProgress}
+            error={videoError}
+            warning={videoWarning}
+            onUpload={onVideoUpload}
+            onMove={onVideoMove}
+            onDelete={onVideoDelete}
           />
         )}
         {tab === "seo" && (

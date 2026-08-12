@@ -102,6 +102,11 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     // Tailwind and Next both emit inline style attributes.
     "style-src": ["'self'", "'unsafe-inline'", ...GMAPS_STYLE],
     "img-src": ["'self'", "data:", "blob:", mediaHost(), ...GMAPS_IMG],
+    // Product videos play straight off CloudFront (ProductVideos.tsx). Without an
+    // explicit media-src the browser falls back to default-src 'self', which would
+    // block every one of them the day this policy stops being report-only. apiOrigin
+    // covers dev, where Django serves /media itself.
+    "media-src": ["'self'", mediaHost(), apiOrigin()],
     "font-src": ["'self'", "data:", ...GMAPS_FONT],
     "connect-src": ["'self'", apiOrigin(), ...PAYSTACK, ...PAYPAL, ...TURNSTILE, ...GMAPS_CONNECT],
     // The payment popups and the Turnstile challenge render in iframes.

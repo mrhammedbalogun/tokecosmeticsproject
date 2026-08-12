@@ -20,6 +20,16 @@ import {
   type ProductImage,
 } from "./image-actions";
 import { savePriceAction } from "./price-actions";
+import {
+  attachVideoAction,
+  deleteVideoAction,
+  updateVideoAction,
+  type ProductVideo,
+} from "./video-actions";
+import {
+  finalizeVideoAction,
+  requestVideoTicketAction,
+} from "@/app/(shell)/content/media/actions";
 import { createVariantAction, updateVariantAction } from "./variant-actions";
 import { adjustStockAction } from "./stock-actions";
 import type { PriceRow, VariantRow } from "@/lib/product-prices";
@@ -102,13 +112,13 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
   // Fetched AFTER the product, deliberately: it needs the product's id, and a 404 on the
   // product should not be preceded by a pointless image request.
   //
-  // FOUR PRODUCT-SCOPED LISTS, all filtered server-side. Unfiltered, `/admin/variants/`
+  // FIVE PRODUCT-SCOPED LISTS, all filtered server-side. Unfiltered, `/admin/variants/`
   // returns all 122 in production and `/admin/prices/` all 121 — and every one would be
   // serialised into this page's RSC payload whether rendered or not.
   //
   // Each failure costs ONE TAB, never the page: the editor holds unsaved-able text in
   // Details, Content and SEO, and a dead price endpoint must not take that with it.
-  const [imagesResult, variantsResult, stockResult, pricesResult] = await Promise.allSettled([
+  const [imagesResult, variantsResult, stockResult, pricesResult, videosResult] = await Promise.allSettled([
     fetchWithAuthOrBounce<{ results: ProductImage[] }>(
       `/admin/images/?product=${product.id}`,
       path,
@@ -128,9 +138,13 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
       `/admin/prices/?variant__product=${product.id}`,
       path,
     ),
+    fetchWithAuthOrBounce<{ results: ProductVideo[] }>(
+      `/admin/videos/?product=${product.id}`,
+      path,
+    ),
   ]);
 
-  for (const result of [imagesResult, variantsResult, stockResult, pricesResult]) {
+  for (const result of [imagesResult, variantsResult, stockResult, pricesResult, videosResult]) {
     if (result.status === "rejected" && !(result.reason instanceof ApiError)) throw result.reason;
   }
 
@@ -139,11 +153,12 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
   // 429'd variants or prices fetch rendered a real product with apparently ZERO
   // variants and prices, which reads as data loss and invites someone to recreate
   // them. Same incident as the product-fetch 429 above, worse costume.
-  const throttled = [imagesResult, variantsResult, stockResult, pricesResult].some(
+  const throttled = [imagesResult, variantsResult, stockResult, pricesResult, videosResult].some(
     (result) => result.status === "rejected" && (result.reason as ApiError).status === 429,
   );
 
   const images = imagesResult.status === "fulfilled" ? (imagesResult.value.results ?? []) : [];
+  const videos = videosResult.status === "fulfilled" ? (videosResult.value.results ?? []) : [];
   // `fetchAllPages` for these three, not a single request: DRF pages at 24, and a product
   // with more variants or a fuller price matrix than today's would otherwise be silently
   // truncated — the same trap the category picker had.
@@ -181,7 +196,7 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
       {throttled && (
         <p className="mt-4 rounded-[var(--radius-card)] border border-warn/30 bg-warn/5 p-3 text-sm text-warn">
           The server is rate-limiting this session, so parts of this page (variants,
-          prices, stock or images) may look empty when they are not. Nothing is lost —
+          prices, stock, images or videos) may look empty when they are not. Nothing is lost —
           wait a minute, then refresh before editing.
         </p>
       )}
@@ -201,6 +216,16 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
             upload: uploadImageAction,
             update: updateImageAction,
             remove: deleteImageAction,
+          }}
+          initialVideos={videos}
+          videoActions={{
+            // The upload half is the MEDIA LIBRARY's pair (`marketing.manage`) — the
+            // rbac.py comment on that scope explains why product staff can call it.
+            ticket: requestVideoTicketAction,
+            finalize: finalizeVideoAction,
+            attach: attachVideoAction,
+            update: updateVideoAction,
+            remove: deleteVideoAction,
           }}
           variants={variants}
           createVariant={createVariantAction}

@@ -39,6 +39,7 @@ export interface ProductDetail {
   seo_title: string; seo_description: string;
   variants: Variant[];
   images: { url: string; alt: string; variant_id: number | null }[];
+  videos: { url: string }[];
   related: ProductCard[];
   rating_avg: string; rating_count: number;
 }

@@ -205,11 +205,39 @@ class ProductVariantAdminSerializer(serializers.ModelSerializer):
 
 
 class ProductVideoAdminSerializer(serializers.ModelSerializer):
-    audit_allowlist = ("product", "url", "position")
+    """A video slot on a product: a library binding, not an upload.
+
+    The bytes never pass through this serializer — they go browser → S3 via the cms
+    video-ticket/finalize pair (Vercel kills request bodies over ~4.5MB, so a relayed
+    video cannot arrive). What is written here is the ATTACH: which finalized library
+    asset plays on which product. `file` is the asset's URL, read-only, so the admin's
+    Videos tab can preview rows without a second fetch.
+    """
+
+    audit_allowlist = ("product", "asset", "position")
+
+    file = serializers.FileField(source="asset.file", read_only=True)
 
     class Meta:
         model = ProductVideo
-        fields = "__all__"
+        fields = ["id", "product", "asset", "position", "file"]
+
+    def validate_asset(self, asset):
+        # `kind` was sniffed from the bytes at upload, so this check is real: an image
+        # asset behind a <video> tag renders a permanently black player.
+        if asset.kind != asset.VIDEO:
+            raise serializers.ValidationError("That library file is an image, not a video.")
+        return asset
+
+    def validate_product(self, product):
+        # Create binds the product; PATCH must not quietly move a video onto another
+        # product — same rule ProductImage enforces by making `product` read-only.
+        # It cannot be read-only HERE because this JSON route has no URL to bind from.
+        if self.instance is not None and product != self.instance.product:
+            raise serializers.ValidationError(
+                "A video cannot be moved to another product — delete and re-attach."
+            )
+        return product
 
 
 class PriceAdminSerializer(serializers.ModelSerializer):

@@ -1,6 +1,7 @@
 import pytest
 
 from apps.catalog.models import Product, ProductImage, ProductVideo, ProductVariant
+from apps.cms.models import MediaAsset
 
 
 @pytest.mark.django_db
@@ -17,6 +18,11 @@ def test_image_attaches_to_product_and_optional_variant():
 @pytest.mark.django_db
 def test_video_ordering():
     p = Product.objects.create(name="P2", slug="p2")
-    ProductVideo.objects.create(product=p, url="https://youtu.be/b", position=1)
-    ProductVideo.objects.create(product=p, url="https://youtu.be/a", position=0)
-    assert [v.url for v in p.videos.all()] == ["https://youtu.be/a", "https://youtu.be/b"]
+    b = MediaAsset.objects.create(file="catalog/library/b.mp4", kind=MediaAsset.VIDEO)
+    a = MediaAsset.objects.create(file="catalog/library/a.mp4", kind=MediaAsset.VIDEO)
+    ProductVideo.objects.create(product=p, asset=b, position=1)
+    ProductVideo.objects.create(product=p, asset=a, position=0)
+    assert [v.asset.file.name for v in p.videos.all()] == [
+        "catalog/library/a.mp4",
+        "catalog/library/b.mp4",
+    ]

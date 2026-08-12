@@ -95,6 +95,13 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     # management, not copywriting, so Content does not hold it.
     "reviews.manage": frozenset({"Owner", "Manager"}),
     "customers.view": frozenset({"Owner", "Manager", "Support"}),
+    # THE PRODUCT EDITOR'S VIDEOS TAB DEPENDS ON THIS GRANT: video upload goes through
+    # the cms media endpoints (`MediaAssetAdminViewSet`, `marketing.manage`), while the
+    # attach is a catalog write (`products.manage`). That reuse is safe only while every
+    # `products.manage` holder also holds this scope —
+    # `test_admin_videos.py::test_products_manage_holders_can_reach_the_upload_endpoints`
+    # pins it, and splitting the grants means building the OR-of-scopes story the
+    # `MediaAssetAdminViewSet` docstring defers.
     "marketing.manage": frozenset({"Owner", "Manager"}),
     "cms.manage": frozenset({"Owner", "Content"}),
     "reports.view": frozenset({"Owner", "Manager"}),

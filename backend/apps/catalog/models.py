@@ -223,8 +223,25 @@ class ProductImage(TimeStampedModel):
 
 
 class ProductVideo(TimeStampedModel):
+    """A product's video, as a pointer into the cms media library.
+
+    The original model (0003) carried a bare `url` for YouTube-style embeds; nothing —
+    no importer, no admin surface, no storefront serializer — ever wrote or read it, so
+    0010 dropped it against an empty table rather than shipping a field whose rows the
+    storefront would silently never render. When embeds are wanted, add `embed_url`
+    TOGETHER WITH its renderer.
+
+    `asset` reaches across into cms — layering debt, accepted knowingly: the library and
+    its presigned-upload pipeline live there, and extracting a shared `media` app would
+    mean moving a model across apps on a live database. PROTECT for the same reason
+    banners use it: when asset deletion ships, "still in use by product X" can be
+    refused by construction.
+    """
+
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="videos")
-    url = models.URLField()
+    asset = models.ForeignKey(
+        "cms.MediaAsset", on_delete=models.PROTECT, related_name="product_videos"
+    )
     position = models.PositiveIntegerField(default=0)
 
     class Meta:

@@ -166,6 +166,15 @@ function setup(
     update: imageActions.update ?? vi.fn(async (id: number) => ({ ok: true, value: image(id, 0) })),
     remove: imageActions.remove ?? vi.fn().mockResolvedValue({ ok: true, value: null }),
   };
+  // The Videos tab is not exercised in this file (the S3 leg makes it its own story);
+  // these exist so the editor can mount.
+  const videoActions = {
+    ticket: vi.fn().mockResolvedValue({ message: "not under test" }),
+    finalize: vi.fn().mockResolvedValue({ message: "not under test" }),
+    attach: vi.fn().mockResolvedValue({ ok: false, error: "not under test" }),
+    update: vi.fn().mockResolvedValue({ ok: false, error: "not under test" }),
+    remove: vi.fn().mockResolvedValue({ ok: false, error: "not under test" }),
+  };
   const adjustStock =
     catalogue.adjustStock ??
     vi.fn<(input: AdjustInput) => Promise<AdjustResultShape>>(async () => ({
@@ -203,6 +212,8 @@ function setup(
       siteUrl="https://tokecosmetics.com"
       initialImages={images}
       imageActions={actions}
+      initialVideos={[]}
+      videoActions={videoActions}
       variants={catalogue.variants ?? []}
       createVariant={createVariant}
       updateVariant={updateVariant}

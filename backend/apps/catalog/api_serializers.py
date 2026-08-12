@@ -133,6 +133,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     brand = BrandSerializer(read_only=True)
     variants = serializers.SerializerMethodField()
     images = serializers.SerializerMethodField()
+    videos = serializers.SerializerMethodField()
     related = serializers.SerializerMethodField()
 
     class Meta:
@@ -140,7 +141,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         fields = [
             "name", "slug", "brand", "description", "short_description",
             "ingredients", "directions", "warnings", "specs", "faqs",
-            "seo_title", "seo_description", "variants", "images", "related",
+            "seo_title", "seo_description", "variants", "images", "videos", "related",
             "rating_avg", "rating_count",
         ]
 
@@ -151,6 +152,11 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     def get_images(self, obj):
         return [{"url": i.image.url, "alt": i.alt, "variant_id": i.variant_id}
                 for i in obj.images.all()]
+
+    def get_videos(self, obj):
+        # The asset FK is NOT NULL, so every row has a playable file. The detail view's
+        # prefetch select_relates `asset`; without that this would be a query per video.
+        return [{"url": v.asset.file.url} for v in obj.videos.all()]
 
     def get_related(self, obj):
         from apps.catalog.services import annotate_in_stock, annotate_min_price, sellable_in
