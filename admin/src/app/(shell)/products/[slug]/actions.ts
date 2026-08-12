@@ -107,3 +107,32 @@ export async function saveProductAction(
 
   return { savedSlug: saved.slug, savedAt: Date.now() };
 }
+
+export type DeleteState = { ok: true } | { ok: false; error: string };
+
+/**
+ * DELETE the whole product. Owner-only: the API elevates this above products.manage
+ * to products.delete inside `ProductAdminViewSet.destroy`, so the button's visibility
+ * check in the page is a courtesy, not the control.
+ *
+ * NO `revalidatePath` — the caller navigates to `/products`, which is fully dynamic
+ * and refetches on every visit, and a revalidate here would also re-render the
+ * editor page being abandoned (~13 API GETs against the per-user throttle — the
+ * image-actions.ts lesson of 2026-08-10).
+ */
+export async function deleteProductAction(slug: string): Promise<DeleteState> {
+  if (!SLUG.test(slug)) return { ok: false, error: "That product could not be identified." };
+
+  try {
+    await fetchWithAuth(`/admin/products/${slug}/`, { method: "DELETE" });
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+    if (e.status === 401) {
+      return { ok: false, error: "Your session has expired — sign in again, then retry." };
+    }
+    if (e.status === 403) return { ok: false, error: "Only the Owner can delete a product." };
+    if (e.status === 404) return { ok: false, error: "That product no longer exists." };
+    return { ok: false, error: "The product could not be deleted — try again." };
+  }
+  return { ok: true };
+}

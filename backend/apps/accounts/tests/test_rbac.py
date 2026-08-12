@@ -32,6 +32,7 @@ OWNER = {
     "orders.operate",
     "orders.manage",
     "products.manage",
+    "products.delete",  # hard delete is destruction, not management — Owner alone
     "reviews.manage",
     "customers.view",
     "marketing.manage",
@@ -82,8 +83,8 @@ def test_every_scope_ends_in_a_recognised_verb():
     `test_admin_surface_guard.py::test_nothing_named_view_is_routed_onto_a_writing_method`.
     """
     for scope in SCOPES:
-        assert scope.endswith((".view", ".operate", ".manage")), (
-            f"{scope} uses an unrecognised verb; use .view, .operate or .manage"
+        assert scope.endswith((".view", ".operate", ".manage", ".delete")), (
+            f"{scope} uses an unrecognised verb; use .view, .operate, .manage or .delete"
         )
 
 

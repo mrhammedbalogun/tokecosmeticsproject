@@ -2,10 +2,10 @@
  * The Variants tab: the variants this product already has.
  *
  * READ-MOSTLY BY DESIGN. This panel edits existing variants' stock through the adjust
- * modal and nothing else; GENERATING variants from an option matrix is the builder above
- * it, which shipped in 17b. That split exists because 26% of the production catalogue is
- * multi-variant — an editor that could not show existing variants would be unusable on a
- * quarter of the range.
+ * modal, and — since weights became editable — their `weight_grams`; GENERATING variants
+ * from an option matrix is the builder above it, which shipped in 17b. That split exists
+ * because 26% of the production catalogue is multi-variant — an editor that could not
+ * show existing variants would be unusable on a quarter of the range.
  *
  * STOCK IS SHOWN, NEVER TYPED. `StockItemAdminViewSet` sets
  * `http_method_names = ["get", "post", "head", "options"]` — it refuses PUT and PATCH
@@ -13,7 +13,14 @@
  * reason and a note and writes a `StockMovement`. An editable number field here would be a
  * lie about what the API permits.
  *
- * PRESENTATIONAL: no state of its own.
+ * WEIGHT IS TYPED, and that is not the same lie: `ProductVariantAdminViewSet` PATCHes
+ * `weight_grams` like any other field, delivery quotes are priced from it
+ * (apps/delivery/services.py), and 8 production variants arrived from WooCommerce with
+ * none — this input is how those get fixed. Commit on blur, like the price grid; each
+ * write lands immediately (no relation to the product form's Save).
+ *
+ * PRESENTATIONAL: no state of its own — drafts and errors live in `ProductEditor`,
+ * because this panel unmounts on every tab switch.
  */
 import type { StockRow } from "@/lib/product-stock";
 import type { VariantRow } from "@/lib/product-prices";
@@ -23,6 +30,11 @@ export function VariantsPanel({
   stock,
   warehouses,
   onAdjust,
+  weightDrafts,
+  weightErrors,
+  weightBusyId,
+  onWeightDraft,
+  onWeightCommit,
 }: {
   variants: VariantRow[];
   stock: StockRow[];
@@ -30,6 +42,13 @@ export function VariantsPanel({
   warehouses: { id: number; name: string }[];
   /** Opens the adjust modal. */
   onAdjust?: (stockItemId: number) => void;
+  /** In-progress weight text, keyed by variant id; absent = show the stored value. */
+  weightDrafts: Record<number, string>;
+  weightErrors: Record<number, string>;
+  /** The variant whose weight is being written right now, if any. */
+  weightBusyId: number | null;
+  onWeightDraft: (variantId: number, text: string) => void;
+  onWeightCommit: (variantId: number) => void;
 }) {
   if (!variants.length) {
     return (
@@ -49,7 +68,7 @@ export function VariantsPanel({
           <tr className="border-b border-line bg-surface text-left text-xs text-muted">
             <th scope="col" className="p-3 font-medium">SKU</th>
             <th scope="col" className="p-3 font-medium">Name</th>
-            <th scope="col" className="p-3 font-medium">Weight</th>
+            <th scope="col" className="p-3 font-medium">Weight (g)</th>
             {warehouses.map((warehouse) => (
               <th key={warehouse.id} scope="col" className="p-3 font-medium">
                 {warehouse.name}
@@ -69,16 +88,40 @@ export function VariantsPanel({
                   </span>
                 )}
               </td>
-              <td className="p-3 tabular-nums">
-                {/* BLANK, never "0 g". Eight production variants have no weight at all, and
-                    a zero would be a claim about a parcel rather than an absence — it is
-                    also the number a courier quote would be built from. */}
-                {variant.weight_grams === null ? (
-                  <span className="text-warn" title="No weight recorded">
-                    —
-                  </span>
-                ) : (
-                  `${variant.weight_grams} g`
+              <td className="p-3">
+                <span className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    // BLANK, never "0". Eight production variants have no weight at
+                    // all, and a zero would be a claim about a parcel rather than an
+                    // absence — it is also the number a courier quote would be built
+                    // from. Blank + the warning border says "not recorded" honestly.
+                    value={weightDrafts[variant.id] ?? (variant.weight_grams === null ? "" : String(variant.weight_grams))}
+                    onChange={(e) => onWeightDraft(variant.id, e.target.value)}
+                    onBlur={() => onWeightCommit(variant.id)}
+                    onKeyDown={(e) => {
+                      // Enter commits, like every grid in this editor. The blur it
+                      // causes is a no-op: commit clears the draft, so the second
+                      // call finds nothing typed.
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                    }}
+                    disabled={weightBusyId === variant.id}
+                    aria-label={`Weight in grams for ${variant.sku}`}
+                    placeholder="—"
+                    title={variant.weight_grams === null && weightDrafts[variant.id] === undefined ? "No weight recorded — delivery quotes treat it as 0 g" : undefined}
+                    className={`w-24 rounded border bg-surface px-2 py-1 text-right text-sm tabular-nums focus:outline-none ${
+                      weightErrors[variant.id]
+                        ? "border-warn"
+                        : variant.weight_grams === null && weightDrafts[variant.id] === undefined
+                          ? "border-warn/50"
+                          : "border-line focus:border-accent"
+                    }`}
+                  />
+                  {weightBusyId === variant.id && <span className="text-xs text-muted">Saving…</span>}
+                </span>
+                {weightErrors[variant.id] && (
+                  <p className="mt-1 text-xs text-warn">{weightErrors[variant.id]}</p>
                 )}
               </td>
               {warehouses.map((warehouse) => {

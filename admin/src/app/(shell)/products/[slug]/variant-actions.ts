@@ -17,6 +17,7 @@
  */
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
+import { isValidWeightGrams } from "@/lib/variant-weight";
 
 export interface CreatedVariant {
   id: number;
@@ -56,6 +57,10 @@ export async function createVariantAction(input: {
   sku: string;
   name: string;
   optionValues: Record<string, string>;
+  /** Grams, already parsed by `parseWeightInput`; null = not recorded. Delivery
+   *  pricing sums this per line, so it rides along at creation rather than being a
+   *  second edit somebody has to remember. */
+  weightGrams: number | null;
   /** True only when the product has no variants at all — see below. */
   makeDefault: boolean;
 }): Promise<VariantCreateResult> {
@@ -70,6 +75,9 @@ export async function createVariantAction(input: {
   if (!sku) return { ok: false, error: "A variant needs a SKU." };
   if (sku.length > 64) return { ok: false, error: "That SKU is longer than 64 characters." };
   if (!name) return { ok: false, error: "A variant needs a name." };
+  if (!isValidWeightGrams(input.weightGrams)) {
+    return { ok: false, error: "Weight must be whole grams (or blank for none)." };
+  }
 
   try {
     const variant = await fetchWithAuth<CreatedVariant>("/admin/variants/", {
@@ -79,6 +87,7 @@ export async function createVariantAction(input: {
         sku,
         name,
         option_values: input.optionValues,
+        weight_grams: input.weightGrams,
         // `api_serializers.py:101` picks the default variant and falls back to the first,
         // so a product with none is survivable rather than broken. Still, the FIRST variant
         // a product ever gets should be the default — otherwise the choice is made by row
@@ -112,6 +121,9 @@ export async function updateVariantAction(input: {
   variantId: number;
   optionValues?: Record<string, string>;
   name?: string;
+  /** Grams; null CLEARS the weight, undefined leaves it alone — the distinction the
+   *  rename loop depends on, since it must not touch weights it never read. */
+  weightGrams?: number | null;
 }): Promise<VariantCreateResult> {
   if (!Number.isInteger(input.variantId) || input.variantId < 1) {
     return { ok: false, error: "That variant could not be identified." };
@@ -123,6 +135,12 @@ export async function updateVariantAction(input: {
     const name = input.name.trim();
     if (!name) return { ok: false, error: "A variant needs a name." };
     body.name = name;
+  }
+  if (input.weightGrams !== undefined) {
+    if (!isValidWeightGrams(input.weightGrams)) {
+      return { ok: false, error: "Weight must be whole grams (or blank for none)." };
+    }
+    body.weight_grams = input.weightGrams;
   }
   if (!Object.keys(body).length) {
     return { ok: false, error: "Nothing to change." };

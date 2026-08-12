@@ -77,6 +77,7 @@ import {
   type MatrixDiff,
 } from "@/lib/variant-matrix";
 import type { VariantCreateResult } from "@/app/(shell)/products/[slug]/variant-actions";
+import { parseWeightInput } from "@/lib/variant-weight";
 import {
   isDirty,
   toFormValues,
@@ -181,12 +182,14 @@ export function ProductEditor({
     sku: string;
     name: string;
     optionValues: Record<string, string>;
+    weightGrams: number | null;
     makeDefault: boolean;
   }) => Promise<VariantCreateResult>;
   updateVariant: (input: {
     variantId: number;
     optionValues?: Record<string, string>;
     name?: string;
+    weightGrams?: number | null;
   }) => Promise<VariantCreateResult>;
   stock: StockRow[];
   initialPrices: PriceRow[];
@@ -421,6 +424,7 @@ export function ProductEditor({
       next[combinationKey(combination)] = {
         sku,
         name: variantName(combination),
+        weight: "",
         status: "pending",
       };
     }
@@ -443,6 +447,17 @@ export function ProductEditor({
         const row = rows[key];
         if (!row || row.status === "created") continue;
 
+        // Parsed BEFORE the request, so a typo costs a red row and no API call —
+        // and one bad weight does not strand the other rows, same as a SKU collision.
+        const weight = parseWeightInput(row.weight);
+        if (!weight.ok) {
+          setRows((current) => ({
+            ...current,
+            [key]: { ...current[key], status: "failed", error: weight.error },
+          }));
+          continue;
+        }
+
         setRows((current) => ({ ...current, [key]: { ...current[key], status: "creating" } }));
         let res: VariantCreateResult;
         try {
@@ -451,6 +466,7 @@ export function ProductEditor({
             sku: row.sku,
             name: row.name,
             optionValues: combination,
+            weightGrams: weight.grams,
             // Only ever true for a product that has none at all — see variant-actions.ts.
             makeDefault: variantCount === 0,
           });
@@ -547,6 +563,78 @@ export function ProductEditor({
       mismatched.map((v) => ({ id: v.id, patch: { name: variantName(v.option_values) } })),
       (n) => `Renamed ${n} ${n === 1 ? "variant" : "variants"}.`,
     );
+
+  // --- variant weights ------------------------------------------------------------
+  //
+  // Commit-on-blur, exactly like the price grid: nothing is written for an untouched
+  // or unchanged field, and each write lands immediately (weights are variant data,
+  // not part of the product form's Save). Drafts live here because the panel unmounts
+  // on every tab switch.
+  const [weightDrafts, setWeightDrafts] = useState<Record<number, string>>({});
+  const [weightErrors, setWeightErrors] = useState<Record<number, string>>({});
+  const [weightBusyId, setWeightBusyId] = useState<number | null>(null);
+
+  const onWeightDraft = (variantId: number, text: string) => {
+    setWeightDrafts((current) => ({ ...current, [variantId]: text }));
+    setWeightErrors((current) => {
+      if (!current[variantId]) return current;
+      const next = { ...current };
+      delete next[variantId];
+      return next;
+    });
+  };
+
+  const onWeightCommit = (variantId: number) => {
+    const typed = weightDrafts[variantId];
+    if (typed === undefined) return;
+
+    const parsed = parseWeightInput(typed);
+    if (!parsed.ok) {
+      setWeightErrors((current) => ({ ...current, [variantId]: parsed.error }));
+      return;
+    }
+    const stored = allVariants.find((v) => v.id === variantId)?.weight_grams ?? null;
+    if (parsed.grams === stored) {
+      // Typing the value that was already there is not an edit — no request, no
+      // audit row. Clearing the draft puts the cell back on the stored value.
+      setWeightDrafts((current) => {
+        const next = { ...current };
+        delete next[variantId];
+        return next;
+      });
+      return;
+    }
+
+    setWeightBusyId(variantId);
+    startImageTransition(async () => {
+      // The same load-bearing catch as every write in this file: a rejected request
+      // must become a message, not an unhandled rejection that unmounts the editor.
+      let res: VariantCreateResult;
+      try {
+        res = await updateVariant({ variantId, weightGrams: parsed.grams });
+      } catch {
+        res = { ok: false, error: UNREACHABLE };
+      }
+      setWeightBusyId(null);
+      if (!res.ok) {
+        setWeightErrors((current) => ({ ...current, [variantId]: res.error }));
+        return;
+      }
+      // Adopt the saved row (same pattern as the rename loop), and drop the draft so
+      // the cell renders what the database now holds.
+      setUpdated((current) => ({ ...current, [res.variant.id]: res.variant as unknown as VariantRow }));
+      setNewVariants((current) =>
+        current.some((v) => v.id === res.variant.id)
+          ? current.map((v) => (v.id === res.variant.id ? (res.variant as unknown as VariantRow) : v))
+          : current,
+      );
+      setWeightDrafts((current) => {
+        const next = { ...current };
+        delete next[variantId];
+        return next;
+      });
+    });
+  };
 
   // --- stock -------------------------------------------------------------------------
   //
@@ -828,6 +916,9 @@ export function ProductEditor({
                 onSku={(key, sku) =>
                   setRows((current) => ({ ...current, [key]: { ...current[key], sku } }))
                 }
+                onWeight={(key, weight) =>
+                  setRows((current) => ({ ...current, [key]: { ...current[key], weight } }))
+                }
                 onApply={onApply}
                 onRegenerate={onGenerate}
               />
@@ -838,6 +929,11 @@ export function ProductEditor({
               stock={stockRows}
               warehouses={warehouseColumns(stockRows)}
               onAdjust={openAdjust}
+              weightDrafts={weightDrafts}
+              weightErrors={weightErrors}
+              weightBusyId={weightBusyId}
+              onWeightDraft={onWeightDraft}
+              onWeightCommit={onWeightCommit}
             />
           </div>
         )}

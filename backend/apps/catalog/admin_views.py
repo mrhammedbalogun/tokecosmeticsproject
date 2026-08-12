@@ -19,10 +19,15 @@ unable to look up one product.
 
 So the whole app is `.manage` until there is a read-only catalogue surface to design
 the split around (Plan-17/19). Over-restriction is the safe direction to be wrong in.
+
+ONE ELEVATION ABOVE THE FLOOR: deleting a product requires `products.delete` (Owner
+only), checked inline in `ProductAdminViewSet.destroy` — the same shape as the
+order-cancel elevation in apps/orders/views.py, and for the same reason: an inline
+check keeps the declared `permission_classes` the truth the surface guard reads.
 """
 from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets
+from rest_framework import exceptions, viewsets
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -30,7 +35,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.authentication import AdminJWTAuthentication
-from apps.accounts.rbac import HasAdminScope
+from apps.accounts.rbac import HasAdminScope, scopes_for_user
 from apps.core.audit import AdminAuditMixin
 from apps.catalog.csv_io import export_products_csv
 from apps.catalog.tasks import import_products_csv_task
@@ -129,6 +134,23 @@ class ProductAdminViewSet(AdminBaseViewSet):
     # `icontains` is the one lookup the Plan-16 Task 6 indexes were built for
     # (`product_name_upper_trgm`, `variant_sku_trgm`, both on UPPER(col)).
     search_fields = ["name", "variants__sku"]
+
+    def destroy(self, request, *args, **kwargs):
+        """DELETE elevates above the viewset's `products.manage` floor to
+        `products.delete` (Owner only) — the module docstring names this the one
+        elevation on the surface. Inline rather than `get_permissions()`, so the
+        declared class permission stays honest; proven over real HTTP by
+        `test_admin_role_matrix.DELETE_PRODUCT_ROW`.
+
+        Checked BEFORE the object lookup, so an unauthorised caller gets a clean
+        403 rather than a 404 that tells them whether the slug exists.
+        """
+        if "products.delete" not in scopes_for_user(request.user):
+            raise exceptions.PermissionDenied(
+                "Deleting a product requires the products.delete scope, which only "
+                "the Owner holds. Archive it instead if it should stop selling."
+            )
+        return super().destroy(request, *args, **kwargs)
 
     @action(
         detail=True,

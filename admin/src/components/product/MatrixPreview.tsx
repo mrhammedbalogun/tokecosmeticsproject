@@ -29,6 +29,10 @@ export type RowStatus = "pending" | "creating" | "created" | "failed";
 export interface RowState {
   sku: string;
   name: string;
+  /** Weight in grams, as typed — parsed by `parseWeightInput` on Apply. Empty means
+   *  "not recorded", which the variants table then flags, so it can be filled in
+   *  later without blocking the create. */
+  weight: string;
   status: RowStatus;
   error?: string;
 }
@@ -45,6 +49,7 @@ export function MatrixPreview({
   busy,
   stale,
   onSku,
+  onWeight,
   onApply,
   onRegenerate,
 }: {
@@ -55,6 +60,7 @@ export function MatrixPreview({
   /** True when the axes changed after this preview was generated. */
   stale: boolean;
   onSku: (key: string, sku: string) => void;
+  onWeight: (key: string, weight: string) => void;
   onApply: () => void;
   onRegenerate: () => void;
 }) {
@@ -115,6 +121,25 @@ export function MatrixPreview({
                       row.status === "failed" ? "border-warn" : "border-line focus:border-accent"
                     }`}
                   />
+                  {/* Weight rides along at creation because delivery quotes are built
+                      from it — a variant created weightless is a variant somebody has
+                      to remember to come back for. Blank is allowed; the variants
+                      table below flags it. */}
+                  <span className="flex items-center gap-1">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={row.weight}
+                      onChange={(e) => onWeight(key, e.target.value)}
+                      disabled={row.status === "created" || busy}
+                      aria-label={`Weight in grams for ${row.name}`}
+                      placeholder="weight"
+                      className={`w-20 rounded border bg-surface px-2 py-1 text-right text-xs tabular-nums focus:outline-none ${
+                        row.status === "failed" ? "border-warn" : "border-line focus:border-accent"
+                      }`}
+                    />
+                    <span className="text-xs text-muted">g</span>
+                  </span>
                   <span className="w-20 text-xs">
                     {row.status === "created" && <span className="text-ok">Created</span>}
                     {row.status === "creating" && <span className="text-muted">Creating…</span>}

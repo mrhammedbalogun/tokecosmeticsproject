@@ -768,14 +768,65 @@ describe("ProductEditor", () => {
     expect(screen.getByText("UK Warehouse")).toBeInTheDocument();
   });
 
-  it("shows a dash, not a zero, for a variant with no weight", () => {
-    // Eight production variants have no weight. A "0 g" is a claim about a parcel rather
-    // than an absence — and it is the number a courier quote would be built from.
+  it("shows a blank input, not a zero, for a variant with no weight", () => {
+    // Eight production variants have no weight. A "0" is a claim about a parcel rather
+    // than an absence — and it is the number a courier quote would be built from. The
+    // cell is an INPUT now (weights became editable), so the absence reads as an empty
+    // field flagged by its title rather than as a dash.
     withCatalogue({ variants: [variantRow(1, "TC-1", null)] });
 
     fireEvent.click(tab("Variants"));
 
-    expect(screen.getByTitle("No weight recorded")).toBeInTheDocument();
+    const field = screen.getByLabelText("Weight in grams for TC-1") as HTMLInputElement;
+    expect(field.value).toBe("");
+    expect(field.title).toMatch(/no weight recorded/i);
+  });
+
+  it("commits a typed weight on blur and adopts the saved row", async () => {
+    const updateVariant = vi.fn().mockResolvedValue({
+      ok: true,
+      variant: { ...variantRow(1, "TC-1", null), weight_grams: 250 },
+    });
+    withCatalogue({ variants: [variantRow(1, "TC-1", null)], updateVariant });
+
+    fireEvent.click(tab("Variants"));
+    const field = screen.getByLabelText("Weight in grams for TC-1");
+    fireEvent.change(field, { target: { value: "250" } });
+    fireEvent.blur(field);
+
+    await waitFor(() =>
+      expect(updateVariant).toHaveBeenCalledWith({ variantId: 1, weightGrams: 250 }),
+    );
+    await waitFor(() =>
+      expect((screen.getByLabelText("Weight in grams for TC-1") as HTMLInputElement).value).toBe("250"),
+    );
+  });
+
+  it("refuses a junk weight next to the field, without calling the server", async () => {
+    const updateVariant = vi.fn();
+    withCatalogue({ variants: [variantRow(1, "TC-1", 100)], updateVariant });
+
+    fireEvent.click(tab("Variants"));
+    const field = screen.getByLabelText("Weight in grams for TC-1");
+    fireEvent.change(field, { target: { value: "1.5kg" } });
+    fireEvent.blur(field);
+
+    await waitFor(() =>
+      expect(screen.getByText(/whole grams/i)).toBeInTheDocument(),
+    );
+    expect(updateVariant).not.toHaveBeenCalled();
+  });
+
+  it("does not write a weight that was not changed", () => {
+    const updateVariant = vi.fn();
+    withCatalogue({ variants: [variantRow(1, "TC-1", 100)], updateVariant });
+
+    fireEvent.click(tab("Variants"));
+    const field = screen.getByLabelText("Weight in grams for TC-1");
+    fireEvent.change(field, { target: { value: "100" } });
+    fireEvent.blur(field);
+
+    expect(updateVariant).not.toHaveBeenCalled();
   });
 
   it("shows a dash where a variant has no stock row in a warehouse", () => {
@@ -1271,8 +1322,42 @@ describe("ProductEditor", () => {
       sku: "carrot-shea-butter-500ml",
       name: "500ml",
       optionValues: { Size: "500ml" },
+      // No weight typed: created weightless (allowed — the table flags it), not as 0.
+      weightGrams: null,
       makeDefault: false,
     });
+  });
+
+  it("passes a typed matrix weight through to the create", async () => {
+    const createVariant = okCreate();
+    withCatalogue({ variants: ONE_AXIS, createVariant });
+    openMatrix();
+
+    addValue(1, "500ml");
+    generate();
+    fireEvent.change(screen.getByLabelText("Weight in grams for 500ml"), {
+      target: { value: "500" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Create 1 variant/ }));
+
+    await waitFor(() => expect(createVariant).toHaveBeenCalledTimes(1));
+    expect(createVariant.mock.calls[0][0]).toMatchObject({ weightGrams: 500 });
+  });
+
+  it("marks the row failed on a junk matrix weight, without calling the server", async () => {
+    const createVariant = okCreate();
+    withCatalogue({ variants: ONE_AXIS, createVariant });
+    openMatrix();
+
+    addValue(1, "500ml");
+    generate();
+    fireEvent.change(screen.getByLabelText("Weight in grams for 500ml"), {
+      target: { value: "half a kilo" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Create 1 variant/ }));
+
+    await waitFor(() => expect(screen.getByText(/whole grams/i)).toBeInTheDocument());
+    expect(createVariant).not.toHaveBeenCalled();
   });
 
   it("marks the FIRST variant of a product as default, and only the first", async () => {

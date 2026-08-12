@@ -66,10 +66,31 @@ def test_admin_can_crud_product():
     r = c.get("/api/v1/admin/products/")
     assert r.status_code == 200
 
-    # Delete
+    # Delete — the factory's default role is Owner, who holds products.delete.
     r = c.delete("/api/v1/admin/products/glow-serum/")
     assert r.status_code == 204
     assert not Product.objects.filter(slug="glow-serum").exists()
+
+
+@pytest.mark.django_db
+def test_manager_cannot_delete_a_product():
+    """products.manage lets a Manager run the catalogue; destroying a row is the
+    products.delete elevation (Owner only). Asserted against a REAL product so this
+    also proves the refusal happens before anything is touched — the admission half
+    (403 on a nonexistent slug) lives in test_admin_role_matrix.DELETE_PRODUCT_ROW."""
+    from apps.catalog.factories import ProductFactory
+
+    ProductFactory(slug="keeper")
+    c = APIClient()
+    c.force_authenticate(user=staff_user(email="manager@toke.test", role="Manager"))
+
+    r = c.delete("/api/v1/admin/products/keeper/")
+    assert r.status_code == 403
+    assert Product.objects.filter(slug="keeper").exists()
+
+    # The floor is untouched: the same Manager may still edit that product.
+    r = c.patch("/api/v1/admin/products/keeper/", {"is_featured": True}, format="json")
+    assert r.status_code == 200
 
 
 @pytest.mark.django_db

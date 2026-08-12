@@ -11,8 +11,10 @@ import {
   type CountryRef,
   type TagRef,
 } from "@/lib/reference";
+import { getAdminMeOrNull } from "@/lib/admin-me";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
-import { saveProductAction } from "./actions";
+import { DeleteProductButton } from "@/components/product/DeleteProductButton";
+import { deleteProductAction, saveProductAction } from "./actions";
 import {
   deleteImageAction,
   updateImageAction,
@@ -104,6 +106,12 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
 
   const product = productResult.value;
 
+  // Whether to OFFER the delete control. Same pattern as the order page's scope
+  // passing: read server-side, and never the gate — `ProductAdminViewSet.destroy`
+  // re-checks products.delete on the request itself. `getAdminMeOrNull` failing
+  // (null) simply hides the button, which fails in the safe direction.
+  const canDelete = (await getAdminMeOrNull())?.scopes.includes("products.delete") ?? false;
+
   // Images are a SEPARATE fetch because `ProductAdminSerializer` does not nest them — only
   // the list's single `thumbnail`. Filtered by product, which is possible because Task 1
   // gave `ProductImageAdminViewSet` a `product` filter; unfiltered it would return every
@@ -191,6 +199,13 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
               ` · priced in ${product.priced_currencies.join(", ")}`}
           </p>
         </div>
+        {canDelete && (
+          <DeleteProductButton
+            slug={product.slug}
+            name={product.name}
+            onDelete={deleteProductAction}
+          />
+        )}
       </div>
 
       {throttled && (

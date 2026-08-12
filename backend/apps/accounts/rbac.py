@@ -28,11 +28,14 @@ THREE DESIGN RULINGS, all Fable 2026-07-28, all deliberate:
 NAMING RULE, enforced by a test: **nothing named `.view` may write.** Scopes are read
 by humans deciding what to grant, and a `.view` scope that mutates state will
 eventually be handed to someone who trusted the name. Every scope therefore ends in
-one of three verbs:
+one of four verbs:
 
 * `.view` — genuinely read-only.
 * `.operate` — changes state, but not money. Order status transitions live here.
 * `.manage` — money, or destructive, or both.
+* `.delete` — removes a record outright, cascades and all. Above `.manage`, and the
+  distinction matters at granting time: a `.manage` holder can rewrite or archive a
+  thing, only a `.delete` holder can make it stop existing. Granted more narrowly.
 
 WHAT THE THREE ORDER SCOPES MEAN, because Task 2 has to apply the split consistently
 across 18 endpoints:
@@ -89,6 +92,13 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     "orders.operate": frozenset({"Owner", "Manager", "Support"}),
     "orders.manage": frozenset({"Owner", "Manager"}),
     "products.manage": frozenset({"Owner", "Manager"}),
+    # Deleting a product outright is a step above managing it: the row takes its
+    # variants, prices, stock records and images with it (order lines survive via
+    # SET_NULL and their own name snapshot, but the product is gone for good).
+    # Archiving already covers "stop selling this", so hard delete is the Owner's
+    # alone. Enforced as an inline elevation in ProductAdminViewSet.destroy — the
+    # declared class permission stays products.manage (see catalog/admin_views.py).
+    "products.delete": frozenset({"Owner"}),
     # Customer product reviews (hide/delete). Its own scope — moderation straddles
     # catalogue and content, and nav.ts asked for "a review-specific scope to point
     # at". Owner + Manager: pulling a customer's words off a product page is shop
