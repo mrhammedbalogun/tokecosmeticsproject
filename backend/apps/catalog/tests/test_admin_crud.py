@@ -101,3 +101,69 @@ def test_admin_crud_taxonomy_and_variant_and_price():
     from decimal import Decimal
 
     assert Decimal(price.data["amount"]) == Decimal("5000.00")
+
+
+@pytest.mark.django_db
+def test_admin_audience_write_read_and_validation():
+    """`audience` is a set of known codes: valid subsets store (de-duplicated, model
+    order), unknown codes 400 naming the field, and the storefront detail exposes it."""
+    from apps.catalog.factories import PriceFactory, ProductFactory, ProductVariantFactory
+
+    # A variant with a price, because the public detail hides unpriced products
+    # ("hide until priced") and the last assertion reads the storefront endpoint.
+    p = ProductFactory(slug="beard-butter", status="active")
+    PriceFactory(variant=ProductVariantFactory(product=p))
+    c = APIClient()
+    c.force_authenticate(user=staff_user())
+
+    # Click order and duplicates are normalised to the model's order.
+    r = c.patch(
+        "/api/v1/admin/products/beard-butter/",
+        {"audience": ["female", "male", "male"]},
+        format="json",
+    )
+    assert r.status_code == 200, r.data
+    assert Product.objects.get(slug="beard-butter").audience == ["male", "female"]
+
+    r = c.patch(
+        "/api/v1/admin/products/beard-butter/", {"audience": ["alien"]}, format="json"
+    )
+    assert r.status_code == 400
+    assert "audience" in r.data
+
+    # Empty clears it — "not stated" is a valid state.
+    r = c.patch("/api/v1/admin/products/beard-butter/", {"audience": []}, format="json")
+    assert r.status_code == 200
+    assert Product.objects.get(slug="beard-butter").audience == []
+
+    # The storefront reads it for filtering / recommendation.
+    c.patch("/api/v1/admin/products/beard-butter/", {"audience": ["male"]}, format="json")
+    r = APIClient().get("/api/v1/products/beard-butter/", HTTP_X_COUNTRY="NG")
+    assert r.data["audience"] == ["male"]
+
+
+@pytest.mark.django_db
+def test_admin_product_html_is_sanitised_on_write():
+    """The rich-text fields go through the CMS nh3 allow-list on write: the storefront
+    renders them via dangerouslySetInnerHTML, so the database must only hold safe HTML."""
+    from apps.catalog.factories import ProductFactory
+
+    ProductFactory(slug="scripted")
+    c = APIClient()
+    c.force_authenticate(user=staff_user())
+
+    r = c.patch(
+        "/api/v1/admin/products/scripted/",
+        {
+            "description": '<p>Fine</p><script>alert(1)</script>',
+            "ingredients": '<ul><li>Shea</li></ul><iframe src="https://evil.example"></iframe>',
+            "directions": '<p onclick="steal()">Apply <strong>daily</strong></p>',
+        },
+        format="json",
+    )
+    assert r.status_code == 200, r.data
+
+    p = Product.objects.get(slug="scripted")
+    assert "<script" not in p.description and "Fine" in p.description
+    assert "<iframe" not in p.ingredients and "<li>Shea</li>" in p.ingredients
+    assert "onclick" not in p.directions and "<strong>daily</strong>" in p.directions

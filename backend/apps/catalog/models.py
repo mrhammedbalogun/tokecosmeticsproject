@@ -116,6 +116,9 @@ class Collection(TimeStampedModel):
 
 class Product(TimeStampedModel):
     STATUS = [("draft", "Draft"), ("active", "Active"), ("archived", "Archived")]
+    # The `audience` vocabulary. The admin UI's checkboxes and the serializer's
+    # validation both derive from this list; add here first.
+    AUDIENCE_CHOICES = ["male", "female", "baby"]
 
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=280, unique=True)
@@ -136,6 +139,10 @@ class Product(TimeStampedModel):
     ingredients = models.TextField(blank=True)
     directions = models.TextField(blank=True)
     warnings = models.TextField(blank=True)
+    # Who the product is for: a subset of {"male", "female", "baby"} (AUDIENCE_CHOICES).
+    # A set, not a choice — one product is routinely for several. Empty means "not
+    # stated", never "for nobody". Exists for filtering and AI product recommendation.
+    audience = models.JSONField(default=list, blank=True)
     specs = models.JSONField(default=list, blank=True)  # [{"label": .., "value": ..}]
     faqs = models.JSONField(default=list, blank=True)   # [{"q": .., "a": ..}]
     related = models.ManyToManyField("self", blank=True)

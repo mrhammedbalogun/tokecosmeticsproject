@@ -16,6 +16,7 @@
  *
  * PRESENTATIONAL, like the other panels: no state of its own.
  */
+import { RichTextField } from "@/components/RichTextField";
 import type { PanelProps } from "@/components/product/DetailsPanel";
 import type { FaqRow, SpecRow } from "@/lib/product-form";
 
@@ -25,6 +26,9 @@ const FIELD =
 const GHOST =
   "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-fg";
 
+/** Rich text (TipTap) since 2026-08-12, matching Details. Specs and FAQs stay plain
+ *  inputs deliberately: they are structured rows, and FAQ answers feed the FAQPage
+ *  JSON-LD on the storefront (`lib/seo.ts`) where HTML does not belong. */
 function Prose({
   label,
   hint,
@@ -41,17 +45,14 @@ function Prose({
   rows?: number;
 }) {
   return (
-    <label className="block text-xs text-muted">
-      {label}
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        rows={rows}
-        placeholder={hint}
-        className={`mt-1 ${FIELD}`}
-      />
-      {error && <p className="mt-1 text-xs text-warn">{error}</p>}
-    </label>
+    <RichTextField
+      label={label}
+      placeholder={hint}
+      value={value}
+      onChange={onChange}
+      error={error}
+      rows={rows}
+    />
   );
 }
 

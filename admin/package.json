@@ -11,6 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tiptap/extensions": "^3.30.0",
+    "@tiptap/react": "^3.30.0",
+    "@tiptap/starter-kit": "^3.30.0",
     "next": "^16.2.12",
     "react": "19.2.4",
     "react-dom": "19.2.4",

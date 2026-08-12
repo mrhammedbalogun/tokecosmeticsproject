@@ -140,7 +140,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             "name", "slug", "brand", "description", "short_description",
-            "ingredients", "directions", "warnings", "specs", "faqs",
+            "ingredients", "directions", "warnings", "specs", "faqs", "audience",
             "seo_title", "seo_description", "variants", "images", "videos", "related",
             "rating_avg", "rating_count",
         ]

@@ -21,6 +21,7 @@ const values = (overrides: Partial<ProductFormValues> = {}): ProductFormValues =
   categories: [1, 2],
   tags: [5],
   available_countries: ["NG"],
+  audience: [],
   ingredients: "",
   directions: "",
   warnings: "",

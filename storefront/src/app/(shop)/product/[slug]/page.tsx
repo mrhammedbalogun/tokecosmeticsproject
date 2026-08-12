@@ -8,7 +8,7 @@ import { mediaUrl } from "@/lib/media";
 import { deliveryEstimateFor } from "@/lib/delivery-estimates";
 import { getAccessToken } from "@/lib/session";
 import { REFRESH_COOKIE } from "@/lib/auth";
-import { breadcrumbJsonLd, faqJsonLd, pageMetadata, productJsonLd } from "@/lib/seo";
+import { breadcrumbJsonLd, faqJsonLd, pageMetadata, productJsonLd, stripHtml } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumbs } from "@/components/plp/Breadcrumbs";
 import { PdpProvider } from "@/components/product/PdpContext";
@@ -39,7 +39,8 @@ export async function generateMetadata({ params }: { params: Params }): Promise<
   if (!product) return { title: "Product not found" };
   return pageMetadata({
     title: product.seo_title || product.name,
-    description: product.seo_description || product.short_description,
+    // short_description is rich HTML; a meta description must be plain text.
+    description: product.seo_description || stripHtml(product.short_description),
     path: `/product/${slug}`,
     image: mediaUrl(product.images[0]?.url ?? null),
     ogType: "product",

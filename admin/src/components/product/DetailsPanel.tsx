@@ -6,6 +6,7 @@
  * editor grows unwieldy, extract each tab's PANEL — never give each tab its own form
  * state, which reintroduces the problem the decision exists to avoid.
  */
+import { RichTextField } from "@/components/RichTextField";
 import { STATUSES, type ProductFormValues, type EditableField } from "@/lib/product-form";
 import { categoryDepth, type CategoryRef, type TagRef } from "@/lib/reference";
 
@@ -93,32 +94,28 @@ export function DetailsPanel({
         Featured
       </label>
 
-      <label className="block text-xs text-muted lg:col-span-2">
-        Short description
-        <textarea
+      {/* Rich text (TipTap) since 2026-08-12 by owner request, superseding the earlier
+          plain-textarea ruling. The stored value is still the same HTML string; the
+          backend sanitises it on write through the CMS allow-list. */}
+      <div className="lg:col-span-2">
+        <RichTextField
+          label="Short description"
           value={values.short_description}
-          onChange={(e) => onChange("short_description", e.target.value)}
+          onChange={(v) => onChange("short_description", v)}
           rows={2}
-          className={`mt-1 ${FIELD}`}
+          error={errors.short_description}
         />
-        <Error message={errors.short_description} />
-      </label>
+      </div>
 
-      <label className="block text-xs text-muted lg:col-span-2">
-        Description
-        <textarea
+      <div className="lg:col-span-2">
+        <RichTextField
+          label="Description"
           value={values.description}
-          onChange={(e) => onChange("description", e.target.value)}
+          onChange={(v) => onChange("description", v)}
           rows={8}
-          className={`mt-1 font-mono ${FIELD}`}
+          error={errors.description}
         />
-        {/* The field holds rich HTML (`catalog.models.Product.description`). A plain
-            textarea is honest about that; a rich-text editor that silently rewrote the
-            migrated WooCommerce markup would be worse than none. TipTap arrives in
-            Plan-19 with the CMS, which is where that decision belongs. */}
-        <p className="mt-1 text-xs text-muted">HTML is allowed and is rendered as-is.</p>
-        <Error message={errors.description} />
-      </label>
+      </div>
 
       <fieldset className="lg:col-span-1">
         <legend className="text-xs text-muted">Categories</legend>

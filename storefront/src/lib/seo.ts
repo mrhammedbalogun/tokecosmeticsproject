@@ -146,7 +146,7 @@ export function productJsonLd(product: ProductDetail, path: string): Record<stri
     "@type": "Product",
     name: product.name,
     url,
-    description: product.short_description || product.seo_description || undefined,
+    description: stripHtml(product.short_description) || product.seo_description || undefined,
     image: product.images.map((i) => mediaUrl(i.url)).filter(Boolean),
     ...(product.brand ? { brand: { "@type": "Brand", name: product.brand.name } } : {}),
     sku: product.variants[0]?.sku,
@@ -158,6 +158,14 @@ export function productJsonLd(product: ProductDetail, path: string): Record<stri
         } }
       : {}),
   };
+}
+
+/** `short_description` is author-written rich HTML (the admin edits it with a rich text
+ *  editor). Meta descriptions and JSON-LD want PLAIN TEXT — `<p>` tags in a search
+ *  snippet read as broken. Tag-stripping is enough here because the backend already
+ *  sanitised the HTML on write; this is formatting, not a security boundary. */
+export function stripHtml(value: string): string {
+  return value.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
 export function faqJsonLd(faqs: { q: string; a: string }[]): Record<string, any> {

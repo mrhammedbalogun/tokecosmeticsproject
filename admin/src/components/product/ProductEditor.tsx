@@ -28,6 +28,7 @@ import { useRouter } from "next/navigation";
 import { AvailabilityPanel } from "@/components/product/AvailabilityPanel";
 import { ContentPanel } from "@/components/product/ContentPanel";
 import { DetailsPanel } from "@/components/product/DetailsPanel";
+import { ForWhoPanel } from "@/components/product/ForWhoPanel";
 import { ImagesPanel } from "@/components/product/ImagesPanel";
 import {
   combinationKey,
@@ -104,6 +105,7 @@ const TABS = [
   { id: "variants", label: "Variants" },
   { id: "prices", label: "Prices" },
   { id: "content", label: "Content" },
+  { id: "for-who", label: "For Who" },
   { id: "images", label: "Images" },
   { id: "videos", label: "Videos" },
   { id: "seo", label: "SEO" },
@@ -852,6 +854,9 @@ export function ProductEditor({
         )}
         {tab === "content" && (
           <ContentPanel values={values} errors={errors} onChange={onChange} />
+        )}
+        {tab === "for-who" && (
+          <ForWhoPanel values={values} errors={errors} onChange={onChange} />
         )}
         {tab === "images" && (
           <ImagesPanel

@@ -20,6 +20,8 @@ TWO OMISSIONS ARE DELIBERATE AND ARE NOT OVERSIGHTS:
 """
 from rest_framework import serializers
 
+from apps.cms.sanitize import clean_html
+
 from apps.catalog.models import (
     Brand,
     Category,
@@ -35,12 +37,37 @@ from apps.catalog.models import (
 from apps.pricing.models import Price
 
 
+# Product fields that hold author-written rich HTML. The admin now writes them from a
+# rich-text editor and the storefront renders them via dangerouslySetInnerHTML, so they
+# are cleaned ON WRITE through the same nh3 allow-list as cms.Page — the database must
+# only ever hold safe HTML (see apps/cms/sanitize.py for why write-side).
+PRODUCT_HTML_FIELDS = ("description", "short_description", "ingredients", "directions", "warnings")
+
+
 class ProductAdminSerializer(serializers.ModelSerializer):
     audit_allowlist = (
         "name", "slug", "brand", "categories", "tags", "status", "is_featured",
-        "related", "available_countries", "seo_title", "seo_description",
+        "related", "available_countries", "audience", "seo_title", "seo_description",
         "published_at", "legacy_source", "legacy_wp_id",
     )
+
+    # A set of codes, stored as a JSON list. ChoiceField per item so an unknown value is
+    # a clear 400 naming the field, not a silent write the storefront filters can't use.
+    audience = serializers.ListField(
+        child=serializers.ChoiceField(choices=Product.AUDIENCE_CHOICES),
+        required=False,
+    )
+
+    def validate_audience(self, value):
+        # De-duplicated, stable order (the model's order, not click order) so "male,female"
+        # and "female,male" store identically and set-comparison in the admin stays honest.
+        return [code for code in Product.AUDIENCE_CHOICES if code in value]
+
+    def validate(self, attrs):
+        for field in PRODUCT_HTML_FIELDS:
+            if field in attrs:
+                attrs[field] = clean_html(attrs[field])
+        return attrs
 
     # Declared explicitly with defaults so they land in `attrs` even when omitted from
     # the request. Product.Meta has a 2-field partial UniqueConstraint
@@ -102,7 +129,7 @@ class ProductAdminSerializer(serializers.ModelSerializer):
         fields = [
             "id", "name", "slug", "brand", "categories", "tags", "description",
             "short_description", "status", "is_featured", "ingredients", "directions",
-            "warnings", "specs", "faqs", "related", "available_countries",
+            "warnings", "specs", "faqs", "related", "available_countries", "audience",
             "seo_title", "seo_description", "published_at", "legacy_source", "legacy_wp_id",
             "updated_at", "thumbnail", "variant_count", "priced_currencies",
         ]

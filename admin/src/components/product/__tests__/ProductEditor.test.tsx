@@ -7,6 +7,35 @@ import type { CategoryRef, CountryRef, TagRef } from "@/lib/reference";
 const replace = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
+// TipTap renders a contenteditable, which jsdom's fireEvent.change cannot drive. The
+// mock keeps the SAME boundary (label, placeholder, value in, onChange(html) out) as a
+// textarea, so every form-state assertion below still tests the real plumbing.
+vi.mock("@/components/RichTextField", () => ({
+  RichTextField: ({
+    label,
+    value,
+    onChange,
+    placeholder,
+    error,
+  }: {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    placeholder?: string;
+    error?: string;
+  }) => (
+    <label>
+      {label}
+      <textarea
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {error && <p>{error}</p>}
+    </label>
+  ),
+}));
+
 const product = (overrides: Partial<ProductDetail> = {}): ProductDetail => ({
   id: 1,
   name: "Carrot Shea Butter",
@@ -18,6 +47,7 @@ const product = (overrides: Partial<ProductDetail> = {}): ProductDetail => ({
   categories: [],
   tags: [],
   available_countries: [],
+  audience: [],
   ingredients: "",
   directions: "",
   warnings: "",
@@ -489,6 +519,33 @@ describe("ProductEditor", () => {
 
     await waitFor(() => expect(save).toHaveBeenCalled());
     expect(save.mock.calls[0][1].specs).toHaveLength(2);
+  });
+
+  // --- For Who tab ------------------------------------------------------------------
+
+  it("saves the ticked audiences, and more than one can be ticked", async () => {
+    // Checkboxes, not radios: a shea butter is routinely for men AND women. The set —
+    // not one winner — must reach the save.
+    const save = vi.fn().mockResolvedValue({ savedSlug: "carrot-shea-butter", savedAt: 1 });
+    setup({}, save);
+
+    fireEvent.click(tab("For Who"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Male" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Female" }));
+    fireEvent.click(saveButton());
+
+    await waitFor(() => expect(save).toHaveBeenCalled());
+    expect(save.mock.calls[0][1].audience).toEqual(["male", "female"]);
+  });
+
+  it("unticking an audience does not disturb the others", () => {
+    setup({ audience: ["male", "baby"] });
+
+    fireEvent.click(tab("For Who"));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Baby" }));
+
+    expect(screen.getByRole("checkbox", { name: "Male" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Baby" })).not.toBeChecked();
   });
 
   // --- SEO tab (task 4) -------------------------------------------------------------

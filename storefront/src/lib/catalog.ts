@@ -36,6 +36,8 @@ export interface ProductDetail {
   ingredients: string; directions: string; warnings: string;
   specs: { label: string; value: string }[];
   faqs: { q: string; a: string }[];
+  /** Who the product is for — subset of ["male","female","baby"]; empty = not stated. */
+  audience: string[];
   seo_title: string; seo_description: string;
   variants: Variant[];
   images: { url: string; alt: string; variant_id: number | null }[];

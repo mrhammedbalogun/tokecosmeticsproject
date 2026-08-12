@@ -20,6 +20,16 @@
 export const STATUSES = ["draft", "active", "archived"] as const;
 export type ProductStatus = (typeof STATUSES)[number];
 
+/** `Product.audience` — who the product is for. Multi-select: a body butter can be for
+ *  men and women at once, so this is a set of codes, not one choice. The codes are the
+ *  contract with the backend's ChoiceField and must not be reworded casually. */
+export const AUDIENCES = [
+  { code: "male", label: "Male" },
+  { code: "female", label: "Female" },
+  { code: "baby", label: "Baby" },
+] as const;
+export type AudienceCode = (typeof AUDIENCES)[number]["code"];
+
 /** Exactly the fields the built tabs own. Nothing else is sent. */
 export const EDITABLE_FIELDS = [
   "name",
@@ -31,6 +41,7 @@ export const EDITABLE_FIELDS = [
   "categories",
   "tags",
   "available_countries",
+  "audience",
   // Content and SEO, added in 17a task 4.
   "ingredients",
   "directions",
@@ -66,6 +77,7 @@ export interface ProductFormValues {
   categories: number[];
   tags: number[];
   available_countries: string[];
+  audience: string[];
   ingredients: string;
   directions: string;
   warnings: string;
@@ -129,6 +141,7 @@ export function toFormValues(product: ProductDetail): ProductFormValues {
     categories: [...(product.categories ?? [])],
     tags: [...(product.tags ?? [])],
     available_countries: [...(product.available_countries ?? [])],
+    audience: [...(product.audience ?? [])],
     ingredients: product.ingredients ?? "",
     directions: product.directions ?? "",
     warnings: product.warnings ?? "",
@@ -169,7 +182,12 @@ export function toPatchPayload(values: ProductFormValues): Record<string, unknow
  * is a real change, and treating it as none would leave the reorder unsaved with the bar
  * saying there was nothing to save.
  */
-const SET_FIELDS = new Set<EditableField>(["categories", "tags", "available_countries"]);
+const SET_FIELDS = new Set<EditableField>([
+  "categories",
+  "tags",
+  "available_countries",
+  "audience",
+]);
 
 /** Whether anything differs from what was loaded. Drives the "unsaved changes" state that
  *  17a design decision 1 requires the UI to make obvious. */

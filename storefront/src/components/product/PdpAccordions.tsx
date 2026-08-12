@@ -2,14 +2,23 @@ import type { ProductDetail } from "@/lib/catalog";
 
 /** Description / ingredients / directions / warnings / FAQs straight from product
  * fields (master spec). Native details/summary — keyboard + SR support for free.
- * `description` is backend-authored rich HTML (trusted admin content). */
+ *
+ * All four prose fields are admin-authored rich HTML since 2026-08-12 (TipTap in the
+ * admin, sanitised on write through nh3 — apps/cms/sanitize.py). Ingredients, directions
+ * and warnings written BEFORE that are plain text, so each value is rendered as HTML
+ * only when it actually contains markup — plain legacy text must not print its own
+ * angle brackets, and HTML must not print its tags. */
+const looksLikeHtml = (value?: string) => Boolean(value && /<[a-z][^>]*>/i.test(value));
+
 export function PdpAccordions({ product }: { product: ProductDetail }) {
   const sections: { title: string; html?: string; text?: string }[] = [
-    { title: "Description", html: product.description },
-    { title: "Ingredients", text: product.ingredients },
-    { title: "How to use", text: product.directions },
-    { title: "Warnings", text: product.warnings },
-  ];
+    { title: "Description", value: product.description },
+    { title: "Ingredients", value: product.ingredients },
+    { title: "How to use", value: product.directions },
+    { title: "Warnings", value: product.warnings },
+  ].map(({ title, value }) =>
+    looksLikeHtml(value) ? { title, html: value } : { title, text: value },
+  );
   return (
     <div className="mt-10 divide-y divide-line border-y border-line">
       {sections.filter((s) => s.html || s.text).map((s, i) => (
