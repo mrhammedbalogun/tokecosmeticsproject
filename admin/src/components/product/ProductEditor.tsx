@@ -37,6 +37,7 @@ import {
 } from "@/components/product/MatrixPreview";
 import { OptionEditor } from "@/components/product/OptionEditor";
 import { RenamePanel } from "@/components/product/RenamePanel";
+import { SingleVariantForm } from "@/components/product/SingleVariantForm";
 import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
 import { StockAdjustModal } from "@/components/product/StockAdjustModal";
@@ -496,6 +497,28 @@ export function ProductEditor({
     });
   };
 
+  /** The simple-product path: the ONE create the SingleVariantForm makes. Empty
+   *  option_values and always the default — the form only renders while the product
+   *  has no variants at all, so there is nothing to demote. */
+  const onCreateSingle = async (input: {
+    sku: string;
+    name: string;
+    weightGrams: number | null;
+  }): Promise<VariantCreateResult> => {
+    const res = await createVariant({
+      productId: product.id,
+      sku: input.sku,
+      name: input.name,
+      optionValues: {},
+      weightGrams: input.weightGrams,
+      makeDefault: true,
+    });
+    if (res.ok) {
+      setNewVariants((current) => [...current, res.variant as unknown as VariantRow]);
+    }
+    return res;
+  };
+
   // The axes AS STORED, frozen at load. Renames are the difference between this and
   // `axes`, so it must not be recomputed from `allVariants` — a successful rename updates
   // those, and the offer would vanish mid-loop.
@@ -871,6 +894,17 @@ export function ProductEditor({
         )}
         {tab === "variants" && (
           <div className="space-y-6">
+            {/* Only while there is truly nothing: one variant existing means the path
+                was taken (or the product is variable), and a half-built axis means the
+                matrix is the intent — showing both invites creating one of each. */}
+            {allVariants.length === 0 && axes.length === 0 && (
+              <SingleVariantForm
+                defaultSku={product.slug}
+                defaultName={values.name}
+                onCreate={onCreateSingle}
+              />
+            )}
+
             <OptionEditor
               axes={axes}
               errors={axisErrors}

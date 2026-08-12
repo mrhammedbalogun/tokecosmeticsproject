@@ -13,8 +13,12 @@ from apps.pricing.models import Price
 
 COLUMNS = [
     "slug", "name", "brand_slug", "status", "short_description", "category_slugs",
-    "sku", "variant_name", "price_ngn", "price_gbp", "price_usd", "price_cad",
+    "sku", "variant_name", "weight_grams", "price_ngn", "price_gbp", "price_usd", "price_cad",
 ]
+# weight_grams bounds mirror the admin editor's (admin/src/lib/variant-weight.ts):
+# whole grams, at least 1 — a 0 is a claim a courier quote would be built from, not an
+# absence — and at most a tonne, which catches "2500000" typed for "2500".
+_WEIGHT_MAX_GRAMS = 1_000_000
 _PRICE_COLS = {"price_ngn": "NGN", "price_gbp": "GBP", "price_usd": "USD", "price_cad": "CAD"}
 
 
@@ -48,10 +52,24 @@ def _apply_row(row: dict) -> str:
             cats.append(cat)
         product.categories.set(cats)
 
-    variant, _ = ProductVariant.objects.update_or_create(
-        sku=sku,
-        defaults={"product": product, "name": row.get("variant_name") or sku, "is_default": True},
-    )
+    defaults = {"product": product, "name": row.get("variant_name") or sku, "is_default": True}
+    # A BLANK weight leaves whatever the variant already has — a spreadsheet exported
+    # before this column existed (or with the cell simply not filled in) must not wipe
+    # weights on re-import. There is deliberately no CSV way to CLEAR a weight; that is
+    # a one-off act for the editor, not a bulk operation.
+    weight_raw = (row.get("weight_grams") or "").strip()
+    if weight_raw:
+        try:
+            weight = int(weight_raw)
+        except ValueError as exc:
+            raise ValueError(f"weight_grams is not whole grams: {weight_raw!r}") from exc
+        if not 1 <= weight <= _WEIGHT_MAX_GRAMS:
+            raise ValueError(
+                f"weight_grams must be between 1 and {_WEIGHT_MAX_GRAMS} grams: {weight_raw!r}"
+            )
+        defaults["weight_grams"] = weight
+
+    variant, _ = ProductVariant.objects.update_or_create(sku=sku, defaults=defaults)
 
     for col, code in _PRICE_COLS.items():
         raw = (row.get(col) or "").strip()
@@ -114,6 +132,11 @@ def export_products_csv() -> str:
                 "category_slugs": "|".join(c.slug for c in p.categories.all()),
                 "sku": variant.sku if variant else "",
                 "variant_name": variant.name if variant else "",
+                # Blank, never 0, for a variant with no recorded weight — same rule as
+                # everywhere else weight appears.
+                "weight_grams": (
+                    "" if variant is None or variant.weight_grams is None else variant.weight_grams
+                ),
                 "price_ngn": prices.get("NGN", ""),
                 "price_gbp": prices.get("GBP", ""),
                 "price_usd": prices.get("USD", ""),

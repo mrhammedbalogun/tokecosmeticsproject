@@ -53,7 +53,8 @@ export function VariantsPanel({
   if (!variants.length) {
     return (
       <p className="rounded-[var(--radius-card)] border border-dashed border-line p-6 text-center text-sm text-muted">
-        This product has no variants yet. Add an option above to generate them.
+        This product has no variants yet. Create its single variant above, or add an
+        option to generate several.
       </p>
     );
   }

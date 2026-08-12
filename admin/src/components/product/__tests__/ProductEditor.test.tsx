@@ -853,14 +853,14 @@ describe("ProductEditor", () => {
     expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument();
   });
 
-  it("points a variant-less product at the builder above, not at a future slice", () => {
-    // The builder shipped in 17b, so the old "arrives in a later slice (17b)" copy sat
-    // directly beneath the thing it said was coming.
+  it("points a variant-less product at both paths above: single variant or options", () => {
+    // The builder shipped in 17b and the single-variant form after it, so the empty
+    // state names both rather than a future slice.
     withCatalogue({ variants: [] });
 
     fireEvent.click(tab("Variants"));
 
-    expect(screen.getByText(/Add an option above to generate them/)).toBeInTheDocument();
+    expect(screen.getByText(/Create its single variant above/)).toBeInTheDocument();
     expect(screen.queryByText(/17b/)).not.toBeInTheDocument();
   });
 
@@ -1326,6 +1326,72 @@ describe("ProductEditor", () => {
       weightGrams: null,
       makeDefault: false,
     });
+  });
+
+  // --- the simple-product path (SingleVariantForm) -----------------------------------
+
+  it("offers the single-variant form only while there are no variants and no axes", () => {
+    withCatalogue({ variants: [] });
+    fireEvent.click(tab("Variants"));
+
+    expect(screen.getByRole("button", { name: "Create variant" })).toBeInTheDocument();
+
+    // Starting an option axis switches intent to the matrix — the form must go.
+    fireEvent.click(screen.getByRole("button", { name: "Add an option" }));
+    expect(screen.queryByRole("button", { name: "Create variant" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer the single-variant form on a product that has variants", () => {
+    withCatalogue({ variants: [variantRow(1)] });
+    fireEvent.click(tab("Variants"));
+
+    expect(screen.queryByRole("button", { name: "Create variant" })).not.toBeInTheDocument();
+  });
+
+  it("creates the single default variant with no options, prefilled from the product", async () => {
+    const createVariant = okCreate();
+    withCatalogue({ variants: [], createVariant });
+    fireEvent.click(tab("Variants"));
+
+    fireEvent.change(screen.getByLabelText("Weight (g)"), { target: { value: "175" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create variant" }));
+
+    await waitFor(() => expect(createVariant).toHaveBeenCalledTimes(1));
+    expect(createVariant.mock.calls[0][0]).toMatchObject({
+      sku: "carrot-shea-butter",
+      name: "Carrot Shea Butter",
+      optionValues: {},
+      weightGrams: 175,
+      makeDefault: true,
+    });
+    // The form unmounts and the new variant shows in the table.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Create variant" })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("refuses a junk single-variant weight without calling the server", async () => {
+    const createVariant = vi.fn();
+    withCatalogue({ variants: [], createVariant });
+    fireEvent.click(tab("Variants"));
+
+    fireEvent.change(screen.getByLabelText("Weight (g)"), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create variant" }));
+
+    await waitFor(() => expect(screen.getByText(/leave it blank/i)).toBeInTheDocument());
+    expect(createVariant).not.toHaveBeenCalled();
+  });
+
+  it("shows the server's refusal on the single-variant form", async () => {
+    const createVariant = vi.fn().mockResolvedValue({ ok: false, error: "SKU: already exists." });
+    withCatalogue({ variants: [], createVariant });
+    fireEvent.click(tab("Variants"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Create variant" }));
+
+    await waitFor(() => expect(screen.getByText("SKU: already exists.")).toBeInTheDocument());
+    // Still there for a corrected retry.
+    expect(screen.getByRole("button", { name: "Create variant" })).toBeInTheDocument();
   });
 
   it("passes a typed matrix weight through to the create", async () => {
