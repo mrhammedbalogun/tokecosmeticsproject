@@ -192,6 +192,12 @@ class AdminPasswordSerializer(TokenObtainSerializer):
     """
 
     turnstile_token = serializers.CharField(required=False, allow_blank=True, write_only=True)
+    # The trusted-device cookie's value, forwarded by the admin BFF when the browser
+    # holds one. Read straight off `request.data` by the view (like `turnstile_token`);
+    # declared here only so the generated schema tells the admin app to send it. It
+    # buys the caller nothing at this step but a UI hint — redemption happens at
+    # confirm, behind the preauth token.
+    device_token = serializers.CharField(required=False, allow_blank=True, write_only=True)
 
     def validate(self, attrs):
         data = super().validate(attrs)
@@ -221,15 +227,24 @@ class AdminPasswordSerializer(TokenObtainSerializer):
 class AdminPreauthResponseSerializer(serializers.Serializer):
     """Response shape of `/auth/admin-token/`. Response-only; documents the schema.
 
-    `totp_enrolled` exists so the admin app knows which screen to draw next — "scan this
-    QR code" or "enter the code from your app". It leaks nothing: only a caller who has
-    already produced this account's password and a solved Turnstile token ever sees it,
-    and they could learn the same fact by calling enrol and reading the status code.
+    `second_factor` ("totp", "email", or null for "none chosen yet") exists so the
+    admin app knows which screen to draw next — the method chooser, a code-from-your-
+    app prompt, or an email-code prompt. It leaks nothing: only a caller who has
+    already produced this account's password and a solved Turnstile token ever sees
+    it, and they could learn the same fact by calling enrol and reading the status
+    code. `totp_enrolled` is the same fact in its pre-email-OTP shape, kept so an
+    admin app deployed before this field existed keeps working through the rollout.
+
+    `device_trusted` is a hint that the forwarded `device_token` matched a live trust
+    row — "skip straight to confirm". NOT a branch in the security logic: the confirm
+    endpoint re-runs the same predicate before anything is minted.
     """
 
     preauth_token = serializers.CharField(read_only=True)
     expires_in = serializers.IntegerField(read_only=True)
     totp_enrolled = serializers.BooleanField(read_only=True)
+    second_factor = serializers.CharField(read_only=True, allow_null=True)
+    device_trusted = serializers.BooleanField(read_only=True)
 
 
 class TOTPCodeSerializer(serializers.Serializer):
@@ -252,15 +267,68 @@ class TOTPEnrolResponseSerializer(serializers.Serializer):
     issuer = serializers.CharField(read_only=True)
 
 
+class SecondFactorConfirmSerializer(serializers.Serializer):
+    """Request shape of second-factor confirm, which now speaks three methods.
+
+    `method` defaults to "totp" so every admin app deployed before the other two
+    existed keeps sending exactly the body it always sent, and keeps meaning the same
+    thing by it.
+
+    `code` stays as permissive as `TOTPCodeSerializer` and for the same reason: every
+    judgement about the value belongs where the failure is counted against the caps.
+    It is optional at THIS layer only because the trusted-device method has no code —
+    the view refuses a codeless totp/email confirm itself, inside the counting.
+
+    `trust_device` asks for a trust token in the response; it is honoured only when a
+    real code (never a trusted device) satisfied the factor. `device_token` is the
+    cookie value being redeemed when `method` is "trusted_device".
+    """
+
+    method = serializers.ChoiceField(
+        choices=["totp", "email", "trusted_device"], default="totp", write_only=True
+    )
+    code = serializers.CharField(
+        required=False, allow_blank=True, write_only=True, max_length=64
+    )
+    trust_device = serializers.BooleanField(default=False, write_only=True)
+    device_token = serializers.CharField(required=False, allow_blank=True, write_only=True)
+
+
 class TOTPConfirmResponseSerializer(serializers.Serializer):
-    """Response shape of TOTP confirm — the only response in the project that carries an
-    admin-audience token. `recovery_codes` is present only on the response that CONFIRMS
-    a new enrolment, not on an ordinary login: reissuing a set every login would make
-    whatever the staff member printed wrong within a day."""
+    """Response shape of second-factor confirm — the only response in the project that
+    carries an admin-audience token. `recovery_codes` is present only on the response
+    that CONFIRMS a new enrolment (first TOTP code, or first email code), not on an
+    ordinary login: reissuing a set every login would make whatever the staff member
+    printed wrong within a day.
+
+    `device_token`/`device_expires_in` are present only when `trust_device` was asked
+    for and granted. The raw token's whole life outside the database digest is this
+    response and the httpOnly cookie the admin BFF sets from it."""
 
     access = serializers.CharField(read_only=True)
     refresh = serializers.CharField(read_only=True)
     recovery_codes = serializers.ListField(child=serializers.CharField(), read_only=True)
+    device_token = serializers.CharField(read_only=True)
+    device_expires_in = serializers.IntegerField(read_only=True)
+
+
+class TrustedDeviceRevokeResponseSerializer(serializers.Serializer):
+    """Response shape of trusted-device revocation. `revoked` is how many browsers
+    stopped being trusted — 0 is a success too (the state the caller wanted is true)."""
+
+    detail = serializers.CharField(read_only=True)
+    revoked = serializers.IntegerField(read_only=True)
+
+
+class EmailOTPRequestResponseSerializer(serializers.Serializer):
+    """Response shape of the email-code send. `retry_after` is the cooldown remainder:
+    0 means "a fresh code was just sent", anything else means "one is already on its
+    way, sent that many seconds ago" — a 200 either way, so a refreshed page or an
+    eager double-click reads as reassurance rather than an error."""
+
+    detail = serializers.CharField(read_only=True)
+    retry_after = serializers.IntegerField(read_only=True)
+    expires_in = serializers.IntegerField(read_only=True)
 
 
 class TOTPRecoveryResponseSerializer(serializers.Serializer):
@@ -398,18 +466,22 @@ class StaffRosterSerializer(serializers.ModelSerializer):
 
     `totp_confirmed` is derived from the related row's `confirmed_at`, never stored
     twice — see the model docstring for why `confirmed_at` is the only thing that counts
-    as enrolled.
+    as enrolled. `second_factor` is the Plan-33 generalisation of the same fact
+    ("totp", "email", or null): without it the roster would report an email-method
+    administrator as having no second factor, which is exactly the "enrolment gap"
+    reading the Owner uses this list for, wrong in the alarming direction.
     """
 
     roles = serializers.SerializerMethodField()
     totp_confirmed = serializers.SerializerMethodField()
+    second_factor = serializers.SerializerMethodField()
     name = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
             "id", "email", "name", "roles", "is_active", "is_superuser",
-            "totp_confirmed", "last_login", "date_joined",
+            "totp_confirmed", "second_factor", "last_login", "date_joined",
         ]
         read_only_fields = fields
 
@@ -421,6 +493,12 @@ class StaffRosterSerializer(serializers.ModelSerializer):
     def get_totp_confirmed(self, obj) -> bool:
         totp = getattr(obj, "totp", None)
         return bool(totp and totp.confirmed_at)
+
+    def get_second_factor(self, obj) -> str | None:
+        if self.get_totp_confirmed(obj):
+            return "totp"
+        email_factor = getattr(obj, "email_second_factor", None)
+        return "email" if email_factor and email_factor.confirmed_at else None
 
     def get_name(self, obj) -> str:
         return f"{obj.first_name} {obj.last_name}".strip()

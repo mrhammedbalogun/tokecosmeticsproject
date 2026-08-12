@@ -31,9 +31,30 @@ describe("StaffTable", () => {
   it("flags an account that has not confirmed a second factor", () => {
     // The row an Owner most needs to act on: it can pass the password door and reach
     // nothing, and no other screen surfaces it.
-    render(<StaffTable members={[memberFor({ totp_confirmed: false })]} />);
+    render(
+      <StaffTable members={[memberFor({ totp_confirmed: false, second_factor: null })]} />,
+    );
 
     expect(screen.getByText(/not enrolled/i)).toBeInTheDocument();
+  });
+
+  it("names the method each enrolled account uses", () => {
+    render(
+      <StaffTable
+        members={[
+          memberFor({ totp_confirmed: true, second_factor: "totp" }),
+          memberFor({
+            id: 2,
+            email: "support@toke.test",
+            totp_confirmed: false,
+            second_factor: "email",
+          }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Authenticator")).toBeInTheDocument();
+    expect(screen.getByText("Email codes")).toBeInTheDocument();
   });
 
   it("calls a superuser with no group a superuser, not 'No role'", () => {

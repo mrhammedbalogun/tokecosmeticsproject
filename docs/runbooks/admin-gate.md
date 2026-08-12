@@ -207,27 +207,44 @@ Security lines to expect in `apps.security`: `staff invite created ...` (INFO),
 `expired` reason logs at INFO instead, because that is a real new hire who waited too
 long).
 
-## 6. Staff TOTP
+## 6. Staff second factor (TOTP or email codes)
 
-**Status: BUILT (Plan-16 Task 3b).** Mandatory for every staff account, with no
-exceptions and no superuser branch.
+**Status: BUILT (Plan-16 Task 3b; widened by Plan-33).** Mandatory for every staff
+account, with no exceptions and no superuser branch. Since Plan-33 a staff member
+chooses their method at first login: an **authenticator app** (recommended, and what
+the UI recommends) or **email codes** (inbox-strength — see 6.7). The methods are
+mutually exclusive: a confirmed TOTP enrolment refuses the email path outright, and a
+confirmed email factor refuses TOTP enrol, so a stolen password can never *switch* an
+account's method. The only routes between methods are a recovery code and
+`reset_staff_totp`.
 
 ### 6.1 What the login actually is now
 
 `/auth/admin-token/` is **step one of three and mints nothing**. A correct staff
 password (behind Turnstile and the throttles in §1–§3) returns a ten-minute *preauth*
-token, whether or not the person has enrolled. That token opens exactly three
-endpoints and nothing else:
+token, whether or not the person has enrolled (the response's `second_factor` field —
+`"totp"`, `"email"` or `null` — only tells the admin app which screen to draw). That
+token opens exactly four endpoints and nothing else:
 
 | endpoint | what it does |
 |---|---|
 | `POST /api/v1/auth/admin-totp/enrol/` | issues a secret + QR provisioning URI, **once** |
-| `POST /api/v1/auth/admin-totp/confirm/` | verifies a code — **the only place an admin session is minted** |
-| `POST /api/v1/auth/admin-totp/recovery/` | burns a recovery code; voids the factor, mints nothing |
+| `POST /api/v1/auth/admin-totp/confirm/` | verifies the second factor (TOTP code, email code, or trusted device) — **the only place an admin session is minted** |
+| `POST /api/v1/auth/admin-totp/recovery/` | burns a recovery code; voids the whole factor, mints nothing |
+| `POST /api/v1/auth/admin-email-otp/request/` | mails a 6-digit code to the token's own user; mints nothing |
 
 The admin audience claim therefore means what Amendment 6 says it means: password +
-Turnstile + TOTP. Accepting a staff invite lands the new hire in the same place — one
-bootstrap path, not two.
+Turnstile + a verified second factor. Accepting a staff invite lands the new hire in
+the same place — one bootstrap path, not two.
+
+**Trusted devices ("don't ask again for 30 days").** Ticking the checkbox at a coded
+sign-in stores a 256-bit token (SHA-256 digest in `accounts_stafftrusteddevice`, raw
+value in an httpOnly cookie on the admin origin). Later logins still run password +
+Turnstile; the confirm endpoint redeems the device token in place of the code. Hard
+30-day expiry, never extended by use; a trusted device can never mint fresh trust.
+Revocation: `POST /api/v1/auth/admin-devices/revoke/` (any staff member, full session
+required, self only — the "lost laptop" button in the admin), or a recovery code, or
+`reset_staff_totp` (both void trusted devices along with everything else).
 
 ### 6.2 Deploy checks — do these or TOTP breaks silently
 
@@ -275,8 +292,8 @@ holding a stolen password and a photographed code sheet would do.
 ssh tokecosmetics 'cd /opt/tokecosmetics/repo && docker compose -p tokecosmetics --env-file /opt/tokecosmetics/.env.prod -f infra/docker-compose.prod.yml exec -T api python manage.py reset_staff_totp <email>'
 ```
 
-That deletes the enrolment and the codes and logs at ERROR. The person then logs in as
-usual and is shown a fresh QR code.
+That deletes the enrolment (TOTP or email), the codes AND every trusted device, and
+logs at ERROR. The person then logs in as usual and is shown the method choice.
 
 ### 6.4 Rotating `TOTP_ENCRYPTION_KEY`
 
@@ -327,16 +344,32 @@ ssh tokecosmetics 'docker exec -i $(docker ps -qf name=redis) redis-cli --scan -
 | line | level | why |
 |---|---|---|
 | `admin TOTP enrolment started for <email>` | INFO | provenance; a deliberate act by someone who proved a password |
-| `admin TOTP enrolment confirmed for <email>` | WARNING | a new administrator credential now exists |
-| `admin TOTP verified for <email>` | INFO | an ordinary staff login |
+| `admin second factor (<method>) enrolment confirmed for <email>` | WARNING | a new administrator credential now exists |
+| `admin second factor (<method>) verified for <email>` | INFO | an ordinary staff login (`method` is `totp`, `email` or `trusted_device`) |
+| `admin email OTP sent to <email>` | INFO | a code left for the inbox; the code itself is never logged |
+| `admin email OTP voided for <email> after N wrong guesses` | WARNING | five misses kill the code; a fresh send is required |
+| `admin trusted device issued for <email>` | INFO | "don't ask again" was ticked at a coded sign-in |
+| `admin trusted devices revoked by <email> (N devices)` | WARNING | the lost-laptop button — rare, deliberate, worth seeing |
 | `admin TOTP code rejected for <email> (<reason>)` | WARNING | typos are the common case; at ERROR they would bury the two alerts below |
 | `admin TOTP: preauth token invalidated for <email> after N failed codes` | **ERROR** | five wrong codes behind a correct password is not a typo pattern |
 | `TOTP brute force in progress against <email> …` | **ERROR** | see §6.5 — rotate the password |
 | `admin TOTP recovery code used by <email> …` | **ERROR** | a device is gone, or someone has a stolen code sheet |
-| `admin TOTP reset from the command line for <email>` | **ERROR** | somebody with shell access removed a second factor |
+| `admin second factor reset from the command line for <email>` | **ERROR** | somebody with shell access removed a second factor |
 
-The secret, the provisioning URI and the recovery codes are **never** logged — the URI
-carries the secret in its query string, so a copy in a log line is a copy of the factor.
+The secret, the provisioning URI, the email codes and the recovery codes are **never**
+logged — the URI carries the secret in its query string, so a copy in a log line is a
+copy of the factor.
+
+### 6.7 Email codes — what they change about the threat model
+
+Email OTP downgrades that account's second factor to "whoever controls the inbox":
+anyone who can read the staff member's mail AND knows their password can sign in. That
+trade is offered because some staff cannot run an authenticator app, and it is bounded
+three ways: it never applies to an account that confirmed TOTP (the stronger method
+cannot be routed around), the send side is capped (60 s cooldown, 6/hour per user, so a
+stolen password is not a mail cannon), and codes live 5 minutes, die after 5 wrong
+guesses, and are single-use. If a staff member's mailbox is suspected compromised,
+treat it as a password compromise too: rotate the password and run `reset_staff_totp`.
 
 ## 7. Staff role groups
 

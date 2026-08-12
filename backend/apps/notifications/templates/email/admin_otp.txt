@@ -1,0 +1,12 @@
+Hi {{ first_name|default:"there" }},
+
+Your Toke Cosmetics Admin sign-in code is:
+
+    {{ code }}
+
+It expires in {{ expires_minutes }} minutes and can be used once.
+
+If you didn't just try to sign in to the admin, someone else has your password.
+Change it now and tell the site owner.
+
+— Toke Cosmetics

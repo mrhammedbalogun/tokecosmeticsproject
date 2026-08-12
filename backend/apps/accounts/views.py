@@ -46,7 +46,9 @@ from .serializers import (
     AdminMeSerializer,
     AdminPasswordSerializer,
     AdminPreauthResponseSerializer,
+    EmailOTPRequestResponseSerializer,
     EmailVerifySerializer,
+    SecondFactorConfirmSerializer,
     LogoutSerializer,
     MeSerializer,
     PasswordChangeSerializer,
@@ -61,6 +63,7 @@ from .serializers import (
     TOTPConfirmResponseSerializer,
     TOTPEnrolResponseSerializer,
     TOTPRecoveryResponseSerializer,
+    TrustedDeviceRevokeResponseSerializer,
 )
 
 User = get_user_model()
@@ -216,7 +219,8 @@ class AdminLoginView(APIView):
     )
     def post(self, request, *args, **kwargs):
         from apps.accounts.authentication import PREAUTH_TOKEN_LIFETIME, mint_preauth_token
-        from apps.accounts.models import StaffTOTP
+        from apps.accounts.devices import device_is_trusted
+        from apps.accounts.models import StaffEmailSecondFactor, StaffTOTP
 
         # Seeded before the try so a body so malformed that reading it raises still
         # produces the ERROR line rather than an unlogged 400.
@@ -260,29 +264,51 @@ class AdminLoginView(APIView):
         AdminLoginIPThrottle().reset(request)
 
         enrolment = StaffTOTP.objects.filter(user=user).first()
+        # `confirmed_at`, not "a row exists" — for both methods. An unconfirmed
+        # enrolment is inert in both directions — see the StaffTOTP docstring — and
+        # reporting it as enrolled would send the admin app to a code prompt for a
+        # secret nobody finished scanning.
+        totp_enrolled = bool(enrolment and enrolment.is_confirmed)
+        email_factor = StaffEmailSecondFactor.objects.filter(user=user).first()
+        second_factor = (
+            "totp"
+            if totp_enrolled
+            else "email" if email_factor and email_factor.is_confirmed else None
+        )
+        # The device hint is a read with no side effects; redemption (and its
+        # `last_used_at` stamp) happens at confirm, which re-runs the same predicate.
+        # Gated on a confirmed factor because a trust row's whole meaning is "this
+        # browser pre-verified that factor" — with no factor there is nothing it can
+        # be a shortcut past.
+        device_token = (request.data or {}).get("device_token") if hasattr(
+            request.data, "get"
+        ) else None
         return Response(
             {
                 "preauth_token": mint_preauth_token(user),
                 "expires_in": int(PREAUTH_TOKEN_LIFETIME.total_seconds()),
-                # `confirmed_at`, not "a row exists". An unconfirmed enrolment is inert
-                # in both directions — see the StaffTOTP docstring — and reporting it as
-                # enrolled would send the admin app to a code prompt for a secret nobody
-                # finished scanning.
-                "totp_enrolled": bool(enrolment and enrolment.is_confirmed),
+                "totp_enrolled": totp_enrolled,
+                "second_factor": second_factor,
+                "device_trusted": bool(
+                    second_factor and device_is_trusted(user, device_token)
+                ),
             }
         )
 
 
-# --- the TOTP ceremony ---------------------------------------------------------
+# --- the second-factor ceremony ------------------------------------------------
 #
-# THREE ENDPOINTS, ONE MINT. These are the only destinations a preauth token has, and
+# FOUR ENDPOINTS, ONE MINT. These are the only destinations a preauth token has —
+# TOTP enrol, second-factor confirm, recovery, and the email-code send — and
 # `tests/test_admin_surface_guard.py` asserts that set exactly against the live URLconf
 # in both directions. `AdminTOTPConfirmView` is the only caller of
 # `mint_admin_token_pair` anywhere in the project, which the same file asserts by
-# walking the AST — that pair of tests IS Amendment 6, executable.
+# walking the AST — that pair of tests IS Amendment 6, executable. The email-otp send
+# joined the set without touching that invariant: it mails a code and mints nothing,
+# and the code it mails is verified at the same confirm endpoint as everything else.
 #
 # WHY THEY ARE NOT UNDER `/api/v1/admin/`. The guard walker treats everything on that
-# prefix as an admin view and requires `AdminJWTAuthentication` exactly; these three
+# prefix as an admin view and requires `AdminJWTAuthentication` exactly; these four
 # take the preauth class instead, so they would need a third allowlist that meant
 # "guarded, but by the other class". They sit next to `admin-token/` under `/auth/`
 # because that is what they are — steps of the login ceremony — and the preauth guard
@@ -290,7 +316,7 @@ class AdminLoginView(APIView):
 
 
 class _PreauthTOTPView(APIView):
-    """Shared body for the three. Preauth-only, and per-user rate-capped.
+    """Shared body for the four ceremony endpoints. Preauth-only, per-user rate-capped.
 
     `throttle_classes = []` is deliberate and is NOT the absence of a limit: the caps
     that matter here are in `apps/accounts/totp.py`, keyed on the USER read out of a
@@ -302,7 +328,7 @@ class _PreauthTOTPView(APIView):
     while the real one lived elsewhere.
 
     The per-user hard deny is checked HERE rather than in each handler so that reaching
-    the cap closes all three doors at once. A caller at the cap gets 429 — the honest
+    the cap closes all four doors at once. A caller at the cap gets 429 — the honest
     code for "this is a rate limit", and one that tells them nothing about the account.
     """
 
@@ -415,11 +441,20 @@ class AdminTOTPEnrolView(_PreauthTOTPView):
 
     @extend_schema(request=None, responses={200: TOTPEnrolResponseSerializer})
     def post(self, request):
-        from apps.accounts.models import StaffTOTP
+        from apps.accounts.models import StaffEmailSecondFactor, StaffTOTP
         from apps.accounts.totp import ISSUER, encrypt_secret, new_secret, provisioning_uri
 
         existing = StaffTOTP.objects.filter(user=request.user).first()
         if existing is not None and existing.is_confirmed:
+            raise _AlreadyEnrolled()
+        # A confirmed EMAIL factor refuses TOTP enrolment for the same reason a
+        # confirmed TOTP one does: with only a stolen password, "enrol my own
+        # authenticator" must not be a way to replace the second factor the account
+        # actually has. The routes between methods stay what they were — a recovery
+        # code, or `manage.py reset_staff_totp`.
+        if StaffEmailSecondFactor.objects.filter(
+            user=request.user, confirmed_at__isnull=False
+        ).exists():
             raise _AlreadyEnrolled()
 
         secret = new_secret()
@@ -449,18 +484,105 @@ class AdminTOTPEnrolView(_PreauthTOTPView):
         )
 
 
+class AdminEmailOTPRequestView(_PreauthTOTPView):
+    """`/auth/admin-email-otp/request/` — send a sign-in code to the caller's inbox.
+    **Mints nothing**; the code it sends is verified at the same confirm endpoint as a
+    TOTP code, so the mint site stays singular.
+
+    THE ADDRESS IS NEVER CHOSEN BY THE CALLER. It is read off the user a validated
+    preauth token identifies, so this endpoint can only ever mail the staff member
+    whose password was just proved — it cannot be aimed at anyone else's inbox.
+
+    A CONFIRMED TOTP ENROLMENT REFUSES THIS PATH, 409, before any mail moves. Email
+    codes are inbox-strength; an authenticator user's second factor must not be
+    quietly downgradeable to that by anyone holding their password. The refusal is a
+    state conflict exactly like `_AlreadyEnrolled`: the admin app's next screen is
+    "enter the code from your app", not an error.
+
+    SEND CAPS, both per user and both in `email_otp.py`: a 60-second cooldown answered
+    with a polite 200 + `retry_after` (a refreshed page must read as "your code is on
+    its way", not as a scolding), and 6 sends per rolling hour answered 429 — the
+    honest code, and one that closes the mail-cannon lever a stolen password would
+    otherwise buy. Wrong-guess caps live with the confirm endpoint, which counts an
+    email miss identically to a TOTP miss.
+
+    The mail itself goes through the ordinary Celery task; a code is worthless in 5
+    minutes, so `max_retries=3` at 30-second spacing fits comfortably inside its life.
+    """
+
+    serializer_class = EmailOTPRequestResponseSerializer
+
+    @extend_schema(request=None, responses={200: EmailOTPRequestResponseSerializer})
+    def post(self, request):
+        from apps.accounts import email_otp
+        from apps.accounts.models import StaffTOTP
+
+        if StaffTOTP.objects.filter(
+            user=request.user, confirmed_at__isnull=False
+        ).exists():
+            raise _AlreadyEnrolled()
+
+        wait = email_otp.send_wait_seconds(request.user)
+        if wait > 0:
+            # Inside the cooldown: the code already in flight is still the live one,
+            # so this is reassurance, not an error — and not a fresh send.
+            return Response(
+                {
+                    "detail": "A code is already on its way to your email.",
+                    "retry_after": wait,
+                    "expires_in": email_otp.CODE_LIFETIME,
+                }
+            )
+        if email_otp.send_allowance(request.user) <= 0:
+            raise exceptions.Throttled(email_otp.SEND_WINDOW)
+
+        code = email_otp.issue_code(request.user)
+        send_email_task.delay(
+            "admin_otp",
+            request.user.email,
+            {
+                "code": code,
+                "expires_minutes": email_otp.CODE_LIFETIME // 60,
+                "first_name": request.user.first_name,
+            },
+        )
+        # INFO, like enrol: a deliberate act behind a proved password. The code itself
+        # is never logged.
+        security_logger.info(
+            "admin email OTP sent to %s", scrub(request.user.email)
+        )
+        return Response(
+            {
+                "detail": "We sent a six-digit code to your email.",
+                "retry_after": email_otp.SEND_COOLDOWN,
+                "expires_in": email_otp.CODE_LIFETIME,
+            }
+        )
+
+
 class AdminTOTPConfirmView(_PreauthTOTPView):
     """`/auth/admin-totp/confirm/` — **the only place an admin-audience token is minted.**
 
-    It serves two situations with one code path, on purpose:
+    It now speaks THREE METHODS — `totp`, `email`, `trusted_device` — and still serves
+    enrolment and ordinary login with one code path per method, on purpose:
 
-    * an UNCONFIRMED enrolment: the code proves the authenticator app really holds the
+    * `totp`, UNCONFIRMED: the code proves the authenticator app really holds the
       secret, `confirmed_at` is set, and a fresh set of recovery codes is issued;
-    * a CONFIRMED enrolment: this is the second factor of an ordinary staff login.
+    * `totp`, CONFIRMED: the second factor of an ordinary staff login;
+    * `email`: the same pair of situations for the inbox method — the first verified
+      email code IS the enrolment (there is no secret to hand over first), and it is
+      refused outright for an account with a confirmed TOTP enrolment, so the weaker
+      method can never substitute for the stronger one;
+    * `trusted_device`: a token this view itself issued on an earlier, fully-coded
+      login. Password and Turnstile still ran this login; only the code prompt is
+      skipped. It requires a confirmed factor to exist, and it never issues recovery
+      codes and never earns a NEW trust token — trust is granted by a real code only.
 
-    Splitting them would mean two mints, and Amendment 6's whole value is that there is
-    one. `tests/test_admin_surface_guard.py` walks the AST of every module under `apps/`
-    and `config/` and asserts `mint_admin_token_pair` is called from exactly here.
+    Splitting them would mean two (now four) mints, and Amendment 6's whole value is
+    that there is one. `tests/test_admin_surface_guard.py` walks the AST of every
+    module under `apps/` and `config/` and asserts `mint_admin_token_pair` is called
+    from exactly here — which is precisely why every method verifies INSIDE this view
+    and the mint sits once, after the branch.
 
     ── REPLAY ──────────────────────────────────────────────────────────────────────
 
@@ -471,21 +593,38 @@ class AdminTOTPConfirmView(_PreauthTOTPView):
     an unconsumed step and both win. Here that is not merely a duplicate row, it is a
     replayed second factor. A code observed over a shoulder, in a screen share or in a
     phished form is therefore worthless the moment it has been used once, rather than
-    for the remaining 90 seconds of its window.
+    for the remaining 90 seconds of its window. Email codes are single-use by cache
+    deletion (`email_otp.verify_code`), and a trusted device is deliberately NOT
+    single-use — the same browser verifies every morning until its hard expiry.
 
     ── RECOVERY CODES ──────────────────────────────────────────────────────────────
 
-    Issued only on the response that CONFIRMS an enrolment, never on an ordinary login.
-    A fresh set every login would make whatever the staff member printed wrong within a
-    day, which is how printed codes come to be ignored.
+    Issued only on the response that CONFIRMS an enrolment (either method), never on
+    an ordinary login. A fresh set every login would make whatever the staff member
+    printed wrong within a day, which is how printed codes come to be ignored.
+
+    ── TRUST IS GRANTED HERE TOO ───────────────────────────────────────────────────
+
+    `trust_device: true` alongside a REAL code returns a `device_token` for the admin
+    BFF to set as a 30-day httpOnly cookie. Granted only on the coded paths: a trusted
+    device that could mint fresh trust would make the 30-day ceiling a fiction.
     """
 
-    serializer_class = TOTPCodeSerializer
+    serializer_class = SecondFactorConfirmSerializer
 
-    @extend_schema(request=TOTPCodeSerializer, responses={200: TOTPConfirmResponseSerializer})
+    @extend_schema(
+        request=SecondFactorConfirmSerializer,
+        responses={200: TOTPConfirmResponseSerializer},
+    )
     def post(self, request):
         from apps.accounts.authentication import mint_admin_token_pair
-        from apps.accounts.models import StaffTOTP
+        from apps.accounts import email_otp
+        from apps.accounts.devices import (
+            device_label,
+            issue_device_token,
+            redeem_device_token,
+        )
+        from apps.accounts.models import StaffEmailSecondFactor, StaffTOTP
         from apps.accounts.totp import (
             decrypt_secret,
             issue_recovery_codes,
@@ -494,34 +633,76 @@ class AdminTOTPConfirmView(_PreauthTOTPView):
             verify_code,
         )
 
-        serializer = TOTPCodeSerializer(data=request.data)
+        serializer = SecondFactorConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        method = serializer.validated_data["method"]
+        code = serializer.validated_data.get("code", "")
 
-        enrolment = StaffTOTP.objects.filter(user=request.user).first()
-        if enrolment is None:
-            self.refuse(request, reason="no enrolment")
+        totp_confirmed = StaffTOTP.objects.filter(
+            user=request.user, confirmed_at__isnull=False
+        ).exists()
+        email_confirmed = StaffEmailSecondFactor.objects.filter(
+            user=request.user, confirmed_at__isnull=False
+        ).exists()
 
-        step = verify_code(decrypt_secret(enrolment.secret_ciphertext), serializer.validated_data["code"])
-        if step is None:
-            self.refuse(request, reason="wrong code")
-
-        first_confirmation = not enrolment.is_confirmed
+        first_confirmation = False
         now = timezone.now()
         with transaction.atomic():
-            advanced = StaffTOTP.objects.filter(
-                pk=enrolment.pk, last_verified_step__lt=step
-            ).update(
-                last_verified_step=step,
-                confirmed_at=enrolment.confirmed_at or now,
-                updated_at=now,
-            )
-            if advanced != 1:
-                # The step was already consumed — a replay, or the loser of a race
-                # between two submissions of the same code. Both are refusals.
-                self.refuse(request, reason="replayed code")
+            if method == "trusted_device":
+                # Requires a confirmed factor: a trust row's whole meaning is "this
+                # browser pre-verified that factor". Belt and braces — the recovery
+                # path deletes trust rows with the factor anyway.
+                raw_device = serializer.validated_data.get("device_token", "")
+                if not (totp_confirmed or email_confirmed):
+                    self.refuse(request, reason="trusted device without a factor")
+                if not redeem_device_token(request.user, raw_device):
+                    self.refuse(request, reason="trusted device")
+            elif method == "email":
+                if totp_confirmed:
+                    # An authenticator account's factor must not be satisfiable at
+                    # inbox strength. Counted and refused like any wrong code — the
+                    # uniform message tells a guesser nothing about the account.
+                    self.refuse(request, reason="email code against a TOTP account")
+                if not email_otp.verify_code(request.user, code):
+                    self.refuse(request, reason="wrong email code")
+                first_confirmation = not email_confirmed
+                if first_confirmation:
+                    StaffEmailSecondFactor.objects.update_or_create(
+                        user=request.user, defaults={"confirmed_at": now}
+                    )
+            else:  # totp
+                enrolment = StaffTOTP.objects.filter(user=request.user).first()
+                if enrolment is None:
+                    self.refuse(request, reason="no enrolment")
+                step = verify_code(decrypt_secret(enrolment.secret_ciphertext), code)
+                if step is None:
+                    self.refuse(request, reason="wrong code")
+                first_confirmation = not enrolment.is_confirmed
+                advanced = StaffTOTP.objects.filter(
+                    pk=enrolment.pk, last_verified_step__lt=step
+                ).update(
+                    last_verified_step=step,
+                    confirmed_at=enrolment.confirmed_at or now,
+                    updated_at=now,
+                )
+                if advanced != 1:
+                    # The step was already consumed — a replay, or the loser of a race
+                    # between two submissions of one code. Both are refusals.
+                    self.refuse(request, reason="replayed code")
+
             payload = mint_admin_token_pair(request.user)
             if first_confirmation:
                 payload["recovery_codes"] = issue_recovery_codes(request.user)
+
+        # Trust is EARNED by a code, never by existing trust, and issued outside the
+        # transaction: a failed row insert here must not roll back a session the
+        # second factor already legitimately produced.
+        if serializer.validated_data["trust_device"] and method != "trusted_device":
+            raw_token, lifetime = issue_device_token(
+                request.user, label=device_label(request)
+            )
+            payload["device_token"] = raw_token
+            payload["device_expires_in"] = lifetime
 
         # Proving the second factor clears both failure layers: a staff member who
         # fumbles a few codes must not carry that around for the rest of the hour.
@@ -556,11 +737,15 @@ class AdminTOTPConfirmView(_PreauthTOTPView):
             # ignored. (Sentry treats INFO and WARNING alike, so this is about what a
             # human greps for.)
             security_logger.warning(
-                "admin TOTP enrolment confirmed for %s", scrub(request.user.email)
+                "admin second factor (%s) enrolment confirmed for %s",
+                method,
+                scrub(request.user.email),
             )
         else:
             security_logger.info(
-                "admin TOTP verified for %s", scrub(request.user.email)
+                "admin second factor (%s) verified for %s",
+                method,
+                scrub(request.user.email),
             )
         return Response(payload)
 
@@ -600,7 +785,12 @@ class AdminTOTPRecoveryView(_PreauthTOTPView):
 
     @extend_schema(request=TOTPCodeSerializer, responses={200: TOTPRecoveryResponseSerializer})
     def post(self, request):
-        from apps.accounts.models import StaffRecoveryCode, StaffTOTP
+        from apps.accounts.devices import revoke_all_devices
+        from apps.accounts.models import (
+            StaffEmailSecondFactor,
+            StaffRecoveryCode,
+            StaffTOTP,
+        )
         from apps.accounts.totp import (
             consume_recovery_code,
             reset_preauth_failures,
@@ -621,8 +811,15 @@ class AdminTOTPRecoveryView(_PreauthTOTPView):
             # `test_consuming_a_recovery_code_voids_the_secret_and_the_remaining_codes`,
             # which is why that test asserts against the old app rather than against the
             # column.
+            #
+            # The WHOLE second factor is voided, not just the method in use: a recovery
+            # code is used because something is lost or stolen, and the email factor,
+            # the code sheet and every trusted browser were all in the same blast
+            # radius. The person re-chooses a method with the same preauth token.
             StaffTOTP.objects.filter(user=request.user).delete()
+            StaffEmailSecondFactor.objects.filter(user=request.user).delete()
             StaffRecoveryCode.objects.filter(user=request.user).delete()
+            revoke_all_devices(request.user)
 
         reset_preauth_failures(self.preauth_jti)
         reset_user_failures(request.user)
@@ -689,6 +886,53 @@ class AdminMeView(AdminAuditMixin, APIView):
                 # Sorted so the payload is stable — it is compared in tests and cached
                 # client-side, and set iteration order is not something to rely on.
                 "scopes": sorted(scopes_for_user(user)),
+            }
+        )
+
+
+class AdminTrustedDeviceRevokeView(AdminAuditMixin, APIView):
+    """`/auth/admin-devices/revoke/` — stop trusting every browser this account ever
+    ticked "don't ask again" on.
+
+    SELF-SERVICE, AND SELF ONLY: it acts on `request.user`, takes no body, and needs
+    no scope beyond `is_staff` — the caller is narrowing their own attack surface, and
+    a lost-laptop afternoon must not depend on holding any particular role. Requires a
+    FULL admin session (not preauth), so the person revoking has just proved they can
+    still complete the ceremony — pressing it can never strand them.
+
+    ALL OR NOTHING, deliberately, for v1: picking one device out of a list means
+    trusting a self-reported User-Agent label to identify the machine that was lost,
+    which is a guess dressed as a control. "Sign every browser out of the shortcut and
+    type a code once per device" costs each remaining device one code prompt.
+
+    Audited (it changes what a stolen laptop is worth) and logged at WARNING — same
+    level as the recovery path, and for the same reason: rare, deliberate, and exactly
+    what someone who suspects a compromise does. Worth seeing in the stream; wrong to
+    page on.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = TrustedDeviceRevokeResponseSerializer
+    audit_action = "trusted_device_revoke"
+    audit_model_label = "accounts.stafftrusteddevice"
+
+    @extend_schema(request=None, responses={200: TrustedDeviceRevokeResponseSerializer})
+    def post(self, request):
+        from apps.accounts.devices import revoke_all_devices
+
+        revoked = revoke_all_devices(request.user)
+        security_logger.warning(
+            "admin trusted devices revoked by %s (%d device%s)",
+            scrub(request.user.email),
+            revoked,
+            "" if revoked == 1 else "s",
+        )
+        return Response(
+            {
+                "detail": "Every trusted device has been signed out of the shortcut. "
+                "You will be asked for a code on each browser's next sign-in.",
+                "revoked": revoked,
             }
         )
 
@@ -800,9 +1044,9 @@ class StaffListView(AdminAuditMixin, generics.ListAPIView):
     def get_queryset(self):
         return (
             User.objects.filter(is_staff=True)
-            # `prefetch_related` on groups and `select_related` on the OneToOne: without
-            # both, this is three queries per administrator.
-            .select_related("totp")
+            # `prefetch_related` on groups and `select_related` on the OneToOnes:
+            # without them, this is several queries per administrator.
+            .select_related("totp", "email_second_factor")
             .prefetch_related("groups")
             .order_by("-is_superuser", "email")
         )

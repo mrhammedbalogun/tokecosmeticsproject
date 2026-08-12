@@ -25,6 +25,10 @@ export interface StaffMember {
   is_active: boolean;
   is_superuser: boolean;
   totp_confirmed: boolean;
+  /** Which method the account confirmed — "totp", "email", or null for the enrolment
+   *  gap the roster exists to surface. Optional so a backend deployed before Plan-33
+   *  still renders (the table falls back to `totp_confirmed`). */
+  second_factor?: "totp" | "email" | null;
   last_login: string | null;
   date_joined: string;
 }

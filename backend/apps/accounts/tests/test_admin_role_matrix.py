@@ -178,6 +178,9 @@ MATRIX: list[Row] = [
     Row("AdminSearchView", "get", "/api/v1/admin/search/?q=zzz", ALL_ROLES),
     # --- identity: every staff member, whatever their role -----------------------
     Row("AdminMeView", "get", "/api/v1/auth/admin-me/", ALL_ROLES),
+    # Self-service on the caller's own trusted devices: a lost-laptop response must
+    # not depend on holding any role, same shape as admin-me.
+    Row("AdminTrustedDeviceRevokeView", "post", "/api/v1/auth/admin-devices/revoke/", ALL_ROLES),
 ]
 
 # The cancel transition is the one place a single route spans two scopes: the endpoint

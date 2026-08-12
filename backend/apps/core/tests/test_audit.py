@@ -601,7 +601,14 @@ def _case_google_reviews_meta(client, monkeypatch):
     ), 200
 
 
+def _case_devices_revoke(client, monkeypatch):
+    return client.post("/api/v1/auth/admin-devices/revoke/"), 200
+
+
 WRITE_CASES: dict[str, tuple] = {
+    # Self-service, but still a write worth a row: it changes what a stolen laptop is
+    # worth. Revoking zero devices is a success (the state the caller wanted is true).
+    "AdminTrustedDeviceRevokeView": (_case_devices_revoke, "trusted_device_revoke"),
     "GoogleReviewAdminViewSet": (_case_google_review, "create"),
     "GoogleReviewsMetaAdminView": (_case_google_reviews_meta, "google_reviews_meta"),
     # Like ProductImageAdminViewSet below: the only writes are PATCH and DELETE, so

@@ -17,7 +17,8 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api";
-import { adminLogin } from "@/lib/admin-session";
+import { adminLogin, confirmSecondFactor } from "@/lib/admin-session";
+import { PREAUTH_COOKIE } from "@/lib/auth";
 import { adminLoginErrorMessage } from "@/lib/auth-errors";
 import { TOTP_PATH } from "@/lib/auth-guard";
 import { DEFAULT_NEXT, safeNext } from "@/lib/next-param";
@@ -56,22 +57,47 @@ export async function loginAction(
   // directly and a BFF-side check would be decorative.
   const turnstileToken = field(formData, "cf-turnstile-response") || undefined;
 
-  let enrolled = false;
+  const jar = await cookies();
+  let method: "totp" | "email" | null = null;
+  let trusted = false;
   try {
-    const out = await adminLogin(await cookies(), { email, password }, { turnstileToken });
-    enrolled = Boolean(out.totp_enrolled);
+    const out = await adminLogin(jar, { email, password }, { turnstileToken });
+    method = out.second_factor ?? (out.totp_enrolled ? "totp" : null);
+    trusted = Boolean(out.device_trusted);
   } catch (e) {
     if (e instanceof ApiError) return { error: adminLoginErrorMessage(e.status, e.data), email, next };
     return { error: adminLoginErrorMessage(500, null), email, next };
   }
 
-  // `setup` is a HINT about which screen to draw, carried in the URL rather than in a
-  // fourth cookie. It is not a branch in the security logic — the backend hands out the
-  // same kind of token either way, and the TOTP page's own calls are what actually
-  // discover the enrolment state (enrol 409s on a confirmed one; confirm refuses when
-  // there is nothing enrolled).
+  // A trusted device pre-verified the second factor on an earlier, fully-coded login,
+  // so the code prompt can be skipped — by asking the backend to REDEEM the trust at
+  // the same confirm endpoint a code would go to, never by skipping the confirm. If
+  // redemption is refused (expired since the hint, revoked, cookie gone), the helper
+  // has already dropped the dead cookie and the ceremony falls back to the code
+  // prompt below — the safe direction, and invisible beyond one extra screen.
+  if (trusted && method) {
+    const preauth = jar.get(PREAUTH_COOKIE)?.value;
+    let redeemed = false;
+    if (preauth) {
+      try {
+        await confirmSecondFactor(jar, preauth, { method: "trusted_device" });
+        redeemed = true;
+      } catch (e) {
+        if (!(e instanceof ApiError)) throw e; // real bugs pass through
+      }
+    }
+    // Outside the try, like the redirect below and for the same NEXT_REDIRECT reason.
+    if (redeemed) redirect(next);
+  }
+
+  // `setup` / `method` are HINTS about which screen to draw, carried in the URL rather
+  // than in a fifth cookie. Neither is a branch in the security logic — the backend
+  // hands out the same kind of token either way, and the TOTP page's own calls are
+  // what actually discover the enrolment state (enrol 409s on a confirmed one;
+  // confirm refuses when there is nothing enrolled).
   const query = new URLSearchParams({ next });
-  if (!enrolled) query.set("setup", "1");
+  if (!method) query.set("setup", "1");
+  else query.set("method", method);
   // Outside the try: redirect() works by throwing NEXT_REDIRECT, and a catch above would
   // swallow it.
   redirect(`${TOTP_PATH}?${query.toString()}`);

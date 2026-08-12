@@ -1,0 +1,10 @@
+{% extends "email/base.html" %}
+{% block content %}
+  <p>Hi {{ first_name|default:"there" }},</p>
+  <p>Your Toke Cosmetics Admin sign-in code is:</p>
+  <p style="font-size:32px;font-weight:700;letter-spacing:8px;font-family:Consolas,Menlo,monospace;
+            background:#f6f6f4;border-radius:8px;padding:16px 20px;text-align:center;">{{ code }}</p>
+  <p style="color:#666;font-size:13px;">It expires in {{ expires_minutes }} minutes and can be used once.</p>
+  <p style="color:#666;font-size:13px;">If you didn't just try to sign in to the admin, someone else has
+    your password. Change it now and tell the site owner.</p>
+{% endblock %}

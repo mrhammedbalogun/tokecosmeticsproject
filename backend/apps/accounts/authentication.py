@@ -84,10 +84,11 @@ ADMIN_AUDIENCE = "toke-admin"
 # grows. What both mint instead is this: a short-lived token that says "this person has
 # proved a password and a human check, and now owes a TOTP code".
 #
-# IT HAS EXACTLY THREE DESTINATIONS — TOTP enrol, TOTP confirm, and recovery-code
-# verification — and `tests/test_admin_surface_guard.py` asserts that set EXACTLY
-# against the live URLconf, in both directions. A fourth destination is a deliberate,
-# reviewed edit; it cannot be a side effect of adding a view.
+# IT HAS EXACTLY FOUR DESTINATIONS — TOTP enrol, second-factor confirm, recovery-code
+# verification, and the email-code send — and `tests/test_admin_surface_guard.py`
+# asserts that set EXACTLY against the live URLconf, in both directions. A fifth
+# destination is a deliberate, reviewed edit; it cannot be a side effect of adding a
+# view.
 #
 # ONE BOOTSTRAP PATH, NOT TWO: `/auth/admin-token/` returns this token whether or not
 # the caller has a confirmed enrolment. The alternative — a full session for the
@@ -207,8 +208,9 @@ class AdminPreauthJWTAuthentication(_AudienceScopedJWTAuthentication):
 
     `tests/test_admin_surface_guard.py` keeps an explicitly enumerated list of the views
     allowed to accept this class, and asserts it against the URLconf in both directions.
-    It holds exactly three: TOTP enrol, TOTP confirm, recovery-code verification. Adding
-    a fourth is the moment to ask what a half-authenticated caller can now reach.
+    It holds exactly four: TOTP enrol, second-factor confirm, recovery-code
+    verification, and the email-code send. Adding a fifth is the moment to ask what a
+    half-authenticated caller can now reach.
 
     THE INVALIDATION CHECK LIVES HERE RATHER THAN IN THE VIEWS, and that placement is
     the whole reason it is reliable. Five wrong codes kill a preauth token (see
@@ -243,9 +245,9 @@ class CustomerJWTAuthentication(JWTAuthentication):
     preauth token is an ordinary SimpleJWT *access* token with one extra claim, and
     stock `JWTAuthentication` does not look at claims it was not taught about — so
     `DEFAULT_AUTHENTICATION_CLASSES` accepted it happily and a token that was supposed to
-    open three endpoints opened the entire customer surface: `/auth/me/`,
+    open a handful of ceremony endpoints opened the entire customer surface: `/auth/me/`,
     `/me/addresses/`, the cart, everything. `test_a_preauth_token_reaches_exactly_those_
-    three_endpoints_and_nothing_else` is what surfaced it; the guard walker could not,
+    endpoints_and_nothing_else` is what surfaced it; the guard walker could not,
     because it reasons about which views declare which classes and every one of those
     views declares nothing at all.
 

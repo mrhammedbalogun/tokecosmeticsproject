@@ -4,9 +4,10 @@ import {
   adminLogin,
   adminLogout,
   clearSession,
-  confirmTotp,
+  confirmSecondFactor,
   enrolTotp,
   recoverTotp,
+  requestEmailOtp,
   storePreauth,
   storeSession,
   type Jar,
@@ -68,10 +69,17 @@ describe("cookie writers are mutually exclusive", () => {
     expect(store.get("admin_refresh")?.value).toBe("R");
   });
 
-  it("clearSession removes all three", () => {
-    const { jar, store } = fakeJar({ admin_access: "A", admin_refresh: "R", admin_preauth: "P" });
+  it("clearSession removes the three session cookies and SPARES the device trust", () => {
+    const { jar, store } = fakeJar({
+      admin_access: "A",
+      admin_refresh: "R",
+      admin_preauth: "P",
+      admin_device: "D",
+    });
     clearSession(jar);
-    expect(store.size).toBe(0);
+    // Signing out ends the session, not the browser's trust: the device cookie is a
+    // pre-verified second factor, and only revocation/expiry/refusal may kill it.
+    expect([...store.keys()]).toEqual(["admin_device"]);
   });
 
   it("writes every cookie httpOnly, SameSite=Strict, with a lifetime under its token's", () => {
@@ -147,12 +155,24 @@ describe("the ceremony", () => {
       ),
     ) as unknown as typeof fetch;
 
-    const out = await confirmTotp(jar, "PRE", "123456");
+    const out = await confirmSecondFactor(jar, "PRE", { code: "123456" });
 
     expect(out.recovery_codes).toEqual(["c1", "c2"]);
     expect(store.get("admin_access")?.value).toBe("A");
     expect(store.get("admin_refresh")?.value).toBe("R");
     expect(store.has("admin_preauth")).toBe(false);
+  });
+
+  it("defaults the confirm body to the totp method so the old request shape survives", async () => {
+    const { jar } = fakeJar({ admin_preauth: "PRE" });
+    const bodies: string[] = [];
+    global.fetch = vi.fn((_url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return Promise.resolve(jsonResponse({ access: "A", refresh: "R" }));
+    }) as unknown as typeof fetch;
+
+    await confirmSecondFactor(jar, "PRE", { code: "123456" });
+    expect(JSON.parse(bodies[0])).toEqual({ method: "totp", code: "123456" });
   });
 
   it("recovery mints nothing and leaves the preauth token in place to re-enrol with", async () => {
@@ -178,6 +198,108 @@ describe("the ceremony", () => {
 
     expect(store.get("admin_preauth")?.value).toBe("PRE");
     expect(store.has("admin_access")).toBe(false);
+  });
+});
+
+describe("trusted devices", () => {
+  it("login forwards the device cookie as device_token, and omits it when absent", async () => {
+    const bodies: string[] = [];
+    global.fetch = vi.fn((_url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return Promise.resolve(
+        jsonResponse({ preauth_token: "PRE", expires_in: 600, device_trusted: true }),
+      );
+    }) as unknown as typeof fetch;
+
+    const withDevice = fakeJar({ admin_device: "DEV" });
+    await adminLogin(withDevice.jar, { email: "a@b.com", password: "pw" });
+    const bare = fakeJar();
+    await adminLogin(bare.jar, { email: "a@b.com", password: "pw" });
+
+    expect(JSON.parse(bodies[0])).toMatchObject({ device_token: "DEV" });
+    expect(Object.keys(JSON.parse(bodies[1]))).not.toContain("device_token");
+  });
+
+  it("a granted trust token is stored as a 30-day httpOnly cookie", async () => {
+    const { jar, store } = fakeJar({ admin_preauth: "PRE" });
+    global.fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          access: "A",
+          refresh: "R",
+          device_token: "DEV",
+          device_expires_in: 2592000,
+        }),
+      ),
+    ) as unknown as typeof fetch;
+
+    await confirmSecondFactor(jar, "PRE", { code: "123456", trustDevice: true });
+
+    expect(store.get("admin_device")?.value).toBe("DEV");
+    expect(store.get("admin_device")?.opts).toMatchObject({
+      httpOnly: true,
+      sameSite: "strict",
+      maxAge: 2592000,
+    });
+  });
+
+  it("a trusted-device confirm reads the cookie itself and sends no code", async () => {
+    const { jar, store } = fakeJar({ admin_preauth: "PRE", admin_device: "DEV" });
+    const bodies: string[] = [];
+    global.fetch = vi.fn((_url: string, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return Promise.resolve(jsonResponse({ access: "A", refresh: "R" }));
+    }) as unknown as typeof fetch;
+
+    await confirmSecondFactor(jar, "PRE", { method: "trusted_device" });
+
+    expect(JSON.parse(bodies[0])).toEqual({
+      method: "trusted_device",
+      device_token: "DEV",
+    });
+    expect(store.get("admin_access")?.value).toBe("A");
+  });
+
+  it("a REFUSED trusted-device redemption drops the dead cookie", async () => {
+    const { jar, store } = fakeJar({ admin_preauth: "PRE", admin_device: "DEV" });
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ detail: "nope" }, 401)),
+    ) as unknown as typeof fetch;
+
+    await expect(
+      confirmSecondFactor(jar, "PRE", { method: "trusted_device" }),
+    ).rejects.toMatchObject({ status: 401 });
+    // The backend voted it dead; keeping it would re-fail every future login.
+    expect(store.has("admin_device")).toBe(false);
+    expect(store.has("admin_access")).toBe(false);
+  });
+
+  it("a refused CODE leaves the device cookie alone", async () => {
+    const { jar, store } = fakeJar({ admin_preauth: "PRE", admin_device: "DEV" });
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ detail: "wrong code" }, 401)),
+    ) as unknown as typeof fetch;
+
+    await expect(
+      confirmSecondFactor(jar, "PRE", { code: "000000" }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(store.get("admin_device")?.value).toBe("DEV");
+  });
+});
+
+describe("the email-code send", () => {
+  it("authenticates with the preauth token and writes no cookie", async () => {
+    let auth: string | null = null;
+    global.fetch = vi.fn((_url: string, init?: RequestInit) => {
+      auth = new Headers(init?.headers).get("Authorization");
+      return Promise.resolve(
+        jsonResponse({ detail: "sent", retry_after: 60, expires_in: 300 }),
+      );
+    }) as unknown as typeof fetch;
+
+    const out = await requestEmailOtp("PRE");
+    expect(auth).toBe("Bearer PRE");
+    expect(out.retry_after).toBe(60);
   });
 });
 

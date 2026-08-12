@@ -20,7 +20,7 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-import { confirmAction, enrolAction, recoveryAction } from "../actions";
+import { confirmAction, emailOtpAction, enrolAction, recoveryAction } from "../actions";
 
 const originalFetch = global.fetch;
 beforeEach(() => {
@@ -136,6 +136,36 @@ describe("confirm — the only step that can produce a session", () => {
     expect(state.error).toMatch(/locked for up to an hour/i);
   });
 
+  it("forwards the method and the trust checkbox to the backend", async () => {
+    store.set("admin_preauth", "PRE");
+    let body: unknown;
+    global.fetch = vi.fn((_url: string, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(jsonResponse({ access: "A", refresh: "R" }));
+    }) as unknown as typeof fetch;
+
+    await redirectFrom(() =>
+      confirmAction({}, form({ code: "123456", method: "email", trust_device: "on" })),
+    );
+    expect(body).toEqual({ method: "email", code: "123456", trust_device: true });
+  });
+
+  it("treats an unknown method value as totp — the backend re-derives anyway", async () => {
+    store.set("admin_preauth", "PRE");
+    let body: unknown;
+    global.fetch = vi.fn((_url: string, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return Promise.resolve(jsonResponse({ access: "A", refresh: "R" }));
+    }) as unknown as typeof fetch;
+
+    await redirectFrom(() =>
+      confirmAction({}, form({ code: "123456", method: "trusted_device" })),
+    );
+    // The form can never claim the trusted-device method: that path belongs to the
+    // login action, which reads the httpOnly cookie itself.
+    expect(body).toEqual({ method: "totp", code: "123456" });
+  });
+
   it("refuses an empty code without spending a guess", async () => {
     store.set("admin_preauth", "PRE");
     const fetchSpy = vi.fn();
@@ -149,6 +179,43 @@ describe("confirm — the only step that can produce a session", () => {
     const fetchSpy = vi.fn();
     global.fetch = fetchSpy as unknown as typeof fetch;
     expect(await redirectFrom(() => confirmAction({}, form({ code: "123456" })))).toBe("/login");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("the email-code send", () => {
+  it("asks the backend to mail a code, authenticating with the preauth cookie", async () => {
+    store.set("admin_preauth", "PRE");
+    let auth: string | null = null;
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      expect(url).toContain("/auth/admin-email-otp/request/");
+      auth = new Headers(init?.headers).get("Authorization");
+      return Promise.resolve(jsonResponse({ detail: "sent", retry_after: 60, expires_in: 300 }));
+    }) as unknown as typeof fetch;
+
+    const state = await emailOtpAction();
+    expect(auth).toBe("Bearer PRE");
+    expect(state.sent).toBe(true);
+    expect(state.retryAfter).toBe(60);
+  });
+
+  it("explains a 409 — the account is on the authenticator method", async () => {
+    store.set("admin_preauth", "PRE");
+    global.fetch = vi.fn(() =>
+      Promise.resolve(jsonResponse({ detail: "already" }, 409)),
+    ) as unknown as typeof fetch;
+
+    const state = await emailOtpAction();
+    expect(state.error).toMatch(/already set up/i);
+    expect(state.sent).toBeUndefined();
+  });
+
+  it("bounces to /login when the preauth cookie is gone", async () => {
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy as unknown as typeof fetch;
+    await expect(emailOtpAction()).rejects.toMatchObject({
+      message: expect.stringContaining("/login"),
+    });
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

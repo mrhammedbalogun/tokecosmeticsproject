@@ -1,9 +1,19 @@
 "use client";
 
 /**
- * The second-factor screen: enrolment, verification and the recovery-code path, in one
- * component because they are one decision from the staff member's point of view — "I have
- * my phone" / "I do not".
+ * The second-factor screen: method choice, enrolment, verification and the
+ * recovery-code path, in one component because they are one decision from the staff
+ * member's point of view — "how do I prove it's me" / "I can't".
+ *
+ * ── THE METHOD CHOICE IS A UI STATE, NOT A PRIVILEGE ──────────────────────────────
+ *
+ * A fresh account (`setup`) picks between an authenticator app and email codes with a
+ * plain `useState` — nothing security-relevant lives in that choice, because the
+ * backend re-derives what the account may verify with on every confirm: a confirmed
+ * TOTP account refuses the email method outright, and vice versa for enrolment. The
+ * chooser RECOMMENDS the authenticator on the card itself, because email codes are
+ * exactly as strong as the staff member's inbox and the UI should say so once, at the
+ * moment of choice, rather than never.
  *
  * ── THE QR CODE, AND THE LINE IT DOES NOT CROSS ───────────────────────────────────
  *
@@ -40,14 +50,29 @@
  *
  * ── THE RECOVERY CODES ARE SHOWN ONCE ─────────────────────────────────────────────
  *
- * They exist in exactly one HTTP response. The confirm action therefore returns them
- * instead of redirecting, and the staff member continues by hand. Redirecting past them
- * would silently throw away the only copy.
+ * They exist in exactly one HTTP response — the one that confirms an enrolment, by
+ * either method. The confirm action therefore returns them instead of redirecting, and
+ * the staff member continues by hand. Redirecting past them would silently throw away
+ * the only copy.
+ *
+ * ── "DON'T ASK AGAIN ON THIS DEVICE" ──────────────────────────────────────────────
+ *
+ * A checkbox on both code forms, off by default. Ticking it asks Django for a 30-day
+ * trust token alongside the session; the BFF stores it as an httpOnly cookie and later
+ * logins redeem it INSIDE the same confirm endpoint a code would go to — the password
+ * step never gets faster, only the code prompt disappears. The label says the honest
+ * thing ("this device"), and the setup screens leave it available too: the person who
+ * just enrolled on their own laptop is exactly who wants it.
  */
-import { useActionState, useMemo } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { encode } from "uqr";
-import type { ConfirmState, EnrolState, RecoveryState } from "@/app/totp/actions";
+import type {
+  ConfirmState,
+  EmailOtpState,
+  EnrolState,
+  RecoveryState,
+} from "@/app/totp/actions";
 
 function Submit({ label, busy }: { label: string; busy: string }) {
   const { pending } = useFormStatus();
@@ -76,13 +101,19 @@ function Alert({ children }: { children: React.ReactNode }) {
 const CODE_INPUT =
   "mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 font-mono text-sm tracking-[0.3em] outline-none focus:border-accent";
 
+export type PanelMethod = "totp" | "email";
+
 export interface TotpPanelProps {
   next: string;
   setup: boolean;
+  /** The method the account already confirmed, from the login response; null during
+   *  setup (nothing confirmed yet) — the chooser decides. */
+  method: PanelMethod | null;
   recovery: boolean;
   enrolAction: (prev: EnrolState, fd: FormData) => Promise<EnrolState>;
   confirmAction: (prev: ConfirmState, fd: FormData) => Promise<ConfirmState>;
   recoveryAction: (prev: RecoveryState, fd: FormData) => Promise<RecoveryState>;
+  emailOtpAction: () => Promise<EmailOtpState>;
 }
 
 export function TotpPanel(props: TotpPanelProps) {
@@ -94,6 +125,9 @@ export function TotpPanel(props: TotpPanelProps) {
     props.recoveryAction,
     {},
   );
+  // Setup only: which card the person picked. Chosen fresh on every visit — the
+  // backend is the memory of what actually got confirmed.
+  const [picked, setPicked] = useState<PanelMethod | null>(null);
 
   if (confirm.recoveryCodes?.length) {
     return <RecoveryCodes codes={confirm.recoveryCodes} next={confirm.next ?? props.next} />;
@@ -105,8 +139,8 @@ export function TotpPanel(props: TotpPanelProps) {
         <h2 className="text-base font-semibold">Use a recovery code</h2>
         <p className="mt-1 text-sm text-muted">
           Enter one of the codes you saved when you set up two-factor authentication. It
-          can be used once, and it will remove the authenticator you have now — you will be
-          asked to set up a new one straight away.
+          can be used once, and it will remove your current second factor and any trusted
+          devices — you will be asked to set up again straight away.
         </p>
         <form action={runRecover} className="mt-4">
           {recover.error ? <Alert>{recover.error}</Alert> : null}
@@ -131,22 +165,41 @@ export function TotpPanel(props: TotpPanelProps) {
     );
   }
 
+  // Which method the code form below should verify. Ordinary login: whatever the
+  // account confirmed. Setup: whatever was just picked.
+  const active: PanelMethod = props.setup ? (picked ?? "totp") : (props.method ?? "totp");
+
+  if (props.setup && picked === null) {
+    return <MethodChooser onPick={setPicked} />;
+  }
+
   return (
     <div>
       {props.setup ? (
-        <SetupBlock enrol={enrol} runEnrol={runEnrol} />
-      ) : (
+        active === "totp" ? (
+          <SetupBlock enrol={enrol} runEnrol={runEnrol} onBack={() => setPicked(null)} />
+        ) : (
+          <EmailBlock
+            setup
+            emailOtpAction={props.emailOtpAction}
+            onBack={() => setPicked(null)}
+          />
+        )
+      ) : active === "totp" ? (
         <>
           <h2 className="text-base font-semibold">Two-factor authentication</h2>
           <p className="mt-1 text-sm text-muted">
             Enter the six-digit code from your authenticator app.
           </p>
         </>
+      ) : (
+        <EmailBlock setup={false} emailOtpAction={props.emailOtpAction} />
       )}
 
       <form action={runConfirm} className="mt-5">
         {confirm.error ? <Alert>{confirm.error}</Alert> : null}
         <input type="hidden" name="next" value={props.next} />
+        <input type="hidden" name="method" value={active} />
         <label className="block text-sm font-medium" htmlFor="code">
           Six-digit code
         </label>
@@ -159,31 +212,149 @@ export function TotpPanel(props: TotpPanelProps) {
           required
           className={CODE_INPUT}
         />
+        <label className="mt-3 flex items-start gap-2 text-sm">
+          <input type="checkbox" name="trust_device" className="mt-0.5 accent-accent" />
+          <span>
+            Don&apos;t ask for a code on this device for 30 days
+            <span className="block text-xs text-muted">
+              Only on your own computer — you&apos;ll still enter your password every time.
+            </span>
+          </span>
+        </label>
         <Submit label="Verify and sign in" busy="Verifying…" />
       </form>
 
       <p className="mt-5 border-t border-line pt-4 text-sm">
         <a className="text-accent underline" href="/totp?recovery=1">
-          Lost your phone? Use a recovery code instead
+          Can&apos;t get a code? Use a recovery code instead
         </a>
       </p>
     </div>
   );
 }
 
-function SetupBlock({
-  enrol,
-  runEnrol,
-}: {
-  enrol: EnrolState;
-  runEnrol: (fd: FormData) => void;
-}) {
+function MethodChooser({ onPick }: { onPick: (m: PanelMethod) => void }) {
+  const card =
+    "w-full rounded-md border border-line bg-surface p-4 text-left transition-colors hover:border-accent";
   return (
     <div>
       <h2 className="text-base font-semibold">Set up two-factor authentication</h2>
       <p className="mt-1 text-sm text-muted">
-        Every staff account needs an authenticator app. Add the key below to Google
-        Authenticator, 1Password, Authy or similar, then enter the six-digit code it shows.
+        Every staff account needs a second factor. Choose how you want to prove it&apos;s
+        you when you sign in.
+      </p>
+      <div className="mt-4 grid gap-3">
+        <button type="button" className={card} onClick={() => onPick("totp")}>
+          <span className="block text-sm font-semibold">
+            Authenticator app{" "}
+            <span className="rounded bg-accent/10 px-1.5 py-0.5 text-xs font-medium text-accent">
+              Recommended
+            </span>
+          </span>
+          <span className="mt-1 block text-xs text-muted">
+            Codes from Google Authenticator, 1Password, Authy or similar. Works offline
+            and is the strongest option — it never leaves your phone.
+          </span>
+        </button>
+        <button type="button" className={card} onClick={() => onPick("email")}>
+          <span className="block text-sm font-semibold">Email codes</span>
+          <span className="mt-1 block text-xs text-muted">
+            A six-digit code sent to your staff email at each sign-in. Only as safe as
+            your inbox — pick the app if you can.
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The email-code screen, shared by setup and ordinary login: a send/resend button and
+ * the explanation. The code FORM stays in the parent so both methods share one form,
+ * one error state and one trust checkbox.
+ *
+ * Sending is a deliberate click rather than an automatic effect on mount: an effect
+ * would fire again on every re-render dance React chooses to do, and although the
+ * backend's cooldown makes that harmless, a button also gives the person a resend
+ * control and a truthful "sent" state for free.
+ */
+function EmailBlock({
+  setup,
+  emailOtpAction,
+  onBack,
+}: {
+  setup: boolean;
+  emailOtpAction: () => Promise<EmailOtpState>;
+  onBack?: () => void;
+}) {
+  const [state, run] = useActionState<EmailOtpState, FormData>(
+    async () => emailOtpAction(),
+    {},
+  );
+  return (
+    <div>
+      <h2 className="text-base font-semibold">
+        {setup ? "Set up email codes" : "Two-factor authentication"}
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        {setup
+          ? "We'll email a six-digit code to your staff address. Entering it turns email codes on and finishes signing you in."
+          : "We'll email a six-digit code to your staff address."}
+      </p>
+
+      {state.error ? <div className="mt-3"><Alert>{state.error}</Alert></div> : null}
+
+      <form action={run} className="mt-3">
+        <SendButton sent={Boolean(state.sent)} />
+      </form>
+      {state.sent ? (
+        <p className="mt-2 text-xs text-muted" role="status">
+          {state.retryAfter && !setup
+            ? "Your code is on its way — check your inbox and spam folder."
+            : "Code sent — check your inbox and spam folder."}
+        </p>
+      ) : null}
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-3 text-xs text-accent underline"
+        >
+          Choose a different method
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function SendButton({ sent }: { sent: boolean }) {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="w-full rounded-md border border-line bg-surface px-4 py-2.5 text-sm font-semibold transition-colors hover:border-accent disabled:opacity-60"
+    >
+      {pending ? "Sending…" : sent ? "Resend code" : "Email me a code"}
+    </button>
+  );
+}
+
+function SetupBlock({
+  enrol,
+  runEnrol,
+  onBack,
+}: {
+  enrol: EnrolState;
+  runEnrol: (fd: FormData) => void;
+  onBack?: () => void;
+}) {
+  return (
+    <div>
+      <h2 className="text-base font-semibold">Set up your authenticator app</h2>
+      <p className="mt-1 text-sm text-muted">
+        Add the key below to Google Authenticator, 1Password, Authy or similar, then
+        enter the six-digit code it shows.
       </p>
 
       {enrol.error ? <Alert>{enrol.error}</Alert> : null}
@@ -221,6 +392,15 @@ function SetupBlock({
           <Submit label="Show my setup key" busy="Generating…" />
         </form>
       )}
+      {onBack && !enrol.enrolment ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="mt-3 text-xs text-accent underline"
+        >
+          Choose a different method
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -231,7 +411,7 @@ function RecoveryCodes({ codes, next }: { codes: string[]; next: string }) {
       <h2 className="text-base font-semibold">Save your recovery codes</h2>
       <p className="mt-1 text-sm text-muted">
         These are shown once and never again. Print them or put them in a password manager.
-        Each one can be used once, to sign in if you lose your phone.
+        Each one can be used once, to sign in if you lose access to your second factor.
       </p>
       <ul className="mt-4 grid grid-cols-2 gap-2 rounded-md border border-line bg-background p-4 font-mono text-sm">
         {codes.map((code) => (

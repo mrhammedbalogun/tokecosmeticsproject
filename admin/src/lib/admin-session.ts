@@ -36,6 +36,8 @@ import { apiFetch } from "@/lib/api";
 import {
   ACCESS_COOKIE,
   ACCESS_MAX_AGE,
+  DEVICE_COOKIE,
+  DEVICE_MAX_AGE,
   PREAUTH_COOKIE,
   PREAUTH_MAX_AGE,
   REFRESH_COOKIE,
@@ -62,7 +64,9 @@ export function storeSession(jar: Jar, access: string, refresh?: string): void {
 }
 
 /** Throw the whole set away. Used by sign-out, by a failed renewal, and by the gate's
- *  anomaly row. */
+ *  anomaly row. The DEVICE cookie deliberately survives: it is a second factor, not
+ *  session state, and signing out is not the same act as un-trusting the browser —
+ *  see the `DEVICE_COOKIE` docstring in `lib/auth.ts`. */
 export function clearSession(jar: Jar): void {
   jar.delete(ACCESS_COOKIE);
   jar.delete(REFRESH_COOKIE);
@@ -110,28 +114,43 @@ function bffHeaders(): Record<string, string> {
   return secret ? { "X-Admin-BFF-Secret": secret } : {};
 }
 
+export type SecondFactorMethod = "totp" | "email";
+
 export interface PreauthResponse {
   preauth_token: string;
   expires_in: number;
   /** Which screen to draw next. NOT a branch in the security logic — the backend returns
    *  the same kind of token either way. */
   totp_enrolled?: boolean;
+  /** The method this account confirmed, or null for "none chosen yet" (the chooser
+   *  screen). Same UI-hint status as `totp_enrolled`, which it supersedes. */
+  second_factor?: SecondFactorMethod | null;
+  /** True when the forwarded device cookie matched a live trust row: the login action
+   *  may go straight to a trusted-device confirm. A HINT — the confirm endpoint
+   *  re-runs the same check before anything is minted. */
+  device_trusted?: boolean;
 }
 
 /**
  * Step one. Returns the preauth response so the caller knows whether to send the staff
- * member to enrolment or to a code prompt.
+ * member to the method chooser, a code prompt, or straight through on a trusted device.
  *
- * Cookie-writing context only (Route Handler or Server Function).
+ * The device cookie rides along when the browser holds one; Django answers with
+ * `device_trusted` and nothing else changes. Cookie-writing context only (Route
+ * Handler or Server Function).
  */
 export async function adminLogin(
   jar: Jar,
   credentials: { email: string; password: string },
   opts: TurnstileOpts = {},
 ): Promise<PreauthResponse> {
+  const deviceToken = jar.get(DEVICE_COOKIE)?.value;
   const out = await apiFetch<PreauthResponse>("/auth/admin-token/", {
     method: "POST",
-    body: withTurnstile(credentials, opts),
+    body: withTurnstile(
+      deviceToken ? { ...credentials, device_token: deviceToken } : { ...credentials },
+      opts,
+    ),
     headers: bffHeaders(),
   });
   storePreauth(jar, out.preauth_token);
@@ -164,25 +183,87 @@ export interface ConfirmResponse {
   /** Present ONLY on the response that confirms a new enrolment. Shown once, never again
    *  and never stored. */
   recovery_codes?: string[];
+  /** Present ONLY when `trust_device` was asked for alongside a real code. Goes
+   *  straight into the httpOnly device cookie and nowhere else. */
+  device_token?: string;
+  device_expires_in?: number;
+}
+
+export interface ConfirmOptions {
+  /** Defaults to "totp" — the shape every pre-Plan-33 caller sent. */
+  method?: SecondFactorMethod | "trusted_device";
+  code?: string;
+  /** Ask Django for a 30-day trust token alongside the session. Honoured only on the
+   *  coded methods; a trusted device can never mint fresh trust. */
+  trustDevice?: boolean;
 }
 
 /**
  * Step three — the only call in this app that can produce a session.
  *
+ * One function for all three methods because the backend has one endpoint and one
+ * mint, and mirroring that here keeps "the only call that can produce a session"
+ * literally true. The trusted-device method reads the device cookie itself; a granted
+ * trust token is written back to the same cookie. A REFUSED trusted-device redemption
+ * deletes the cookie — the backend has voted it dead (expired, revoked, or another
+ * user's), and re-presenting it every login would fail forever.
+ *
  * Cookie-writing context only.
  */
-export async function confirmTotp(
+export async function confirmSecondFactor(
   jar: Jar,
   preauthToken: string,
-  code: string,
+  opts: ConfirmOptions,
 ): Promise<ConfirmResponse> {
-  const out = await apiFetch<ConfirmResponse>("/auth/admin-totp/confirm/", {
+  const method = opts.method ?? "totp";
+  const body: Record<string, unknown> = { method };
+  if (opts.code !== undefined) body.code = opts.code;
+  if (opts.trustDevice) body.trust_device = true;
+  if (method === "trusted_device") {
+    body.device_token = jar.get(DEVICE_COOKIE)?.value ?? "";
+  }
+  let out: ConfirmResponse;
+  try {
+    out = await apiFetch<ConfirmResponse>("/auth/admin-totp/confirm/", {
+      method: "POST",
+      token: preauthToken,
+      body,
+    });
+  } catch (e) {
+    if (method === "trusted_device") jar.delete(DEVICE_COOKIE);
+    throw e;
+  }
+  storeSession(jar, out.access, out.refresh);
+  if (out.device_token) {
+    jar.set(
+      DEVICE_COOKIE,
+      out.device_token,
+      cookieOptions({ maxAge: out.device_expires_in ?? DEVICE_MAX_AGE }),
+    );
+  }
+  return out;
+}
+
+export interface EmailOTPRequestResponse {
+  detail: string;
+  /** 0 = a fresh code was just sent; >0 = one is already in flight, sent that many
+   *  seconds into its 60-second cooldown. */
+  retry_after: number;
+  expires_in: number;
+}
+
+/**
+ * Ask Django to mail a sign-in code to the preauth token's own user. Writes no
+ * cookie; safe to call from a render-adjacent action because a repeat inside the
+ * cooldown is a 200 that sends nothing.
+ */
+export async function requestEmailOtp(
+  preauthToken: string,
+): Promise<EmailOTPRequestResponse> {
+  return apiFetch<EmailOTPRequestResponse>("/auth/admin-email-otp/request/", {
     method: "POST",
     token: preauthToken,
-    body: { code },
   });
-  storeSession(jar, out.access, out.refresh);
-  return out;
 }
 
 export interface RecoveryResponse {

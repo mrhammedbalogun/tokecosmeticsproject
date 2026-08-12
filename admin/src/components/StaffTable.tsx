@@ -58,8 +58,10 @@ export function StaffTable({ members }: { members: StaffMember[] }) {
               </td>
               <td className="px-3 py-2">{roleLabel(member)}</td>
               <td className="px-3 py-2">
-                {member.totp_confirmed ? (
-                  <span className="text-xs text-muted">Enrolled</span>
+                {member.second_factor === "totp" || member.totp_confirmed ? (
+                  <span className="text-xs text-muted">Authenticator</span>
+                ) : member.second_factor === "email" ? (
+                  <span className="text-xs text-muted">Email codes</span>
                 ) : (
                   <span className="rounded bg-warn/10 px-1.5 py-0.5 text-[11px] font-medium text-warn">
                     Not enrolled

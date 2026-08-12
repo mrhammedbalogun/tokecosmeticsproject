@@ -67,7 +67,7 @@ describe("step one of the ceremony", () => {
       loginAction(EMPTY, form({ email: "a@b.com", password: "pw", next: "/orders" })),
     );
 
-    expect(to).toBe(`/totp?next=${encodeURIComponent("/orders")}`);
+    expect(to).toBe(`/totp?next=${encodeURIComponent("/orders")}&method=totp`);
     expect(store.get("admin_preauth")).toBe("PRE");
     // No session anywhere. `/auth/admin-token/` mints nothing, and this action cannot
     // invent one.
@@ -84,6 +84,74 @@ describe("step one of the ceremony", () => {
     );
 
     expect(to).toBe(`/totp?next=${encodeURIComponent("/")}&setup=1`);
+    expect(store.get("admin_preauth")).toBe("PRE");
+  });
+
+  it("sends an email-method staff member to the email code screen", async () => {
+    global.fetch = vi.fn(() =>
+      Promise.resolve(
+        jsonResponse({ preauth_token: "PRE", expires_in: 600, second_factor: "email" }),
+      ),
+    ) as unknown as typeof fetch;
+
+    const to = await redirectFrom(() =>
+      loginAction(EMPTY, form({ email: "a@b.com", password: "pw" })),
+    );
+    expect(to).toBe(`/totp?next=${encodeURIComponent("/")}&method=email`);
+  });
+
+  it("redeems a trusted device at the confirm endpoint and skips the code screen", async () => {
+    store.set("admin_device", "DEV");
+    const calls: Array<{ url: string; body: unknown }> = [];
+    global.fetch = vi.fn((url: string, init?: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init?.body)) });
+      if (url.includes("/auth/admin-token/")) {
+        return Promise.resolve(
+          jsonResponse({
+            preauth_token: "PRE",
+            expires_in: 600,
+            second_factor: "totp",
+            device_trusted: true,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ access: "A", refresh: "R" }));
+    }) as unknown as typeof fetch;
+
+    const to = await redirectFrom(() =>
+      loginAction(EMPTY, form({ email: "a@b.com", password: "pw", next: "/orders" })),
+    );
+
+    // Straight to the destination — but THROUGH the confirm endpoint, never around it.
+    expect(to).toBe("/orders");
+    expect(calls[1].url).toContain("/auth/admin-totp/confirm/");
+    expect(calls[1].body).toEqual({ method: "trusted_device", device_token: "DEV" });
+    expect(store.get("admin_access")).toBe("A");
+    expect(store.has("admin_preauth")).toBe(false);
+  });
+
+  it("falls back to the code prompt when the trusted device is refused, dropping the dead cookie", async () => {
+    store.set("admin_device", "DEV");
+    global.fetch = vi.fn((url: string) => {
+      if (url.includes("/auth/admin-token/")) {
+        return Promise.resolve(
+          jsonResponse({
+            preauth_token: "PRE",
+            expires_in: 600,
+            second_factor: "totp",
+            device_trusted: true,
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({ detail: "nope" }, 401));
+    }) as unknown as typeof fetch;
+
+    const to = await redirectFrom(() =>
+      loginAction(EMPTY, form({ email: "a@b.com", password: "pw" })),
+    );
+
+    expect(to).toBe(`/totp?next=${encodeURIComponent("/")}&method=totp`);
+    expect(store.has("admin_device")).toBe(false);
     expect(store.get("admin_preauth")).toBe("PRE");
   });
 

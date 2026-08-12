@@ -38,6 +38,23 @@ export const REFRESH_COOKIE = "admin_refresh";
 export const PREAUTH_COOKIE = "admin_preauth";
 
 /**
+ * THE FOURTH COOKIE IS NOT SESSION STATE, and everything about how it is handled
+ * follows from that. `admin_device` holds the trusted-device token — a PRE-VERIFIED
+ * second factor minted by Django when the staff member ticks "don't ask again on this
+ * device", worth exactly one thing: skipping the code prompt inside a ceremony whose
+ * password and Turnstile steps still ran. It is deliberately OUTSIDE the gate matrix
+ * (`lib/auth-guard.ts` never reads it): presence of a trust token says nothing about
+ * whether anyone is signed in, so letting it influence routing would let a 30-day
+ * cookie impersonate a session signal.
+ *
+ * It SURVIVES `clearSession`, also deliberately: signing out ends the session, not the
+ * browser's trust — that is what the revoke endpoint (and expiry) are for. The one
+ * flow that removes it locally is a failed redemption, because a cookie the backend
+ * has refused is dead weight that would otherwise re-fail on every login.
+ */
+export const DEVICE_COOKIE = "admin_device";
+
+/**
  * ADMIN LIFETIMES ARE DELIBERATELY SHORTER THAN THE STOREFRONT'S, and the refresh is
  * shorter by three orders of magnitude (12 hours against 14 days).
  *
@@ -64,6 +81,14 @@ export const REFRESH_MAX_AGE = 60 * 60 * 12; // 12 h, well under the 30-day toke
  * a session-restore feature) is refused by the backend, and the BFF clears it there.
  */
 export const PREAUTH_MAX_AGE = 60 * 10;
+
+/**
+ * Matched to `devices.TRUST_LIFETIME` (30 days) the same way the preauth cookie is
+ * matched to its token: browser and database expire together, so a stale cookie that
+ * does arrive (clock skew, session restore) is refused by the backend and cleared by
+ * the BFF — the trust simply falls back to a code prompt, the safe direction.
+ */
+export const DEVICE_MAX_AGE = 60 * 60 * 24 * 30;
 
 export interface CookieOptions {
   httpOnly: boolean;

@@ -1,12 +1,13 @@
 "use server";
 
 /**
- * Steps two and three of the staff ceremony: the TOTP factor.
+ * Steps two and three of the staff ceremony: the second factor.
  *
- * THREE SERVER FUNCTIONS FOR THREE BACKEND ENDPOINTS, and no fourth. The preauth token in
- * the `admin_preauth` cookie opens exactly those three (`AdminPreauthJWTAuthentication` +
- * an enumerated, guard-tested allowlist on the Django side), so anything else this module
- * grew would 401 anyway — which is a good property to state out loud, because it means a
+ * FOUR SERVER FUNCTIONS FOR FOUR BACKEND ENDPOINTS, and no fifth. The preauth token in
+ * the `admin_preauth` cookie opens exactly those four — TOTP enrol, second-factor
+ * confirm, recovery, and the email-code send (`AdminPreauthJWTAuthentication` + an
+ * enumerated, guard-tested allowlist on the Django side) — so anything else this module
+ * grew would 401 anyway. A good property to state out loud, because it means a
  * mistake here is a bug and not a hole.
  *
  * A STALE PREAUTH TOKEN IS HANDLED IN ONE PLACE, `withPreauth` below: the backend 401s, the
@@ -19,9 +20,10 @@ import { redirect } from "next/navigation";
 import { ApiError } from "@/lib/api";
 import {
   clearSession,
-  confirmTotp,
+  confirmSecondFactor,
   enrolTotp,
   recoverTotp,
+  requestEmailOtp,
   type EnrolResponse,
 } from "@/lib/admin-session";
 import { totpErrorMessage } from "@/lib/auth-errors";
@@ -99,12 +101,27 @@ export async function confirmAction(
 ): Promise<ConfirmState> {
   const code = field(formData, "code");
   const next = safeNext(field(formData, "next"), DEFAULT_NEXT);
-  if (!code) return { error: "Enter the six-digit code from your authenticator app.", next };
+  // Which method the form is verifying — a UI fact like `next`, not a privilege: the
+  // backend re-derives what the account is allowed to verify with and refuses the
+  // rest, so a hand-edited hidden input changes an error message and nothing else.
+  const method = field(formData, "method") === "email" ? "email" : "totp";
+  const trustDevice = field(formData, "trust_device") === "on";
+  if (!code) {
+    return {
+      error:
+        method === "email"
+          ? "Enter the six-digit code from your email."
+          : "Enter the six-digit code from your authenticator app.",
+      next,
+    };
+  }
 
   let codes: string[] | undefined;
   try {
     const jar = await cookies();
-    const out = await withPreauth((token) => confirmTotp(jar, token, code));
+    const out = await withPreauth((token) =>
+      confirmSecondFactor(jar, token, { method, code, trustDevice }),
+    );
     codes = out.recovery_codes;
   } catch (e) {
     if (e instanceof ApiError) return { error: totpErrorMessage(e.status, e.data), next };
@@ -117,6 +134,32 @@ export async function confirmAction(
   if (codes?.length) return { recoveryCodes: codes, next };
 
   redirect(next);
+}
+
+// ── email code ───────────────────────────────────────────────────────────────────────
+
+export interface EmailOtpState {
+  error?: string;
+  /** Set once a send has been asked for. `retryAfter` is how long the resend button
+   *  should stay quiet — the backend's answer, not a client-side guess. */
+  sent?: boolean;
+  retryAfter?: number;
+}
+
+/**
+ * Ask the backend to mail a code to the signing-in account's own inbox. Nullary like
+ * `enrolAction` and for the same reason: the only input is the preauth cookie — the
+ * backend derives the address from it, so there is nothing here a form could aim.
+ * Safe to re-run: inside the cooldown it is a 200 that sends nothing.
+ */
+export async function emailOtpAction(): Promise<EmailOtpState> {
+  try {
+    const out = await withPreauth((token) => requestEmailOtp(token));
+    return { sent: true, retryAfter: out.retry_after };
+  } catch (e) {
+    if (e instanceof ApiError) return { error: totpErrorMessage(e.status, e.data) };
+    throw e;
+  }
 }
 
 // ── recovery ─────────────────────────────────────────────────────────────────────────

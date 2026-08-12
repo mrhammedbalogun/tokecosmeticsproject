@@ -53,9 +53,12 @@ ADMIN_ME = "/api/v1/auth/admin-me/"
 ENROL = "/api/v1/auth/admin-totp/enrol/"
 CONFIRM = "/api/v1/auth/admin-totp/confirm/"
 RECOVERY = "/api/v1/auth/admin-totp/recovery/"
+EMAIL_OTP = "/api/v1/auth/admin-email-otp/request/"
 
-# The three endpoints a preauth token is allowed to reach, and nothing else.
-PREAUTH_ENDPOINTS = (ENROL, CONFIRM, RECOVERY)
+# The four endpoints a preauth token is allowed to reach, and nothing else. The
+# email-code send joined in Plan-33 (see test_staff_second_factor.py for its
+# behaviour); it mints nothing, so the mint invariant below is untouched.
+PREAUTH_ENDPOINTS = (ENROL, CONFIRM, RECOVERY, EMAIL_OTP)
 
 
 # --- fixtures -----------------------------------------------------------------
@@ -449,7 +452,7 @@ def test_an_unconfirmed_enrolment_is_inert_in_both_directions(owner):
     assert "access" not in r.data
 
 
-# --- who may reach the three endpoints ----------------------------------------
+# --- who may reach the four ceremony endpoints --------------------------------
 
 
 @pytest.mark.parametrize("path", PREAUTH_ENDPOINTS)
@@ -474,7 +477,7 @@ def test_the_totp_endpoints_refuse_a_full_ADMIN_token(owner, path):
     assert bearer(data["access"]).post(path, {}, format="json").status_code == 401
 
 
-def test_a_preauth_token_reaches_exactly_those_three_endpoints_and_nothing_else(owner):
+def test_a_preauth_token_reaches_exactly_those_endpoints_and_nothing_else(owner):
     """The enumerated set, asserted against the live URLconf rather than against a
     list someone remembered to update. A route added later that accepts the preauth
     class fails `test_admin_surface_guard.py`; a route that stops accepting it fails
@@ -535,7 +538,7 @@ def test_five_wrong_codes_invalidate_that_preauth_token(owner, clock):
 
 
 @pytest.mark.parametrize("path", PREAUTH_ENDPOINTS)
-def test_a_burned_preauth_token_reaches_none_of_the_three_endpoints(owner, path):
+def test_a_burned_preauth_token_reaches_none_of_the_ceremony_endpoints(owner, path):
     """Invalidation is checked in the AUTHENTICATION class, not per view, so a preauth
     token that ran out of guesses stops being a credential everywhere at once. A
     per-view check would have to be remembered on the fourth endpoint somebody adds."""
@@ -782,7 +785,7 @@ def test_enrolment_and_confirmation_are_logged(owner, caplog):
         full_ceremony(owner)
     messages = [rec.getMessage() for rec in _security_records(caplog)]
     assert any("TOTP enrolment started" in m for m in messages), messages
-    assert any("TOTP enrolment confirmed" in m for m in messages), messages
+    assert any("second factor (totp) enrolment confirmed" in m for m in messages), messages
 
 
 def test_the_secret_and_the_provisioning_uri_are_never_logged(owner, caplog):
@@ -845,7 +848,7 @@ def test_reset_staff_totp_logs_at_error(owner, caplog):
     with caplog.at_level(logging.INFO, logger="apps.security"):
         call_command("reset_staff_totp", owner.email)
     assert any(
-        rec.levelno == logging.ERROR and "TOTP reset" in rec.getMessage()
+        rec.levelno == logging.ERROR and "second factor reset" in rec.getMessage()
         for rec in _security_records(caplog, logging.ERROR)
     )
 

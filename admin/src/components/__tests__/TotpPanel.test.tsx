@@ -1,27 +1,35 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TotpPanel } from "@/components/TotpPanel";
-import type { ConfirmState, EnrolState, RecoveryState } from "@/app/totp/actions";
+import type {
+  ConfirmState,
+  EmailOtpState,
+  EnrolState,
+  RecoveryState,
+} from "@/app/totp/actions";
 
 const noopEnrol = vi.fn(async (): Promise<EnrolState> => ({}));
 const noopConfirm = vi.fn(async (): Promise<ConfirmState> => ({}));
 const noopRecovery = vi.fn(async (): Promise<RecoveryState> => ({}));
+const noopEmailOtp = vi.fn(async (): Promise<EmailOtpState> => ({ sent: true, retryAfter: 60 }));
 
 function panel(props: Partial<React.ComponentProps<typeof TotpPanel>> = {}) {
   return render(
     <TotpPanel
       next="/"
       setup={false}
+      method={null}
       recovery={false}
       enrolAction={noopEnrol}
       confirmAction={noopConfirm}
       recoveryAction={noopRecovery}
+      emailOtpAction={noopEmailOtp}
       {...props}
     />,
   );
 }
 
-describe("the TOTP step", () => {
+describe("the second-factor step", () => {
   it("offers a recovery-code route out — the backend path existed; without this it served only people who read the runbook", () => {
     panel();
     const link = screen.getByRole("link", { name: /recovery code/i });
@@ -33,9 +41,46 @@ describe("the TOTP step", () => {
     expect(screen.getByLabelText(/six-digit code/i)).toBeInTheDocument();
   });
 
-  it("in setup mode asks the staff member to generate a key first", () => {
+  it("in setup mode offers the method choice, authenticator first and recommended", () => {
     panel({ setup: true });
+    const buttons = screen.getAllByRole("button");
+    expect(buttons[0]).toHaveTextContent(/authenticator app/i);
+    expect(buttons[0]).toHaveTextContent(/recommended/i);
+    expect(screen.getByRole("button", { name: /email codes/i })).toBeInTheDocument();
+    // No code field until a method is picked.
+    expect(screen.queryByLabelText(/six-digit code/i)).not.toBeInTheDocument();
+  });
+
+  it("picking the authenticator card leads to the setup-key screen", () => {
+    panel({ setup: true });
+    fireEvent.click(screen.getByRole("button", { name: /authenticator app/i }));
     expect(screen.getByRole("button", { name: /show my setup key/i })).toBeInTheDocument();
+  });
+
+  it("picking email codes leads to the send-a-code screen with a code form", () => {
+    panel({ setup: true });
+    fireEvent.click(screen.getByRole("button", { name: /email codes/i }));
+    expect(screen.getByRole("button", { name: /email me a code/i })).toBeInTheDocument();
+    expect(screen.getByLabelText(/six-digit code/i)).toBeInTheDocument();
+  });
+
+  it("an email-method login shows the send button, not the authenticator prompt", () => {
+    panel({ method: "email" });
+    expect(screen.getByRole("button", { name: /email me a code/i })).toBeInTheDocument();
+    expect(screen.queryByText(/authenticator app/i)).not.toBeInTheDocument();
+  });
+
+  it("tells the backend which method the code form is verifying", () => {
+    const { container } = panel({ method: "email" });
+    const hidden = container.querySelector('input[name="method"]') as HTMLInputElement;
+    expect(hidden.value).toBe("email");
+  });
+
+  it("offers — unticked — to trust this device for 30 days", () => {
+    panel();
+    const box = screen.getByRole("checkbox", { name: /don't ask for a code/i });
+    expect(box).not.toBeChecked();
+    expect(box).toHaveAttribute("name", "trust_device");
   });
 
   it("in recovery mode swaps the form and drops the six-digit field", () => {
@@ -64,6 +109,7 @@ describe("the enrolment screen", () => {
       }),
     );
     const view = panel({ setup: true, enrolAction });
+    fireEvent.click(screen.getByRole("button", { name: /authenticator app/i }));
     fireEvent.click(screen.getByRole("button", { name: /show my setup key/i }));
     await waitFor(() => expect(screen.getByRole("img")).toBeInTheDocument());
     return view;

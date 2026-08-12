@@ -104,20 +104,23 @@ PUBLIC_ADMIN_ROUTES: dict[str, str] = {
 }
 
 # Views permitted to accept `AdminPreauthJWTAuthentication` — the bootstrap claim minted
-# by accept-invite and by the staff password step. EXACTLY THREE, and the number is the
+# by accept-invite and by the staff password step. EXACTLY FOUR, and the number is the
 # point: a preauth token is a caller who has proved a password and a human check and
-# owes a TOTP code, so the only things it may reach are the ones that finish the
-# ceremony. Enumerated rather than discovered so that widening it is a deliberate,
-# reviewed edit and not a side effect of adding a view — and asserted against the live
-# URLconf in BOTH directions below, so it can be neither quietly widened nor quietly
-# emptied.
+# owes a second factor, so the only things it may reach are the ones that finish the
+# ceremony. The email-otp send is the widening Plan-33 deliberately made: it mails a
+# code to the address a validated token identifies and mints nothing, so it hands a
+# half-authenticated caller no new authority beyond mail to the account's own inbox.
+# Enumerated rather than discovered so that widening it is a deliberate, reviewed edit
+# and not a side effect of adding a view — and asserted against the live URLconf in
+# BOTH directions below, so it can be neither quietly widened nor quietly emptied.
 PREAUTH_ACCEPTING_VIEWS: tuple[str, ...] = (
-    "AdminTOTPEnrolView",  # hand out a secret (refused once one is confirmed)
-    "AdminTOTPConfirmView",  # verify a code — the ONLY mint of an admin token
+    "AdminTOTPEnrolView",  # hand out a secret (refused once a factor is confirmed)
+    "AdminTOTPConfirmView",  # verify a factor — the ONLY mint of an admin token
     "AdminTOTPRecoveryView",  # burn a recovery code; voids the factor, mints nothing
+    "AdminEmailOTPRequestView",  # mail a code to the token's own user; mints nothing
 )
 
-# The routes those three are expected to occupy. A second copy of the same fact as the
+# The routes those four are expected to occupy. A second copy of the same fact as the
 # names above, on purpose: the names answer "which classes", these answer "at which
 # URLs", and a view re-mounted somewhere else would satisfy the first and not the second.
 PREAUTH_ACCEPTING_PATHS: frozenset[str] = frozenset(
@@ -125,6 +128,7 @@ PREAUTH_ACCEPTING_PATHS: frozenset[str] = frozenset(
         "api/v1/auth/admin-totp/enrol/",
         "api/v1/auth/admin-totp/confirm/",
         "api/v1/auth/admin-totp/recovery/",
+        "api/v1/auth/admin-email-otp/request/",
     }
 )
 
@@ -139,7 +143,7 @@ ADMIN_MINT_CALLER = ("apps/accounts/views.py", "AdminTOTPConfirmView")
 # each entry is a route someone deliberately put somewhere else, and writing it down is
 # cheaper than a heuristic that would also have to be trusted. `admin_token_obtain_pair`
 # is absent on purpose — see the test at the bottom.
-ADMIN_VIEWS_OUTSIDE_THE_PREFIX: tuple[str, ...] = ("admin_me",)
+ADMIN_VIEWS_OUTSIDE_THE_PREFIX: tuple[str, ...] = ("admin_me", "admin_devices_revoke")
 
 # view class name -> the scope its permission class must require, or None for the
 # endpoints that deliberately gate on `is_staff` alone.
@@ -256,6 +260,9 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # admin-me answers "who am I and what may I do". Every staff member must be able
     # to ask it, including one whose role grants nothing yet, so it holds no scope.
     "AdminMeView": None,
+    # Revoking your OWN trusted devices is the same shape: self-service on the caller's
+    # own account, and a lost-laptop response must not depend on holding any role.
+    "AdminTrustedDeviceRevokeView": None,
     # Inviting staff mints administrators, so `staff.manage` is Owner-only. Revocation
     # carries the same scope because an invite is a live staff-creation capability
     # either way: being able to cancel one is as consequential as being able to send it.
@@ -587,7 +594,7 @@ def test_only_enumerated_views_accept_the_preauth_claim():
     )
 
 
-def test_the_preauth_claim_reaches_exactly_three_routes():
+def test_the_preauth_claim_reaches_exactly_the_enumerated_routes():
     """The other direction, and the half that a one-sided allowlist always misses.
 
     The test above catches WIDENING — a fourth endpoint that started accepting the
@@ -597,7 +604,7 @@ def test_the_preauth_claim_reaches_exactly_three_routes():
     that no longer accepts the claim is simply not an offender.
 
     Asserted as PATHS rather than class names because that is the property that matters
-    operationally: these three URLs, and no others, may be opened by a caller who has
+    operationally: these four URLs, and no others, may be opened by a caller who has
     proved a password but not a second factor.
     """
     assert preauth_accepting_paths() == set(PREAUTH_ACCEPTING_PATHS)

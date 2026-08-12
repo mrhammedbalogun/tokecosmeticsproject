@@ -355,6 +355,87 @@ class StaffRecoveryCode(TimeStampedModel):
         return f"recovery code for {self.user_id} ({'used' if self.used_at else 'unused'})"
 
 
+class StaffEmailSecondFactor(TimeStampedModel):
+    """One staff member's CHOICE of email codes as their second factor.
+
+    There is deliberately no secret here: the codes themselves are short-lived, held
+    hashed in the cache (`apps/accounts/email_otp.py`), and proved by control of the
+    inbox — the same proof `/auth/password/reset/` runs on. This row records only that
+    the choice was made and completed.
+
+    **`confirmed_at` is the ONLY thing that counts as "enrolled"**, exactly as on
+    `StaffTOTP`, and enrolment happens implicitly: the first email code a staff member
+    verifies sets it (and issues their recovery codes). There is no separate enrol
+    endpoint because, unlike TOTP, there is no secret to hand over first.
+
+    THE TWO METHODS ARE MUTUALLY EXCLUSIVE, enforced in views rather than by a DB
+    constraint: a confirmed `StaffTOTP` refuses the email path (or a stolen password
+    could downgrade an authenticator user to inbox-strength security), and a confirmed
+    row here refuses TOTP enrol (or the same password could move the factor onto an
+    attacker's phone). The only routes between methods are a recovery code and
+    `manage.py reset_staff_totp` — both void everything and return to the choice.
+    """
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="email_second_factor")
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "staff email second factor"
+        verbose_name_plural = "staff email second factors"
+
+    def __str__(self) -> str:
+        return (
+            f"email 2FA for {self.user_id} "
+            f"({'confirmed' if self.confirmed_at else 'pending'})"
+        )
+
+    @property
+    def is_confirmed(self) -> bool:
+        return self.confirmed_at is not None
+
+
+class StaffTrustedDevice(TimeStampedModel):
+    """One browser a staff member chose to trust for 30 days — a PRE-VERIFIED second
+    factor, never a bypass of the ceremony.
+
+    The raw token (`secrets.token_urlsafe(32)`, 256 bits) lives in exactly one place:
+    an httpOnly cookie on the admin origin. It is accepted only inside TOTP-confirm,
+    from a caller who already holds a preauth token — so password and Turnstile have
+    already passed, and the only step it satisfies is the code prompt. A stolen cookie
+    on its own opens nothing.
+
+    **SHA-256, no work factor, lookup by digest** — the invite-token reasoning
+    transfers exactly: 256 bits leaves nothing to enumerate, and the digest makes the
+    lookup one indexed equality match.
+
+    **`expires_at` is a hard ceiling, not a sliding window.** Using the device does not
+    extend it; after 30 days the person types a code again. A sliding window would let
+    one active browser hold the second factor forever, which is most of what the factor
+    is for, given away.
+
+    Revocation is DELETION, as with `StaffTOTP` on the recovery path: the row IS the
+    capability, and the durable record of its life is the `apps.security` log. Rows die
+    four ways — expiry, the revoke endpoint, a recovery code (the lost-device story
+    must not leave sibling devices trusted), and `reset_staff_totp`.
+
+    `label` is a trimmed User-Agent, for the human reading a device list or a log line.
+    Display material only: it is attacker-choosable text, so it is scrubbed before
+    logging and never part of any decision.
+    """
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="trusted_devices")
+    token_hash = models.CharField(max_length=64, unique=True, editable=False)
+    expires_at = models.DateTimeField()
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    label = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=["user", "expires_at"])]
+
+    def __str__(self) -> str:
+        return f"trusted device for {self.user_id} (expires {self.expires_at:%Y-%m-%d})"
+
+
 class Address(TimeStampedModel):
     """Structured, per-country address. Validation rules live in core.address_rules."""
 

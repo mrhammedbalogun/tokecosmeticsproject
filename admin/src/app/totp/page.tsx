@@ -3,7 +3,7 @@ import { TotpPanel } from "@/components/TotpPanel";
 import { StagingBadge } from "@/components/StagingBadge";
 import { gatePage } from "@/lib/session";
 import { DEFAULT_NEXT, first, safeNext } from "@/lib/next-param";
-import { confirmAction, enrolAction, recoveryAction } from "./actions";
+import { confirmAction, emailOtpAction, enrolAction, recoveryAction } from "./actions";
 
 export const metadata: Metadata = {
   title: "Two-factor authentication",
@@ -17,15 +17,18 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
  * `gatePage("totp", …)` sends a cookieless visitor to `/login` and a fully-signed-in one to
  * the dashboard, and purges the anomaly.
  *
- * `setup` and `recovery` are UI hints carried in the URL rather than in a fourth cookie.
- * Neither is a security decision: the backend refuses to re-enrol a confirmed account
- * (409) and refuses a code against a non-existent enrolment, so a hand-edited query string
- * changes which screen is drawn and nothing else.
+ * `setup`, `method` and `recovery` are UI hints carried in the URL rather than in a
+ * cookie. None is a security decision: the backend refuses to re-enrol a confirmed
+ * account (409), refuses a code against a non-existent enrolment, and refuses the email
+ * method against a TOTP account, so a hand-edited query string changes which screen is
+ * drawn and nothing else.
  */
 export default async function TotpPage({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
   const next = safeNext(first(params.next), DEFAULT_NEXT);
   const setup = first(params.setup) === "1";
+  const methodParam = first(params.method);
+  const method = methodParam === "email" || methodParam === "totp" ? methodParam : null;
   const recovery = first(params.recovery) === "1";
 
   await gatePage("totp", "/totp");
@@ -42,10 +45,12 @@ export default async function TotpPage({ searchParams }: { searchParams: SearchP
           <TotpPanel
             next={next}
             setup={setup}
+            method={method}
             recovery={recovery}
             enrolAction={enrolAction}
             confirmAction={confirmAction}
             recoveryAction={recoveryAction}
+            emailOtpAction={emailOtpAction}
           />
         </div>
       </div>

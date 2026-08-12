@@ -21,7 +21,8 @@ import logging
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.accounts.models import StaffRecoveryCode, StaffTOTP
+from apps.accounts.devices import revoke_all_devices
+from apps.accounts.models import StaffEmailSecondFactor, StaffRecoveryCode, StaffTOTP
 from apps.core.log_safety import scrub
 
 security_logger = logging.getLogger("apps.security")
@@ -29,8 +30,9 @@ security_logger = logging.getLogger("apps.security")
 
 class Command(BaseCommand):
     help = (
-        "Void a staff member's TOTP enrolment and recovery codes so they can enrol a "
-        "new device. Requires shell access on the server; there is no web equivalent."
+        "Void a staff member's second factor (TOTP or email), recovery codes and "
+        "trusted devices so they can set up again. Requires shell access on the "
+        "server; there is no web equivalent."
     )
 
     def add_arguments(self, parser):
@@ -46,26 +48,35 @@ class Command(BaseCommand):
             raise CommandError(f"No account with the address {email!r}.")
 
         totp_rows = StaffTOTP.objects.filter(user=user).delete()[0]
+        email_rows = StaffEmailSecondFactor.objects.filter(user=user).delete()[0]
         code_rows = StaffRecoveryCode.objects.filter(user=user).delete()[0]
+        # The same blast radius as the recovery endpoint, for the same reason: a
+        # trusted browser is a pre-verified copy of the factor being voided.
+        device_rows = revoke_all_devices(user)
 
         # ERROR -> a Sentry event. Somebody with shell access has just removed a staff
         # account's second factor; that is worth a permanent, alerting record whether it
         # was routine or not, and it is the only trace once the rows are gone.
         security_logger.error(
-            "admin TOTP reset from the command line for %s (%d enrolment(s), %d "
-            "recovery code(s) removed)",
+            "admin second factor reset from the command line for %s (%d TOTP "
+            "enrolment(s), %d email factor(s), %d recovery code(s), %d trusted "
+            "device(s) removed)",
             scrub(user.email),
             totp_rows,
+            email_rows,
             code_rows,
+            device_rows,
         )
 
-        if not totp_rows:
+        if not totp_rows and not email_rows:
             self.stdout.write(
-                self.style.WARNING(f"{user.email} had no TOTP enrolment; nothing to void.")
+                self.style.WARNING(
+                    f"{user.email} had no confirmed second factor; nothing to void."
+                )
             )
         self.stdout.write(
             self.style.SUCCESS(
-                f"{user.email} can now enrol a new device. They log in at "
-                f"/auth/admin-token/ as usual; the next screen will be the QR code."
+                f"{user.email} can now set up again. They log in at /auth/admin-token/ "
+                f"as usual; the next screen will be the method choice."
             )
         )
