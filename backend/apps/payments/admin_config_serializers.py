@@ -35,10 +35,49 @@ class BankAccountAdminSerializer(serializers.ModelSerializer):
 
 class CountryPaymentGatewayAdminSerializer(serializers.ModelSerializer):
     """Which gateways a market offers. Turning one on is what makes cards live, and it is
-    the switch Plan-09 left to a production DB edit."""
+    the switch Plan-09 left to a production DB edit.
+
+    The read-only trio (`configured`, `missing_settings`, `supported_currencies`) mirrors
+    the registry's request-time filter: `is_active` is merchandising INTENT, and the
+    storefront menu intersects it with configuredness. Without these fields the admin
+    toggle lies — a row can say "on" while `active_gateways_for` silently drops it. The
+    UI's job is to show that divergence, not to prevent it (enabling a gateway before its
+    keys are deployed is a legitimate sequencing choice)."""
 
     audit_allowlist = ("country", "gateway", "is_active", "sort_order")
 
+    country_name = serializers.CharField(source="country.name", read_only=True)
+    country_currency = serializers.CharField(source="country.currency_id", read_only=True)
+    configured = serializers.SerializerMethodField()
+    missing_settings = serializers.SerializerMethodField()
+    supported_currencies = serializers.SerializerMethodField()
+
     class Meta:
         model = CountryPaymentGateway
-        fields = "__all__"
+        fields = [
+            "id", "country", "country_name", "country_currency", "gateway",
+            "is_active", "sort_order", "configured", "missing_settings",
+            "supported_currencies",
+        ]
+
+    def get_configured(self, obj) -> bool:
+        from apps.payments.gateways.registry import _is_configured
+
+        return _is_configured(obj.gateway, obj.country)
+
+    def get_missing_settings(self, obj) -> list[str]:
+        from apps.payments.checks import missing_settings_for
+
+        return missing_settings_for(obj.gateway)
+
+    def get_supported_currencies(self, obj) -> list[str]:
+        # [] means "no restriction": bank_transfer declares no supported_currencies (a
+        # wire works in any currency). `gateway` is also a free CharField, so a row can
+        # name an adapter that no longer exists — that answers [] too rather than 500
+        # (the row stays visible and deletable, and can't be charged through anyway).
+        from apps.payments.gateways.registry import UnknownGateway, get_gateway
+
+        try:
+            return sorted(getattr(get_gateway(obj.gateway), "supported_currencies", []))
+        except UnknownGateway:
+            return []

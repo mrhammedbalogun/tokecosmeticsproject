@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PaymentsConfig } from "@/components/config/PaymentsConfig";
 import { ApiError } from "@/lib/api";
-import type { BankAccountRow, GatewayRow } from "@/lib/money-config";
+import type { BankAccountRow, GatewayCatalogEntry, GatewayRow } from "@/lib/money-config";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Payments" };
@@ -17,16 +17,19 @@ const PATH = "/settings/payments";
 export default async function PaymentsSettingsPage() {
   await requireAdmin(PATH);
 
-  const [accountsResult, gatewaysResult] = await Promise.allSettled([
+  const [accountsResult, gatewaysResult, catalogResult] = await Promise.allSettled([
     fetchWithAuthOrBounce<{ results: BankAccountRow[] } | BankAccountRow[]>(
       "/admin/bank-accounts/", PATH,
     ),
     fetchWithAuthOrBounce<{ results: GatewayRow[] } | GatewayRow[]>(
       "/admin/payment-gateways/", PATH,
     ),
+    // The add-to-market menu. Degrades to [] (the add control hides itself) rather
+    // than failing the page — same posture as the secondary fetches elsewhere.
+    fetchWithAuthOrBounce<GatewayCatalogEntry[]>("/admin/payment-gateways/catalog/", PATH),
   ]);
 
-  for (const r of [accountsResult, gatewaysResult]) {
+  for (const r of [accountsResult, gatewaysResult, catalogResult]) {
     if (r.status === "rejected" && !(r.reason instanceof ApiError)) throw r.reason;
   }
 
@@ -61,6 +64,7 @@ export default async function PaymentsSettingsPage() {
           <PaymentsConfig
             accounts={unwrap<BankAccountRow>(accountsResult)}
             gateways={unwrap<GatewayRow>(gatewaysResult)}
+            catalog={unwrap<GatewayCatalogEntry>(catalogResult)}
           />
         )}
       </div>

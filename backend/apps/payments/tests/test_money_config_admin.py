@@ -80,3 +80,85 @@ def test_the_gateway_switch_works(owner):
     assert response.status_code == 200
     gateway.refresh_from_db()
     assert gateway.is_active is False
+
+
+# --- dynamic per-market gateways (2026-08-12) -------------------------------------------
+#
+# "What if we decide to enable Flutterwave in the UK?" — the model always allowed it; the
+# admin surface now makes it a two-click act with honest warnings instead of a DB edit.
+
+
+def test_a_gateway_can_be_added_to_any_market(owner):
+    """Flutterwave in GB: the exact future case the dynamic settings exist for."""
+    gb = Country.objects.get(code="GB")
+    CountryPaymentGateway.objects.filter(country=gb, gateway="flutterwave").delete()
+
+    response = owner.post(
+        "/api/v1/admin/payment-gateways/",
+        {"country": gb.pk, "gateway": "flutterwave", "is_active": False, "sort_order": 5},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    row = CountryPaymentGateway.objects.get(country=gb, gateway="flutterwave")
+    assert row.is_active is False  # adding never silently goes live
+
+
+def test_adding_the_same_gateway_twice_is_refused(owner):
+    ng = Country.objects.get(code="NG")
+
+    response = owner.post(
+        "/api/v1/admin/payment-gateways/",
+        {"country": ng.pk, "gateway": "paystack", "sort_order": 9},
+        format="json",
+    )
+
+    assert response.status_code == 400  # unique (country, gateway)
+
+
+def test_a_market_row_can_be_removed(owner):
+    """DELETE means "this market never offered this" — allowed here, unlike the account."""
+    gb = Country.objects.get(code="GB")
+    row, _ = CountryPaymentGateway.objects.get_or_create(
+        country=gb, gateway="flutterwave", defaults={"is_active": False, "sort_order": 5}
+    )
+
+    response = owner.delete(f"/api/v1/admin/payment-gateways/{row.pk}/")
+
+    assert response.status_code == 204
+    assert not CountryPaymentGateway.objects.filter(pk=row.pk).exists()
+
+
+def test_rows_report_configuredness_and_currency_support(owner, settings):
+    """The toggle must not lie: `is_active` is intent, and the storefront intersects it
+    with configuredness — the row says which keys are missing and which currencies the
+    adapter can charge, so "on but dark" is visible instead of a mystery."""
+    settings.FLUTTERWAVE_SECRET_KEY = ""
+    settings.FLUTTERWAVE_SECRET_HASH = ""
+
+    response = owner.get("/api/v1/admin/payment-gateways/", {"gateway": "flutterwave"})
+
+    assert response.status_code == 200
+    rows = response.data["results"] if isinstance(response.data, dict) else response.data
+    row = next(r for r in rows if r["country_name"] == "Nigeria")
+    assert row["configured"] is False
+    assert "FLUTTERWAVE_SECRET_KEY" in row["missing_settings"]
+    assert row["country_currency"] == "NGN"
+    assert "NGN" in row["supported_currencies"]
+
+
+def test_the_catalog_lists_every_adapter(owner):
+    """The add-to-market menu comes from the registry, never a hardcoded UI list."""
+    response = owner.get("/api/v1/admin/payment-gateways/catalog/")
+
+    assert response.status_code == 200
+    by_code = {entry["code"]: entry for entry in response.data}
+    assert {"bank_transfer", "paystack", "flutterwave", "paypal", "stripe"} <= set(by_code)
+    assert "GBP" in by_code["flutterwave"]["supported_currencies"]  # the FW-in-UK future
+    assert by_code["bank_transfer"]["needs"] == "bank_account"
+    assert by_code["paystack"]["needs"] == "api_keys"
+
+
+def test_the_catalog_is_owner_only():
+    assert APIClient().get("/api/v1/admin/payment-gateways/catalog/").status_code in (401, 403)
+

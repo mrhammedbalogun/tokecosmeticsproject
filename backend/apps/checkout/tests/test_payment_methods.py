@@ -12,8 +12,11 @@ def test_payment_methods_for_country(settings):
     # US/CA/ZZ, so asserting an exact gateway list on NG would fight the seeded rows.
     # Togo has no seeded rows, so the list is exactly what this test sets — keeping the
     # original intent: active gateways returned in sort order, inactive excluded.
-    xof = Currency.objects.create(code="XOF", symbol="CFA")
-    tg = Country.objects.create(code="TG", name="Togo", currency=xof)
+    # KES rather than Togo's real XOF: active_gateways_for also filters on currency
+    # support (2026-08-12) and Paystack cannot charge XOF — this test is about sort
+    # order and the inactive filter, so the currency must be one every row can charge.
+    kes = Currency.objects.create(code="KES", symbol="KSh")
+    tg = Country.objects.create(code="TG", name="Togo", currency=kes)
     CountryPaymentGateway.objects.create(country=tg, gateway="paystack", sort_order=1)
     CountryPaymentGateway.objects.create(country=tg, gateway="bank_transfer", sort_order=3)
     CountryPaymentGateway.objects.create(country=tg, gateway="off", is_active=False, sort_order=9)
@@ -22,7 +25,7 @@ def test_payment_methods_for_country(settings):
     # this the endpoint correctly returns nothing and the sort-order intent goes untested.
     settings.PAYSTACK_SECRET_KEY = "sk_test_configured"
     BankAccount.objects.create(
-        country=tg, currency=xof, bank_name="Ecobank",
+        country=tg, currency=kes, bank_name="Ecobank",
         account_name="Toke Cosmetics", account_number="0123456789",
     )
 

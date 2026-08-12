@@ -1,14 +1,29 @@
 import { describe, it, expect } from "vitest";
 import {
+  addableGateways,
   couponInactiveReason,
+  gatewayObstacle,
   marketsWithoutAnAccount,
+  nextSortOrder,
   type BankAccountRow,
   type CouponRow,
+  type GatewayCatalogEntry,
   type GatewayRow,
 } from "@/lib/money-config";
 
-const gateway = (country: string, gw: string, is_active = true): GatewayRow => ({
-  id: Math.random(), country, gateway: gw, is_active, sort_order: 0,
+const gateway = (
+  country: string,
+  gw: string,
+  is_active = true,
+  over: Partial<GatewayRow> = {},
+): GatewayRow => ({
+  id: Math.random(), country, country_name: country, country_currency: "NGN",
+  gateway: gw, is_active, sort_order: 0, configured: true, missing_settings: [],
+  supported_currencies: ["NGN"], ...over,
+});
+
+const catalogEntry = (code: string, over: Partial<GatewayCatalogEntry> = {}): GatewayCatalogEntry => ({
+  code, supported_currencies: ["NGN"], missing_settings: [], needs: "api_keys", ...over,
 });
 
 const account = (country: string, is_active = true): BankAccountRow => ({
@@ -66,5 +81,68 @@ describe("couponInactiveReason", () => {
     expect(
       couponInactiveReason(coupon({ usage_limit: 5, redemption_count: 5 }), now),
     ).toBe("Usage limit reached");
+  });
+});
+
+describe("gatewayObstacle", () => {
+  it("is quiet for a row checkout would actually offer", () => {
+    expect(gatewayObstacle(gateway("NG", "paystack"))).toBeNull();
+  });
+
+  it("names the missing keys — 'on but dark' must be legible, not a mystery", () => {
+    const row = gateway("NG", "flutterwave", true, {
+      configured: false,
+      missing_settings: ["FLUTTERWAVE_SECRET_KEY", "FLUTTERWAVE_SECRET_HASH"],
+    });
+    expect(gatewayObstacle(row)).toContain("FLUTTERWAVE_SECRET_KEY");
+  });
+
+  it("warns when the adapter cannot charge the market's currency", () => {
+    // The FW-in-UK future: adding is allowed, but GBP support is what makes it real.
+    const row = gateway("GB", "paystack", true, {
+      country_currency: "GBP",
+      configured: false,
+      supported_currencies: ["NGN", "USD"],
+    });
+    expect(gatewayObstacle(row)).toBe("Cannot charge GBP");
+  });
+
+  it("treats an empty currency list as no restriction (bank transfer)", () => {
+    const row = gateway("GB", "bank_transfer", true, {
+      country_currency: "GBP",
+      supported_currencies: [],
+    });
+    expect(gatewayObstacle(row)).toBeNull();
+  });
+
+  it("says a market's bank transfer has no account to pay into", () => {
+    const row = gateway("US", "bank_transfer", true, {
+      configured: false,
+      supported_currencies: [],
+    });
+    expect(gatewayObstacle(row)).toBe("No active bank account for this market");
+  });
+});
+
+describe("addableGateways", () => {
+  it("offers only what the market does not already have", () => {
+    const catalog = [catalogEntry("paystack"), catalogEntry("flutterwave"), catalogEntry("paypal")];
+    const rows = [gateway("GB", "paypal"), gateway("GB", "bank_transfer")];
+    expect(addableGateways(catalog, rows).map((e) => e.code)).toEqual([
+      "paystack",
+      "flutterwave",
+    ]);
+  });
+});
+
+describe("nextSortOrder", () => {
+  it("lands a new method after everything the market offers", () => {
+    expect(
+      nextSortOrder([gateway("NG", "a", true, { sort_order: 1 }), gateway("NG", "b", true, { sort_order: 3 })]),
+    ).toBe(4);
+  });
+
+  it("starts at 1 for an empty market", () => {
+    expect(nextSortOrder([])).toBe(1);
   });
 });

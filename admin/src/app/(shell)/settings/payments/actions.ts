@@ -77,3 +77,58 @@ export async function setGatewayActiveAction(
   revalidatePath("/settings/payments");
   return { savedAt: Date.now() };
 }
+
+/** Offer a gateway in a market it never had. Always lands switched OFF — adding and
+ * going live are two separate deliberate acts. */
+export async function addGatewayAction(input: {
+  country: string;
+  gateway: string;
+  sort_order: number;
+}): Promise<ConfigState> {
+  try {
+    await fetchWithAuth("/admin/payment-gateways/", {
+      method: "POST",
+      body: {
+        country: input.country,
+        gateway: input.gateway,
+        is_active: false,
+        sort_order: input.sort_order,
+      },
+    });
+  } catch (e) {
+    return fail(e, "That method could not be added.");
+  }
+  revalidatePath("/settings/payments");
+  return { savedAt: Date.now() };
+}
+
+/** "This market never offered this" — coherent to say (past orders keep their gateway
+ * name), which is why DELETE is allowed here and not on bank accounts. */
+export async function removeGatewayAction(id: number): Promise<ConfigState> {
+  try {
+    await fetchWithAuth(`/admin/payment-gateways/${id}/`, { method: "DELETE" });
+  } catch (e) {
+    return fail(e, "That method could not be removed.");
+  }
+  revalidatePath("/settings/payments");
+  return { savedAt: Date.now() };
+}
+
+/** Persist a market's checkout menu order. Sequential PATCHes, smallest set the client
+ * computed; not atomic, but each write is idempotent and a retry converges. */
+export async function reorderGatewaysAction(
+  updates: { id: number; sort_order: number }[],
+): Promise<ConfigState> {
+  try {
+    for (const u of updates) {
+      await fetchWithAuth(`/admin/payment-gateways/${u.id}/`, {
+        method: "PATCH",
+        body: { sort_order: u.sort_order },
+      });
+    }
+  } catch (e) {
+    return fail(e, "The order could not be saved.");
+  }
+  revalidatePath("/settings/payments");
+  return { savedAt: Date.now() };
+}

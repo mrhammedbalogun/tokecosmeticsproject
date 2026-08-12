@@ -17,12 +17,19 @@
  */
 import { startTransition, useState } from "react";
 import {
+  addGatewayAction,
+  removeGatewayAction,
+  reorderGatewaysAction,
   saveBankAccountAction,
   setGatewayActiveAction,
 } from "@/app/(shell)/settings/payments/actions";
 import {
+  addableGateways,
+  gatewayObstacle,
   marketsWithoutAnAccount,
+  nextSortOrder,
   type BankAccountRow,
+  type GatewayCatalogEntry,
   type GatewayRow,
 } from "@/lib/money-config";
 
@@ -32,9 +39,11 @@ const FIELD =
 export function PaymentsConfig({
   accounts,
   gateways,
+  catalog,
 }: {
   accounts: BankAccountRow[];
   gateways: GatewayRow[];
+  catalog: GatewayCatalogEntry[];
 }) {
   const stranded = marketsWithoutAnAccount(gateways, accounts);
 
@@ -70,9 +79,10 @@ export function PaymentsConfig({
       <section>
         <h2 className="text-sm font-semibold">Payment methods by market</h2>
         <p className="mt-1 text-sm text-muted">
-          Which methods appear at checkout. Turning one on makes it live immediately.
+          Which methods appear at checkout, and in what order. Turning one on makes it
+          live immediately — unless a warning says why it would stay hidden.
         </p>
-        <GatewayTable gateways={gateways} />
+        <GatewayTable gateways={gateways} catalog={catalog} />
       </section>
     </div>
   );
@@ -242,15 +252,21 @@ function AccountCard({ account }: { account: BankAccountRow }) {
   );
 }
 
-function GatewayTable({ gateways }: { gateways: GatewayRow[] }) {
+function GatewayTable({
+  gateways,
+  catalog,
+}: {
+  gateways: GatewayRow[];
+  catalog: GatewayCatalogEntry[];
+}) {
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const toggle = (row: GatewayRow) => {
-    setBusy(row.id);
+  const run = (id: number | null, act: () => Promise<{ message?: string | null }>) => {
+    setBusy(id);
     setMessage(null);
     startTransition(async () => {
-      const state = await setGatewayActiveAction(row.id, !row.is_active);
+      const state = await act();
       setBusy(null);
       setMessage(state.message ?? null);
     });
@@ -269,29 +285,194 @@ function GatewayTable({ gateways }: { gateways: GatewayRow[] }) {
         </p>
       )}
       {[...byCountry.entries()].map(([country, rows]) => (
-        <div key={country} className="rounded-[var(--radius-card)] border border-line p-3">
-          <h3 className="text-sm font-medium">{country}</h3>
-          <ul className="mt-2 flex flex-wrap gap-2">
-            {rows.map((row) => (
-              <li key={row.id}>
+        <MarketCard
+          key={country}
+          country={country}
+          rows={[...rows].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id)}
+          catalog={catalog}
+          busy={busy}
+          run={run}
+        />
+      ))}
+    </div>
+  );
+}
+
+function MarketCard({
+  country,
+  rows,
+  catalog,
+  busy,
+  run,
+}: {
+  country: string;
+  rows: GatewayRow[];
+  catalog: GatewayCatalogEntry[];
+  busy: number | null;
+  run: (id: number | null, act: () => Promise<{ message?: string | null }>) => void;
+}) {
+  const [adding, setAdding] = useState("");
+  const [removing, setRemoving] = useState<number | null>(null);
+  const addable = addableGateways(catalog, rows);
+  const currency = rows[0]?.country_currency ?? "";
+
+  // Checkout shows the menu in sort order — moving a row means renumbering the market's
+  // list 1..n and saving only the rows whose number changed.
+  const move = (index: number, delta: -1 | 1) => {
+    const order = [...rows];
+    const [row] = order.splice(index, 1);
+    order.splice(index + delta, 0, row);
+    const updates = order
+      .map((r, i) => ({ id: r.id, sort_order: i + 1 }))
+      .filter((u) => rows.find((r) => r.id === u.id)?.sort_order !== u.sort_order);
+    run(row.id, () => reorderGatewaysAction(updates));
+  };
+
+  return (
+    <div className="rounded-[var(--radius-card)] border border-line p-3">
+      <h3 className="text-sm font-medium">
+        {rows[0]?.country_name ?? country}{" "}
+        <span className="text-muted">
+          ({country}
+          {currency ? ` · ${currency}` : ""})
+        </span>
+      </h3>
+      <ul className="mt-2 space-y-2">
+        {rows.map((row, index) => {
+          const obstacle = gatewayObstacle(row);
+          return (
+            <li key={row.id} className="flex flex-wrap items-center gap-2">
+              <span className="flex flex-col">
                 <button
                   type="button"
-                  onClick={() => toggle(row)}
-                  disabled={busy === row.id}
-                  className={`rounded-full border px-3 py-1 text-xs disabled:opacity-40 ${
-                    row.is_active
-                      ? "border-ok/50 text-ok"
-                      : "border-line text-muted hover:border-accent"
-                  }`}
-                  title={row.is_active ? "Live — click to switch off" : "Off — click to make live"}
+                  onClick={() => move(index, -1)}
+                  disabled={index === 0 || busy !== null}
+                  aria-label={`Move ${row.gateway} up`}
+                  className="text-xs leading-none text-muted hover:text-fg disabled:opacity-30"
                 >
-                  {row.gateway} · {row.is_active ? "on" : "off"}
+                  ▲
                 </button>
-              </li>
-            ))}
-          </ul>
+                <button
+                  type="button"
+                  onClick={() => move(index, 1)}
+                  disabled={index === rows.length - 1 || busy !== null}
+                  aria-label={`Move ${row.gateway} down`}
+                  className="text-xs leading-none text-muted hover:text-fg disabled:opacity-30"
+                >
+                  ▼
+                </button>
+              </span>
+              <button
+                type="button"
+                onClick={() => run(row.id, () => setGatewayActiveAction(row.id, !row.is_active))}
+                disabled={busy === row.id}
+                className={`rounded-full border px-3 py-1 text-xs disabled:opacity-40 ${
+                  row.is_active
+                    ? "border-ok/50 text-ok"
+                    : "border-line text-muted hover:border-accent"
+                }`}
+                title={row.is_active ? "Live — click to switch off" : "Off — click to make live"}
+              >
+                {row.gateway} · {row.is_active ? "on" : "off"}
+              </button>
+              {obstacle && (
+                <span
+                  className={`rounded border px-2 py-0.5 text-xs ${
+                    row.is_active
+                      ? "border-warn/40 bg-warn/5 text-warn"
+                      : "border-line text-muted"
+                  }`}
+                  role={row.is_active ? "alert" : undefined}
+                  title="Why checkout would not show this method"
+                >
+                  {row.is_active ? "On but hidden — " : ""}
+                  {obstacle}
+                </span>
+              )}
+              <span className="ml-auto">
+                {removing === row.id ? (
+                  <span className="flex items-center gap-2 text-xs">
+                    <span className="text-warn">Remove {row.gateway} from {country}?</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRemoving(null);
+                        run(row.id, () => removeGatewayAction(row.id));
+                      }}
+                      className="rounded bg-warn px-2 py-1 font-medium text-white hover:opacity-90"
+                    >
+                      Remove
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRemoving(null)}
+                      className="rounded border border-line px-2 py-1 hover:border-accent"
+                    >
+                      Keep
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setRemoving(row.id)}
+                    disabled={busy !== null}
+                    className="text-xs text-muted hover:text-warn disabled:opacity-30"
+                  >
+                    Remove
+                  </button>
+                )}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      {addable.length > 0 && (
+        <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+          <label className="sr-only" htmlFor={`add-gateway-${country}`}>
+            Add a payment method to {country}
+          </label>
+          <select
+            id={`add-gateway-${country}`}
+            value={adding}
+            onChange={(e) => setAdding(e.target.value)}
+            className={`${FIELD} max-w-xs`}
+          >
+            <option value="">Add a method…</option>
+            {addable.map((entry) => {
+              const cantCharge =
+                entry.supported_currencies.length > 0 &&
+                currency &&
+                !entry.supported_currencies.includes(currency);
+              return (
+                <option key={entry.code} value={entry.code}>
+                  {entry.code}
+                  {cantCharge ? ` — cannot charge ${currency}` : ""}
+                </option>
+              );
+            })}
+          </select>
+          <button
+            type="button"
+            disabled={!adding || busy !== null}
+            onClick={() => {
+              const code = adding;
+              setAdding("");
+              run(null, () =>
+                addGatewayAction({
+                  country,
+                  gateway: code,
+                  sort_order: nextSortOrder(rows),
+                }),
+              );
+            }}
+            className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
+          >
+            Add
+          </button>
+          <span className="text-xs text-muted">Added methods start switched off.</span>
         </div>
-      ))}
+      )}
     </div>
   );
 }

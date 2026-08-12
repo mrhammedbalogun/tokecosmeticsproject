@@ -87,6 +87,36 @@ def test_configured_gateway_is_offered_when_switched_on(settings):
     assert "flutterwave" in _offered(_country("NG"))
 
 
+def test_a_gateway_that_cannot_charge_the_markets_currency_is_not_offered(settings):
+    """Dynamic market settings (2026-08-12) let an admin add any gateway to any market —
+    so the registry must also refuse a currency the adapter cannot charge. Paystack
+    switched on in GB (GBP) would otherwise render a button that 503s at initiate."""
+    from apps.core.models import Country
+    from apps.payments.models import CountryPaymentGateway
+    settings.PAYSTACK_SECRET_KEY = "sk_test_x"
+    gb = Country.objects.get(code="GB")
+    CountryPaymentGateway.objects.update_or_create(
+        country=gb, gateway="paystack", defaults={"is_active": True, "sort_order": 8}
+    )
+
+    assert "paystack" not in _offered(gb)
+    # sanity: the same key in a market whose currency Paystack supports IS offered
+    assert "paystack" in _offered(_country("NG"))
+
+
+def test_an_unknown_gateway_code_is_never_offered(settings):
+    """The model's gateway field is free text — a typo'd row must narrow the menu, not
+    crash checkout when get_gateway() can't resolve it."""
+    from apps.core.models import Country
+    from apps.payments.models import CountryPaymentGateway
+    ng = Country.objects.get(code="NG")
+    CountryPaymentGateway.objects.create(
+        country=ng, gateway="paystak", is_active=True, sort_order=9
+    )
+
+    assert "paystak" not in _offered(ng)
+
+
 def test_bank_transfer_is_not_offered_without_a_bank_account():
     """W002's failure made structural: no account means checkout refuses the
     order at initiate, so the method must not appear in the menu either."""

@@ -17,9 +17,27 @@ export interface BankAccountRow {
 export interface GatewayRow {
   id: number;
   country: string;
+  country_name: string;
+  /** The market's checkout currency (e.g. "NGN"). */
+  country_currency: string;
   gateway: string;
   is_active: boolean;
   sort_order: number;
+  /** Whether the storefront menu would actually offer this row right now — `is_active`
+   * is intent, and the registry intersects it with keys/account presence per request. */
+  configured: boolean;
+  missing_settings: string[];
+  /** [] means "no restriction" (bank transfer wires work in any currency). */
+  supported_currencies: string[];
+}
+
+/** One entry per gateway adapter the platform ships, from
+ * `GET /admin/payment-gateways/catalog/` — the add-to-market menu. */
+export interface GatewayCatalogEntry {
+  code: string;
+  supported_currencies: string[];
+  missing_settings: string[];
+  needs: "bank_account" | "api_keys";
 }
 
 export interface CouponRow {
@@ -88,6 +106,40 @@ export function marketsWithoutAnAccount(
         .map((g) => g.country),
     ),
   ].sort();
+}
+
+/** Why a switched-on gateway row would still not appear at checkout (or null if it
+ * would). Mirrors the registry's request-time filter so the toggle cannot lie. */
+export function gatewayObstacle(row: GatewayRow): string | null {
+  if (row.gateway === "bank_transfer") {
+    // configuredness for bank transfer means "an active account exists for the market";
+    // the stranded-market alert above the tables says the same thing louder.
+    return row.configured ? null : "No active bank account for this market";
+  }
+  if (row.missing_settings.length > 0) {
+    return `Keys not deployed: ${row.missing_settings.join(", ")}`;
+  }
+  if (
+    row.supported_currencies.length > 0 &&
+    !row.supported_currencies.includes(row.country_currency)
+  ) {
+    return `Cannot charge ${row.country_currency}`;
+  }
+  return null;
+}
+
+/** Catalog entries a market could still add (not already offered there). */
+export function addableGateways(
+  catalog: GatewayCatalogEntry[],
+  marketRows: GatewayRow[],
+): GatewayCatalogEntry[] {
+  const present = new Set(marketRows.map((r) => r.gateway));
+  return catalog.filter((entry) => !present.has(entry.code));
+}
+
+/** Where a newly added gateway lands: after everything the market already offers. */
+export function nextSortOrder(marketRows: GatewayRow[]): number {
+  return Math.max(0, ...marketRows.map((r) => r.sort_order)) + 1;
 }
 
 /** A coupon that cannot currently discount anything, and why. Display-only. */

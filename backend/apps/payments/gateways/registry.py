@@ -36,7 +36,19 @@ def _is_configured(gateway: str, country) -> bool:
     Bank transfer needs no API keys -- it needs an ACCOUNT, and checkout refuses
     the order at initiate when there isn't one. Same failure shape as a missing
     secret, so it is answered here too.
+
+    Currency is part of the same question (2026-08-12, dynamic market settings):
+    a gateway that cannot charge the market's currency would render a button
+    that 503s at initiate -- e.g. Paystack switched on in GB. An adapter with no
+    supported_currencies (bank transfer) has no restriction. An unknown code
+    (the model's gateway field is free text) can never be offered.
     """
+    adapter = _REGISTRY.get(gateway)
+    if adapter is None:
+        return False
+    supported = getattr(adapter, "supported_currencies", None)
+    if supported and country.currency_id not in supported:
+        return False
     if gateway == "bank_transfer":
         return BankAccount.objects.filter(country=country, is_active=True).exists()
     return not missing_settings_for(gateway)
