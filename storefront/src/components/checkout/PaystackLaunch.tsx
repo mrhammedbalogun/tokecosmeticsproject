@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef } from "react";
-import PaystackPop from "@paystack/inline-js";
 
 interface Props {
   data: Record<string, unknown>;
@@ -25,16 +24,22 @@ export function PaystackLaunch({ data, onGatewaySuccess, onGatewayAbort }: Props
       onGatewayAbort();
       return;
     }
-    try {
-      const popup = new PaystackPop();
-      popup.resumeTransaction(accessCode, {
-        onSuccess: () => onGatewaySuccess(),
-        onCancel: () => onGatewayAbort(),
-        onError: () => onGatewayAbort(),
-      });
-    } catch {
-      onGatewayAbort();
-    }
+    // Imported here, not at module scope: @paystack/inline-js touches `window` the
+    // moment it's evaluated, which crashes the server render of every page that
+    // (transitively) imports this file — /checkout 500s before the browser is involved.
+    (async () => {
+      try {
+        const { default: PaystackPop } = await import("@paystack/inline-js");
+        const popup = new PaystackPop();
+        popup.resumeTransaction(accessCode, {
+          onSuccess: () => onGatewaySuccess(),
+          onCancel: () => onGatewayAbort(),
+          onError: () => onGatewayAbort(),
+        });
+      } catch {
+        onGatewayAbort();
+      }
+    })();
   }, [accessCode, onGatewaySuccess, onGatewayAbort]);
 
   return <p className="text-sm text-muted">Complete your payment in the pop-up…</p>;

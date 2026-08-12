@@ -30,10 +30,39 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             <p className="text-muted">Your cart is empty.</p>
           ) : (
             cart.items.map((l) => (
-              <div key={l.id} className="flex items-center justify-between border-b border-line py-3">
+              <div
+                key={l.id}
+                className={`flex items-center justify-between gap-3 border-b border-line py-3 ${l.unavailable ? "opacity-60" : ""}`}
+              >
                 <div>
                   <p className="font-medium">{l.name}</p>
-                  <p className="text-sm text-muted">Qty {l.quantity}</p>
+                  {l.unavailable ? (
+                    <p className="text-sm text-accent">No longer available</p>
+                  ) : (
+                    <div
+                      className="mt-1 flex items-center gap-2"
+                      role="group"
+                      aria-label={`Quantity for ${l.name}`}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Decrease quantity of ${l.name}`}
+                        onClick={() => setQty.mutate({ variantId: l.variant_id, quantity: Math.max(0, l.quantity - 1) })}
+                        className="h-7 w-7 rounded-full border border-line text-muted hover:text-foreground"
+                      >
+                        −
+                      </button>
+                      <span aria-live="polite" className="min-w-4 text-center text-sm">{l.quantity}</span>
+                      <button
+                        type="button"
+                        aria-label={`Increase quantity of ${l.name}`}
+                        onClick={() => setQty.mutate({ variantId: l.variant_id, quantity: l.quantity + 1 })}
+                        className="h-7 w-7 rounded-full border border-line text-muted hover:text-foreground"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <span>{l.line_total ? formatMoney(l.line_total, cart.currency, "") : "—"}</span>

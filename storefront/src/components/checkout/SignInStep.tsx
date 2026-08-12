@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
 import { readBuyNowIntent, clearBuyNowIntent } from "@/lib/buynow-intent";
@@ -20,11 +21,13 @@ type Phase = "checking" | "register" | "login";
  * Review (the backend forces auth on order placement — see Plan-14 design D3).
  *
  * - Already signed in (GET-equivalent `me` check) → auto-completes silently.
- * - Guest → email + first name + password → silent account creation (register),
- *   auto-logged-in by the auth BFF.
- * - If that email already has an account, the backend reports it via a 400 with
- *   an `email` field error ("Account already exists") — flip to a password-only
- *   login form instead of erroring out.
+ * - Guest → the login form, matching the step's "Sign in" title: email + password,
+ *   with "Forgot password?" (→ /forgot-password) and a toggle to the register form.
+ * - Register form: email + first name + password → account creation, auto-logged-in
+ *   by the auth BFF, with a toggle back to login.
+ * - If a register attempt hits an email that already has an account, the backend
+ *   reports it via a 400 with an `email` field error ("Account already exists") —
+ *   flip to the login form with a notice instead of erroring out.
  * - The guest cart is merged into the new/matched account by the auth BFF itself
  *   (api/auth/[action]), not here — it belongs to authenticating, not to checkout.
  * - Either path then runs the Buy-Now guest-resume: if the shopper arrived via a
@@ -43,6 +46,9 @@ export function SignInStep() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ApiErrorBody>({});
+  // Set only by the duplicate-email flip, so the shopper knows why the form changed
+  // under them; a manual toggle to the login form needs no explanation.
+  const [notice, setNotice] = useState<string | null>(null);
   // Counts completed submits — the Turnstile reset signal. Tokens are single-use,
   // so a failed attempt must hand the shopper a fresh one. (On success the step
   // unmounts, so the extra reset there is moot.)
@@ -78,7 +84,7 @@ export function SignInStep() {
         // Network hiccup on the silent check — fall through to the guest form;
         // the shopper can still sign in/register explicitly.
       }
-      setPhase("register");
+      setPhase("login");
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one-shot mount check only
   }, []);
@@ -123,6 +129,14 @@ export function SignInStep() {
     return Array.isArray(body.email) && body.email.some((m) => /already exists/i.test(m));
   }
 
+  function switchPhase(next: Phase) {
+    setPhase(next);
+    setPassword("");
+    setFormError(null);
+    setFieldErrors({});
+    setNotice(null);
+  }
+
   async function submitRegister(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -140,8 +154,8 @@ export function SignInStep() {
       }
       const body: ApiErrorBody = await res.json().catch(() => ({}));
       if (res.status === 400 && looksLikeDuplicateEmail(body)) {
-        setPhase("login");
-        setPassword("");
+        switchPhase("login");
+        setNotice("Good news — this email already has an account. Enter your password to continue.");
         return;
       }
       setFieldErrors(body);
@@ -173,7 +187,7 @@ export function SignInStep() {
         return;
       }
       const body: ApiErrorBody = await res.json().catch(() => ({}));
-      setFormError(body.detail ?? "Incorrect password — please try again.");
+      setFormError(body.detail ?? "We couldn't sign you in — check your email and password.");
     } catch {
       setFormError("Something went wrong signing you in — please try again.");
     } finally {
@@ -189,9 +203,7 @@ export function SignInStep() {
   if (phase === "login") {
     return (
       <form onSubmit={submitLogin} className="space-y-4" noValidate>
-        <p className="text-sm text-muted">
-          This email already has an account — enter your password to continue.
-        </p>
+        {notice && <p className="text-sm text-muted">{notice}</p>}
         <div aria-live="polite">
           {formError && (
             <p role="alert" className="text-sm text-red-700">
@@ -207,8 +219,13 @@ export function SignInStep() {
             id="signin-email"
             type="email"
             value={email}
-            readOnly
-            className="w-full rounded-[var(--radius-card)] border border-line bg-beige/60 px-3 py-2 text-sm text-muted"
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
           />
         </div>
         <div>
@@ -228,22 +245,25 @@ export function SignInStep() {
         <TurnstileWidget resetSignal={attempts} />
         <button
           type="submit"
-          disabled={submitting || !password}
+          disabled={submitting || !email || !password}
           className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
         >
           {submitting ? "Signing in…" : "Sign in"}
         </button>
-        <button
-          type="button"
-          onClick={() => {
-            setPhase("register");
-            setPassword("");
-            setFormError(null);
-          }}
-          className="block text-sm text-muted underline hover:text-foreground"
-        >
-          Use a different email
-        </button>
+        <p className="text-sm text-muted">
+          New to Toke Cosmetics?{" "}
+          <button
+            type="button"
+            onClick={() => switchPhase("register")}
+            className="underline hover:text-foreground"
+          >
+            Create an account
+          </button>
+          {" · "}
+          <Link href="/forgot-password" className="underline hover:text-foreground">
+            Forgot password?
+          </Link>
+        </p>
       </form>
     );
   }
@@ -320,8 +340,18 @@ export function SignInStep() {
         disabled={submitting || !email || !firstName || !password}
         className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {submitting ? "Creating account…" : "Continue"}
+        {submitting ? "Creating account…" : "Create account"}
       </button>
+      <p className="text-sm text-muted">
+        Already have an account?{" "}
+        <button
+          type="button"
+          onClick={() => switchPhase("login")}
+          className="underline hover:text-foreground"
+        >
+          Sign in
+        </button>
+      </p>
     </form>
   );
 }

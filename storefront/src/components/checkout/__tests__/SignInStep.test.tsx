@@ -62,6 +62,14 @@ function mockFetch(routes: Record<string, Route>) {
 
 const originalFetch = global.fetch;
 
+/** The step now defaults to the login form (matching its "Sign in" title); the
+ * register form is behind the "Create an account" toggle. */
+async function openRegisterForm() {
+  await waitFor(() => screen.getByRole("button", { name: /create an account/i }));
+  fireEvent.click(screen.getByRole("button", { name: /create an account/i }));
+  await waitFor(() => screen.getByLabelText(/first name/i));
+}
+
 beforeEach(() => {
   sessionStorage.clear();
   mockCart = EMPTY_CART;
@@ -90,6 +98,47 @@ describe("SignInStep", () => {
     expect(f).not.toHaveBeenCalledWith("/api/cart/merge", expect.anything());
   });
 
+  it("defaults to the sign-in form with a forgot-password link and a register toggle", async () => {
+    mockFetch({
+      "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /^sign in$/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/first name/i)).toBeNull();
+    expect(screen.getByRole("link", { name: /forgot password/i })).toHaveAttribute(
+      "href",
+      "/forgot-password"
+    );
+    expect(screen.getByRole("button", { name: /create an account/i })).toBeInTheDocument();
+  });
+
+  it("signs in an existing shopper directly and completes the step", async () => {
+    const f = mockFetch({
+      "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
+      "/api/auth/login": { status: 200, body: { ok: true } },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "jane@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "correct-password" } });
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    expect(screen.getByTestId("userEmail")).toHaveTextContent("jane@example.com");
+    expect(f).toHaveBeenCalledWith(
+      "/api/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "jane@example.com", password: "correct-password" }),
+      })
+    );
+  });
+
   it("registers a new email and completes the step", async () => {
     const f = mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
@@ -98,11 +147,11 @@ describe("SignInStep", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "new@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
     expect(screen.getByTestId("userEmail")).toHaveTextContent("new@example.com");
@@ -134,11 +183,11 @@ describe("SignInStep", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "shopper@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
     expect(f).not.toHaveBeenCalledWith("/api/cart/merge", expect.anything());
@@ -153,17 +202,17 @@ describe("SignInStep", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "new@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
     expect(f).not.toHaveBeenCalledWith("/api/cart/merge", expect.anything());
   });
 
-  it("flips to the password/login form when the email already has an account", async () => {
+  it("flips back to the login form when the email already has an account", async () => {
     mockFetch({
       "/api/auth/me": { status: 401, body: { detail: "Not authenticated." } },
       "/api/auth/register": { status: 400, body: { email: ["Account already exists"] } },
@@ -171,17 +220,18 @@ describe("SignInStep", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "dup@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/already has an account/i)).toBeInTheDocument()
     );
+    // Email stays prefilled but is editable — the shopper may want a different one.
     expect(screen.getByLabelText(/^email$/i)).toHaveValue("dup@example.com");
-    expect(screen.getByLabelText(/^email$/i)).toHaveAttribute("readonly");
+    expect(screen.getByLabelText(/^email$/i)).not.toHaveAttribute("readonly");
     expect(screen.queryByLabelText(/first name/i)).toBeNull();
 
     // And logging in from the flipped form completes the step.
@@ -201,15 +251,15 @@ describe("SignInStep", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "dup@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "wrongfirsttry" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByText(/already has an account/i)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "correct-password" } });
-    fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^sign in$/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
     expect(screen.getByTestId("userEmail")).toHaveTextContent("dup@example.com");
@@ -226,11 +276,11 @@ describe("SignInStep", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "buyer@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Bea" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
     expect(f).toHaveBeenCalledWith(
@@ -275,11 +325,11 @@ describe("SignInStep", () => {
 
     renderHarness();
 
-    await waitFor(() => expect(screen.getByLabelText(/^email$/i)).toBeInTheDocument());
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "new@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "password" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() =>
       expect(screen.getByText(/too common/i)).toBeInTheDocument()
@@ -298,11 +348,11 @@ describe("SignInStep — turnstile", () => {
   });
 
   async function fillAndSubmitRegister() {
-    await waitFor(() => screen.getByLabelText(/^email$/i));
+    await openRegisterForm();
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "n@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Nia" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ng-pass-9" } });
-    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create account/i }));
   }
 
   it("renders the widget container inside the checkout sign-in form", async () => {
