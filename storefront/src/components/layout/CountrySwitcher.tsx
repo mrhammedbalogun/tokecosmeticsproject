@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 import type { Market } from "@/lib/country";
 import { labelFor } from "@/lib/country";
 import { dismissGeoSuggestion } from "@/lib/geo";
@@ -8,14 +8,18 @@ import { dismissGeoSuggestion } from "@/lib/geo";
 export function CountrySwitcher({ markets, current }: { markets: Market[]; current: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [value, setValue] = useState(current);
+  // Optimistic mirror of the server-derived country: shows the picked value instantly
+  // while the POST+refresh is in flight, then follows `current`. Plain useState(current)
+  // froze the mount value, so a switch made ELSEWHERE (the welcome popup) updated the
+  // prices but left this select stale until a full reload.
+  const [value, setValue] = useOptimistic(current);
 
   function change(code: string) {
-    setValue(code);
-    // An explicit choice supersedes any geo suggestion — suppress the banner for good.
+    // An explicit choice supersedes any geo suggestion — suppress the popup for good.
     // Dismissing before the POST resolves is intentional: an explicit pick signals intent regardless of the request outcome.
     dismissGeoSuggestion();
     start(async () => {
+      setValue(code); // inside the transition, as useOptimistic requires
       await fetch("/api/country", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ code }),
