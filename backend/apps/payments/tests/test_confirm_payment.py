@@ -141,6 +141,29 @@ def test_confirm_currency_mismatch_flags_for_review(fake_gateway):
     assert order.review_reason != ""
 
 
+def test_confirm_never_downgrades_a_succeeded_payment(fake_gateway):
+    """succeeded is terminal. Flutterwave allows several charge attempts under one
+    tx_ref, so verify-by-reference can surface an OLD failed attempt after a later one
+    succeeded and fulfilled — that stale answer must not un-succeed the money (it would
+    break the succeeded<=>fulfilled invariant and hide the row from refund picking)."""
+    ng, ngn, variant = _setup()
+    order = _order("TC-900030", ng, ngn)
+    payment = PaymentFactory(order=order, currency=ngn, gateway="fake",
+                             amount="1000.00", gateway_reference="TC-900030",
+                             status="succeeded")
+    order.status = "processing"
+    order.save(update_fields=["status"])
+    fake_gateway.result = VerifyResult(status="failed", amount=Decimal("1000.00"),
+                                       currency="NGN", raw={"status": "failed"})
+
+    confirm_payment(payment)
+
+    payment.refresh_from_db()
+    assert payment.status == "succeeded"
+    # the stale verify is still recorded as evidence, just not acted on
+    assert payment.raw_response["verify"] == {"status": "failed"}
+
+
 def test_confirm_unpaid_verify_does_not_fulfil(fake_gateway):
     ng, ngn, variant = _setup()
     order = _order("TC-200013", ng, ngn)

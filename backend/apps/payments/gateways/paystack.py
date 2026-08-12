@@ -51,7 +51,10 @@ class PaystackGateway(PaymentGateway):
             "email": order.email,
             "amount": to_minor(payment.amount, payment.currency),  # kobo
             "currency": payment.currency_id,
-            "reference": order.reservation_reference,  # our attempt-suffixed idempotency key
+            # Minted by the checkout service: bare order reference for the first attempt,
+            # "-P<pk>"-suffixed for retries. Paystack dedupes initialize on it, so a
+            # retry after a 5xx with the same reference resumes the same transaction.
+            "reference": payment.gateway_reference,
         }
         if return_url:
             payload["callback_url"] = return_url

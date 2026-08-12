@@ -45,7 +45,11 @@ class BankTransferGateway(PaymentGateway):
             )
         return InitiateResult(
             action="bank_details",
-            reference=order.number,
+            # The ROW identity — attempt-unique, minted by the checkout service. The
+            # reference the CUSTOMER quotes on the wire stays the plain order number
+            # (data["reference"] below): staff match bank statements by order number,
+            # and the confirm flow records the statement line separately.
+            reference=payment.gateway_reference,
             data={
                 "bank_name": account.bank_name,
                 "account_name": account.account_name,

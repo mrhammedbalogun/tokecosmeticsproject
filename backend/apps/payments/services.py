@@ -292,6 +292,14 @@ def confirm_payment(payment) -> None:
     payment.raw_response = {**(payment.raw_response or {}), "verify": result.raw}
 
     if result.status != "succeeded":
+        # succeeded is TERMINAL. Flutterwave keeps several charge attempts under one
+        # tx_ref, so a verify can surface an older failed attempt after a later one
+        # succeeded and fulfilled — acting on that stale answer would break the
+        # succeeded<=>fulfilled invariant and hide the row from refund picking. Record
+        # the verify as evidence, change nothing else.
+        if payment.status == "succeeded":
+            payment.save(update_fields=["raw_response", "updated_at"])
+            return
         payment.status = "pending" if result.status == "pending" else "failed"
         payment.save(update_fields=["status", "raw_response", "updated_at"])
         return

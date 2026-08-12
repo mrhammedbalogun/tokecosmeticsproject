@@ -17,7 +17,7 @@ from apps.core.models import Country
 from apps.orders.factories import OrderFactory
 from apps.payments.factories import PaymentFactory
 from apps.payments.gateways import registry
-from apps.payments.gateways.base import InitiateResult, PaymentGateway
+from apps.payments.gateways.base import GatewayError, InitiateResult, PaymentGateway
 from apps.payments.models import BankAccount, Payment
 
 pytestmark = pytest.mark.django_db
@@ -162,3 +162,128 @@ def test_manual_gateway_without_a_bank_account_is_refused(pending_order):
         retry_payment(user=pending_order.user, order_number="TC-800001",
                       payment_gateway="bank_transfer", key="retry-9")
     assert exc.value.code == "gateway_unavailable"
+
+
+# --- same-gateway retry: the reference is the transaction identity ---------------------
+#
+# The FAKE-{pk} gateway above accidentally mints attempt-unique references, which is how
+# the 2026-08-12 bug survived its tests: the REAL adapters send the reference the service
+# minted on the row, and retrying the same gateway collided with
+# uniq_payment_gateway_reference (Flutterwave order TC-100056, HTTP 500). The service now
+# owns minting: bare order reference for the first goods attempt (the exact bytes Paystack
+# was certified on), "-P<pk>"-suffixed for every later attempt.
+
+
+class _EchoRefGateway(PaymentGateway):
+    """Shaped like the real adapters post-fix: sends payment.gateway_reference verbatim."""
+
+    code = "fakecho"
+    supported_currencies = {"NGN"}
+    calls: list = []
+    fail_next = False
+
+    def initiate(self, payment, order, return_url: str = "") -> InitiateResult:
+        type(self).calls.append(
+            {"pk": payment.pk, "reference": payment.gateway_reference, "return_url": return_url}
+        )
+        if type(self).fail_next:
+            type(self).fail_next = False
+            raise GatewayError("gateway 5xx")
+        return InitiateResult(action="redirect", reference=payment.gateway_reference,
+                              data={"redirect_url": "https://gw/pay"})
+
+
+@pytest.fixture
+def fakecho(monkeypatch):
+    _EchoRefGateway.calls = []
+    _EchoRefGateway.fail_next = False
+    gw = _EchoRefGateway()
+    monkeypatch.setitem(registry._REGISTRY, "fakecho", gw)
+    ng = Country.objects.get(code="NG")
+    from apps.payments.models import CountryPaymentGateway
+
+    CountryPaymentGateway.objects.update_or_create(
+        country=ng, gateway="fakecho", defaults={"is_active": True, "sort_order": 10})
+    return gw
+
+
+@pytest.fixture
+def declined_order(django_user_model):
+    """An order whose FIRST attempt already holds the bare order reference — exactly what
+    production rows look like after a declined card."""
+    ng = Country.objects.get(code="NG")
+    user = django_user_model.objects.create_user(email="d@x.com", password="pw")
+    order = OrderFactory(number="TC-800002", user=user, country=ng, currency=ng.currency,
+                         reservation_reference="TC-800002", grand_total="5000.00",
+                         status="pending_payment", email="d@x.com",
+                         reservation_expires_at=timezone.now() + timedelta(minutes=15))
+    PaymentFactory(order=order, currency=ng.currency, gateway="fakecho",
+                   amount="5000.00", gateway_reference="TC-800002", status="initiated",
+                   raw_response={"redirect_url": "https://gw/old"})
+    return order
+
+
+def test_retrying_the_same_gateway_does_not_collide(declined_order, fakecho):
+    """The live bug: same gateway, same order -> IntegrityError -> 500."""
+    result = retry_payment(user=declined_order.user, order_number="TC-800002",
+                           payment_gateway="fakecho", key="retry-same-1")
+
+    assert result.payment.gateway == "fakecho"
+    assert result.payment.gateway_reference == f"TC-800002-P{result.payment.pk}"
+    # The declined attempt survives untouched — its decline evidence and its identity
+    # at the gateway must never be recycled.
+    old = declined_order.payments.exclude(pk=result.payment.pk).get()
+    assert old.gateway_reference == "TC-800002"
+    assert old.raw_response == {"redirect_url": "https://gw/old"}
+    assert declined_order.payments.count() == 2
+
+
+def test_retry_return_url_carries_the_attempt_reference(declined_order, fakecho):
+    """The customer must come back to the verify of THIS attempt, not the declined one —
+    PaymentStatusView resolves ?ref= by gateway_reference."""
+    result = retry_payment(user=declined_order.user, order_number="TC-800002",
+                           payment_gateway="fakecho", key="retry-same-2")
+
+    assert _EchoRefGateway.calls[-1]["return_url"].endswith(
+        f"/checkout/return?ref={result.payment.gateway_reference}"
+    )
+
+
+def test_bank_transfer_same_gateway_retry_does_not_collide(pending_order):
+    """bank_transfer had the identical latent collision (its adapter returned the bare
+    order number). A card customer switching to bank transfer, abandoning, and choosing
+    bank transfer again must not 500."""
+    ng = Country.objects.get(code="NG")
+    BankAccount.objects.create(country=ng, currency=ng.currency, bank_name="GTB",
+                               account_name="Toke", account_number="0123456789",
+                               is_active=True)
+
+    first = retry_payment(user=pending_order.user, order_number="TC-800001",
+                          payment_gateway="bank_transfer", key="retry-bt-1")
+    again = retry_payment(user=pending_order.user, order_number="TC-800001",
+                          payment_gateway="bank_transfer", key="retry-bt-2")
+
+    assert first.payment.pk != again.payment.pk
+    refs = {first.payment.gateway_reference, again.payment.gateway_reference}
+    assert len(refs) == 2  # attempt-unique, no constraint violation
+
+
+def test_crashed_initiate_replays_with_the_same_key_and_reference(declined_order, fakecho):
+    """Intent-then-act: the reference is persisted BEFORE the gateway call, so a crashed
+    initiate leaves a row that a replay of the SAME key resumes — same row, same
+    reference, and this time with SDK material."""
+    _EchoRefGateway.fail_next = True
+    with pytest.raises(GatewayError):
+        retry_payment(user=declined_order.user, order_number="TC-800002",
+                      payment_gateway="fakecho", key="retry-crash-1")
+
+    crashed = declined_order.payments.exclude(gateway_reference="TC-800002").get()
+    assert crashed.gateway_reference == f"TC-800002-P{crashed.pk}"  # persisted pre-crash
+    assert crashed.raw_response == {}  # but no SDK material yet
+
+    replay = retry_payment(user=declined_order.user, order_number="TC-800002",
+                           payment_gateway="fakecho", key="retry-crash-1")
+    assert replay.payment.pk == crashed.pk
+    assert replay.payment.gateway_reference == crashed.gateway_reference
+    assert replay.payment.raw_response == {"redirect_url": "https://gw/pay"}
+    assert declined_order.payments.count() == 2  # no third row

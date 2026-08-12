@@ -89,7 +89,11 @@ def test_gateway_5xx_on_initiate_returns_502_then_retry_resumes(django_user_mode
     assert order.status == "pending_payment"
     assert variant.stock_items.get().reserved == 2  # reservation held
     payment = Payment.objects.get(order=order)
-    assert payment.gateway_reference == ""  # initiate never completed
+    # Intent-then-act (2026-08-12): the reference is persisted BEFORE the gateway call,
+    # so a crashed initiate still leaves the handle to find any half-created transaction
+    # gateway-side. "Initiate never completed" is marked by the missing SDK material.
+    assert payment.gateway_reference == order.reservation_reference
+    assert payment.raw_response == {}
 
     # Retry with the SAME key — resumes the same order, initiate now succeeds.
     r2 = client.post("/api/v1/checkout/", _body(cart, addr, opt), format="json",

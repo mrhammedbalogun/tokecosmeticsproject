@@ -66,9 +66,11 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
     existing = Payment.objects.filter(idempotency_key=key, order__user=user).select_related("order").first()
     if existing:
         # If a prior attempt created the order but the gateway initiate failed (5xx), the
-        # payment has no gateway_reference yet — resume by re-attempting initiate (may
-        # raise GatewayError again, which the view maps to 502). Never a duplicate order.
-        if not existing.gateway_reference:
+        # payment has no SDK material yet (raw_response is set only after a successful
+        # initiate; the reference alone is persisted BEFORE the call) — resume by
+        # re-attempting initiate (may raise GatewayError again, which the view maps to
+        # 502). Never a duplicate order.
+        if not existing.raw_response:
             _initiate_payment(existing, existing.order)
         return CheckoutResult(order=existing.order, payment=existing)
 
@@ -246,7 +248,10 @@ def retry_payment(*, user, order_number: str, payment_gateway: str, key: str) ->
         .select_related("order").first()
     )
     if existing:
-        if not existing.gateway_reference:
+        # raw_response, not gateway_reference: the reference is persisted before the
+        # gateway call, so only the SDK material proves initiate finished (same marker
+        # as place_order's backstop above).
+        if not existing.raw_response:
             _initiate_payment(existing, existing.order)
         return CheckoutResult(order=existing.order, payment=existing)
 
@@ -295,12 +300,36 @@ def _initiate_payment(payment, order) -> None:
     """Call the gateway to start collecting money and persist what it returns. Raises
     GatewayError/GatewayNotConfigured on failure — the order stays pending_payment and
     the attempt is safely retryable (see the durable backstop above)."""
-    # Server-built return URL: the trusted storefront origin + the order's OWN reference.
-    # Never accept a return URL from the client (open-redirect / tampering). Only the
-    # redirect gateway (Flutterwave) acts on it; the inline gateways ignore it.
+    # The service mints the gateway reference, not the adapters. At every gateway we use,
+    # the reference IS the transaction identity, so each attempt needs its own: the first
+    # goods attempt keeps the bare order reference (the exact bytes the Paystack
+    # certification ran on), every later attempt is "-P<pk>"-suffixed. Reusing a
+    # reference across attempts is what produced the retry 500 (IntegrityError on
+    # uniq_payment_gateway_reference, Flutterwave TC-100056, 2026-08-12).
+    #
+    # Persisted BEFORE the network call (intent-then-act): if initiate crashes after the
+    # gateway created a transaction, the reference in our row is the handle to find it —
+    # previously that link existed gateway-side with no trace in the DB. "Initiate
+    # succeeded" is therefore marked by raw_response (the SDK material), no longer by
+    # gateway_reference — the backstops check accordingly.
+    if not payment.gateway_reference:
+        is_first_attempt = not (
+            order.payments.filter(purpose="goods").exclude(pk=payment.pk).exists()
+        )
+        payment.gateway_reference = (
+            order.reservation_reference if is_first_attempt
+            else f"{order.reservation_reference}-P{payment.pk}"
+        )
+        payment.save(update_fields=["gateway_reference", "updated_at"])
+
+    # Server-built return URL: the trusted storefront origin + THIS attempt's reference
+    # (PaymentStatusView resolves ?ref= by gateway_reference, so the customer returns to
+    # the verify of the attempt they actually paid). Never accept a return URL from the
+    # client (open-redirect / tampering). Only the redirect gateway (Flutterwave) acts on
+    # it; the inline gateways ignore it.
     return_url = (
         f"{settings.STOREFRONT_BASE_URL.rstrip('/')}"
-        f"/checkout/return?ref={order.reservation_reference}"
+        f"/checkout/return?ref={payment.gateway_reference}"
     )
     init = get_gateway(payment.gateway).initiate(payment, order, return_url=return_url)
     payment.gateway_reference = init.reference

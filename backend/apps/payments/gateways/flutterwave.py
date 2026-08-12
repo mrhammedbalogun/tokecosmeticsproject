@@ -67,7 +67,9 @@ class FlutterwaveGateway(PaymentGateway):
         if settings.BRAND_LOGO_URL:
             customizations["logo"] = settings.BRAND_LOGO_URL
         payload = {
-            "tx_ref": order.reservation_reference,  # our idempotency handle
+            # Minted by the checkout service, unique per attempt — Flutterwave keeps one
+            # transaction identity per tx_ref, so attempts must never share one.
+            "tx_ref": payment.gateway_reference,
             "amount": str(payment.amount),  # MAJOR units — not to_minor()
             "currency": payment.currency_id,
             "customer": {"email": order.email},
@@ -84,7 +86,7 @@ class FlutterwaveGateway(PaymentGateway):
             raise GatewayError(f"Flutterwave rejected: {body.get('message')}")
         return InitiateResult(
             action="redirect",
-            reference=order.reservation_reference,
+            reference=payment.gateway_reference,
             data={"redirect_url": body["data"]["link"]},
         )
 

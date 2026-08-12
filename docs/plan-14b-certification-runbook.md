@@ -14,7 +14,7 @@ What remains is **manual** and needs a human with the gateway dashboards: Tasks 
 | Gateway | Keys | Task 16 (UI payment) | Task 17 (webhook) |
 | --- | --- | --- | --- |
 | **Paystack** (NG) | ✅ test key configured | ✅ **certified** — TC-100041 → `processing` | ✅ **signature + idempotency certified**; one Paystack-*originated* delivery still owed (needs the dashboard URL — do it at deploy) |
-| Flutterwave (NG) | ⬜ no credentials yet | ⬜ | ⬜ |
+| **Flutterwave** (NG) | ✅ test key configured 2026-08-12 | ✅ **certified 2026-08-12** — TC-100052 → `processing`; decline + same-order recovery on TC-100056 | ✅ **verif-hash + idempotency certified 2026-08-12** over a cloudflared tunnel; one Flutterwave-*originated* delivery still owed (dashboard webhook URL + secret hash — do it at deploy) |
 | PayPal (intl) | ⬜ no credentials yet | ⬜ | ⬜ |
 | Bank transfer | n/a | ✅ still works — TC-100042 | n/a |
 
@@ -216,6 +216,83 @@ tunnel. **Trailing slash is required** (`…/api/v1/webhooks/paystack/`) — Dja
 `APPEND_SLASH` will not redirect a POST.
 
 Script used: `task17_signed_replay.py` (session scratchpad; read-only against Paystack).
+
+### Flutterwave — done 2026-08-12
+
+Driven headlessly (Playwright, scripts in the session scratchpad) against the dev servers
+with the TEST secret key. Keys live in `backend/.env` under the exact names Django reads;
+the live pair is parked commented under the DO-NOT-ENABLE banner. `FLUTTERWAVE_SECRET_HASH`
+is a generated random string — **at deploy it must be pasted into Flutterwave dashboard →
+Settings → Webhooks → Secret hash**, along with the webhook URL
+`https://<api-origin>/api/v1/webhooks/flutterwave/` (trailing slash required).
+
+**Task 16 (UI payment)** — order **TC-100052**: checkout → hosted page (branded, test-mode
+banner) → MasterCard test card `5531 8866 5214 2950` + PIN 3310 + OTP 12345 → redirect to
+`/checkout/return?ref=…` → confirmation, order `processing`. Payment `succeeded ₦2,800`,
+Flutterwave transaction id `10427340` persisted in `raw_response.verify.id` (refund-ready).
+Exactly two `StockMovement` rows (reservation + sale). Confirmation email for the follow-up
+order TC-100056 **delivered** by Resend to a real inbox
+(`billztechnologiesofficial+flwcert@gmail.com`); TC-100052's bounced only because the
+walkthrough account uses a `.local` address.
+
+**Failure surface** — the insufficient-funds test card (`5258 5859 2266 6506`) produced
+Flutterwave's inline decline; nothing was fulfilled and the returning customer sees
+"Your payment didn't go through." Their hosted page deliberately stays open on decline
+(retry-in-place is their design), and its Cancel/X control never redirected in headless —
+the failure screen was certified by returning to `/checkout/return?ref=…` directly, which
+is byte-identical to what their `status=failed` redirect does.
+
+**Certification found and fixed a real bug (same-gateway retry 500).** `retry_payment`
+creates a new Payment row per attempt, but every real adapter sent the BARE order
+reference as the gateway reference → second attempt on the same gateway violated
+`uniq_payment_gateway_reference` → HTTP 500 (reproduced live on TC-100056; latent for
+paystack and bank_transfer too — the retry tests' fake gateway minted `FAKE-{pk}` refs and
+dodged it). Fix (2026-08-12, after a dissent review rejected reusing the payment row):
+the **service** now mints references in `_initiate_payment` — bare order reference for the
+first goods attempt (the exact bytes Paystack was certified on), `-P<pk>`-suffixed for
+retries — persisted BEFORE the gateway call (intent-then-act; a crashed initiate now
+leaves the handle to find the half-created transaction). Adapters send
+`payment.gateway_reference` verbatim; the durable backstops now key "initiate finished"
+off `raw_response` instead of the reference; `confirm_payment` gained a terminal-state
+guard (a stale failed verify can never un-succeed a fulfilled payment — Flutterwave allows
+several charge attempts per tx_ref, so verify-by-reference answers are ambiguous by
+design). Proof on TC-100056: decline (payment 58, `failed`, bare ref, decline evidence
+intact) → retry via `POST /orders/{number}/pay/` → payment 61 `succeeded` on
+`TC-100056-P61` (own flw id 10427378) → SAME order `processing`, no double-payment flag,
+still exactly two stock movements. Regression tests:
+`test_retry_payment.py` (same-gateway retry, bank-transfer retry, attempt-suffixed return
+URL, crashed-initiate replay) and
+`test_confirm_payment.py::test_confirm_never_downgrades_a_succeeded_payment`.
+
+**Task 17 (webhook)** — over a real cloudflared tunnel into
+`POST /api/v1/webhooks/flutterwave/`, body = Flutterwave's own verify data for TC-100052
+enveloped as `charge.completed`:
+
+| Delivery | Result |
+| --- | --- |
+| `verif-hash` = `0`×64 | **HTTP 400** `invalid_signature`, no `WebhookEvent` row |
+| No `verif-hash` header | **HTTP 400** `invalid_signature` |
+| Correct `verif-hash` | **HTTP 200** `accepted` — one `WebhookEvent`, processed, `error=""` |
+| Exact redelivery | **HTTP 200** `duplicate` — still one row (derived event id dedupe) |
+
+Idempotency against the return-verify: TC-100052 unchanged after the webhook — one
+payment, still `processing`, still two stock movements. Amount-mismatch guard not
+re-staged: same shared `confirm_payment` as Paystack (its TC-100039 evidence + unit tests
+cover both).
+
+**Gaps found while certifying (open):**
+
+- **Redirect-flow dead end.** After a failed/cancelled Flutterwave payment the failure
+  screen's only exit is "Back to checkout", which lands on an EMPTY cart (the order
+  consumed it). Paystack dodges this only because its popup keeps the checkout page
+  mounted. The backend retry endpoint exists and is certified; what's missing is UI —
+  a "Pay now" on `/account/orders/[number]` (page exists now) and/or Try-again on the
+  failure screen. Decision owed by Hammed.
+- **Flutterwave account limit.** The dashboard reports "Merchant limit is set at 3000
+  pending go live" — test transactions cap at ₦3,000 until Flutterwave finishes their
+  account review. Certification worked around it with a temporarily cheap dev product
+  (restored). **Check the go-live review status before planning a live cutover** — the
+  live keys likely cannot take real money until it clears.
 
 ## Task 18 — sign-off
 
