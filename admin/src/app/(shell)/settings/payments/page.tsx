@@ -45,7 +45,7 @@ export default async function PaymentsSettingsPage() {
   return (
     <div>
       <div>
-        <Link href="/settings" className="text-sm text-muted hover:text-fg">
+        <Link href="/settings" className="text-sm text-muted hover:text-foreground">
           ← Settings
         </Link>
         <h1 className="mt-2 text-lg font-semibold tracking-tight">Payments</h1>

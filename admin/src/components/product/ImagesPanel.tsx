@@ -27,7 +27,7 @@ import { useRef, useState } from "react";
 import type { ProductImage } from "@/app/(shell)/products/[slug]/image-actions";
 
 const GHOST =
-  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-fg disabled:opacity-40";
+  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-foreground disabled:opacity-40";
 
 export interface ImagesPanelProps {
   images: ProductImage[];

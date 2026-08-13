@@ -15,7 +15,7 @@ import type { ProductVideo } from "@/app/(shell)/products/[slug]/video-actions";
 import { fileSizeMb } from "@/lib/video";
 
 const GHOST =
-  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-fg disabled:opacity-40";
+  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-foreground disabled:opacity-40";
 
 export interface VideosPanelProps {
   videos: ProductVideo[];

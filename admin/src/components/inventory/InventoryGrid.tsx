@@ -208,7 +208,7 @@ function Cell({
       <button
         type="button"
         onClick={onStartStocking}
-        className="inline-flex items-center gap-1 rounded border border-dashed border-line px-1.5 py-0.5 text-xs text-muted hover:border-accent hover:text-fg"
+        className="inline-flex items-center gap-1 rounded border border-dashed border-line px-1.5 py-0.5 text-xs text-muted hover:border-accent hover:text-foreground"
         title="No stock row here. Nobody has counted this variant in this warehouse — click to start stocking it."
       >
         Not stocked

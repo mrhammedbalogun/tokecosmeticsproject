@@ -24,7 +24,7 @@ const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm placeholder:text-muted/70 focus:border-accent focus:outline-none";
 
 const GHOST =
-  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-fg";
+  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-foreground";
 
 /** Rich text (TipTap) since 2026-08-12, matching Details. Specs and FAQs stay plain
  *  inputs deliberately: they are structured rows, and FAQ answers feed the FAQPage

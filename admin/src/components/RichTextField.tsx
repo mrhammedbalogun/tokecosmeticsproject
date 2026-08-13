@@ -54,7 +54,7 @@ function ToolButton({
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={`min-w-7 rounded px-1.5 py-1 text-xs leading-none disabled:opacity-40 ${
-        active ? "bg-accent/10 font-semibold text-accent" : "text-muted hover:text-fg"
+        active ? "bg-accent/10 font-semibold text-accent" : "text-muted hover:text-foreground"
       }`}
     >
       {children}

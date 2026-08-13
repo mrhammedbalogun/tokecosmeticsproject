@@ -146,7 +146,7 @@ export default async function ReportsPage({ searchParams }: { searchParams: Sear
           >
             Run
           </button>
-          <Link href={PATH} className="py-1.5 text-sm text-muted hover:text-fg">
+          <Link href={PATH} className="py-1.5 text-sm text-muted hover:text-foreground">
             Reset
           </Link>
         </div>

@@ -860,7 +860,7 @@ export function ProductEditor({
             className={`-mb-px border-b-2 px-4 py-2 text-sm ${
               tab === id
                 ? "border-accent font-medium text-accent"
-                : "border-transparent text-muted hover:text-fg"
+                : "border-transparent text-muted hover:text-foreground"
             }`}
           >
             {label}
@@ -1016,7 +1016,7 @@ export function ProductEditor({
         )}
       </div>
 
-      <div className="sticky bottom-0 mt-6 flex items-center gap-3 border-t border-line bg-bg/95 py-3 backdrop-blur">
+      <div className="sticky bottom-0 mt-6 flex items-center gap-3 border-t border-line bg-background/95 py-3 backdrop-blur">
         <button
           type="button"
           onClick={onSave}

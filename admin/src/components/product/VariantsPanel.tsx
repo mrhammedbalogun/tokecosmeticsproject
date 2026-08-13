@@ -141,7 +141,7 @@ export function VariantsPanel({
                           type="button"
                           onClick={() => onAdjust?.(item.id)}
                           disabled={!onAdjust}
-                          className="rounded border border-line px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-fg disabled:opacity-40"
+                          className="rounded border border-line px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-foreground disabled:opacity-40"
                         >
                           Adjust
                         </button>

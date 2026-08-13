@@ -171,7 +171,7 @@ export function MediaLibraryModal({
             type="button"
             onClick={onClose}
             aria-label="Close library"
-            className="rounded border border-line px-2 py-0.5 text-sm text-muted hover:border-accent hover:text-fg"
+            className="rounded border border-line px-2 py-0.5 text-sm text-muted hover:border-accent hover:text-foreground"
           >
             ✕
           </button>
@@ -217,7 +217,7 @@ export function MediaLibraryModal({
             <button
               type="button"
               onClick={() => abortRef.current?.()}
-              className="rounded border border-line px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-fg"
+              className="rounded border border-line px-2 py-0.5 text-xs text-muted hover:border-accent hover:text-foreground"
             >
               Cancel
             </button>

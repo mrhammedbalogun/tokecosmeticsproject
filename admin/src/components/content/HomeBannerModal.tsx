@@ -360,7 +360,7 @@ export function HomeBannerModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded border border-line px-2 py-0.5 text-sm text-muted hover:border-accent hover:text-fg"
+            className="rounded border border-line px-2 py-0.5 text-sm text-muted hover:border-accent hover:text-foreground"
           >
             ✕
           </button>

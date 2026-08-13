@@ -98,7 +98,7 @@ export function StockAdjustModal({
         role="dialog"
         aria-modal="true"
         aria-label={`Adjust stock for ${sku}`}
-        className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-bg p-5 shadow-lg"
+        className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-background p-5 shadow-lg"
       >
         <h2 className="text-base font-semibold">Adjust stock</h2>
         <p className="mt-1 text-sm text-muted">
@@ -178,7 +178,7 @@ export function StockAdjustModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-fg"
+            className="rounded border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-foreground"
           >
             Cancel
           </button>

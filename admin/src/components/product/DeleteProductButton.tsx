@@ -108,7 +108,7 @@ export function DeleteProductButton({
           type="button"
           onClick={() => setOpen(false)}
           disabled={pending}
-          className="rounded border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-fg"
+          className="rounded border border-line px-3 py-1.5 text-sm text-muted hover:border-accent hover:text-foreground"
         >
           Cancel
         </button>

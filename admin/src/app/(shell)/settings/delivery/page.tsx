@@ -49,7 +49,7 @@ export default async function DeliverySettingsPage() {
     <div>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <Link href="/settings" className="text-sm text-muted hover:text-fg">
+          <Link href="/settings" className="text-sm text-muted hover:text-foreground">
             ← Settings
           </Link>
           <h1 className="mt-2 text-lg font-semibold tracking-tight">Delivery</h1>

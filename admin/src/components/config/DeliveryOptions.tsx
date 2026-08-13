@@ -492,7 +492,7 @@ function OptionEditor({
             <button
               type="button"
               onClick={() => setArmed(false)}
-              className="text-sm text-muted underline hover:text-fg"
+              className="text-sm text-muted underline hover:text-foreground"
             >
               Keep it
             </button>

@@ -348,7 +348,7 @@ function MarketCard({
                   onClick={() => move(index, -1)}
                   disabled={index === 0 || busy !== null}
                   aria-label={`Move ${row.gateway} up`}
-                  className="text-xs leading-none text-muted hover:text-fg disabled:opacity-30"
+                  className="text-xs leading-none text-muted hover:text-foreground disabled:opacity-30"
                 >
                   ▲
                 </button>
@@ -357,7 +357,7 @@ function MarketCard({
                   onClick={() => move(index, 1)}
                   disabled={index === rows.length - 1 || busy !== null}
                   aria-label={`Move ${row.gateway} down`}
-                  className="text-xs leading-none text-muted hover:text-fg disabled:opacity-30"
+                  className="text-xs leading-none text-muted hover:text-foreground disabled:opacity-30"
                 >
                   ▼
                 </button>

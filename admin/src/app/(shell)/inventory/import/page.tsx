@@ -20,7 +20,7 @@ export default async function StockImportPage() {
   return (
     <div>
       <div>
-        <Link href="/inventory" className="text-sm text-muted hover:text-fg">
+        <Link href="/inventory" className="text-sm text-muted hover:text-foreground">
           ← Inventory
         </Link>
         <h1 className="mt-2 text-lg font-semibold tracking-tight">Import stock</h1>

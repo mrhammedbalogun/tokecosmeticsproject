@@ -22,7 +22,7 @@
 import type { Combination, MatrixDiff } from "@/lib/variant-matrix";
 
 const GHOST =
-  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-fg disabled:opacity-40";
+  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-foreground disabled:opacity-40";
 
 export type RowStatus = "pending" | "creating" | "created" | "failed";
 

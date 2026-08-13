@@ -67,7 +67,7 @@ export default async function UnpricedPage({ searchParams }: { searchParams: Sea
   return (
     <div>
       <div>
-        <Link href="/products" className="text-sm text-muted hover:text-fg">
+        <Link href="/products" className="text-sm text-muted hover:text-foreground">
           ← Products
         </Link>
         <h1 className="mt-2 text-lg font-semibold tracking-tight">Unpriced in a market</h1>

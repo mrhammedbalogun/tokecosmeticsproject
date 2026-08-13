@@ -33,7 +33,7 @@ export default async function NewDeliveryOptionPage() {
   return (
     <div>
       <div>
-        <Link href="/settings/delivery" className="text-sm text-muted hover:text-fg">
+        <Link href="/settings/delivery" className="text-sm text-muted hover:text-foreground">
           ← Delivery
         </Link>
         <h1 className="mt-2 text-lg font-semibold tracking-tight">New delivery option</h1>

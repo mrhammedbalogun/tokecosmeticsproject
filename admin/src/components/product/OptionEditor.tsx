@@ -28,7 +28,7 @@ import { cartesian, MAX_COMBINATIONS, type Axis } from "@/lib/variant-matrix";
 const FIELD =
   "rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
 const GHOST =
-  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-fg disabled:opacity-40";
+  "rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-foreground disabled:opacity-40";
 
 export function OptionEditor({
   axes,
@@ -161,7 +161,7 @@ export function OptionEditor({
                     }
                     disabled={valueIndex === 0}
                     aria-label={`Move ${value} earlier`}
-                    className="px-1 text-xs text-muted hover:text-fg disabled:opacity-30"
+                    className="px-1 text-xs text-muted hover:text-foreground disabled:opacity-30"
                   >
                     ←
                   </button>
@@ -172,7 +172,7 @@ export function OptionEditor({
                     }
                     disabled={valueIndex === axis.values.length - 1}
                     aria-label={`Move ${value} later`}
-                    className="px-1 text-xs text-muted hover:text-fg disabled:opacity-30"
+                    className="px-1 text-xs text-muted hover:text-foreground disabled:opacity-30"
                   >
                     →
                   </button>

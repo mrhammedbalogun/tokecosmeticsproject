@@ -32,7 +32,7 @@ export default async function EditContentPage({
   return (
     <div>
       <div>
-        <Link href="/content" className="text-sm text-muted hover:text-fg">
+        <Link href="/content" className="text-sm text-muted hover:text-foreground">
           ← Content
         </Link>
         <h1 className="mt-2 text-lg font-semibold tracking-tight">{page.title}</h1>

@@ -64,7 +64,7 @@ export function InventoryFilterForm({
         >
           Apply
         </button>
-        <a href="/inventory" className="py-1.5 text-sm text-muted hover:text-fg">
+        <a href="/inventory" className="py-1.5 text-sm text-muted hover:text-foreground">
           Clear
         </a>
       </div>

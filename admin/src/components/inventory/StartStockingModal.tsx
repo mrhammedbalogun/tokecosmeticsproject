@@ -79,7 +79,7 @@ export function StartStockingModal({
       }}
     >
       <form
-        className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-bg p-4 shadow-lg"
+        className="w-full max-w-md rounded-[var(--radius-card)] border border-line bg-background p-4 shadow-lg"
         onSubmit={(e) => {
           e.preventDefault();
           onSubmit({
@@ -93,7 +93,7 @@ export function StartStockingModal({
         <h2 className="text-base font-semibold">Start stocking here</h2>
         <p className="mt-1 text-sm text-muted">
           <span className="font-mono">{sku}</span> — {productName} in{" "}
-          <strong className="text-fg">{warehouseName}</strong>. There is no stock row here
+          <strong className="text-foreground">{warehouseName}</strong>. There is no stock row here
           yet.
         </p>
 
