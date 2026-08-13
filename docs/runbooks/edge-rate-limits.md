@@ -4,7 +4,7 @@
 
 | rule | state |
 |---|---|
-| **A — Vercel Firewall** | **DONE and enforcing.** `Admin login volume cap`, `rule_admin_login_volume_cap_fIQ5Tx`, 20 req / 600 s per IP on `POST /login`, action `deny`, no persistent duration. |
+| **A — Vercel Firewall** | **DONE and enforcing — amended 2026-08-13.** `Admin login volume cap`, `rule_admin_login_volume_cap_fIQ5Tx`, 40 req / 600 s per IP on `/login` (all methods), action `challenge`, no persistent duration. See [Amendment 2026-08-13](#amendment-2026-08-13--deny--challenge) for why it is no longer `POST`-only + `deny`. |
 | **B — Cloudflare** | **DONE and enforcing 2026-07-30.** `http.request.uri.path eq "/api/v1/auth/admin-token/"`, IP, 5 req / 10 s, block 10 s. Verified live: 12 rapid POSTs gave `403 403 403 403 403 429 429 …`, other paths unaffected, window self-cleared. |
 | **BFF shared-secret gate** | **DONE** (`backend-v0.4.1`) — the control that actually closed the gap. |
 
@@ -98,6 +98,33 @@ does not route through the thing enforcing it.
 
 > **DONE 2026-07-30.** Live and enforcing; the steps below are kept as the record of how,
 > and as the procedure for changing or re-creating it.
+>
+> ### Amendment 2026-08-13 — deny → challenge
+>
+> The rule now reads: **path eq `/login` (no method condition), 40 req / 600 s per IP,
+> rate-limit action `challenge`**. Applied via `PATCH /v1/security/firewall/config`
+> (config version 3); the API patches the ACTIVE config directly — no `publish` step,
+> unlike the CLI flow below.
+>
+> **Why.** When the old `deny` fired, the staff member's own login submit (a Server
+> Action `POST /login`) got a bare 403, the client threw "An unexpected response was
+> received from the server", and the root error boundary replaced the page — the
+> "admin hit an error" box, reproduced end-to-end in headless Chrome on 2026-08-13.
+> Per-IP + a CGNAT ISP means other people's traffic can fill the bucket.
+>
+> **Why the method condition had to go.** Vercel's `challenge` is a browser interstitial
+> (Security Checkpoint); a fetch POST cannot render it, and a challenge session can only
+> be established on a document navigation. A `POST`-only challenge rule is therefore
+> deny with extra steps. Covering GET too means a tripped client's next page load shows
+> the checkpoint, a real browser solves it silently, and the 1-hour session lets the
+> login POST through — while scripts still can't establish a session at all.
+>
+> **Why 40, not 20.** Page loads and RSC prefetches now count against the same bucket
+> as submits, so the budget roughly doubles to keep the old headroom.
+>
+> Worst case for a real person mid-trip: one error box on the POST that crossed the
+> limit, then a reload recovers via the checkpoint. The sections below predate this
+> amendment and describe the original `POST`-only `deny` rule.
 >
 > **The 24h log soak in Step A3 was deliberately compressed**, and the reasoning is worth
 > keeping because it is the argument for when a soak is and is not load-bearing. A soak
