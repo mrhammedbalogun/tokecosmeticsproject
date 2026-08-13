@@ -407,6 +407,40 @@ all. Until GIG fixes it: the wallet monitor sees no number, and the capture pre-
 treats lookup failure as balance-unknown rather than blocking captures (capture.py,
 measured-dated comment). Raised as a runbook §2 item for the WhatsApp thread.
 
+## 2h. 2026-08-12 — company-record "gap" closed (our bug); prod webhook host confirmed
+
+GIG's dev answered the 2026-08-11 WhatsApp bundle: *"[companyDetails] works fine, not
+sure what the customer is passing"* and *"[webhook base] just as stated on the
+documentation... change dev to prod"*. Both checked out under measurement:
+
+- **`companyDetails/get` was never broken — the lookup is case-sensitive.** On
+  production, `?Email=tokefactory1@gmail.com` (lowercase, as GIG stores the record)
+  answers 200 with the full company object; `?Email=TOKEFACTORY1@GMAIL.COM` — the
+  casing the creds were issued in, which is what we stored and passed on 2026-08-11 —
+  answers 401 "Company not found." (`/login` accepts either casing, which is why the
+  mismatch was invisible there). `CustomerCode` as the Email value also 401s; the
+  param name is `Email` exactly (`email=`/none → 400 `"Email" is required`). Fixed in
+  `capture.py::wallet_balance` — it now sends `settings.GIG_EMAIL.lower()`.
+- **Production record contents** (verified): CompanyId 113743, CustomerCode ECO078703,
+  Name TOKE FMCG LTD, Ogudu address, Discount 0, SettlementPeriod 0,
+  **`WalletAmount: null`** — same null as sandbox, but this account has never been
+  funded (created 2026-08-10). **ANSWERED later on 2026-08-12: the wallet was funded
+  with ₦50,000 and `WalletAmount` STILL reads `null`** (record's DateModified unchanged
+  — GIG's third-party API simply never surfaces the balance for this account type, and
+  the docs expose no other wallet-read endpoint). Decision (Hammed): **manual
+  monitoring**. The monitor beat sees "unknown" and never alerts; the capture
+  pre-check degrades to unknown by design; GIG's own insufficient-balance refusal is
+  the only automated fence. Reconciliation trail: `GigShipment.cost` rows vs the
+  funded amount (runbook §9).
+- **Webhook prod host confirmed**: the dev-→prod- swap is the whole answer, i.e.
+  `prod-agilitythirdpartyapi.theagilitysystems.com`. Empirically: DNS resolves and an
+  unauthenticated `POST /api/webhook/add-webhook-user` answers **401** (app present,
+  wants auth) on BOTH dev- and prod- hosts — not a Cloudflare 404. Runbook step 4b's
+  `GIG_WEBHOOK_API_BASE` stands as written; no open question remains.
+
+Still open with GIG: only the insufficient-balance error shape (nice-to-have — it
+tightens error copy, nothing else waits on it).
+
 ---
 
 ## 3. The two flows — original analysis, superseded by §2b

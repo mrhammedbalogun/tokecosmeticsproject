@@ -60,7 +60,11 @@ def wallet_balance(*, refresh: bool = False):
         hit = cache.get(WALLET_CACHE_KEY)
         if hit is not None:
             return None if hit == "unknown" else Decimal(hit)
-    email = urllib.parse.quote(settings.GIG_EMAIL)
+    # The lookup is case-sensitive against GIG's stored record (measured on
+    # production 2026-08-12: lowercase 200s, the issued UPPERCASE 401s
+    # "Company not found." — login itself accepts either). Records are stored
+    # lowercase, so normalise before asking.
+    email = urllib.parse.quote(settings.GIG_EMAIL.lower())
     result = client.call("GET", f"/companyDetails/get?Email={email}")
     data = result.data.get("data", result.data) if isinstance(result.data, dict) else result.data
     record = data[0] if isinstance(data, list) and data else data if isinstance(data, dict) else {}
@@ -148,11 +152,10 @@ def capture_shipment(order, *, actor) -> GigShipment:
     ).quantize(TWO_DP)
 
     # Live wallet check, never the cache: the debit is about to happen. A balance GIG
-    # reports as null (sandbox) does not block — the capture itself is then the check.
-    # The lookup FAILING doesn't block either: production answers 401 "Company not
-    # found." on /companyDetails/get for our account (measured 2026-08-11) even while
-    # login and the shipment endpoints work, and an advisory pre-check must not turn
-    # that into a capture outage. GIG's own insufficient-balance refusal stays the fence.
+    # reports as null (sandbox, and production pre-funding) does not block — the
+    # capture itself is then the check. The lookup FAILING doesn't block either: an
+    # advisory pre-check must not turn a lookup outage into a capture outage. GIG's
+    # own insufficient-balance refusal stays the fence.
     try:
         balance = wallet_balance(refresh=True)
     except client.GigUnavailable:

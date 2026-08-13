@@ -39,11 +39,12 @@ Facial Wash) · `TC-WP-2812` (Kids Shampoo) · `TC-WP-4013` (Rinse Off Condition
       before 3 pm for same-day rider dispatch.
 - [ ] The **insufficient-balance error** shape from `capture/preshipment` (we pre-check
       the balance regardless; this only tightens the error copy).
-- [ ] **NEW 2026-08-11: `companyDetails/get` answers 401 "Company not found."** on
-      production for `ECO078703` (login works). Ask GIG to fix the company record — until
-      then the wallet balance is invisible to us: the low-balance monitor cannot arm and
-      the capture pre-check degrades to "unknown" (capture still works; GIG's own
-      insufficient-balance refusal is the fence).
+- [x] ~~`companyDetails/get` answers 401 "Company not found."~~ **RESOLVED 2026-08-12 —
+      it was our bug, not GIG's.** The lookup is case-sensitive against the stored
+      record: `Email=tokefactory1@gmail.com` (lowercase) returns the full company
+      record; the UPPERCASE casing GIG issued the creds in (and we stored) 401s.
+      `wallet_balance()` now lowercases before asking (capture.py). Production record
+      verified: CompanyId 113743, `WalletAmount: null` (wallet unfunded — see step 5).
 
 ## 3. Environment (backend/.env on the VPS, then restart)
 
@@ -81,18 +82,20 @@ manage.py register_gig_webhook https://<api host>/api/v1/webhooks/gig/
 
 It prints the `secret` GIG issues; put it in `backend/.env` as `GIG_WEBHOOK_SECRET`
 and set `GIG_WEBHOOK_API_BASE=https://prod-agilitythirdpartyapi.theagilitysystems.com`
-(their docs' dev-→prod- convention — if registration 404s on that host, confirm the
-production hostname with GIG), then restart. Until the secret is set the receiver
+(**CONFIRMED 2026-08-12**: GIG's dev confirmed the docs' dev-→prod- swap is the whole
+answer, and the prod- host answers 401 — app present, wants auth — on
+`/api/webhook/add-webhook-user`, not 404), then restart. Until the secret is set the receiver
 answers 503, which keeps GIG retrying rather than dropping events. The receiver is
 authenticated by decryption: only a body encrypted with our secret is accepted.
 
 ## 5. Fund the wallet
 
-Transfer with GIG per your arrangement. Then confirm the number the API sees:
-`GET /companyDetails/get` should show the balance (the admin order panel displays it once
-any GIG order exists). **If production also reports `WalletAmount: null`, tell GIG** —
-the low-balance alert cannot protect a number the API won't report, and the capture-time
-guard becomes the only fence.
+**DONE 2026-08-12: wallet funded ₦50,000 — and `WalletAmount` still reads `null`**
+(re-measured after funding; the API never surfaces the balance for this account, and
+there is no other wallet-read endpoint). Decision: **manual monitoring** — reconcile
+the funded amount against `GigShipment.cost` rows (§9); the low-balance email will
+never fire and the capture-time guard (GIG's own insufficient-balance refusal) is the
+only automated fence.
 
 ## 6. Production smoke (one real quote, no waybill)
 
