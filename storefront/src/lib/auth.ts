@@ -17,6 +17,12 @@ export const CART_COOKIE = "cart_id";
 export const ACCESS_MAX_AGE = 60 * 14; // 14 min, under the 15-min access token
 export const REFRESH_MAX_AGE = 60 * 60 * 24 * 14; // 14 days, well under the 30-day token
 
+// The guest cart id is not a credential — it just names a cart row. It must OUTLIVE the
+// browser session (a shopper who closes the tab expects their cart back days later), so
+// unlike the token cookies it gets a long fixed max-age. The backend revives abandoned
+// carts on return, so the only hard limit on cart recall is this cookie's lifetime.
+export const CART_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
+
 export interface CookieOptions {
   httpOnly: boolean;
   sameSite: "lax";

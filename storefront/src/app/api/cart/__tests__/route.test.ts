@@ -43,6 +43,33 @@ describe("cart BFF", () => {
     expect(new Headers(init.headers).get("X-Cart-Id")).toBe("22222222-2222-2222-2222-222222222222");
   });
 
+  it("refreshes a rejected access token and retries — the cart must not go anonymous", async () => {
+    // The original bug: the route read the access cookie raw, so 14 minutes into a
+    // session cart requests silently went out unauthenticated and the backend
+    // answered with a fresh empty guest cart ("my cart emptied itself").
+    store.set("access", "stale-token");
+    store.set("refresh", "refresh-token");
+    const f = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ detail: "expired" }), {
+        status: 401, headers: { "content-type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access: "fresh-token" }), {
+        status: 200, headers: { "content-type": "application/json" },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(CART), {
+        status: 200, headers: { "content-type": "application/json" },
+      }));
+    global.fetch = f as unknown as typeof fetch;
+
+    const res = await GET(new Request("http://localhost:3000/api/cart"), { params: Promise.resolve({ path: [] }) });
+
+    expect(res.status).toBe(200);
+    expect((f.mock.calls[1][0] as string).endsWith("/auth/token/refresh/")).toBe(true);
+    const retry = new Headers((f.mock.calls[2][1] as RequestInit).headers);
+    expect(retry.get("Authorization")).toBe("Bearer fresh-token");
+    expect(setSpy).toHaveBeenCalledWith("access", "fresh-token");
+  });
+
   it("POST items proxies the body to /cart/items/", async () => {
     const f = upstream(CART);
     const res = await POST(

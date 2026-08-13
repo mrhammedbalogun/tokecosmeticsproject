@@ -19,7 +19,8 @@
 import type { cookies } from "next/headers";
 import { apiFetch } from "@/lib/api";
 import {
-  ACCESS_COOKIE, CART_COOKIE, REFRESH_COOKIE, ACCESS_MAX_AGE, REFRESH_MAX_AGE, cookieOptions,
+  ACCESS_COOKIE, CART_COOKIE, REFRESH_COOKIE,
+  ACCESS_MAX_AGE, REFRESH_MAX_AGE, CART_MAX_AGE, cookieOptions,
 } from "@/lib/auth";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 
@@ -74,7 +75,7 @@ export async function mergeGuestCart(jar: Jar, accessToken: string): Promise<voi
       country: jar.get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY,
     });
     // Point the browser at the surviving cart; the guest one is now converted.
-    if (merged?.id) jar.set(CART_COOKIE, merged.id, cookieOptions());
+    if (merged?.id) jar.set(CART_COOKIE, merged.id, cookieOptions({ maxAge: CART_MAX_AGE }));
   } catch {
     // Swallowed deliberately — see the doc comment above.
   }
