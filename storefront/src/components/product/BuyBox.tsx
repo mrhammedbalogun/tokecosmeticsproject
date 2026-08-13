@@ -5,6 +5,7 @@ import { ReviewStars } from "@/components/product/ReviewStars";
 import { VariantPicker } from "@/components/product/VariantPicker";
 import { QtySelector } from "@/components/product/QtySelector";
 import { BuyButtons } from "@/components/product/BuyButtons";
+import { PdpWishlistButton } from "@/components/product/PdpWishlistButton";
 import { usePdp } from "@/components/product/PdpContext";
 
 export function BuyBox({ product, deliveryLine }: {
@@ -51,6 +52,7 @@ export function BuyBox({ product, deliveryLine }: {
       </p>
       <QtySelector />
       <BuyButtons />
+      <PdpWishlistButton name={product.name} />
       <p className="mt-4 text-center text-xs text-muted">Secure worldwide checkout · 14-day returns</p>
     </div>
   );

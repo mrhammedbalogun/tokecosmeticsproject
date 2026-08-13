@@ -7,15 +7,17 @@
  * the PDP's Add to Cart exactly (BuyButtons.addToCart): addItem.mutateAsync then
  * openCartDrawer().
  *
- * ProductCard already renders its own WishlistHeart (toggles the same sku this
- * page's Remove button targets) — that redundancy is an accepted plan tradeoff, not
- * a bug; do not fork ProductCard or try to keep the heart and this grid in sync.
+ * The cards' hearts read the shared ["wishlist"] cache (useWishlist), so a Remove
+ * here must invalidate that cache or the heart on the same card keeps showing
+ * "saved". (This supersedes the earlier "don't sync heart and grid" ruling — the
+ * shared cache made the sync free.)
  */
 import Link from "next/link";
 import { useState } from "react";
 import type { ProductCard as ProductCardData } from "@/lib/catalog";
 import { ProductCard } from "@/components/product/ProductCard";
 import { isJustSoldOut, useCart } from "@/hooks/useCart";
+import { useWishlist } from "@/hooks/useWishlist";
 import { openCartDrawer } from "@/lib/cart-ui";
 
 export interface WishlistItem {
@@ -39,6 +41,7 @@ export function WishlistGrid({ initial }: { initial: WishlistItem[] }) {
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const { addItem } = useCart();
+  const { invalidate: invalidateHearts } = useWishlist();
 
   async function refresh() {
     const res = await fetch("/api/wishlist");
@@ -72,6 +75,7 @@ export function WishlistGrid({ initial }: { initial: WishlistItem[] }) {
         return;
       }
       await refresh();
+      invalidateHearts();
     } catch {
       setErrors((prev) => ({ ...prev, [sku]: REMOVE_ERROR }));
     } finally {

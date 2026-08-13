@@ -137,8 +137,12 @@ describe("WishlistGrid", () => {
 
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
     expect(screen.getByText("Shea Butter Cream")).toBeInTheDocument();
-    // Only the failed DELETE happened against the wishlist endpoint — no re-GET.
-    expect(f.mock.calls.filter(([url]) => String(url).startsWith("/api/wishlist"))).toHaveLength(1);
+    // Only the failed DELETE happened as a MUTATION — no re-GET of the grid list.
+    // (useWishlist's membership GET for the hearts is expected background traffic.)
+    const mutations = f.mock.calls.filter(
+      ([url, init]) => String(url).startsWith("/api/wishlist") && (init as RequestInit)?.method === "DELETE",
+    );
+    expect(mutations).toHaveLength(1);
   });
 
   it("add-to-cart failure shows the inline error and leaves the list unchanged", async () => {

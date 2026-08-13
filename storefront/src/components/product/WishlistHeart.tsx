@@ -1,59 +1,41 @@
 "use client";
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useWishlist, WishlistAuthError } from "@/hooks/useWishlist";
 
-/** Heart toggle. Optimistic; a 401 from the BFF sends the visitor to /login.
- * sku is the default-variant sku (backend wishlist is sku-keyed). The heart sits
- * inside the card <Link>, so clicks are prevented from navigating.
- *
- * Hardening: a single in-flight request at a time (rapid double-clicks would
- * otherwise race a POST against a DELETE, or land a duplicate-POST 400 that
- * flips the heart to the wrong state), and every failure path — non-ok
- * response, 401, or a rejected fetch (offline/DNS/abort) — restores the exact
- * prior state so the UI never drifts from the server. */
+/** Heart toggle on product cards. Saved state comes from the shared ["wishlist"]
+ * cache (useWishlist), so a product the shopper saved last week renders filled on
+ * first paint of the list — every heart on the page moves together, including the
+ * header's. Optimistic; the hook rolls the cache back on any failure, and a 401
+ * sends the visitor to /login. sku is the default-variant sku (backend wishlist is
+ * sku-keyed). The heart sits inside the card <Link>, so clicks must not navigate. */
 export function WishlistHeart({ sku, name }: { sku: string | null; name: string }) {
-  const [saved, setSaved] = useState(false);
-  const [pending, setPending] = useState(false);
-  const inFlight = useRef(false);
+  const { isSaved, toggle } = useWishlist();
   const router = useRouter();
+  // A ref, not toggle.isPending: mutation state propagates asynchronously, so a
+  // rapid double-click could still race a POST against a DELETE without it.
+  const inFlight = useRef(false);
   if (!sku) return null;
 
-  async function toggle(e: React.MouseEvent) {
-    e.preventDefault(); // the heart sits inside the card <Link>
-    if (!sku) return; // re-narrow for the async closure (button only renders with sku)
-    if (inFlight.current) return; // one request at a time — drop double-clicks
-    inFlight.current = true;
-    setPending(true);
+  const saved = isSaved(sku);
+  const pending = toggle.isPending;
 
-    const prior = saved;
-    const next = !prior;
-    setSaved(next);
-    try {
-      const res = next
-        ? await fetch("/api/wishlist", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ sku }),
-          })
-        : await fetch(`/api/wishlist/${encodeURIComponent(sku)}`, { method: "DELETE" });
-      if (res.status === 401) {
-        setSaved(prior);
-        router.push("/login");
-      } else if (!res.ok) {
-        setSaved(prior);
-      }
-    } catch {
-      // fetch rejected (offline / DNS / abort) — undo the optimistic update
-      setSaved(prior);
-    } finally {
-      inFlight.current = false;
-      setPending(false);
-    }
+  function onClick(e: React.MouseEvent) {
+    e.preventDefault(); // the heart sits inside the card <Link>
+    if (!sku || inFlight.current) return; // one request at a time — drop double-clicks
+    inFlight.current = true;
+    toggle.mutate(
+      { sku, save: !saved },
+      {
+        onError: (err) => { if (err instanceof WishlistAuthError) router.push("/login"); },
+        onSettled: () => { inFlight.current = false; },
+      },
+    );
   }
 
   return (
     <button
-      onClick={toggle}
+      onClick={onClick}
       disabled={pending}
       aria-pressed={saved}
       aria-busy={pending}

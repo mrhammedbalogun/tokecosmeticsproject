@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/session";
 import { CountrySwitcher } from "@/components/layout/CountrySwitcher";
 import { CartButton } from "@/components/layout/CartButton";
+import { WishlistLink } from "@/components/layout/WishlistLink";
 import { AccountMenu } from "@/components/layout/AccountMenu";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { SearchBar } from "@/components/layout/SearchBar";
@@ -54,6 +55,7 @@ export async function Header() {
         <div className="flex items-center gap-5">
           <CountrySwitcher markets={markets} current={country} />
           <AccountMenu signedIn={signedIn} />
+          <WishlistLink />
           <CartButton />
         </div>
       </div>
