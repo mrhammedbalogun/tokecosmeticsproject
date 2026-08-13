@@ -1,5 +1,13 @@
 # GIG go-live runbook (Plan-32a slice 7)
 
+> **RUN 2026-08-13 (by Claude, on Hammed's go-ahead).** Steps 3, 4, 4b, 5, 6 and 8 are
+> DONE — both GIG rows are ACTIVE in production and priced correctly in checkout
+> (door ₦3,532.97 / pickup ₦3,747.85 for a 15k Ikeja test basket). Still open:
+> **step 7** (staff E2E order — Hammed; this also confirms the rider collects from the
+> right address) and the two flagged items below: the **sender pin** (set to Ogudu
+> Mall; an Ikorodu-factory pin would price +85% — confirm parcels dispatch from Ogudu)
+> and the **Cloudflare UA fence** on the webhook receiver (step 4b note).
+
 Everything is built and shipped **dark**: the `Door Delivery (GIG)` option row is
 `is_active=False`, so nothing customer-facing exists until step 8 flips it. Steps 1–5 are
 safe to do any time; 6–8 are the cutover and take minutes. Sandbox base URL and creds
@@ -64,29 +72,57 @@ GIG_WALLET_ALERT_THRESHOLD=50000   # ₦; tune to a week of expected shipping
 Get the coordinates by dropping a pin on the office in Google Maps (right-click → the
 lat/long is first in the menu). Wrong sender coordinates mis-price EVERY quote.
 
+**DONE 2026-08-13** (backup `.env.prod.bak-gig-golive-20260813-045733`): all vars set —
+email lowercase, phone `+2347074800702` and address from GIG's own company record,
+pin = the "Ogudu Mall" Google listing (6.5765217, 3.3893872). **OPEN QUESTION FOR
+HAMMED**: the Toke Cosmetics Google listing itself sits in Ikorodu/Igbogbo
+(6.5937412, 3.5680512) — quoting from there is **+85%** (₦6,526 vs ₦3,533 for the
+same Ikeja parcel, measured). Quote and wallet-debit stay consistent either way (both
+read the same setting), but the RIDER drives to this pin — if parcels actually
+dispatch from the Ikorodu factory, edit the two coordinate lines + address, restart,
+and quotes re-price within the 15-min cache. Step 7's rider arrival is the check.
+
 ## 4. Production data pass
 
-- [ ] `manage.py load_lga_centroids` — idempotent; fills any LGAs seeded since.
-- [ ] `manage.py sync_gig_coverage` — **against the production base URL**. This answers
-      the open coverage question (the dev disputed the sandbox's 103 home-delivery LGAs):
-      whatever production returns IS the coverage. Read the unmatched report; map any
-      real-LGA stragglers in admin (GigLga → region); ignore street-zone rows.
-- [ ] Verify the beat schedule is live on the VPS (celery beat logs show
-      `sync-gig-coverage`, `poll-gig-tracking`, `monitor-gig-wallet`).
+- [x] `manage.py load_lga_centroids` — done 2026-08-11 (774/774).
+- [x] `manage.py sync_gig_coverage` — **DONE 2026-08-13 against production**: 350
+      active LGAs, **91 home-delivery** (production's real number; the sandbox's 103
+      is history), 58 unmatched. Four unmatched rows were REAL LGAs and are now
+      hand-mapped: LAGOS/Ifako/Ijaye→Ifako-Ijaiye (home delivery!), FCT/Municipal
+      Area Coun→Municipal Area Council (home delivery!), Ogun Yewa North/South→Egbado
+      North/South. The rest are street zones, ignored per this runbook.
+- [x] Beat schedule verified live: `monitor-gig-wallet` 6h, `poll-gig-tracking` 2h,
+      `sync-gig-coverage` + `sync-gig-centres` daily.
+- [x] Centre sync — DONE 2026-08-13: 46 stations, **180 centres** created
+      (`apps.delivery.gig.centres.sync_gig_centres()` — it is a beat task, not a
+      management command).
 
 ### 4b. Register the tracking webhook (once, from the VPS)
 
-```
-manage.py register_gig_webhook https://<api host>/api/v1/webhooks/gig/
-```
+**DONE 2026-08-13.** GIG answered with a secret for ECO078703 against
+`https://api.tokecosmetics.com/api/v1/webhooks/gig/`; `GIG_WEBHOOK_SECRET` and
+`GIG_WEBHOOK_API_BASE=https://prod-agilitythirdpartyapi.theagilitysystems.com` are in
+the VPS `.env.prod`, containers restarted. **Receiver verified end-to-end**: a test
+event encrypted with the real secret → HTTP 200 `Webhook received successfully`
+(unknown waybills are safely ignored). Until the secret is set the receiver answers
+503, which keeps GIG retrying rather than dropping events; the receiver is
+authenticated by decryption — only a body encrypted with our secret is accepted.
 
-It prints the `secret` GIG issues; put it in `backend/.env` as `GIG_WEBHOOK_SECRET`
-and set `GIG_WEBHOOK_API_BASE=https://prod-agilitythirdpartyapi.theagilitysystems.com`
-(**CONFIRMED 2026-08-12**: GIG's dev confirmed the docs' dev-→prod- swap is the whole
-answer, and the prod- host answers 401 — app present, wants auth — on
-`/api/webhook/add-webhook-user`, not 404), then restart. Until the secret is set the receiver
-answers 503, which keeps GIG retrying rather than dropping events. The receiver is
-authenticated by decryption: only a body encrypted with our secret is accepted.
+Two measured facts GIG's docs never said:
+
+- **Auth**: `add-webhook-user` REJECTS the third-party node JWT (401 in every header
+  spelling). The webhook host is its own "Third Party API v1" service with
+  `POST /api/ThirdParty/login` (`{username, password}`, same creds) → `data.token` →
+  standard `Authorization: Bearer`. `register_gig_webhook` now does this (fixed
+  2026-08-13); the swagger at `{GIG_WEBHOOK_API_BASE}/swagger/v1/swagger.json` is the
+  reference (it also reveals `POST /api/ThirdParty/cancelshipment/{waybill}` — worth
+  a future ask, the main docs claim cancellation doesn't exist).
+- **Cloudflare UA fence**: api.tokecosmetics.com is Cloudflare-proxied and 403s SOME
+  non-browser User-Agents (measured: `Python-urllib` blocked; empty UA and browser
+  UAs pass). GIG's .NET sender most likely passes (default HttpClient sends no UA),
+  but if webhook events never arrive, add a Cloudflare WAF skip rule for
+  `POST /api/v1/webhooks/gig/` — safe, the receiver authenticates by decryption.
+  The 2h poll is the fallback either way.
 
 ## 5. Fund the wallet
 
@@ -116,26 +152,35 @@ print(quote_home_delivery(A(), 500, Decimal('15000')))"
 Sanity-check the price against what you actually pay GIG today. This is where a wrong
 sender coordinate or a production tariff surprise shows up — before any customer sees it.
 
+**DONE 2026-08-13**: home 500g/₦15k to Ikeja = **₦3,532.97** (GrandTotal; includes a
+20% rank discount and ₦1,000 SurchargeFee, VAT 0 on home delivery) — sane against the
+sandbox's ₦4,175 for the same parcel.
+
 ## 7. One real end-to-end order (staff, small value)
+
+**STILL OPEN — the one remaining runbook step, on Hammed.**
 
 Place a real order to a covered Lagos address choosing GIG, pay it, capture the waybill
 from the admin panel. **This debits the production wallet and dispatches a real rider** —
 treat it as the live payment tests in Plan-26: one deliberate, small, verified. Confirm:
-rider arrives, tracking scans appear on the order page, the wallet dropped by exactly the
-stored cost, the label appears.
+rider arrives (**at the Ogudu Mall shop — this validates the sender pin, see step 3**),
+tracking scans appear on the order page, the wallet dropped by exactly the stored cost
+(read it off the shipment row — the API reports no balance), the label appears.
 
 ## 8. Flip it on — BOTH rows (32b slice 6 addendum)
+
+**DONE 2026-08-13**: rows 7 (`Door Delivery (GIG)`) and 8 (`Pickup at GIG Centre`)
+are `is_active=True`; checkout for an Ikeja address offers Lagos Delivery ₦1,500 /
+GIG door ₦3,532.97 / GIG pickup ₦3,747.85 (nearest centre) / Nationwide ₦3,500.
+`free_over` left unset on both (customers pay the quoted price) — set per row in
+admin if wanted. Pickup price-check done: Ikeja centre **₦3,807.86**, i.e. production
+prices pickup slightly ABOVE door (₦3,533) — the REVERSE of the sandbox's ordering
+(₦3,899 vs ₦4,175). Not a blocker (customers see honest prices), just reality.
 
 Admin → Settings → Delivery options → activate **`Door Delivery (GIG)`** AND
 **`Pickup at GIG Centre`** (rename to taste — the names are customer-facing). Decide
 `free_over` policy per row (charges the customer ₦0 above the threshold; GIG still
 debits the full cost — the shipment row stores both).
-
-Before flipping pickup, ONE production pickup price-check (the sandbox priced pickup
-CHEAPER than door — ₦3,899 vs ₦4,175 — verify production agrees, from the VPS):
-run the step-6 smoke with `quote_centre_pickup` against a synced centre and sanity-check
-the figure. Production centres arrive via `sync_gig_centres` (nightly; run it once
-manually first — the picker is empty until it has rows).
 
 Keep **Lagos Delivery / Nationwide Delivery active** — they are the fallback when GIG is
 down or an LGA is uncovered, by design.
