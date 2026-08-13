@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from apps.carts.models import Cart, CartItem
 from apps.inventory.services import available_for_country
@@ -25,29 +25,62 @@ def _safe_uuid(value) -> uuid.UUID | None:
         return None
 
 
+def _revive(cart: Cart) -> Cart:
+    """Flip an abandoned cart back to active. The abandoned status is a marketing
+    marker (idle >3h, see tasks.abandon_stale_carts), NOT a deletion — a shopper
+    who returns days later must find their items where they left them. `converted`
+    stays terminal: those items were bought."""
+    cart.status = "active"
+    cart.save(update_fields=["status", "updated_at"])
+    return cart
+
+
+def _user_cart(user, kind: str, country) -> Cart:
+    """The user's single active cart of `kind` — reviving their most recent
+    abandoned one before creating an empty replacement."""
+    cart = Cart.objects.filter(user=user, kind=kind, status="active").first()
+    if cart:
+        return cart
+    stale = (
+        Cart.objects.filter(user=user, kind=kind, status="abandoned")
+        .order_by("-updated_at")
+        .first()
+    )
+    try:
+        with transaction.atomic():
+            if stale:
+                return _revive(stale)
+            return Cart.objects.create(
+                user=user, kind=kind, country=country, currency=country.currency
+            )
+    except IntegrityError:
+        # A concurrent request beat us to the one-active-cart-per-user slot;
+        # its cart is the winner.
+        return Cart.objects.get(user=user, kind=kind, status="active")
+
+
 def get_or_create_cart(request, kind: str = "standard") -> Cart:
     """Resolve the caller's active cart of `kind`, creating one if needed.
 
-    Authed  -> the user's single active cart of that kind (get_or_create).
-    Guest   -> the cart named by the X-Cart-Id header if it exists and is active
-               and unclaimed; otherwise a fresh guest cart.
+    Authed  -> the user's single active cart of that kind; if the abandon task
+               flagged it while they were away, the most recent abandoned one is
+               revived instead of minting an empty replacement.
+    Guest   -> the cart named by the X-Cart-Id header if it exists and is
+               unclaimed (revived if flagged abandoned); otherwise a fresh cart.
     """
     country = request.country
     user = getattr(request, "user", None)
     if user is not None and getattr(user, "is_authenticated", False):
-        cart, _ = Cart.objects.get_or_create(
-            user=user, kind=kind, status="active",
-            defaults={"country": country, "currency": country.currency},
-        )
-        return cart
+        return _user_cart(user, kind, country)
 
     cart_id = _safe_uuid(request.headers.get("X-Cart-Id"))
     if cart_id:
         cart = Cart.objects.filter(
-            id=cart_id, user__isnull=True, kind=kind, status="active"
+            id=cart_id, user__isnull=True, kind=kind,
+            status__in=["active", "abandoned"],
         ).first()
         if cart:
-            return cart
+            return cart if cart.status == "active" else _revive(cart)
     return Cart.objects.create(
         user=None, kind=kind, country=country, currency=country.currency
     )
@@ -117,15 +150,15 @@ def merge_guest_cart(user, guest_cart_id, country) -> Cart:
     """Fold an unclaimed guest cart's lines into the user's active standard cart
     (summing quantities, capped at available stock), then mark the guest cart
     converted. Foreign/claimed/missing guest ids are ignored — returns the user's
-    cart unchanged. Idempotent: a converted guest cart won't be merged twice."""
-    user_cart, _ = Cart.objects.get_or_create(
-        user=user, kind="standard", status="active",
-        defaults={"country": country, "currency": country.currency},
-    )
+    cart unchanged. Idempotent: a converted guest cart won't be merged twice.
+    Abandoned guest carts merge too — "idle >3h" must not cost a shopper who
+    logs in the next morning their basket."""
+    user_cart = _user_cart(user, "standard", country)
     guest_id = _safe_uuid(guest_cart_id)
     guest = (
         Cart.objects.filter(
-            id=guest_id, user__isnull=True, kind="standard", status="active"
+            id=guest_id, user__isnull=True, kind="standard",
+            status__in=["active", "abandoned"],
         ).first()
         if guest_id
         else None
