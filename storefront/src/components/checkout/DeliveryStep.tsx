@@ -183,6 +183,11 @@ export function DeliveryStep() {
                     <span>{priceLabel}</span>
                   </span>
                   <span className="mt-1 block text-muted">{etaLabel}</span>
+                  {pickup && !pickerOpen && (
+                    <span className="mt-2 block font-medium text-accent">
+                      Select to see nearby pickup centres &rarr;
+                    </span>
+                  )}
                 </button>
                 {pickerOpen && (
                   <div className="mt-2 ml-4 space-y-2">

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useEffect } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { CheckoutProvider, useCheckout } from "@/components/checkout/CheckoutContext";
 import { DeliveryStep } from "@/components/checkout/DeliveryStep";
 import type { Cart } from "@/lib/cart-types";
@@ -223,6 +223,31 @@ describe("DeliveryStep centre pickup (32b slice 4)", () => {
     expect(screen.getByTestId("deliveryOptionId")).toHaveTextContent("8");
     expect(screen.getByTestId("gigCentreId")).toHaveTextContent("101");
     expect(screen.getByTestId("deliveryDisplay")).toHaveTextContent("Pickup at GIG Centre · GIG Oregun");
+  });
+
+  it("the pickup row carries a see-centres call-to-action until its picker opens", async () => {
+    mockCart = makeCart({ country: "NG", currency: "NGN" });
+    mockRoutedFetch({
+      "/api/checkout/delivery-options": OPTIONS,
+      "/api/checkout/gig-centres": CENTRES,
+    });
+    render(
+      <CheckoutProvider>
+        <GigHarness addressId={5} />
+      </CheckoutProvider>
+    );
+
+    // Unopened: the hint invites the click that reveals the centre list.
+    const pickupRow = await screen.findByRole("radio", { name: /pickup at gig centre/i });
+    expect(screen.getByText(/select to see nearby pickup centres/i)).toBeInTheDocument();
+    // Door rows never carry it.
+    expect(
+      within(screen.getByRole("radio", { name: /door delivery/i })).queryByText(/pickup centres/i)
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(pickupRow);
+    await screen.findByText(/choose your pickup centre/i);
+    expect(screen.queryByText(/select to see nearby pickup centres/i)).not.toBeInTheDocument();
   });
 
   it("switching to a door option clears the centre", async () => {
