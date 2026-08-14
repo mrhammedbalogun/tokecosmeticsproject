@@ -55,6 +55,7 @@ dependencies = [
     # for, is not (1.7.4, 2020) and would serve exactly 86 users. phpass is ~25 lines and
     # is vendored in apps/accounts/hashers.py instead, so that dependency buys nothing.
     "bcrypt>=4.2.0",
+    "phonenumbers>=9.0.37",
 ]
 
 [dependency-groups]

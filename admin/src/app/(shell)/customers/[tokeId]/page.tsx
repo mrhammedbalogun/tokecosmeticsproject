@@ -57,6 +57,7 @@ export default async function CustomerDetailPage({
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Email" value={customer.email} />
         <Field label="Phone" value={customer.phone || "—"} />
+        <Field label="WhatsApp" value={customer.whatsapp || "—"} />
         <Field
           label="Email verified"
           value={customer.email_verified_at ? customer.email_verified_at.slice(0, 10) : "Not yet"}

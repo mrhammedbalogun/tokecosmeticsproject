@@ -8,6 +8,7 @@
  */
 import { useActionState } from "react";
 import type { ProfileState } from "@/app/(shop)/account/profile/actions";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 const ERROR_ID = "profile-error";
 
@@ -20,6 +21,7 @@ export interface ProfileDefaults {
   first_name: string;
   last_name: string;
   phone: string;
+  whatsapp: string;
   marketing_consent: boolean;
 }
 
@@ -84,19 +86,24 @@ export function ProfileForm({
         />
       </div>
 
-      <div>
-        <label htmlFor="profile-phone" className="mb-1 block text-sm font-medium">
-          Phone
-        </label>
-        <input
-          id="profile-phone"
-          name="phone"
-          type="tel"
-          defaultValue={defaults.phone}
-          autoComplete="tel"
-          className={inputClass}
-        />
-      </div>
+      {/* Not `required`, unlike registration: accounts that predate the phone field
+          would otherwise be unable to save any profile edit until they add one. */}
+      <PhoneField
+        id="profile-phone"
+        name="phone"
+        label="Phone"
+        defaultValue={defaults.phone}
+        autoComplete="tel"
+      />
+
+      <PhoneField
+        id="profile-whatsapp"
+        name="whatsapp"
+        label="WhatsApp"
+        defaultValue={defaults.whatsapp}
+        autoComplete="tel"
+        hint="For order updates on WhatsApp. Can be the same as your phone number."
+      />
 
       <label htmlFor="profile-consent" className="flex items-start gap-2 text-sm">
         <input

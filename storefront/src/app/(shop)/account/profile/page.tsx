@@ -20,6 +20,7 @@ export default async function ProfilePage() {
             first_name: me.first_name ?? "",
             last_name: me.last_name ?? "",
             phone: me.phone ?? "",
+            whatsapp: me.whatsapp ?? "",
             marketing_consent: me.marketing_consent ?? false,
           }}
           action={updateProfileAction}

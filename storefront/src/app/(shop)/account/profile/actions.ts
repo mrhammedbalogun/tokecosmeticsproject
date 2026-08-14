@@ -37,6 +37,7 @@ export async function updateProfileAction(
         // Empty strings are sent on purpose: clearing a field is a real edit.
         last_name: field(formData, "last_name"),
         phone: field(formData, "phone"),
+        whatsapp: field(formData, "whatsapp"),
         // An unticked checkbox is absent from FormData; send explicit false so the
         // stored value always reflects a real choice (same rule as registration).
         marketing_consent: formData.get("marketing_consent") !== null,

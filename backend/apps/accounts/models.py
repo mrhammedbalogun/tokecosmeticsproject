@@ -67,6 +67,10 @@ class User(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=150, blank=True)
     last_name = models.CharField(max_length=150, blank=True)
     phone = models.CharField(max_length=32, blank=True)
+    # Both contact numbers are stored strict E.164 ("+2348023900964") or "" — enforced
+    # by apps.core.phones.normalize_e164 in the serializers, not by the column, because
+    # pre-existing rows hold legacy national formats until their owner next edits them.
+    whatsapp = models.CharField(max_length=32, blank=True)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     date_joined = models.DateTimeField(auto_now_add=True)

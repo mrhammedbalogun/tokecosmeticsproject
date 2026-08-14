@@ -53,11 +53,12 @@ def _anonymize_one(pk: int) -> bool:
         user.first_name = ""
         user.last_name = ""
         user.phone = ""
+        user.whatsapp = ""
         user.marketing_consent = False
         user.set_unusable_password()
         user.save(update_fields=[
-            "email", "first_name", "last_name", "phone", "marketing_consent",
-            "password",
+            "email", "first_name", "last_name", "phone", "whatsapp",
+            "marketing_consent", "password",
         ])
         user.addresses.all().delete()
         # Scrub the order snapshots too — the link stays, the PII does not (D3).

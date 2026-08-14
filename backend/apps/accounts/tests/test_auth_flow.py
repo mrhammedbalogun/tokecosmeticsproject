@@ -27,6 +27,36 @@ def test_register_login_me_flow():
 
 
 @pytest.mark.django_db
+def test_register_normalises_phone_and_whatsapp_to_e164(django_user_model):
+    c = APIClient()
+    r = c.post(
+        "/api/v1/auth/register/",
+        {
+            "email": "a@b.com", "password": PW, "first_name": "A",
+            # Formatting noise in, strict E.164 out.
+            "phone": "+234 802 390-0964", "whatsapp": "+1 (415) 555-2671",
+        },
+        format="json",
+    )
+    assert r.status_code == 201
+    user = django_user_model.objects.get(email="a@b.com")
+    assert user.phone == "+2348023900964"
+    assert user.whatsapp == "+14155552671"
+
+
+@pytest.mark.django_db
+def test_register_rejects_phone_without_country_code():
+    c = APIClient()
+    r = c.post(
+        "/api/v1/auth/register/",
+        {"email": "a@b.com", "password": PW, "first_name": "A", "phone": "08023900964"},
+        format="json",
+    )
+    assert r.status_code == 400
+    assert "country code" in str(r.data["phone"])
+
+
+@pytest.mark.django_db
 def test_duplicate_email_clean_400():
     c = APIClient()
     payload = {"email": "a@b.com", "password": PW}

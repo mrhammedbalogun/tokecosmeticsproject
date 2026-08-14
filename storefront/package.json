@@ -16,7 +16,9 @@
     "@paystack/inline-js": "^2.24.0",
     "@tanstack/react-query": "^5.101.2",
     "clsx": "^2.1.1",
+    "country-flag-icons": "^1.6.20",
     "framer-motion": "^12.42.2",
+    "libphonenumber-js": "^1.13.10",
     "next": "^16.2.12",
     "react": "19.2.4",
     "react-dom": "19.2.4"

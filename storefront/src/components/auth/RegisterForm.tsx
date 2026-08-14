@@ -14,6 +14,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import type { RegisterState } from "@/app/(auth)/register/actions";
 import { TurnstileWidget } from "@/components/auth/TurnstileWidget";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 const ERROR_ID = "register-error";
 
@@ -121,6 +122,24 @@ export function RegisterForm({
         />
         <p className="mt-1 text-xs text-muted">At least 8 characters.</p>
       </div>
+
+      <PhoneField
+        id="register-phone"
+        name="phone"
+        label="Phone number"
+        defaultValue={state.phone ?? ""}
+        required
+        autoComplete="tel"
+      />
+
+      <PhoneField
+        id="register-whatsapp"
+        name="whatsapp"
+        label="WhatsApp number"
+        defaultValue={state.whatsapp ?? ""}
+        autoComplete="tel"
+        hint="For order updates on WhatsApp. Can be the same as your phone number."
+      />
 
       <label className="flex items-start gap-2 text-sm">
         <input

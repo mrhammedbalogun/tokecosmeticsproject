@@ -1087,6 +1087,115 @@ export interface paths {
         patch: operations["v1_admin_images_partial_update"];
         trace?: never;
     };
+    "/api/v1/admin/media/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The media library: list, search, upload. See `MediaAsset` for why no delete.
+         *
+         *     `marketing.manage`, like the banners the library feeds — today its only consumer.
+         *     When product images join, this needs an OR of scopes; that is deliberately NOT
+         *     `HasAdminScope(...) | HasAdminScope(...)` yet, because the surface guard
+         *     (`test_admin_surface_guard.py`) reads a single `.scope` off each permission and the
+         *     OR story should be built there first, not smuggled past it. The two scopes' holders
+         *     are identical today (Owner + Manager), so nothing is lost by waiting.
+         */
+        get: operations["v1_admin_media_list"];
+        put?: never;
+        /**
+         * @description The media library: list, search, upload. See `MediaAsset` for why no delete.
+         *
+         *     `marketing.manage`, like the banners the library feeds — today its only consumer.
+         *     When product images join, this needs an OR of scopes; that is deliberately NOT
+         *     `HasAdminScope(...) | HasAdminScope(...)` yet, because the surface guard
+         *     (`test_admin_surface_guard.py`) reads a single `.scope` off each permission and the
+         *     OR story should be built there first, not smuggled past it. The two scopes' holders
+         *     are identical today (Owner + Manager), so nothing is lost by waiting.
+         */
+        post: operations["v1_admin_media_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/media/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The media library: list, search, upload. See `MediaAsset` for why no delete.
+         *
+         *     `marketing.manage`, like the banners the library feeds — today its only consumer.
+         *     When product images join, this needs an OR of scopes; that is deliberately NOT
+         *     `HasAdminScope(...) | HasAdminScope(...)` yet, because the surface guard
+         *     (`test_admin_surface_guard.py`) reads a single `.scope` off each permission and the
+         *     OR story should be built there first, not smuggled past it. The two scopes' holders
+         *     are identical today (Owner + Manager), so nothing is lost by waiting.
+         */
+        get: operations["v1_admin_media_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/media/video-finalize/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Verify what landed, publish it, and record the asset.
+         *
+         *     Order matters: copy BEFORE the row is written. The inverse would leave a row
+         *     pointing at nothing, which a banner could then attach to.
+         */
+        post: operations["v1_admin_media_video_finalize_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/media/video-ticket/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Mint a one-shot S3 POST form. The bytes bypass this server entirely.
+         *
+         *     WHY THIS EXISTS: Vercel rejects function request bodies over ~4.5MB at its edge
+         *     before Next runs (measured 2026-08-09: 3.91MB passes, 4.30MB 413s), so a video
+         *     relayed through the admin's server actions cannot arrive. Images still take the
+         *     old path — they are downscaled under 4MB in the browser and their full-byte
+         *     Pillow check is worth keeping.
+         */
+        post: operations["v1_admin_media_video_ticket_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/menu-items/": {
         parameters: {
             query?: never;
@@ -1741,6 +1850,31 @@ export interface paths {
         patch: operations["v1_admin_payment_gateways_partial_update"];
         trace?: never;
     };
+    "/api/v1/admin/payment-gateways/catalog/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /admin/payment-gateways/catalog/` — every gateway adapter the platform
+         *     HAS, whether or not any market offers it. This is the "add a method to a market"
+         *     menu: the model's `gateway` field is deliberately free text, so without this the
+         *     UI would have to hardcode the adapter list and drift from the registry.
+         *
+         *     `missing_settings` is key-level truth only; bank_transfer's configuredness is
+         *     per-country (it needs an account, not keys), which the row serializer answers.
+         */
+        get: operations["v1_admin_payment_gateways_catalog_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/prices/": {
         parameters: {
             query?: never;
@@ -2023,23 +2157,14 @@ export interface paths {
         put: operations["v1_admin_products_update"];
         post?: never;
         /**
-         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         * @description DELETE elevates above the viewset's `products.manage` floor to
+         *     `products.delete` (Owner only) — the module docstring names this the one
+         *     elevation on the surface. Inline rather than `get_permissions()`, so the
+         *     declared class permission stays honest; proven over real HTTP by
+         *     `test_admin_role_matrix.DELETE_PRODUCT_ROW`.
          *
-         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
-         *     added here inherits the admin-only authenticator, so even if someone forgets the
-         *     permission class the request arrives unauthenticated and answers 401 rather than
-         *     letting a customer-door token through.
-         *
-         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
-         *     audit row is written inside the same transaction as the mutation, so an unauditable
-         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
-         *     fail-closed property as the authenticator: a viewset added to this module is
-         *     audited before anybody remembers to ask for it.
-         *
-         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
-         *     catalogue carries no personal data, and an admin UI that lists products on every
-         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
-         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         *     Checked BEFORE the object lookup, so an unauthorised caller gets a clean
+         *     403 rather than a 404 that tells them whether the slug exists.
          */
         delete: operations["v1_admin_products_destroy"];
         options?: never;
@@ -3316,44 +3441,24 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         * @description Attach/reorder/detach library videos on a product (Videos tab).
          *
-         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
-         *     added here inherits the admin-only authenticator, so even if someone forgets the
-         *     permission class the request arrives unauthenticated and answers 401 rather than
-         *     letting a customer-door token through.
-         *
-         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
-         *     audit row is written inside the same transaction as the mutation, so an unauditable
-         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
-         *     fail-closed property as the authenticator: a viewset added to this module is
-         *     audited before anybody remembers to ask for it.
-         *
-         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
-         *     catalogue carries no personal data, and an admin UI that lists products on every
-         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
-         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         *     Unlike images there is no multipart create action on the product viewset: the bytes
+         *     go straight to S3 through the cms ticket/finalize pair, so the create here is plain
+         *     JSON and carries `product` in the body. The UPLOAD half of the flow lives behind
+         *     `marketing.manage` (see `MediaAssetAdminViewSet`) — `test_admin_videos.py` pins that
+         *     every `products.manage` role also holds it, so the Videos tab cannot half-break.
          */
         get: operations["v1_admin_videos_list"];
         put?: never;
         /**
-         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         * @description Attach/reorder/detach library videos on a product (Videos tab).
          *
-         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
-         *     added here inherits the admin-only authenticator, so even if someone forgets the
-         *     permission class the request arrives unauthenticated and answers 401 rather than
-         *     letting a customer-door token through.
-         *
-         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
-         *     audit row is written inside the same transaction as the mutation, so an unauditable
-         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
-         *     fail-closed property as the authenticator: a viewset added to this module is
-         *     audited before anybody remembers to ask for it.
-         *
-         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
-         *     catalogue carries no personal data, and an admin UI that lists products on every
-         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
-         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         *     Unlike images there is no multipart create action on the product viewset: the bytes
+         *     go straight to S3 through the cms ticket/finalize pair, so the create here is plain
+         *     JSON and carries `product` in the body. The UPLOAD half of the flow lives behind
+         *     `marketing.manage` (see `MediaAssetAdminViewSet`) — `test_admin_videos.py` pins that
+         *     every `products.manage` role also holds it, so the Videos tab cannot half-break.
          */
         post: operations["v1_admin_videos_create"];
         delete?: never;
@@ -3370,86 +3475,46 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         * @description Attach/reorder/detach library videos on a product (Videos tab).
          *
-         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
-         *     added here inherits the admin-only authenticator, so even if someone forgets the
-         *     permission class the request arrives unauthenticated and answers 401 rather than
-         *     letting a customer-door token through.
-         *
-         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
-         *     audit row is written inside the same transaction as the mutation, so an unauditable
-         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
-         *     fail-closed property as the authenticator: a viewset added to this module is
-         *     audited before anybody remembers to ask for it.
-         *
-         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
-         *     catalogue carries no personal data, and an admin UI that lists products on every
-         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
-         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         *     Unlike images there is no multipart create action on the product viewset: the bytes
+         *     go straight to S3 through the cms ticket/finalize pair, so the create here is plain
+         *     JSON and carries `product` in the body. The UPLOAD half of the flow lives behind
+         *     `marketing.manage` (see `MediaAssetAdminViewSet`) — `test_admin_videos.py` pins that
+         *     every `products.manage` role also holds it, so the Videos tab cannot half-break.
          */
         get: operations["v1_admin_videos_retrieve"];
         /**
-         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         * @description Attach/reorder/detach library videos on a product (Videos tab).
          *
-         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
-         *     added here inherits the admin-only authenticator, so even if someone forgets the
-         *     permission class the request arrives unauthenticated and answers 401 rather than
-         *     letting a customer-door token through.
-         *
-         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
-         *     audit row is written inside the same transaction as the mutation, so an unauditable
-         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
-         *     fail-closed property as the authenticator: a viewset added to this module is
-         *     audited before anybody remembers to ask for it.
-         *
-         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
-         *     catalogue carries no personal data, and an admin UI that lists products on every
-         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
-         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         *     Unlike images there is no multipart create action on the product viewset: the bytes
+         *     go straight to S3 through the cms ticket/finalize pair, so the create here is plain
+         *     JSON and carries `product` in the body. The UPLOAD half of the flow lives behind
+         *     `marketing.manage` (see `MediaAssetAdminViewSet`) — `test_admin_videos.py` pins that
+         *     every `products.manage` role also holds it, so the Videos tab cannot half-break.
          */
         put: operations["v1_admin_videos_update"];
         post?: never;
         /**
-         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         * @description Attach/reorder/detach library videos on a product (Videos tab).
          *
-         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
-         *     added here inherits the admin-only authenticator, so even if someone forgets the
-         *     permission class the request arrives unauthenticated and answers 401 rather than
-         *     letting a customer-door token through.
-         *
-         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
-         *     audit row is written inside the same transaction as the mutation, so an unauditable
-         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
-         *     fail-closed property as the authenticator: a viewset added to this module is
-         *     audited before anybody remembers to ask for it.
-         *
-         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
-         *     catalogue carries no personal data, and an admin UI that lists products on every
-         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
-         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         *     Unlike images there is no multipart create action on the product viewset: the bytes
+         *     go straight to S3 through the cms ticket/finalize pair, so the create here is plain
+         *     JSON and carries `product` in the body. The UPLOAD half of the flow lives behind
+         *     `marketing.manage` (see `MediaAssetAdminViewSet`) — `test_admin_videos.py` pins that
+         *     every `products.manage` role also holds it, so the Videos tab cannot half-break.
          */
         delete: operations["v1_admin_videos_destroy"];
         options?: never;
         head?: never;
         /**
-         * @description Base for every catalogue viewset. All three of these are load-bearing.
+         * @description Attach/reorder/detach library videos on a product (Videos tab).
          *
-         *     `authentication_classes` is what makes a future subclass fail CLOSED: a viewset
-         *     added here inherits the admin-only authenticator, so even if someone forgets the
-         *     permission class the request arrives unauthenticated and answers 401 rather than
-         *     letting a customer-door token through.
-         *
-         *     `AdminAuditMixin` is FIRST in the bases so its `dispatch` wraps the viewset's — the
-         *     audit row is written inside the same transaction as the mutation, so an unauditable
-         *     write does not happen at all (apps/core/audit.py). Inheriting it here has the same
-         *     fail-closed property as the authenticator: a viewset added to this module is
-         *     audited before anybody remembers to ask for it.
-         *
-         *     READS ARE NOT AUDITED on this surface, by ruling rather than by omission: the
-         *     catalogue carries no personal data, and an admin UI that lists products on every
-         *     screen would bury the rows that matter. The two CSV EXPORTS opt in individually —
-         *     a whole-catalogue dump is a bulk egress whatever it contains.
+         *     Unlike images there is no multipart create action on the product viewset: the bytes
+         *     go straight to S3 through the cms ticket/finalize pair, so the create here is plain
+         *     JSON and carries `product` in the body. The UPLOAD half of the flow lives behind
+         *     `marketing.manage` (see `MediaAssetAdminViewSet`) — `test_admin_videos.py` pins that
+         *     every `products.manage` role also holds it, so the Videos tab cannot half-break.
          */
         patch: operations["v1_admin_videos_partial_update"];
         trace?: never;
@@ -3572,6 +3637,83 @@ export interface paths {
         put?: never;
         /** @description Soft-delete: deactivate now, anonymise after 30 days (apps.accounts.tasks). */
         post: operations["v1_auth_account_delete_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/admin-devices/revoke/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/auth/admin-devices/revoke/` — stop trusting every browser this account ever
+         *     ticked "don't ask again" on.
+         *
+         *     SELF-SERVICE, AND SELF ONLY: it acts on `request.user`, takes no body, and needs
+         *     no scope beyond `is_staff` — the caller is narrowing their own attack surface, and
+         *     a lost-laptop afternoon must not depend on holding any particular role. Requires a
+         *     FULL admin session (not preauth), so the person revoking has just proved they can
+         *     still complete the ceremony — pressing it can never strand them.
+         *
+         *     ALL OR NOTHING, deliberately, for v1: picking one device out of a list means
+         *     trusting a self-reported User-Agent label to identify the machine that was lost,
+         *     which is a guess dressed as a control. "Sign every browser out of the shortcut and
+         *     type a code once per device" costs each remaining device one code prompt.
+         *
+         *     Audited (it changes what a stolen laptop is worth) and logged at WARNING — same
+         *     level as the recovery path, and for the same reason: rare, deliberate, and exactly
+         *     what someone who suspects a compromise does. Worth seeing in the stream; wrong to
+         *     page on.
+         */
+        post: operations["v1_auth_admin_devices_revoke_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/admin-email-otp/request/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `/auth/admin-email-otp/request/` — send a sign-in code to the caller's inbox.
+         *     **Mints nothing**; the code it sends is verified at the same confirm endpoint as a
+         *     TOTP code, so the mint site stays singular.
+         *
+         *     THE ADDRESS IS NEVER CHOSEN BY THE CALLER. It is read off the user a validated
+         *     preauth token identifies, so this endpoint can only ever mail the staff member
+         *     whose password was just proved — it cannot be aimed at anyone else's inbox.
+         *
+         *     A CONFIRMED TOTP ENROLMENT REFUSES THIS PATH, 409, before any mail moves. Email
+         *     codes are inbox-strength; an authenticator user's second factor must not be
+         *     quietly downgradeable to that by anyone holding their password. The refusal is a
+         *     state conflict exactly like `_AlreadyEnrolled`: the admin app's next screen is
+         *     "enter the code from your app", not an error.
+         *
+         *     SEND CAPS, both per user and both in `email_otp.py`: a 60-second cooldown answered
+         *     with a polite 200 + `retry_after` (a refreshed page must read as "your code is on
+         *     its way", not as a scolding), and 6 sends per rolling hour answered 429 — the
+         *     honest code, and one that closes the mail-cannon lever a stolen password would
+         *     otherwise buy. Wrong-guess caps live with the confirm endpoint, which counts an
+         *     email miss identically to a TOTP miss.
+         *
+         *     The mail itself goes through the ordinary Celery task; a code is worthless in 5
+         *     minutes, so `max_retries=3` at 30-second spacing fits comfortably inside its life.
+         */
+        post: operations["v1_auth_admin_email_otp_request_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3718,15 +3860,26 @@ export interface paths {
         /**
          * @description `/auth/admin-totp/confirm/` — **the only place an admin-audience token is minted.**
          *
-         *     It serves two situations with one code path, on purpose:
+         *     It now speaks THREE METHODS — `totp`, `email`, `trusted_device` — and still serves
+         *     enrolment and ordinary login with one code path per method, on purpose:
          *
-         *     * an UNCONFIRMED enrolment: the code proves the authenticator app really holds the
+         *     * `totp`, UNCONFIRMED: the code proves the authenticator app really holds the
          *       secret, `confirmed_at` is set, and a fresh set of recovery codes is issued;
-         *     * a CONFIRMED enrolment: this is the second factor of an ordinary staff login.
+         *     * `totp`, CONFIRMED: the second factor of an ordinary staff login;
+         *     * `email`: the same pair of situations for the inbox method — the first verified
+         *       email code IS the enrolment (there is no secret to hand over first), and it is
+         *       refused outright for an account with a confirmed TOTP enrolment, so the weaker
+         *       method can never substitute for the stronger one;
+         *     * `trusted_device`: a token this view itself issued on an earlier, fully-coded
+         *       login. Password and Turnstile still ran this login; only the code prompt is
+         *       skipped. It requires a confirmed factor to exist, and it never issues recovery
+         *       codes and never earns a NEW trust token — trust is granted by a real code only.
          *
-         *     Splitting them would mean two mints, and Amendment 6's whole value is that there is
-         *     one. `tests/test_admin_surface_guard.py` walks the AST of every module under `apps/`
-         *     and `config/` and asserts `mint_admin_token_pair` is called from exactly here.
+         *     Splitting them would mean two (now four) mints, and Amendment 6's whole value is
+         *     that there is one. `tests/test_admin_surface_guard.py` walks the AST of every
+         *     module under `apps/` and `config/` and asserts `mint_admin_token_pair` is called
+         *     from exactly here — which is precisely why every method verifies INSIDE this view
+         *     and the mint sits once, after the branch.
          *
          *     ── REPLAY ──────────────────────────────────────────────────────────────────────
          *
@@ -3737,13 +3890,21 @@ export interface paths {
          *     an unconsumed step and both win. Here that is not merely a duplicate row, it is a
          *     replayed second factor. A code observed over a shoulder, in a screen share or in a
          *     phished form is therefore worthless the moment it has been used once, rather than
-         *     for the remaining 90 seconds of its window.
+         *     for the remaining 90 seconds of its window. Email codes are single-use by cache
+         *     deletion (`email_otp.verify_code`), and a trusted device is deliberately NOT
+         *     single-use — the same browser verifies every morning until its hard expiry.
          *
          *     ── RECOVERY CODES ──────────────────────────────────────────────────────────────
          *
-         *     Issued only on the response that CONFIRMS an enrolment, never on an ordinary login.
-         *     A fresh set every login would make whatever the staff member printed wrong within a
-         *     day, which is how printed codes come to be ignored.
+         *     Issued only on the response that CONFIRMS an enrolment (either method), never on
+         *     an ordinary login. A fresh set every login would make whatever the staff member
+         *     printed wrong within a day, which is how printed codes come to be ignored.
+         *
+         *     ── TRUST IS GRANTED HERE TOO ───────────────────────────────────────────────────
+         *
+         *     `trust_device: true` alongside a REAL code returns a `device_token` for the admin
+         *     BFF to set as a 30-day httpOnly cookie. Granted only on the coded paths: a trusted
+         *     device that could mint fresh trust would make the 30-day ceiling a fiction.
          */
         post: operations["v1_auth_admin_totp_confirm_create"];
         delete?: never;
@@ -4738,6 +4899,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/webhooks/gig/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/webhooks/gig/ — GIG tracking events (gig/webhook.py has the scheme).
+         *
+         *     No auth: successful AES decryption with our registered secret IS the
+         *     authentication, exactly as gateway signatures are for payment webhooks.
+         */
+        post: operations["v1_webhooks_gig_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4764,6 +4947,10 @@ export interface components {
             city_text?: string;
             state_text?: string;
             postcode?: string;
+            /** Format: decimal */
+            latitude?: string | null;
+            /** Format: decimal */
+            longitude?: string | null;
             readonly is_default_shipping: boolean;
             readonly is_default_billing: boolean;
         };
@@ -4886,6 +5073,7 @@ export interface components {
          */
         AdminPassword: {
             turnstile_token?: string;
+            device_token?: string;
             email: string;
             password: string;
         };
@@ -4933,15 +5121,24 @@ export interface components {
         /**
          * @description Response shape of `/auth/admin-token/`. Response-only; documents the schema.
          *
-         *     `totp_enrolled` exists so the admin app knows which screen to draw next — "scan this
-         *     QR code" or "enter the code from your app". It leaks nothing: only a caller who has
-         *     already produced this account's password and a solved Turnstile token ever sees it,
-         *     and they could learn the same fact by calling enrol and reading the status code.
+         *     `second_factor` ("totp", "email", or null for "none chosen yet") exists so the
+         *     admin app knows which screen to draw next — the method chooser, a code-from-your-
+         *     app prompt, or an email-code prompt. It leaks nothing: only a caller who has
+         *     already produced this account's password and a solved Turnstile token ever sees
+         *     it, and they could learn the same fact by calling enrol and reading the status
+         *     code. `totp_enrolled` is the same fact in its pre-email-OTP shape, kept so an
+         *     admin app deployed before this field existed keeps working through the rollout.
+         *
+         *     `device_trusted` is a hint that the forwarded `device_token` matched a live trust
+         *     row — "skip straight to confirm". NOT a branch in the security logic: the confirm
+         *     endpoint re-runs the same predicate before anything is minted.
          */
         AdminPreauthResponse: {
             readonly preauth_token: string;
             readonly expires_in: number;
             readonly totp_enrolled: boolean;
+            readonly second_factor: string | null;
+            readonly device_trusted: boolean;
         };
         /** @description One refund against one payment, for the admin payment panel. */
         AdminRefund: {
@@ -4963,6 +5160,13 @@ export interface components {
          * @enum {string}
          */
         AdminRefundStatusEnum: "pending" | "succeeded" | "failed";
+        /**
+         * @description * `male` - male
+         *     * `female` - female
+         *     * `baby` - baby
+         * @enum {string}
+         */
+        AudienceEnum: "male" | "female" | "baby";
         /**
          * @description Read shape for the audit log. EVERY field is read-only, twice over.
          *
@@ -5012,7 +5216,10 @@ export interface components {
         };
         /**
          * @description Every field a campaign depends on is audited: a banner that appeared or vanished at
-         *     the wrong moment is a marketing incident somebody will want explained.
+         *     the wrong moment is a marketing incident somebody will want explained. That includes
+         *     the ARTWORK since 2026-08-07 — the file fields audit as filenames, the `_asset`
+         *     fields as library ids (they are readable fields, which the audit guard's write-only
+         *     seatbelt requires).
          */
         BannerAdmin: {
             readonly id: number;
@@ -5025,6 +5232,7 @@ export interface components {
             mobile_image?: string | null;
             /** Format: uri */
             video?: string | null;
+            video_mode?: components["schemas"]["VideoModeEnum"];
             cta_text?: string;
             cta_url?: string;
             placement?: components["schemas"]["PlacementEnum"];
@@ -5038,6 +5246,9 @@ export interface components {
             readonly is_live: boolean;
             /** Format: date-time */
             readonly updated_at: string;
+            image_asset?: number | null;
+            mobile_image_asset?: number | null;
+            video_asset?: number | null;
         };
         /** @enum {unknown} */
         BlankEnum: "";
@@ -5124,13 +5335,25 @@ export interface components {
         /**
          * @description Which gateways a market offers. Turning one on is what makes cards live, and it is
          *     the switch Plan-09 left to a production DB edit.
+         *
+         *     The read-only trio (`configured`, `missing_settings`, `supported_currencies`) mirrors
+         *     the registry's request-time filter: `is_active` is merchandising INTENT, and the
+         *     storefront menu intersects it with configuredness. Without these fields the admin
+         *     toggle lies — a row can say "on" while `active_gateways_for` silently drops it. The
+         *     UI's job is to show that divergence, not to prevent it (enabling a gateway before its
+         *     keys are deployed is a legitimate sequencing choice).
          */
         CountryPaymentGatewayAdmin: {
             readonly id: number;
+            country: string;
+            readonly country_name: string;
+            readonly country_currency: string;
             gateway: string;
             is_active?: boolean;
             sort_order?: number;
-            country: string;
+            readonly configured: boolean;
+            readonly missing_settings: string[];
+            readonly supported_currencies: string[];
         };
         /**
          * @description A coupon is money off, so every field that decides how much is on the audit
@@ -5201,6 +5424,7 @@ export interface components {
             first_name?: string;
             last_name?: string;
             phone?: string;
+            whatsapp?: string;
             is_active?: boolean;
             marketing_consent?: boolean;
             /** Format: date-time */
@@ -5255,6 +5479,7 @@ export interface components {
             first_name?: string;
             last_name?: string;
             phone?: string;
+            whatsapp?: string;
             is_active?: boolean;
             marketing_consent?: boolean;
             /** Format: date-time */
@@ -5270,7 +5495,7 @@ export interface components {
         DeliveryOptionAdmin: {
             readonly id: number;
             name: string;
-            kind?: components["schemas"]["KindEnum"];
+            kind?: components["schemas"]["DeliveryOptionAdminKindEnum"];
             carrier_code?: string;
             /** Format: decimal */
             price: string;
@@ -5297,6 +5522,23 @@ export interface components {
             readonly coverage: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * @description * `manual` - Manual
+         *     * `carrier` - Carrier API
+         * @enum {string}
+         */
+        DeliveryOptionAdminKindEnum: "manual" | "carrier";
+        /**
+         * @description Response shape of the email-code send. `retry_after` is the cooldown remainder:
+         *     0 means "a fresh code was just sent", anything else means "one is already on its
+         *     way, sent that many seconds ago" — a 200 either way, so a refreshed page or an
+         *     eager double-click reads as reassurance rather than an error.
+         */
+        EmailOTPRequestResponse: {
+            readonly detail: string;
+            readonly retry_after: number;
+            readonly expires_in: number;
         };
         EmailVerify: {
             token: string;
@@ -5338,12 +5580,6 @@ export interface components {
          */
         HomepageSectionAdminTypeEnum: "hero" | "collection_carousel" | "banner_grid" | "editorial" | "brand_strip";
         /**
-         * @description * `manual` - Manual
-         *     * `carrier` - Carrier API
-         * @enum {string}
-         */
-        KindEnum: "manual" | "carrier";
-        /**
          * @description * `legacy_ng` - Nigeria — current store
          *     * `legacy_ng_old` - Nigeria — old store (dead since Nov 2025)
          *     * `legacy_intl` - International (US/UK/CA)
@@ -5366,9 +5602,34 @@ export interface components {
             first_name?: string;
             last_name?: string;
             phone?: string;
+            whatsapp?: string;
             marketing_consent?: boolean;
             readonly toke_id: string;
         };
+        /**
+         * @description The library. Upload once, attach anywhere — see `MediaAsset`'s docstring.
+         *
+         *     `kind`, `original_name` and `size` are all derived from the file on create, never
+         *     submitted: the client's word on what a file is decides nothing. The allowlist's
+         *     `file` entry audits as the uploaded filename (`audit._jsonable` stringifies an
+         *     `UploadedFile`), which is exactly the useful, bounded fact.
+         */
+        MediaAssetAdmin: {
+            readonly id: number;
+            /** Format: uri */
+            file: string;
+            readonly kind: components["schemas"]["MediaAssetAdminKindEnum"];
+            readonly original_name: string;
+            readonly size: number;
+            /** Format: date-time */
+            readonly created_at: string;
+        };
+        /**
+         * @description * `image` - Image
+         *     * `video` - Video
+         * @enum {string}
+         */
+        MediaAssetAdminKindEnum: "image" | "video";
         /**
          * @description * `header` - Header
          *     * `footer` - Footer
@@ -5384,6 +5645,13 @@ export interface components {
             sort?: number;
             is_active?: boolean;
         };
+        /**
+         * @description * `totp` - totp
+         *     * `email` - email
+         *     * `trusted_device` - trusted_device
+         * @enum {string}
+         */
+        MethodEnum: "totp" | "email" | "trusted_device";
         OrderEvent: {
             type: string;
             message?: string;
@@ -5622,6 +5890,21 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["HomepageSectionAdmin"][];
+        };
+        PaginatedMediaAssetAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["MediaAssetAdmin"][];
         };
         PaginatedMenuItemAdminList: {
             /** @example 123 */
@@ -5910,6 +6193,10 @@ export interface components {
             city_text?: string;
             state_text?: string;
             postcode?: string;
+            /** Format: decimal */
+            latitude?: string | null;
+            /** Format: decimal */
+            longitude?: string | null;
             readonly is_default_shipping?: boolean;
             readonly is_default_billing?: boolean;
         };
@@ -5936,7 +6223,10 @@ export interface components {
         };
         /**
          * @description Every field a campaign depends on is audited: a banner that appeared or vanished at
-         *     the wrong moment is a marketing incident somebody will want explained.
+         *     the wrong moment is a marketing incident somebody will want explained. That includes
+         *     the ARTWORK since 2026-08-07 — the file fields audit as filenames, the `_asset`
+         *     fields as library ids (they are readable fields, which the audit guard's write-only
+         *     seatbelt requires).
          */
         PatchedBannerAdmin: {
             readonly id?: number;
@@ -5949,6 +6239,7 @@ export interface components {
             mobile_image?: string | null;
             /** Format: uri */
             video?: string | null;
+            video_mode?: components["schemas"]["VideoModeEnum"];
             cta_text?: string;
             cta_url?: string;
             placement?: components["schemas"]["PlacementEnum"];
@@ -5962,6 +6253,9 @@ export interface components {
             readonly is_live?: boolean;
             /** Format: date-time */
             readonly updated_at?: string;
+            image_asset?: number | null;
+            mobile_image_asset?: number | null;
+            video_asset?: number | null;
         };
         PatchedBrandAdmin: {
             readonly id?: number;
@@ -6012,13 +6306,25 @@ export interface components {
         /**
          * @description Which gateways a market offers. Turning one on is what makes cards live, and it is
          *     the switch Plan-09 left to a production DB edit.
+         *
+         *     The read-only trio (`configured`, `missing_settings`, `supported_currencies`) mirrors
+         *     the registry's request-time filter: `is_active` is merchandising INTENT, and the
+         *     storefront menu intersects it with configuredness. Without these fields the admin
+         *     toggle lies — a row can say "on" while `active_gateways_for` silently drops it. The
+         *     UI's job is to show that divergence, not to prevent it (enabling a gateway before its
+         *     keys are deployed is a legitimate sequencing choice).
          */
         PatchedCountryPaymentGatewayAdmin: {
             readonly id?: number;
+            country?: string;
+            readonly country_name?: string;
+            readonly country_currency?: string;
             gateway?: string;
             is_active?: boolean;
             sort_order?: number;
-            country?: string;
+            readonly configured?: boolean;
+            readonly missing_settings?: string[];
+            readonly supported_currencies?: string[];
         };
         /**
          * @description A coupon is money off, so every field that decides how much is on the audit
@@ -6052,7 +6358,7 @@ export interface components {
         PatchedDeliveryOptionAdmin: {
             readonly id?: number;
             name?: string;
-            kind?: components["schemas"]["KindEnum"];
+            kind?: components["schemas"]["DeliveryOptionAdminKindEnum"];
             carrier_code?: string;
             /** Format: decimal */
             price?: string;
@@ -6113,6 +6419,7 @@ export interface components {
             first_name?: string;
             last_name?: string;
             phone?: string;
+            whatsapp?: string;
             marketing_consent?: boolean;
             readonly toke_id?: string;
         };
@@ -6178,6 +6485,7 @@ export interface components {
             faqs?: unknown;
             related?: number[];
             available_countries?: string[];
+            audience?: components["schemas"]["AudienceEnum"][];
             seo_title?: string;
             seo_description?: string;
             /** Format: date-time */
@@ -6225,16 +6533,22 @@ export interface components {
             position?: number;
             product?: number;
         };
+        /**
+         * @description A video slot on a product: a library binding, not an upload.
+         *
+         *     The bytes never pass through this serializer — they go browser → S3 via the cms
+         *     video-ticket/finalize pair (Vercel kills request bodies over ~4.5MB, so a relayed
+         *     video cannot arrive). What is written here is the ATTACH: which finalized library
+         *     asset plays on which product. `file` is the asset's URL, read-only, so the admin's
+         *     Videos tab can preview rows without a second fetch.
+         */
         PatchedProductVideoAdmin: {
             readonly id?: number;
-            /** Format: date-time */
-            readonly created_at?: string;
-            /** Format: date-time */
-            readonly updated_at?: string;
-            /** Format: uri */
-            url?: string;
-            position?: number;
             product?: number;
+            asset?: number;
+            position?: number;
+            /** Format: uri */
+            readonly file?: string | null;
         };
         PatchedRedirectAdmin: {
             readonly id?: number;
@@ -6362,6 +6676,7 @@ export interface components {
             faqs?: unknown;
             related?: number[];
             available_countries?: string[];
+            audience?: components["schemas"]["AudienceEnum"][];
             seo_title?: string;
             seo_description?: string;
             /** Format: date-time */
@@ -6402,10 +6717,12 @@ export interface components {
             warnings?: string;
             specs?: unknown;
             faqs?: unknown;
+            audience?: unknown;
             seo_title?: string;
             seo_description?: string;
             readonly variants: string;
             readonly images: string;
+            readonly videos: string;
             readonly related: string;
             /** Format: decimal */
             rating_avg?: string;
@@ -6452,16 +6769,22 @@ export interface components {
             position?: number;
             product: number;
         };
+        /**
+         * @description A video slot on a product: a library binding, not an upload.
+         *
+         *     The bytes never pass through this serializer — they go browser → S3 via the cms
+         *     video-ticket/finalize pair (Vercel kills request bodies over ~4.5MB, so a relayed
+         *     video cannot arrive). What is written here is the ATTACH: which finalized library
+         *     asset plays on which product. `file` is the asset's URL, read-only, so the admin's
+         *     Videos tab can preview rows without a second fetch.
+         */
         ProductVideoAdmin: {
             readonly id: number;
-            /** Format: date-time */
-            readonly created_at: string;
-            /** Format: date-time */
-            readonly updated_at: string;
-            /** Format: uri */
-            url: string;
-            position?: number;
             product: number;
+            asset: number;
+            position?: number;
+            /** Format: uri */
+            readonly file: string | null;
         };
         /**
          * @description What the storefront renders.
@@ -6536,6 +6859,10 @@ export interface components {
             name: string;
             level: components["schemas"]["LevelEnum"];
             readonly has_children: boolean;
+            /** Format: decimal */
+            latitude?: string | null;
+            /** Format: decimal */
+            longitude?: string | null;
         };
         /**
          * @description A state or an area, flat. The TREE is assembled by the client from `parent` —
@@ -6557,6 +6884,7 @@ export interface components {
             first_name?: string;
             last_name?: string;
             phone?: string;
+            whatsapp?: string;
             marketing_consent?: boolean;
         };
         /**
@@ -6591,6 +6919,30 @@ export interface components {
          * @enum {string}
          */
         RuleEnum: "manual" | "new_arrivals" | "best_sellers" | "trending";
+        /**
+         * @description Request shape of second-factor confirm, which now speaks three methods.
+         *
+         *     `method` defaults to "totp" so every admin app deployed before the other two
+         *     existed keeps sending exactly the body it always sent, and keeps meaning the same
+         *     thing by it.
+         *
+         *     `code` stays as permissive as `TOTPCodeSerializer` and for the same reason: every
+         *     judgement about the value belongs where the failure is counted against the caps.
+         *     It is optional at THIS layer only because the trusted-device method has no code —
+         *     the view refuses a codeless totp/email confirm itself, inside the counting.
+         *
+         *     `trust_device` asks for a trust token in the response; it is honoured only when a
+         *     real code (never a trusted device) satisfied the factor. `device_token` is the
+         *     cookie value being redeemed when `method` is "trusted_device".
+         */
+        SecondFactorConfirm: {
+            /** @default totp */
+            method: components["schemas"]["MethodEnum"];
+            code?: string;
+            /** @default false */
+            trust_device: boolean;
+            device_token?: string;
+        };
         /**
          * @description READ shape. Note what is absent: `token_hash`.
          *
@@ -6675,7 +7027,10 @@ export interface components {
          *
          *     `totp_confirmed` is derived from the related row's `confirmed_at`, never stored
          *     twice — see the model docstring for why `confirmed_at` is the only thing that counts
-         *     as enrolled.
+         *     as enrolled. `second_factor` is the Plan-33 generalisation of the same fact
+         *     ("totp", "email", or null): without it the roster would report an email-method
+         *     administrator as having no second factor, which is exactly the "enrolment gap"
+         *     reading the Owner uses this list for, wrong in the alarming direction.
          */
         StaffRoster: {
             readonly id: number;
@@ -6690,6 +7045,7 @@ export interface components {
              */
             readonly is_superuser: boolean;
             readonly totp_confirmed: boolean;
+            readonly second_factor: string | null;
             /** Format: date-time */
             readonly last_login: string | null;
             /** Format: date-time */
@@ -6743,15 +7099,22 @@ export interface components {
             code: string;
         };
         /**
-         * @description Response shape of TOTP confirm — the only response in the project that carries an
-         *     admin-audience token. `recovery_codes` is present only on the response that CONFIRMS
-         *     a new enrolment, not on an ordinary login: reissuing a set every login would make
-         *     whatever the staff member printed wrong within a day.
+         * @description Response shape of second-factor confirm — the only response in the project that
+         *     carries an admin-audience token. `recovery_codes` is present only on the response
+         *     that CONFIRMS a new enrolment (first TOTP code, or first email code), not on an
+         *     ordinary login: reissuing a set every login would make whatever the staff member
+         *     printed wrong within a day.
+         *
+         *     `device_token`/`device_expires_in` are present only when `trust_device` was asked
+         *     for and granted. The raw token's whole life outside the database digest is this
+         *     response and the httpOnly cookie the admin BFF sets from it.
          */
         TOTPConfirmResponse: {
             readonly access: string;
             readonly refresh: string;
             readonly recovery_codes: string[];
+            readonly device_token: string;
+            readonly device_expires_in: number;
         };
         /**
          * @description Response shape of TOTP enrol. Returned ONCE, never stored, never logged: the
@@ -6792,6 +7155,20 @@ export interface components {
             readonly access: string;
             refresh: string;
         };
+        /**
+         * @description Response shape of trusted-device revocation. `revoked` is how many browsers
+         *     stopped being trusted — 0 is a success too (the state the caller wanted is true).
+         */
+        TrustedDeviceRevokeResponse: {
+            readonly detail: string;
+            readonly revoked: number;
+        };
+        /**
+         * @description * `loop` - Loop silently
+         *     * `click` - Play on click
+         * @enum {string}
+         */
+        VideoModeEnum: "loop" | "click";
         /**
          * @description Plan-17c Task 1. CRUD minus delete — see the viewset for why deletion is refused.
          *
@@ -8390,6 +8767,132 @@ export interface operations {
             };
         };
     };
+    v1_admin_media_list: {
+        parameters: {
+            query?: {
+                /**
+                 * @description * `image` - Image
+                 *     * `video` - Video
+                 */
+                kind?: "image" | "video";
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description A search term. */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedMediaAssetAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_media_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaAssetAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["MediaAssetAdmin"];
+                "multipart/form-data": components["schemas"]["MediaAssetAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_media_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this media asset. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_media_video_finalize_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaAssetAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["MediaAssetAdmin"];
+                "multipart/form-data": components["schemas"]["MediaAssetAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_media_video_ticket_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MediaAssetAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["MediaAssetAdmin"];
+                "multipart/form-data": components["schemas"]["MediaAssetAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MediaAssetAdmin"];
+                };
+            };
+        };
+    };
     v1_admin_menu_items_list: {
         parameters: {
             query?: {
@@ -9170,6 +9673,25 @@ export interface operations {
                 "multipart/form-data": components["schemas"]["PatchedCountryPaymentGatewayAdmin"];
             };
         };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CountryPaymentGatewayAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_payment_gateways_catalog_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             200: {
                 headers: {
@@ -10566,6 +11088,7 @@ export interface operations {
             query?: {
                 /** @description A page number within the paginated result set. */
                 page?: number;
+                product?: number;
             };
             header?: never;
             path?: never;
@@ -10858,6 +11381,44 @@ export interface operations {
             };
         };
     };
+    v1_auth_admin_devices_revoke_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustedDeviceRevokeResponse"];
+                };
+            };
+        };
+    };
+    v1_auth_admin_email_otp_request_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmailOTPRequestResponse"];
+                };
+            };
+        };
+    };
     v1_auth_admin_me_retrieve: {
         parameters: {
             query?: never;
@@ -10909,11 +11470,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
+        requestBody?: {
             content: {
-                "application/json": components["schemas"]["TOTPCode"];
-                "application/x-www-form-urlencoded": components["schemas"]["TOTPCode"];
-                "multipart/form-data": components["schemas"]["TOTPCode"];
+                "application/json": components["schemas"]["SecondFactorConfirm"];
+                "application/x-www-form-urlencoded": components["schemas"]["SecondFactorConfirm"];
+                "multipart/form-data": components["schemas"]["SecondFactorConfirm"];
             };
         };
         responses: {
@@ -12158,6 +12719,24 @@ export interface operations {
             path: {
                 gateway: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_webhooks_gig_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

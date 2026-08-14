@@ -117,7 +117,9 @@ export interface RegisterPayload {
   password: string;
   first_name: string;
   last_name?: string;
+  /** E.164 or absent — the backend rejects anything without a country code. */
   phone?: string;
+  whatsapp?: string;
   marketing_consent?: boolean;
 }
 

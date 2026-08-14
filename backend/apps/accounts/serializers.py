@@ -10,8 +10,17 @@ from rest_framework_simplejwt.serializers import TokenObtainSerializer
 
 from apps.accounts.models import Address, StaffInvite
 from apps.core.address_rules import required_fields_for
+from apps.core.phones import normalize_e164
 
 User = get_user_model()
+
+
+def _clean_contact_number(value):
+    """Serializer-facing wrapper: E.164 or bust, with the customer-facing message."""
+    try:
+        return normalize_e164(value)
+    except ValueError as exc:
+        raise serializers.ValidationError(str(exc))
 
 
 class RegisterSerializer(serializers.ModelSerializer):
@@ -21,13 +30,22 @@ class RegisterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["email", "password", "first_name", "last_name", "phone", "marketing_consent"]
+        fields = [
+            "email", "password", "first_name", "last_name",
+            "phone", "whatsapp", "marketing_consent",
+        ]
 
     def validate_email(self, value):
         value = value.lower()
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("Account already exists")
         return value
+
+    def validate_phone(self, value):
+        return _clean_contact_number(value)
+
+    def validate_whatsapp(self, value):
+        return _clean_contact_number(value)
 
     def create(self, validated_data):
         password = validated_data.pop("password")
@@ -37,8 +55,25 @@ class RegisterSerializer(serializers.ModelSerializer):
 class MeSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["email", "first_name", "last_name", "phone", "marketing_consent", "toke_id"]
+        fields = [
+            "email", "first_name", "last_name",
+            "phone", "whatsapp", "marketing_consent", "toke_id",
+        ]
         read_only_fields = ["email", "toke_id"]
+
+    def _clean_number(self, field, value):
+        # Grandfather clause: rows migrated from WordPress hold national-format
+        # numbers ("08099998888"). Re-submitting the stored value unchanged must not
+        # block an unrelated profile edit — only a NEW value has to be E.164.
+        if self.instance and value == getattr(self.instance, field):
+            return value
+        return _clean_contact_number(value)
+
+    def validate_phone(self, value):
+        return self._clean_number("phone", value)
+
+    def validate_whatsapp(self, value):
+        return self._clean_number("whatsapp", value)
 
 
 class PasswordChangeSerializer(serializers.Serializer):

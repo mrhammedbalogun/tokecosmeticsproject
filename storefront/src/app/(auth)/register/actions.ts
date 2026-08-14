@@ -15,6 +15,7 @@
  */
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { parsePhoneNumberFromString } from "libphonenumber-js";
 import { ApiError } from "@/lib/api";
 import { registerSession } from "@/lib/auth-session";
 import { registerErrorMessage } from "@/lib/auth-errors";
@@ -27,6 +28,9 @@ export interface RegisterState {
   email?: string;
   firstName?: string;
   lastName?: string;
+  /** E.164 echoes for the PhoneField defaults. */
+  phone?: string;
+  whatsapp?: string;
   /** Always the SANITISED value. */
   next?: string;
 }
@@ -34,6 +38,16 @@ export interface RegisterState {
 function field(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value.trim() : "";
+}
+
+/** "" for empty, E.164 for a valid number, null for garbage. The PhoneField already
+ * submits E.164, so this only rejects hand-crafted POSTs — but the backend re-checks
+ * regardless; this just gives a friendlier error without a round trip. */
+function e164Field(formData: FormData, name: string): string | null {
+  const raw = field(formData, name);
+  if (!raw) return "";
+  const parsed = parsePhoneNumberFromString(raw);
+  return parsed?.isValid() ? parsed.number : null;
 }
 
 export async function registerAction(
@@ -48,10 +62,18 @@ export async function registerAction(
   // endpoint, so the hidden input is not a trust boundary. The sanitised value also goes
   // back into the re-rendered form, so a hostile value cannot survive into the next submit.
   const next = safeNext(field(formData, "next"), DEFAULT_NEXT);
-  const echo = { email, firstName, lastName, next };
+  const phone = e164Field(formData, "phone");
+  const whatsapp = e164Field(formData, "whatsapp");
+  const echo = { email, firstName, lastName, phone: phone ?? "", whatsapp: whatsapp ?? "", next };
 
   if (!email || !firstName || typeof password !== "string" || !password) {
     return { ...echo, error: "Enter your name, email and a password." };
+  }
+  if (phone === null || !phone || whatsapp === null) {
+    return {
+      ...echo,
+      error: "Enter your phone number with its country code, e.g. +2348023900964.",
+    };
   }
 
   // Injected by the Turnstile widget as a hidden input; absent when the widget is
@@ -64,6 +86,8 @@ export async function registerAction(
       password,
       first_name: firstName,
       ...(lastName ? { last_name: lastName } : {}),
+      phone,
+      ...(whatsapp ? { whatsapp } : {}),
       // An unticked checkbox is absent from FormData entirely. Send an explicit false
       // rather than omitting the key, so the stored value always reflects a real choice.
       marketing_consent: formData.get("marketing_consent") !== null,

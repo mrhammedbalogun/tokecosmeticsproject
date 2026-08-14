@@ -12,6 +12,7 @@ export interface CustomerRow {
   first_name: string;
   last_name: string;
   phone: string;
+  whatsapp: string;
   is_active: boolean;
   marketing_consent: boolean;
   email_verified_at: string | null;

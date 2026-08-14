@@ -75,7 +75,7 @@ class CustomerListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = [
-            "toke_id", "email", "name", "first_name", "last_name", "phone",
+            "toke_id", "email", "name", "first_name", "last_name", "phone", "whatsapp",
             "is_active", "marketing_consent", "email_verified_at",
             "deletion_requested_at", "date_joined", "last_login", "legacy_source",
         ]
