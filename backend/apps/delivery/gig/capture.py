@@ -190,8 +190,26 @@ def capture_shipment(order, *, actor) -> GigShipment:
             if part
         )
     receiver_name = f"{snap.get('first_name', '')} {snap.get('last_name', '')}".strip() or order.email
-    body = {
-        "SenderDetails": {
+    # Sender = the origin SNAPSHOT the customer was quoted from (Plan-34), all-or-
+    # nothing on the coordinate pair — a snapshot without both coords must never
+    # mix its address with the env pin (same pairing discipline as the receiver
+    # pin above). Empty/partial snapshot = the env origin: pre-Plan-34 shipments
+    # and the zero-rows fallback, which is exactly what they were priced from.
+    origin_snap = shipment.origin or {}
+    if origin_snap.get("latitude") is not None and origin_snap.get("longitude") is not None:
+        sender = {
+            "SenderName": origin_snap.get("name") or settings.GIG_SENDER_NAME,
+            "SenderPhoneNumber": origin_snap.get("phone") or settings.GIG_SENDER_PHONE,
+            "SenderAddress": origin_snap.get("address", ""),
+            "InputtedSenderAddress": origin_snap.get("address", ""),
+            "SenderLocality": origin_snap.get("locality", ""),
+            "SenderLocation": {
+                "Latitude": origin_snap["latitude"],
+                "Longitude": origin_snap["longitude"],
+            },
+        }
+    else:
+        sender = {
             "SenderName": settings.GIG_SENDER_NAME,
             "SenderPhoneNumber": settings.GIG_SENDER_PHONE,
             "SenderAddress": settings.GIG_SENDER_ADDRESS,
@@ -201,7 +219,9 @@ def capture_shipment(order, *, actor) -> GigShipment:
                 "Latitude": settings.GIG_SENDER_LATITUDE,
                 "Longitude": settings.GIG_SENDER_LONGITUDE,
             },
-        },
+        }
+    body = {
+        "SenderDetails": sender,
         "ReceiverDetails": {
             "ReceiverName": receiver_name,
             "ReceiverPhoneNumber": snap.get("phone") or order.phone or "",

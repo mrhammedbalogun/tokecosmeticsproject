@@ -199,3 +199,7 @@ export async function saveCoverageAction(input: {
   revalidatePath(`/settings/delivery/${input.id}`);
   return { savedAt: Date.now() };
 }
+
+// Pickup-location actions moved to `app/(shell)/deliveries/pickup-locations/actions.ts`
+// (Plan-35): the page moved, and keeping the writes beside the page they revalidate is
+// what stops the two drifting.

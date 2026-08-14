@@ -289,6 +289,16 @@ def _case_delivery_option_create(client, monkeypatch):
     ), 201
 
 
+def _case_sender_location_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/sender-locations/",
+        {"name": "Kubwa (Abuja)", "phone": "+2347074800702",
+         "address": "F01 Building Materials Market, Kubwa, FCT", "locality": "Kubwa",
+         "latitude": "9.161219", "longitude": "7.355617"},
+        format="json",
+    ), 201
+
+
 def _case_banner_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/banners/",
@@ -641,6 +651,7 @@ WRITE_CASES: dict[str, tuple] = {
     "CouponAdminViewSet": (_case_coupon_create, "create"),
     "DeliveryOptionAdminViewSet": (_case_delivery_option_create, "create"),
     "RegionAdminViewSet": (_case_region_patch, "partial_update"),
+    "SenderLocationAdminViewSet": (_case_sender_location_create, "create"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),
@@ -676,6 +687,9 @@ READ_ONLY_VIEWS = frozenset(
         # Plan-32a: the fulfilment panel is GET-only; its writes are the two views
         # above. Read-audited — declared in test_audit_guard.READ_AUDITED_VIEWS.
         "AdminGigShipmentView",
+        # Plan-35: the deliveries table — GET-only by design (the table reads, the
+        # order page acts). Read-audited — declared in READ_AUDITED_VIEWS.
+        "AdminGigShipmentListView",
         "AdminOrderListView",
         "AdminOrderDetailView",
         "AdminRefundsOwedView",

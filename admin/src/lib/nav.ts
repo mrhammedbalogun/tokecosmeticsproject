@@ -32,6 +32,10 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/", scopes: [] },
   { label: "Orders", href: "/orders", scopes: ["orders.view"] },
+  // A door like Settings (Plan-35): the shipment table is desk reading (`orders.view`),
+  // Pickup locations is a Manager's surface (`products.manage`). Any-of; the door page
+  // then shows only the sections the visitor's scopes cover.
+  { label: "Deliveries", href: "/deliveries", scopes: ["orders.view", "products.manage"] },
   { label: "Products", href: "/products", scopes: ["products.manage"] },
   // Its own item rather than a link inside Products: the tree is a separate job from
   // editing a product, and `activeHref` does longest-prefix matching, so nesting it under

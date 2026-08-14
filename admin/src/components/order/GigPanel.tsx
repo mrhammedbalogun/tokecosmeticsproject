@@ -29,6 +29,8 @@ export interface GigShipmentData {
   last_tracked_at: string | null;
   /** Centre-pickup snapshot from placement (32b slice 5); {} for door shipments. */
   centre?: { id?: number; name?: string; address?: string };
+  /** Sender-origin snapshot from placement (Plan-34); {} = the built-in env sender. */
+  origin?: { id?: number; name?: string; address?: string };
 }
 
 export interface GigPanelData {
@@ -107,6 +109,19 @@ export function GigPanel({
             </dd>
           </div>
         )}
+        {shipment.origin?.name && (
+          <div className="flex justify-between gap-4">
+            <dt className="text-muted">Collecting from</dt>
+            {/* Which SHOP must pack this order (Plan-34): the rider is sent to this
+                origin's pin. An Ogudu desk must not capture an Abuja-routed shipment. */}
+            <dd className="text-right">
+              {shipment.origin.name}
+              {shipment.origin.address && (
+                <span className="block text-xs text-muted">{shipment.origin.address}</span>
+              )}
+            </dd>
+          </div>
+        )}
         <div className="flex justify-between gap-4">
           <dt className="text-muted">Customer paid</dt>
           <dd className="tabular-nums">₦{shipment.charged}</dd>
@@ -151,7 +166,14 @@ export function GigPanel({
             <div className="rounded border border-line p-2">
               <p className="text-xs">
                 This debits <span className="font-medium">₦{quoteTotal}</span> from the GIG
-                wallet and dispatches a rider to collect. It cannot be cancelled or amended.
+                wallet and dispatches a rider to collect
+                {shipment.origin?.name ? (
+                  <>
+                    {" "}from <span className="font-medium">{shipment.origin.name}</span> —
+                    that shop must have this order packed
+                  </>
+                ) : null}
+                . It cannot be cancelled or amended.
                 {/* Cutoff confirmed by GIG 2026-08-11 (runbook §2). */}
                 {" "}GIG&rsquo;s cutoff is 3&nbsp;pm — waybills created later are picked up
                 the next day.

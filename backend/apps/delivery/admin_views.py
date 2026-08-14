@@ -6,7 +6,7 @@ account (which is Owner-only under `settings.manage`).
 """
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import viewsets
+from rest_framework import generics, viewsets
 
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
@@ -20,10 +20,12 @@ from apps.core.models import Country, Region
 from apps.delivery.admin_serializers import (
     DeliveryCoverageSerializer,
     DeliveryOptionAdminSerializer,
+    GigShipmentRowSerializer,
+    SenderLocationAdminSerializer,
     RegionAdminSerializer,
     currency_mismatches,
 )
-from apps.delivery.models import DeliveryOption
+from apps.delivery.models import DeliveryOption, SenderLocation
 
 
 class DeliveryOptionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
@@ -178,6 +180,110 @@ class RegionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     http_method_names = ["get", "patch", "head", "options"]
 
 
+class SenderLocationAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """Pickup origins (Plan-34): the Toke locations GIG collects from. Same scope
+    reasoning as delivery options — an operational number, `products.manage`.
+
+    Delete is refused once any shipment's origin snapshot references the row:
+    the snapshot answers history on its own, but reusing a freed pk would let a
+    NEW row silently inherit an old shipment's identity in the audit trail.
+    "This shop closed" is `is_active=False`; delete is for typos that never
+    shipped anything. Deactivating every row is safe by construction — selection
+    falls back to the `GIG_SENDER_*` env origin, it never breaks a checkout.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
+    serializer_class = SenderLocationAdminSerializer
+    audit_serializers = (SenderLocationAdminSerializer,)
+    queryset = SenderLocation.objects.order_by("name")
+    pagination_class = None  # operator-scale rows, same reasoning as delivery options
+
+    def destroy(self, request, *args, **kwargs):
+        from apps.delivery.models import GigShipment
+
+        row = self.get_object()
+        if GigShipment.objects.filter(origin__id=row.pk).exists():
+            return Response(
+                {"detail": "Shipments were quoted from this location — deactivate it "
+                           "instead of deleting."},
+                status=400,
+            )
+        self._deleted_origin = SenderLocationAdminSerializer(row).data
+        return super().destroy(request, *args, **kwargs)
+
+    def _changes(self, response) -> dict:
+        changes = super()._changes(response)
+        if self.request.method.upper() == "DELETE" and hasattr(self, "_deleted_origin"):
+            changes["deleted"] = self._deleted_origin
+        return changes
+
+
+class AdminGigShipmentListView(AdminAuditMixin, generics.ListAPIView):
+    """GET /api/v1/admin/gig-shipments/ — the deliveries table (Plan-35): every GIG
+    shipment with its origin, destination, customer and money columns, newest first.
+    The packing-desk question it exists to answer: "what must MY shop pack today?"
+    (filter by origin).
+
+    `orders.view` and READ-AUDITED, the order-list posture exactly: every row names a
+    customer and their phone. Paginated — this table grows with every order, and an
+    unpaginated dump would be bulk PII egress in one call (the CSV precedent gates
+    that at `orders.manage`; no export exists here on purpose).
+
+    The table READS; the order page ACTS (plan ruling 4): no capture or label
+    endpoints hang off this route — rows link to the order, where the confirm
+    ritual lives.
+
+    Filters: `status`, `origin` (snapshot id; 0 matches BOTH id-0 snapshots and the
+    empty pre-Plan-34 dict, so history never vanishes from a filtered view),
+    `service` (door|pickup, resolved from the centre snapshot), `placed_after`/
+    `placed_before` (the order's placed date).
+    """
+
+    serializer_class = GigShipmentRowSerializer
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.view")]
+    audit_reads = True
+    audit_action = "list"
+
+    def get_queryset(self):
+        from django.db.models import Q
+
+        from apps.delivery.models import GigShipment
+
+        qs = GigShipment.objects.select_related("order")
+        p = self.request.query_params
+        if v := p.get("status"):
+            qs = qs.filter(status=v)
+        if (v := p.get("origin")) is not None and v != "":
+            try:
+                origin_id = int(v)
+            except ValueError:
+                return qs.none()  # a non-numeric id matches no origin, honestly
+            if origin_id == 0:
+                # id 0 ≡ the empty pre-Plan-34 snapshot — both are the built-in
+                # origin, and old shipments must not vanish from a filtered view.
+                qs = qs.filter(Q(origin={}) | Q(origin__id=0))
+            else:
+                qs = qs.filter(origin__id=origin_id)
+        if v := p.get("service"):
+            if v == "pickup":
+                qs = qs.exclude(centre={})
+            elif v == "door":
+                qs = qs.filter(centre={})
+        # Dates are parsed eagerly: a lazy-filtered garbage value would 500 at
+        # evaluation time, deep in pagination. Unparseable cutoff = no matches.
+        from django.utils.dateparse import parse_date, parse_datetime
+
+        for param, lookup in (("placed_after", "gte"), ("placed_before", "lte")):
+            if v := p.get(param):
+                parsed = parse_datetime(v) or parse_date(v)
+                if parsed is None:
+                    return qs.none()
+                qs = qs.filter(**{f"order__placed_at__{lookup}": parsed})
+        return qs.order_by("-order__placed_at", "-pk")
+
+
 class AdminGigShipmentView(AdminAuditMixin, APIView):
     """GET /api/v1/admin/orders/{number}/gig/ — the fulfilment panel's data: the
     shipment, the cached wallet balance, and whether capture is currently legal
@@ -227,6 +333,11 @@ class AdminGigShipmentView(AdminAuditMixin, APIView):
                 # packing desk needs to see WHERE the parcel is routed before pressing
                 # the button that debits the wallet.
                 "centre": shipment.centre,
+                # Sender-origin snapshot (Plan-34): {} = the env origin. The desk
+                # must see WHICH shop the rider is being sent to before the button
+                # that dispatches one — an Ogudu packer must never capture an
+                # Abuja-routed shipment.
+                "origin": shipment.origin,
             },
             # "unknown" is honest: the sandbox account has no wallet record, and a
             # stale/absent cache is not a zero.

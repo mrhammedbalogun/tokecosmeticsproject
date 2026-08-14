@@ -116,3 +116,26 @@ describe("GigPanel pickup centre (32b slice 5)", () => {
     expect(screen.queryByText("Pickup centre")).toBeNull();
   });
 });
+
+describe("GigPanel sender origin (Plan-34)", () => {
+  it("shows which shop the rider collects from and names it in the confirm copy", () => {
+    setup(data({}, {
+      origin: {
+        id: 2,
+        name: "Kubwa (Abuja)",
+        address: "Shop 7, Lane 3, Building Materials Market, Kubwa, FCT",
+      },
+    }));
+    expect(screen.getByText("Collecting from")).toBeInTheDocument();
+    expect(screen.getByText("Kubwa (Abuja)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /create gig waybill/i }));
+    // The confirm step warns WHICH shop must have the order packed before the
+    // button that dispatches a rider there.
+    expect(screen.getByText(/that shop must have this order packed/)).toBeInTheDocument();
+  });
+
+  it("renders no origin row for legacy shipments (empty snapshot = env sender)", () => {
+    setup();
+    expect(screen.queryByText("Collecting from")).toBeNull();
+  });
+});

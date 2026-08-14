@@ -216,6 +216,9 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "DeliveryOptionAdminViewSet": "products.manage",
     # Reference data: read plus is_active. Same scope as the options that reference it.
     "RegionAdminViewSet": "products.manage",
+    # Pickup origins (Plan-34): where GIG collects from — an operational address a
+    # Manager maintains, same reasoning as the delivery options themselves.
+    "SenderLocationAdminViewSet": "products.manage",
     # --- reports (Plan-20a). The third scope this project declared before anything used
     # it, after cms.manage and settings.manage.
     "ReportView": "reports.view",
@@ -243,6 +246,9 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # MONEY: the wallet is debited the full GrandTotal, irrevocably, and a rider is
     # dispatched. The panel read and the label are day-job surfaces.
     "AdminGigShipmentView": "orders.view",
+    # The deliveries table (Plan-35): the order-list posture — every row names a
+    # customer and phone, so it is `orders.view` and read-audited, never exportable.
+    "AdminGigShipmentListView": "orders.view",
     "AdminGigCaptureView": "orders.manage",
     "AdminGigLabelView": "orders.operate",
     "AdminOrderNoteView": "orders.operate",

@@ -119,6 +119,8 @@ MATRIX: list[Row] = [
     Row("CouponAdminViewSet", "get", "/api/v1/admin/coupons/", _MANAGERS),
     Row("DeliveryOptionAdminViewSet", "get", "/api/v1/admin/delivery-options/", _MANAGERS),
     Row("RegionAdminViewSet", "get", "/api/v1/admin/regions/?country_code=NG", _MANAGERS),
+    # Pickup origins (Plan-34): same operational-address reasoning as the options.
+    Row("SenderLocationAdminViewSet", "get", "/api/v1/admin/sender-locations/", _MANAGERS),
     # --- reports: Owner and Manager. Support works the desk and does not see the books.
     Row("ReportView", "get", "/api/v1/admin/reports/revenue/", _MANAGERS),
     Row("ReportExportView", "get", "/api/v1/admin/reports/revenue/export.csv", _MANAGERS),
@@ -139,6 +141,8 @@ MATRIX: list[Row] = [
     # --- orders: GIG fulfilment (Plan-32a). The panel and the label are desk work;
     # capture debits the wallet irrevocably, so Support is out with the other money.
     Row("AdminGigShipmentView", "get", f"{_ORDER}/gig/", _DESK),
+    # The deliveries table (Plan-35) is desk reading, like the order list it mirrors.
+    Row("AdminGigShipmentListView", "get", "/api/v1/admin/gig-shipments/", _DESK),
     Row("AdminGigLabelView", "post", f"{_ORDER}/gig/label/", _DESK),
     Row("AdminGigCaptureView", "post", f"{_ORDER}/gig/capture/", _MANAGERS),
     # --- orders: money. Support is deliberately out ------------------------------

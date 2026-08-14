@@ -42,8 +42,13 @@ def create_quoted_shipment(order, chosen: dict, charged, *, centre=None) -> GigS
         if centre is not None
         else {}
     )
+    # The sender origin the quote priced from (Plan-34): lifted out of the cached
+    # payload into its own column, sibling of `centre`. A cache miss leaves it
+    # empty — capture then falls back to the env origin, which is also what the
+    # re-quote would select for a single-row table.
     return GigShipment.objects.create(
-        order=order, status="quoted", quote=quote, charged=charged, centre=snapshot
+        order=order, status="quoted", quote=quote, charged=charged, centre=snapshot,
+        origin=quote.get("origin") or {},
     )
 
 

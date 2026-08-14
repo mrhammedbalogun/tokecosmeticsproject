@@ -70,3 +70,26 @@ def test_order_refunded_after_capture_keeps_the_shipment_state(order):
 def test_abandon_is_a_noop_for_orders_without_a_gig_shipment(order):
     abandon_quoted_shipment(order.pk)  # must not raise
     assert not GigShipment.objects.filter(order=order).exists()
+
+
+def test_placement_lifts_the_origin_snapshot_from_the_cached_quote(order):
+    """Plan-34 ruling 3: the sender origin the quote priced from becomes
+    GigShipment.origin, so capture ships from exactly what was priced."""
+    from django.core.cache import cache
+
+    origin = {"id": 2, "name": "Kubwa (Abuja)", "phone": "+2347074800702",
+              "address": "Shop 7, Lane 3, Building Materials Market, Kubwa, FCT",
+              "locality": "Kubwa", "latitude": 9.138, "longitude": 7.322}
+    key = "gig:quote:v2:2:99:1"
+    cache.set(key, {"price": "4175.20", "breakdown": {"GrandTotal": 4175.2},
+                    "api_id": "q-1", "origin": origin}, 60)
+    shipment = create_quoted_shipment(order, {"carrier_quote_key": key},
+                                      charged=Decimal("4175.20"))
+    assert shipment.origin == origin
+    cache.delete(key)
+
+
+def test_placement_cache_miss_leaves_the_origin_empty(order):
+    shipment = create_quoted_shipment(order, {"carrier_quote_key": "gig:quote:v2:0:gone:1"},
+                                      charged=Decimal("4175.20"))
+    assert shipment.origin == {}  # capture falls back to the env origin

@@ -8,7 +8,7 @@ The rules, all measured or ruled in the plan doc:
   checkout simply doesn't offer GIG — the flat-rate options carry it.
 - The HTTP budget is one attempt, 3 seconds, no retries. A checkout render must
   never hang on a carrier.
-- Quotes are cached 6 hours per (LGA, ceil-kg) — measured: price ignores weight
+- Quotes are cached 6 hours per (origin, LGA, ceil-kg) — measured: price ignores weight
   below 5 kg and coordinates resolve zone-granular, so this key over-segments if
   anything. The FULL quote payload is cached, not just the price: order
   placement (slice 4) re-reads it to snapshot the breakdown without a second
@@ -28,6 +28,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from apps.delivery.gig import client
+from apps.delivery.gig.origins import select_origin
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +45,16 @@ class GigQuote:
     cache_key: str
 
 
-def _cache_key(region_id: int, weight_g: int) -> str:
-    return f"gig:quote:v1:{region_id}:{max(1, math.ceil(weight_g / 1000))}"
+def _cache_key(origin_id: int, region_id: int, weight_g: int) -> str:
+    # v2 (Plan-34): the ORIGIN is in the key. Without it, two sender locations
+    # would share cache entries and a customer could be charged one origin's
+    # price while capture ships (and the wallet pays) from another.
+    return f"gig:quote:v2:{origin_id}:{region_id}:{max(1, math.ceil(weight_g / 1000))}"
 
 
-def _pickup_cache_key(centre_id: int, weight_g: int) -> str:
+def _pickup_cache_key(origin_id: int, centre_id: int, weight_g: int) -> str:
     # Keyed on the CENTRE, not the LGA: the receiver is the centre's own location.
-    return f"gig:quote:pickup:v1:{centre_id}:{max(1, math.ceil(weight_g / 1000))}"
+    return f"gig:quote:pickup:v2:{origin_id}:{centre_id}:{max(1, math.ceil(weight_g / 1000))}"
 
 
 def receiver_point(address, region):
@@ -85,7 +89,12 @@ def quote_home_delivery(address, weight_g: int, declared_value: Decimal) -> GigQ
     if region is None:
         return None
 
-    key = _cache_key(region.id, weight_g)
+    # Origin follows the receiver (Plan-34 ruling 2): nearest active sender
+    # location to the door pin (else centroid). Selected BEFORE the cache lookup
+    # because the origin is part of the key.
+    receiver_lat, receiver_lng = receiver_point(address, region)
+    origin = select_origin(receiver_lat, receiver_lng)
+    key = _cache_key(origin.id, region.id, weight_g)
     cached = cache.get(key)
     if cached is not None:
         return GigQuote(
@@ -95,10 +104,10 @@ def quote_home_delivery(address, weight_g: int, declared_value: Decimal) -> GigQ
 
     body = {
         "SenderLocation": {
-            "Latitude": settings.GIG_SENDER_LATITUDE,
-            "Longitude": settings.GIG_SENDER_LONGITUDE,
+            "Latitude": origin.latitude,
+            "Longitude": origin.longitude,
         },
-        "ReceiverLocation": dict(zip(("Latitude", "Longitude"), receiver_point(address, region))),
+        "ReceiverLocation": {"Latitude": receiver_lat, "Longitude": receiver_lng},
         "VehicleType": settings.GIG_VEHICLE_TYPE,
         "PickUpOptions": 0,  # door delivery
         "ShipmentItems": [{
@@ -126,7 +135,10 @@ def quote_home_delivery(address, weight_g: int, declared_value: Decimal) -> GigQ
         return None
 
     price = Decimal(str(payload["GrandTotal"])).quantize(TWO_DP)
-    cache.set(key, {"price": str(price), "breakdown": payload, "api_id": result.api_id},
+    # `origin` rides in the cached payload (Plan-34 ruling 3): placement lifts it
+    # onto GigShipment.origin, so capture ships from exactly what was priced.
+    cache.set(key, {"price": str(price), "breakdown": payload, "api_id": result.api_id,
+                    "origin": origin.as_snapshot()},
               QUOTE_CACHE_TTL)
     return GigQuote(price=price, breakdown=payload, api_id=result.api_id, cache_key=key)
 
@@ -141,14 +153,18 @@ def quote_centre_pickup(address, weight_g: int, declared_value: Decimal, centre)
     home_delivery=False)."""
     if centre is None or centre.latitude is None or centre.longitude is None:
         return None
-    key = _pickup_cache_key(centre.gig_centre_id, weight_g)
+    # The parcel travels origin→centre, so the origin follows the CENTRE's
+    # coordinates — the customer's home plays no part in this leg (Plan-34
+    # ruling 2).
+    origin = select_origin(float(centre.latitude), float(centre.longitude))
+    key = _pickup_cache_key(origin.id, centre.gig_centre_id, weight_g)
     cached = cache.get(key)
     if cached is not None:
         return GigQuote(price=Decimal(cached["price"]), breakdown=cached["breakdown"],
                         api_id=cached["api_id"], cache_key=key)
     body = {
-        "SenderLocation": {"Latitude": settings.GIG_SENDER_LATITUDE,
-                           "Longitude": settings.GIG_SENDER_LONGITUDE},
+        "SenderLocation": {"Latitude": origin.latitude,
+                           "Longitude": origin.longitude},
         "ReceiverLocation": {"Latitude": float(centre.latitude), "Longitude": float(centre.longitude)},
         "VehicleType": settings.GIG_VEHICLE_TYPE,
         "PickUpOptions": 1,  # customer collects from the centre
@@ -167,6 +183,7 @@ def quote_centre_pickup(address, weight_g: int, declared_value: Decimal, centre)
         logger.warning("gig pickup quote malformed (apiId=%s)", result.api_id)
         return None
     price = Decimal(str(payload["GrandTotal"])).quantize(TWO_DP)
-    cache.set(key, {"price": str(price), "breakdown": payload, "api_id": result.api_id},
+    cache.set(key, {"price": str(price), "breakdown": payload, "api_id": result.api_id,
+                    "origin": origin.as_snapshot()},
               QUOTE_CACHE_TTL)
     return GigQuote(price=price, breakdown=payload, api_id=result.api_id, cache_key=key)

@@ -339,3 +339,77 @@ def test_pickup_capture_refuses_malformed_or_coordinateless_snapshots(order, quo
     import json as jsonlib
     rd = jsonlib.loads(route.calls[-1].request.content)["ReceiverDetails"]
     assert rd["ReceiverLocation"] == {"Latitude": 6.607894, "Longitude": 3.369322}
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_capture_ships_from_the_origin_snapshot_not_the_env(order, quoted, django_user_model):
+    """Plan-34: SenderDetails come from GigShipment.origin — the row the customer
+    was quoted from — even though the env still points at the old sender."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    GigShipment.objects.filter(pk=quoted.pk).update(origin={
+        "id": 2, "name": "Kubwa (Abuja)", "phone": "+2347074800702",
+        "address": "Shop 7, Lane 3, Building Materials Market, Kubwa, FCT",
+        "locality": "Kubwa", "latitude": 9.138, "longitude": 7.322,
+    })
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(50000))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope({"Waybill": "1349113200"}))
+    )
+    capture_shipment(order, actor=actor)
+    import json as jsonlib
+
+    sender = jsonlib.loads(route.calls[0].request.content)["SenderDetails"]
+    assert sender["SenderName"] == "Kubwa (Abuja)"
+    assert sender["SenderPhoneNumber"] == "+2347074800702"
+    assert sender["SenderAddress"] == "Shop 7, Lane 3, Building Materials Market, Kubwa, FCT"
+    assert sender["InputtedSenderAddress"] == sender["SenderAddress"]
+    assert sender["SenderLocality"] == "Kubwa"
+    assert sender["SenderLocation"] == {"Latitude": 9.138, "Longitude": 7.322}
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_capture_with_no_origin_snapshot_uses_the_env_sender(order, quoted, django_user_model):
+    """Pre-Plan-34 shipments (empty origin dict) keep today's behaviour exactly."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(50000))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope({"Waybill": "1349113201"}))
+    )
+    capture_shipment(order, actor=actor)
+    import json as jsonlib
+
+    sender = jsonlib.loads(route.calls[0].request.content)["SenderDetails"]
+    assert sender["SenderName"] == "Toke Cosmetics"
+    assert sender["SenderAddress"] == "Gbagada, Lagos"
+    assert sender["SenderLocation"] == {"Latitude": 6.556, "Longitude": 3.3888}
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_capture_never_mixes_a_partial_origin_snapshot_with_env_coordinates(
+    order, quoted, django_user_model
+):
+    """A snapshot missing its coordinate pair is treated as absent wholesale —
+    the env sender ships, never a hybrid of snapshot address + env pin."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    GigShipment.objects.filter(pk=quoted.pk).update(origin={
+        "id": 2, "name": "Kubwa (Abuja)", "address": "Somewhere, Kubwa", "latitude": 9.138,
+    })
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(50000))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope({"Waybill": "1349113202"}))
+    )
+    capture_shipment(order, actor=actor)
+    import json as jsonlib
+
+    sender = jsonlib.loads(route.calls[0].request.content)["SenderDetails"]
+    assert sender["SenderName"] == "Toke Cosmetics"
+    assert sender["SenderLocation"] == {"Latitude": 6.556, "Longitude": 3.3888}

@@ -27,7 +27,8 @@ describe("the sidebar renders only what the scopes allow", () => {
     expect(labels(MANAGER)).toEqual([
       // Categories carries `products.manage`, the same scope as Products — editing the
       // tree is editing the catalogue, and it is what the storefront nav is built from.
-      "Dashboard", "Orders", "Products", "Categories", "Inventory", "Customers", "Reviews",
+      "Dashboard", "Orders", "Deliveries", "Products", "Categories", "Inventory",
+      "Customers", "Reviews",
       "Coupons",
       "Home Content", "Reports",
       // Settings is any-of `settings.manage` / `products.manage`: the Delivery section
@@ -37,8 +38,10 @@ describe("the sidebar renders only what the scopes allow", () => {
     ]);
   });
 
-  it("Support sees orders and customers only", () => {
-    expect(labels(SUPPORT)).toEqual(["Dashboard", "Orders", "Customers"]);
+  it("Support sees orders, deliveries and customers only", () => {
+    // Deliveries opens on `orders.view` — the shipment table is desk reading; the
+    // door page then hides the Pickup-locations card Support cannot use.
+    expect(labels(SUPPORT)).toEqual(["Dashboard", "Orders", "Deliveries", "Customers"]);
   });
 
   it("Content sees content only — customer reviews are shop management, not copy", () => {

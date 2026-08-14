@@ -99,6 +99,43 @@ class GigCentre(TimeStampedModel):
         return f"{self.name} ({'active' if self.is_active else 'inactive'})"
 
 
+class SenderLocation(TimeStampedModel):
+    """One Toke fulfilment point GIG can collect from (Plan-34).
+
+    The sender used to be six `GIG_SENDER_*` env vars; multiple shops made it data.
+    Selection is nearest-active-to-the-receiver by haversine (`gig/origins.py`) and
+    the chosen row is SNAPSHOTTED onto `GigShipment.origin` at placement — edits
+    here never rewrite what an in-flight order was quoted from. Zero active rows =
+    the env-var fallback, byte-for-byte today's behaviour, so this table can be
+    emptied without breaking a checkout.
+
+    The pin is load-bearing twice over: GIG prices from it (Ogudu vs Ikorodu
+    measured +85%) and the rider drives to it. `phone` is who GIG calls to
+    coordinate the pickup — it must reach THIS shop's counter.
+    """
+
+    name = models.CharField(max_length=100)
+    phone = models.CharField(max_length=20)  # strict E.164, judged by core.phones
+    address = models.CharField(max_length=500)
+    locality = models.CharField(max_length=100)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    # DISPLAY ONLY (Plan-35): human filing for a table that will grow — nothing routes
+    # on these. The PIN is the only routing input (origins.select_origin is pure
+    # haversine); typing "Lagos" here must never move a quote, and the serializer help
+    # text and the admin form both say so.
+    state = models.CharField(max_length=100, blank=True)
+    lga = models.CharField(max_length=100, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "GIG sender location"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({'active' if self.is_active else 'inactive'})"
+
+
 class GigShipment(TimeStampedModel):
     """One order's GIG story, from checkout quote to delivered parcel (Plan-32a
     slice 4) — and the wallet-reconciliation trail Plan-20 reports aggregate.
@@ -148,6 +185,12 @@ class GigShipment(TimeStampedModel):
     # "where do I collect my parcel" must answer from the order forever. Empty dict
     # for door-delivery shipments.
     centre = models.JSONField(default=dict, blank=True)
+    # Multi-origin (Plan-34): the SENDER location this shipment was quoted from —
+    # `gig/origins.py` `as_snapshot()` shape — snapshotted at placement for the same
+    # reason as `centre`: capture must ship from exactly what was priced, even after
+    # the row is edited or deactivated. Empty dict = the env-var origin (pre-Plan-34
+    # shipments and the zero-rows fallback); capture then reads settings.
+    origin = models.JSONField(default=dict, blank=True)
 
     class Meta:
         verbose_name = "GIG shipment"

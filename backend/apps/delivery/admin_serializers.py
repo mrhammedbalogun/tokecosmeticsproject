@@ -8,11 +8,13 @@ to month as fuel and logistics costs move.
 Weight tiers (`DeliveryOptionRate`) are deliberately absent: production has zero rows, and
 a tier editor for an unpopulated table would be speculative UI.
 """
+from decimal import Decimal
+
 from django.db.models import Max
 from rest_framework import serializers
 
 from apps.core.models import Country, Region
-from apps.delivery.models import DeliveryOption
+from apps.delivery.models import DeliveryOption, GigShipment, SenderLocation
 
 # The carriers checkout can actually quote and capture (apps/checkout/services/checkout.py
 # branches on carrier_code). A "carrier" option naming anything else falls through to the
@@ -181,3 +183,113 @@ class DeliveryCoverageSerializer(serializers.Serializer):
 
     country_codes = serializers.ListField(child=serializers.CharField(), required=False)
     region_ids = serializers.ListField(child=serializers.IntegerField(), required=False)
+
+
+class GigShipmentRowSerializer(serializers.ModelSerializer):
+    """One row of the deliveries table (Plan-35) — READ ONLY, composed entirely from
+    snapshots the shipment and its order already hold, so a page of rows costs one
+    query and zero HTTP. The origin/centre/address snapshots are the source, not the
+    live tables: this list answers "what happened", and history must not shift when
+    a location is renamed or a centre closes.
+    """
+
+    order_number = serializers.CharField(source="order.number", read_only=True)
+    placed_at = serializers.DateTimeField(source="order.placed_at", read_only=True)
+    currency = serializers.CharField(source="order.currency_id", read_only=True)
+    origin = serializers.SerializerMethodField()
+    service = serializers.SerializerMethodField()
+    destination = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GigShipment
+        fields = [
+            "order_number", "placed_at", "status", "waybill", "origin", "service",
+            "destination", "customer_name", "customer_phone", "charged", "cost",
+            "currency", "last_scan", "last_tracked_at",
+        ]
+
+    def get_origin(self, obj) -> dict:
+        """An empty snapshot means pre-Plan-34 or the env fallback — labelled as the
+        built-in origin (id 0) so old shipments stay legible and filterable, never
+        resolved against today's settings (which may have moved since)."""
+        if obj.origin:
+            return {"id": obj.origin.get("id", 0), "name": obj.origin.get("name", "")}
+        return {"id": 0, "name": "Ogudu (built-in)"}
+
+    def get_service(self, obj) -> str:
+        return "pickup" if obj.centre else "door"
+
+    def get_destination(self, obj) -> str:
+        if obj.centre:
+            return obj.centre.get("name", "")
+        addr = obj.order.shipping_address or {}
+        return ", ".join(p for p in (addr.get("area"), addr.get("state")) if p)
+
+    def get_customer_name(self, obj) -> str:
+        addr = obj.order.shipping_address or {}
+        return " ".join(p for p in (addr.get("first_name"), addr.get("last_name")) if p)
+
+    def get_customer_phone(self, obj) -> str:
+        return (obj.order.shipping_address or {}).get("phone", "")
+
+
+class SenderLocationAdminSerializer(serializers.ModelSerializer):
+    """Plan-34: one Toke fulfilment point GIG collects from. The pin prices every
+    quote and is where the rider drives; the phone is who GIG calls to coordinate
+    the pickup — both are validated hard, not trusted."""
+
+    audit_allowlist = (
+        "name", "phone", "address", "locality", "latitude", "longitude",
+        "state", "lga", "is_active",
+    )
+
+    # DISPLAY ONLY (Plan-35): filing labels for the pickup-locations page. Nothing
+    # routes on them — the pin is the only routing input, and the help text is the
+    # contract the admin form repeats.
+    state = serializers.CharField(
+        required=False, allow_blank=True, max_length=100,
+        help_text="Display only — routing follows the pin, never this label.",
+    )
+    lga = serializers.CharField(
+        required=False, allow_blank=True, max_length=100,
+        help_text="Display only — routing follows the pin, never this label.",
+    )
+
+    class Meta:
+        model = SenderLocation
+        fields = [
+            "id", "name", "phone", "address", "locality",
+            "latitude", "longitude", "state", "lga", "is_active", "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]
+
+    def validate_phone(self, value):
+        from apps.core.phones import normalize_e164
+
+        try:
+            normalized = normalize_e164(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
+        if not normalized:
+            raise serializers.ValidationError(
+                "A pickup phone is required — GIG calls it to coordinate the collection."
+            )
+        return normalized
+
+    def validate_latitude(self, value):
+        if not 4 <= value <= 14:
+            raise serializers.ValidationError(
+                "Latitude must be inside Nigeria (4–14). Right-click the spot in "
+                "Google Maps and copy the first number."
+            )
+        return value
+
+    def validate_longitude(self, value):
+        if not Decimal("2.5") <= value <= 15:
+            raise serializers.ValidationError(
+                "Longitude must be inside Nigeria (2.5–15). Right-click the spot in "
+                "Google Maps and copy the second number."
+            )
+        return value

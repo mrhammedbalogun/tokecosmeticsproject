@@ -31,7 +31,8 @@ export default async function DeliverySettingsPage() {
   }
 
   // For the global address tester. Best-effort: the option list is the page's job,
-  // the tester quietly absents itself if these fail.
+  // the tester quietly absents itself on failure. Pickup locations moved to
+  // /deliveries/pickup-locations (Plan-35) — one home, or the two drift.
   const [regionsResult, countriesResult] = await Promise.allSettled([
     fetchWithAuthOrBounce<RegionRow[]>("/admin/regions/", PATH),
     fetchWithAuthOrBounce<CountryRef[]>("/meta/countries/", PATH),

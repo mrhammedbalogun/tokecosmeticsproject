@@ -29,6 +29,13 @@ pytestmark = pytest.mark.django_db
 FakeVariant = namedtuple("FakeVariant", "weight_grams")
 
 
+def _seeded_origin_id() -> int:
+    # Migration 0014 seeds the Ogudu sender row (Plan-34); with one active row it
+    # is always the selected origin, whatever the receiver.
+    from apps.delivery.models import SenderLocation
+    return SenderLocation.objects.get(is_active=True).pk
+
+
 class FakeAddress:
     def __init__(self, country_code="NG", state_region=None, area_region=None):
         self.country_code = country_code
@@ -112,7 +119,7 @@ def test_covered_lga_gets_a_priced_gig_option_and_flat_options_pass_through(
     assert by_name["Nationwide Delivery"]["price"] == "3500.00"
     gig = by_name["Door Delivery (GIG)"]
     assert gig["price"] == "4175.20"
-    assert gig["carrier_quote_key"] == _cache_key(covered_ikeja.id, 500)
+    assert gig["carrier_quote_key"] == _cache_key(_seeded_origin_id(), covered_ikeja.id, 500)
     # The customer-facing dict never carries GIG's breakdown (our discount rank).
     assert "carrier_quote" not in gig and "breakdown" not in gig
 
@@ -129,7 +136,7 @@ def test_second_call_is_served_from_cache(ng, covered_ikeja, gig_option):
     assert route.call_count == 1
     assert [o["price"] for o in first] == [o["price"] for o in second]
     # The cached payload keeps the full breakdown for slice 4's placement snapshot.
-    cached = cache.get(_cache_key(covered_ikeja.id, 500))
+    cached = cache.get(_cache_key(_seeded_origin_id(), covered_ikeja.id, 500))
     assert cached["breakdown"]["SurchargeFee"] == 1000
     assert cached["api_id"] == "quote-api-id"
 
@@ -188,7 +195,7 @@ def test_free_over_zeroes_the_charge_but_not_the_cached_cost(ng, covered_ikeja, 
     options = _options(address, ng)  # subtotal 15000 >= 10000
     gig = next(o for o in options if o["carrier_code"] == "gig")
     assert gig["price"] == "0.00"  # customer pays nothing...
-    cached = cache.get(_cache_key(covered_ikeja.id, 500))
+    cached = cache.get(_cache_key(_seeded_origin_id(), covered_ikeja.id, 500))
     assert cached["price"] == "4175.20"  # ...but what GIG will cost us is unchanged
 
 
