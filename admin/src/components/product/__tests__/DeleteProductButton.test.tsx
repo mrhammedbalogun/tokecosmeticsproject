@@ -46,7 +46,7 @@ describe("DeleteProductButton", () => {
   });
 
   it("shows the server's refusal and stays on the page", async () => {
-    const onDelete = setup(
+    setup(
       vi.fn().mockResolvedValue({ ok: false, error: "Only the Owner can delete a product." }),
     );
     open();
@@ -63,7 +63,7 @@ describe("DeleteProductButton", () => {
   });
 
   it("turns a dropped request into a message rather than an unmount", async () => {
-    const onDelete = setup(vi.fn().mockRejectedValue(new Error("network")));
+    setup(vi.fn().mockRejectedValue(new Error("network")));
     open();
 
     fireEvent.change(screen.getByLabelText(/type the product/i), {
