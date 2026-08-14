@@ -15,6 +15,7 @@ import { LgaMismatchNudge } from "@/components/address/LgaMismatchNudge";
 import { PinConfirmMap, type LatLng } from "@/components/address/PinConfirmMap";
 import { detectLgaMismatch } from "@/components/address/lgaMismatch";
 import type { Region } from "@/components/checkout/RegionSelect";
+import { PhoneField } from "@/components/ui/PhoneField";
 import type { PlacePick } from "@/lib/googleMaps";
 import {
   fieldConfigFor,
@@ -296,17 +297,17 @@ export function AddressForm({
       </div>
 
       <div>
-        <label htmlFor="addr-form-phone" className="mb-1 block text-sm font-medium">
-          Phone
-        </label>
-        <input
+        {/* form.phone holds the E.164 value (or "" while invalid). A legacy national
+            number on an old address is recovered by the picker's default-country
+            parse; one the picker can't parse shows as-is for the user to fix. */}
+        <PhoneField
           id="addr-form-phone"
-          type="tel"
-          value={form.phone}
-          onChange={(e) => updateField("phone", e.target.value)}
+          name="phone"
+          label="Phone"
+          defaultValue={form.phone}
+          defaultCountry={form.country_code}
           required
-          autoComplete="tel"
-          className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+          onValueChange={(e164) => updateField("phone", e164)}
         />
         {fieldErrors.phone && (
           <p role="alert" className="mt-1 text-sm text-red-700">

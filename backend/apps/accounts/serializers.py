@@ -135,6 +135,15 @@ class AddressSerializer(serializers.ModelSerializer):
     def validate_country_code(self, value):
         return (value or "").upper()
 
+    def validate_phone(self, value):
+        # Same rule and same grandfather clause as MeSerializer: a NEW value must be
+        # E.164 (the delivery number GIG actually dials — see gig/capture.py), but a
+        # legacy national-format value re-submitted unchanged must not block an
+        # unrelated edit on an old address.
+        if self.instance and value == self.instance.phone:
+            return value
+        return _clean_contact_number(value)
+
     def validate(self, attrs):
         # On PATCH, fall back to the instance's current values for anything not sent.
         def get(name):

@@ -23,6 +23,7 @@ import {
   AsYouType,
   getCountries,
   getCountryCallingCode,
+  isSupportedCountry,
   parsePhoneNumberFromString,
   type CountryCode,
 } from "libphonenumber-js";
@@ -65,6 +66,20 @@ function formatDisplay(raw: string, country: CountryCode): string {
   return new AsYouType(country).input(raw);
 }
 
+/** Mount-time state from the stored value. Legacy rows hold national formats
+ * ("08099998888"); parsing those with the default country recovers them, which is
+ * exactly the soft-migration path — next save stores them clean. */
+function initialStateFor(defaultValue: string, fallback: CountryCode) {
+  const parsed = parsePhoneNumberFromString(defaultValue, fallback);
+  if (parsed) {
+    return {
+      country: (parsed.country ?? fallback) as CountryCode,
+      text: parsed.formatInternational(),
+    };
+  }
+  return { country: fallback, text: defaultValue };
+}
+
 export function PhoneField({
   id,
   name,
@@ -74,32 +89,31 @@ export function PhoneField({
   required = false,
   autoComplete = "tel",
   hint,
+  onValueChange,
 }: {
   id: string;
   name: string;
   label: string;
   defaultValue?: string;
-  defaultCountry?: CountryCode;
+  /** ISO2; anything libphonenumber doesn't know (e.g. the "ZZ" market) falls back to NG. */
+  defaultCountry?: string;
   required?: boolean;
   autoComplete?: string;
   hint?: string;
+  /** For state-driven forms (checkout): fires with the E.164 value, or "" while
+   * the number is empty/invalid. FormData-driven forms use the hidden input instead. */
+  onValueChange?: (e164: string) => void;
 }) {
-  // Initial state from the stored value. Legacy rows hold national formats
-  // ("08099998888"); parsing those with the default country recovers them, which is
-  // exactly the soft-migration path — next save stores them clean.
-  const initial = useMemo(() => {
-    const parsed = parsePhoneNumberFromString(defaultValue, defaultCountry);
-    if (parsed) {
-      return {
-        country: (parsed.country ?? defaultCountry) as CountryCode,
-        text: parsed.formatInternational(),
-      };
-    }
-    return { country: defaultCountry, text: defaultValue };
-  }, [defaultValue, defaultCountry]);
+  const fallbackCountry: CountryCode = isSupportedCountry(defaultCountry)
+    ? defaultCountry
+    : "NG";
 
-  const [country, setCountry] = useState<CountryCode>(initial.country);
-  const [text, setText] = useState(initial.text);
+  const [country, setCountry] = useState<CountryCode>(
+    () => initialStateFor(defaultValue, fallbackCountry).country,
+  );
+  const [text, setText] = useState(
+    () => initialStateFor(defaultValue, fallbackCountry).text,
+  );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
@@ -107,7 +121,7 @@ export function PhoneField({
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const countries = useMemo(buildCountries, []);
+  const countries = useMemo(() => buildCountries(), []);
 
   // The submitted value: E.164 when the number is valid, "" otherwise.
   const parsed = parsePhoneNumberFromString(text, country);
@@ -116,6 +130,16 @@ export function PhoneField({
   // it is what the field holds before the user has typed anything of their own.
   const isEmpty = text.replace(/[\s()+-]/g, "") === getCountryCallingCode(country) ||
     text.replace(/[\s()+-]/g, "") === "";
+
+  // Report the E.164 value to state-driven parents. Ref'd so an inline callback
+  // prop doesn't retrigger the value effect every render — only a real change does.
+  const onValueChangeRef = useRef(onValueChange);
+  useEffect(() => {
+    onValueChangeRef.current = onValueChange;
+  });
+  useEffect(() => {
+    onValueChangeRef.current?.(e164);
+  }, [e164]);
 
   // Native validation: browsers block submit on a non-empty invalid value and say why.
   useEffect(() => {

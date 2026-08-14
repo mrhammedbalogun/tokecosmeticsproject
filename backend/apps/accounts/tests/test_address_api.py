@@ -20,7 +20,7 @@ def test_create_and_list_own_addresses(django_user_model):
     c = _client(user)
 
     r = c.post("/api/v1/me/addresses/", {
-        "label": "Home", "first_name": "Ada", "phone": "08012345678",
+        "label": "Home", "first_name": "Ada", "phone": "+2348012345678",
         "line1": "1 Allen Ave", "country_code": "NG", "state_region": lagos.id,
     }, format="json")
     assert r.status_code == 201

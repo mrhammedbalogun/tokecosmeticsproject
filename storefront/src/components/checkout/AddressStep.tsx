@@ -14,6 +14,7 @@ import {
   type Address,
   type AddressFieldErrors,
 } from "@/components/checkout/address-fields";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 interface FormValues {
   label: string;
@@ -414,17 +415,16 @@ export function AddressStep() {
           </div>
 
           <div>
-            <label htmlFor="addr-phone" className="mb-1 block text-sm font-medium">
-              Phone
-            </label>
-            <input
+            {/* form.phone holds the E.164 value (or "" while invalid), so the payload
+                and the !form.phone submit gate never see display formatting. */}
+            <PhoneField
               id="addr-phone"
-              type="tel"
-              value={form.phone}
-              onChange={(e) => updateField("phone", e.target.value)}
+              name="phone"
+              label="Phone"
+              defaultValue={form.phone}
+              defaultCountry={country}
               required
-              autoComplete="tel"
-              className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+              onValueChange={(e164) => updateField("phone", e164)}
             />
             {fieldErrors.phone && (
               <p role="alert" className="mt-1 text-sm text-red-700">
