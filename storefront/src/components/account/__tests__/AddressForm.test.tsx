@@ -31,7 +31,7 @@ function lastCall(f: ReturnType<typeof mockFetch>) {
 }
 
 const GB_ADDRESS: Address = {
-  id: 5, label: "Office", first_name: "Ada", last_name: "L", phone: "0700",
+  id: 5, label: "Office", first_name: "Ada", last_name: "L", phone: "+447911123456",
   line1: "2 Fleet St", line2: "", country_code: "GB", city_text: "London",
   state_text: "", postcode: "EC4", is_default_shipping: false, is_default_billing: false,
 };
@@ -109,7 +109,7 @@ describe("AddressForm", () => {
       expect(screen.getByText(/no regions are set up/i)).toBeInTheDocument()
     );
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "0700" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+2348023900964" } });
     fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "x" } });
 
     fireEvent.click(screen.getByRole("button", { name: /save address/i }));
@@ -142,7 +142,7 @@ describe("AddressForm", () => {
     await waitFor(() => expect(screen.getByLabelText(/^city\/town$/i)).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "07000000000" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+447911123456" } });
     fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "10 Downing St" } });
     fireEvent.change(screen.getByLabelText(/^city\/town$/i), { target: { value: "London" } });
     fireEvent.change(screen.getByLabelText(/^postcode$/i), { target: { value: "SW1A 2AA" } });
@@ -158,7 +158,7 @@ describe("AddressForm", () => {
       country_code: "GB",
       line1: "10 Downing St",
       first_name: "Ada",
-      phone: "07000000000",
+      phone: "+447911123456",
       city_text: "London",
       postcode: "SW1A 2AA",
     });
@@ -224,11 +224,11 @@ describe("AddressForm", () => {
 
   it("keeps the saved LGA in the PATCH payload when only an unrelated field changes", async () => {
     const ngAddress: Address = {
-      id: 7, first_name: "Ada", last_name: "L", phone: "0700", line1: "12 Allen Ave",
+      id: 7, first_name: "Ada", last_name: "L", phone: "+2348030000000", line1: "12 Allen Ave",
       country_code: "NG", state_region: 1, area_region: 11,
       is_default_shipping: false, is_default_billing: false,
     };
-    const updated: Address = { ...ngAddress, phone: "0711" };
+    const updated: Address = { ...ngAddress, phone: "+2348023900964" };
     const f = mockFetch({
       "GET /api/regions?country=NG": {
         status: 200,
@@ -248,7 +248,7 @@ describe("AddressForm", () => {
     // assertion below would pass by accident (submitting before the fetch resolves).
     await waitFor(() => expect(screen.getByLabelText(/^lga$/i)).toHaveValue("11"));
 
-    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "0711" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+2348023900964" } });
     fireEvent.click(screen.getByRole("button", { name: /save address/i }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(updated));
@@ -258,7 +258,7 @@ describe("AddressForm", () => {
     const body = JSON.parse(init!.body as string);
     expect(body.state_region).toBe(1);
     expect(body.area_region).toBe(11);
-    expect(body.phone).toBe("0711");
+    expect(body.phone).toBe("+2348023900964");
   });
 
   // Fix 2 (15d final review): under DRF partial update, an OMITTED field is left
@@ -310,7 +310,7 @@ describe("AddressForm", () => {
     await waitFor(() => expect(screen.getByLabelText(/^city\/town$/i)).toBeInTheDocument());
 
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
-    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "07000000000" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+447911123456" } });
     fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "10 Downing St" } });
     fireEvent.change(screen.getByLabelText(/^city\/town$/i), { target: { value: "London" } });
     fireEvent.change(screen.getByLabelText(/^postcode$/i), { target: { value: "SW1A 2AA" } });
@@ -332,7 +332,7 @@ describe("AddressForm", () => {
     // No googleMaps mock on purpose: without a key the map degrades to its
     // fallback line, and the pin must still round-trip from the saved address.
     const pinned: Address = {
-      id: 7, label: "Home", first_name: "Ada", phone: "0800", line1: "12 Allen Ave",
+      id: 7, label: "Home", first_name: "Ada", phone: "+2348030000000", line1: "12 Allen Ave",
       line2: "", country_code: "NG", state_region: 1, area_region: 11,
       latitude: "6.601840", longitude: "3.351490",
       is_default_shipping: false, is_default_billing: false,
@@ -357,7 +357,7 @@ describe("AddressForm", () => {
       expect(screen.getByText(/map could not load/i)).toBeInTheDocument()
     );
 
-    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "0900" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "+2348023900964" } });
     fireEvent.click(screen.getByRole("button", { name: /save address/i }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
 

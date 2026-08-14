@@ -70,6 +70,13 @@ async function openRegisterForm() {
   await waitFor(() => screen.getByLabelText(/first name/i));
 }
 
+/** Registration requires a phone since the E.164 work; the PhoneField reports the
+ * clean value through state, which gates the submit button. */
+const TEST_PHONE = "+2348023900964";
+function fillPhone() {
+  fireEvent.change(screen.getByLabelText(/phone number/i), { target: { value: TEST_PHONE } });
+}
+
 beforeEach(() => {
   sessionStorage.clear();
   mockCart = EMPTY_CART;
@@ -151,6 +158,7 @@ describe("SignInStep", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "new@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
@@ -159,7 +167,10 @@ describe("SignInStep", () => {
       "/api/auth/register",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ email: "new@example.com", password: "Str0ngPassw0rd!", first_name: "Jane" }),
+        body: JSON.stringify({
+          email: "new@example.com", password: "Str0ngPassw0rd!", first_name: "Jane",
+          phone: TEST_PHONE,
+        }),
       })
     );
   });
@@ -187,6 +198,7 @@ describe("SignInStep", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "shopper@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
@@ -206,6 +218,7 @@ describe("SignInStep", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "new@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
@@ -224,6 +237,7 @@ describe("SignInStep", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "dup@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() =>
@@ -255,6 +269,7 @@ describe("SignInStep", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "dup@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "wrongfirsttry" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByText(/already has an account/i)).toBeInTheDocument());
@@ -280,6 +295,7 @@ describe("SignInStep", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "buyer@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Bea" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ngPassw0rd!" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
@@ -329,6 +345,7 @@ describe("SignInStep", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "new@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Jane" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "password" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
 
     await waitFor(() =>
@@ -352,6 +369,7 @@ describe("SignInStep — turnstile", () => {
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "n@example.com" } });
     fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Nia" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "Str0ng-pass-9" } });
+    fillPhone();
     fireEvent.click(screen.getByRole("button", { name: /create account/i }));
   }
 

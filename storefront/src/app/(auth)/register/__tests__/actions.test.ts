@@ -33,7 +33,11 @@ function form(fields: Record<string, string>) {
   return fd;
 }
 
-const VALID = { email: "a@b.com", password: "Str0ng-Passw0rd-9x", first_name: "Ada" };
+const VALID = {
+  email: "a@b.com", password: "Str0ng-Passw0rd-9x", first_name: "Ada",
+  // The PhoneField's hidden input always submits E.164 (or "").
+  phone: "+2348023900964",
+};
 
 function upstreamOk() {
   const f = vi.fn((url: string, _init?: RequestInit) => {
@@ -179,6 +183,18 @@ describe("registerAction", () => {
     const state = await registerAction({}, form({ email: "", password: "", first_name: "" }));
 
     expect(state.error).toBeTruthy();
+    expect(f).not.toHaveBeenCalled();
+  });
+
+  it("refuses a missing or non-E.164 phone without calling the API", async () => {
+    const f = vi.fn();
+    global.fetch = f as unknown as typeof fetch;
+
+    const missing = await registerAction({}, form({ ...VALID, phone: "" }));
+    expect(missing.error).toMatch(/country code/i);
+
+    const national = await registerAction({}, form({ ...VALID, phone: "08023900964" }));
+    expect(national.error).toMatch(/country code/i);
     expect(f).not.toHaveBeenCalled();
   });
 

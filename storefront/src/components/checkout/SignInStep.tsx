@@ -3,8 +3,10 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
+import { useCart } from "@/hooks/useCart";
 import { readBuyNowIntent, clearBuyNowIntent } from "@/lib/buynow-intent";
 import { TurnstileWidget, turnstileToken } from "@/components/auth/TurnstileWidget";
+import { PhoneField } from "@/components/ui/PhoneField";
 
 /** Django field errors come back as `{ field: ["message", ...] }`; a top-level
  * problem (e.g. login's "No active account found...") comes back as `{ detail }`. */
@@ -13,6 +15,8 @@ interface ApiErrorBody {
   email?: string[];
   password?: string[];
   first_name?: string[];
+  phone?: string[];
+  whatsapp?: string[];
 }
 
 type Phase = "checking" | "register" | "login";
@@ -37,11 +41,15 @@ type Phase = "checking" | "register" | "login";
  */
 export function SignInStep() {
   const { complete } = useCheckout();
+  const { cart } = useCart();
   const queryClient = useQueryClient();
 
   const [phase, setPhase] = useState<Phase>("checking");
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
+  // E.164 from the PhoneField ("" while empty/invalid), same as AddressStep.
+  const [phone, setPhone] = useState("");
+  const [whatsapp, setWhatsapp] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -146,7 +154,10 @@ export function SignInStep() {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(withTurnstile({ email, password, first_name: firstName })),
+        body: JSON.stringify(withTurnstile({
+          email, password, first_name: firstName,
+          phone, ...(whatsapp ? { whatsapp } : {}),
+        })),
       });
       if (res.ok) {
         await runPostAuth(email);
@@ -160,7 +171,7 @@ export function SignInStep() {
       }
       setFieldErrors(body);
       if (body.detail) setFormError(body.detail);
-      else if (!body.email && !body.password && !body.first_name) {
+      else if (!body.email && !body.password && !body.first_name && !body.phone && !body.whatsapp) {
         setFormError("Something went wrong creating your account — please try again.");
       }
     } catch {
@@ -334,10 +345,42 @@ export function SignInStep() {
           </p>
         )}
       </div>
+      <div>
+        {/* `phone` holds E.164 ("" while invalid) — it gates the submit button, so a
+            half-typed number reads as "not filled in yet", matching the other gates. */}
+        <PhoneField
+          id="signin-phone"
+          name="phone"
+          label="Phone number"
+          defaultCountry={cart.country}
+          required
+          onValueChange={setPhone}
+        />
+        {fieldErrors.phone && (
+          <p role="alert" className="mt-1 text-sm text-red-700">
+            {fieldErrors.phone.join(" ")}
+          </p>
+        )}
+      </div>
+      <div>
+        <PhoneField
+          id="signin-whatsapp"
+          name="whatsapp"
+          label="WhatsApp number"
+          defaultCountry={cart.country}
+          onValueChange={setWhatsapp}
+          hint="For order updates on WhatsApp. Can be the same as your phone number."
+        />
+        {fieldErrors.whatsapp && (
+          <p role="alert" className="mt-1 text-sm text-red-700">
+            {fieldErrors.whatsapp.join(" ")}
+          </p>
+        )}
+      </div>
       <TurnstileWidget resetSignal={attempts} />
       <button
         type="submit"
-        disabled={submitting || !email || !firstName || !password}
+        disabled={submitting || !email || !firstName || !password || !phone}
         className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? "Creating account…" : "Create account"}
