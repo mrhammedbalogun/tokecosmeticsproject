@@ -39,9 +39,15 @@ crash landed between writing this plan and starting the code; nothing was half-d
   order `TC-PLAN35T1` (Kubwa-routed shipment) kept for future walkthroughs. Backend
   full suite: run at session end (see conversation record).
 
-**Remaining**: commit + deploy on Hammed's word (one release with Plan-34 — backend tag
-+ Vercel admin), then the Plan-34 slice-4 prod steps (data entry, smoke quotes, staff
-E2E order).
+**SHIPPED 2026-08-14** (Hammed's go-ahead the same day): 9659c22 → backend-v0.25.0 on
+the VPS (one release with Plan-34; deploy clean first try, migrations 0013–0015
+applied, healthz ok) + Vercel admin Ready. Live-verified: `/admin/gig-shipments/` and
+`/admin/sender-locations/` 401 unauthenticated (exist, gated), all three /deliveries
+routes 307→login, Ogudu seeded in the prod table, prod shipment count 0 (no GIG orders
+yet — honest). Backend full suite 2437 passed pre-ship.
+
+**Remaining**: the Plan-34 slice-4 prod steps — Abuja data entry (Hammed eyeballs the
+pin at entry time), smoke quotes, Abuja staff E2E order.
 
 Hammed's ask (2026-08-14): a "Deliveries" area in the admin with a GIG-deliveries
 table (every shipment with pickup origin, destination, customer name/phone, what was

@@ -26,6 +26,12 @@ both present. Delivery + all three guard suites re-run green (755 tests) after t
 rename. See [[2026-08-14-plan-35-deliveries-menu]] for the surface that grows out
 of this.
 
+**SHIPPED 2026-08-14**: 9659c22 → backend-v0.25.0 (one release with Plan-35, which
+also moved the pickup-locations page to /deliveries and added display-only state/lga
+fields). Prod migrations 0013–0015 applied, Ogudu seeded, healthz ok, Vercel admin
+Ready. Slice 4 steps 2–4 remain: Abuja prod data entry (eyeball the pin below at
+entry time), smoke quotes, Abuja staff E2E order.
+
 **Slices 1–3 BUILT in dev, uncommitted.** Model + migrations 0013/0014 (Ogudu seeded),
 `gig/origins.py` selection, v2 origin-scoped cache keys, origin in cached payload →
 `GigShipment.origin` → capture SenderDetails (all-or-nothing coordinate rule),
