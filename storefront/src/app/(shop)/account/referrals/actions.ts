@@ -18,7 +18,7 @@ import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 
 // Both pages, not just the one the form is on. A payout changes the balance the
-// dashboard's wallet card shows AND the withdraw state the payouts page shows, and
+// dashboard's balance card shows AND the payout state the payouts page shows, and
 // `revalidatePath` on a single path leaves the other rendering yesterday's number from
 // the router cache — which reads exactly like the request having failed.
 const PAGES = ["/account/referrals", "/account/referrals/payouts"] as const;
@@ -107,7 +107,7 @@ export async function requestPayoutAction(
   formData: FormData,
 ): Promise<PayoutRequestState> {
   const currency = field(formData, "currency");
-  if (!currency) return { error: "Choose a currency to withdraw." };
+  if (!currency) return { error: "Choose a currency to be paid in." };
 
   try {
     const payout = await fetchWithAuth<{ amount_display: string }>(

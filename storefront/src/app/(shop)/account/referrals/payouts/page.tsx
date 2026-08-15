@@ -20,14 +20,17 @@ const PATH = "/account/referrals/payouts";
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 /**
- * Bank details, the withdraw button, and the history of what has been sent.
+ * Bank details, the request-a-payout button, and the history of what has been sent.
+ *
+ * VOCABULARY: "payout", never "withdraw" — see WalletCard.tsx for why the distinction
+ * between an ordinary trade payable and a customer-funds balance is worth the words.
  *
  * Split off the dashboard rather than folded into it because the two are different
  * visits: the dashboard is "give me my link", this is "pay me". Keeping the bank form on
  * its own page also keeps a form that emails the account holder on every save away from
  * the page people open casually.
  *
- * The `?currency=` parameter comes from a Withdraw button on the dashboard, so the right
+ * The `?currency=` parameter comes from the payout button on the dashboard, so the right
  * wallet is already selected. It is untrusted URL input and is only ever used to CHOOSE
  * among the wallets the API returned — never forwarded anywhere.
  */
@@ -53,7 +56,7 @@ export default async function ReferralPayoutsPage({
       <div>
         <h2 className="font-display text-2xl">Payouts</h2>
         <p className="mt-1 text-sm text-muted">
-          Withdraw what you&rsquo;ve earned, and manage where it&rsquo;s sent.{" "}
+          Request what you&rsquo;ve earned, and manage where it&rsquo;s sent.{" "}
           <Link
             href="/account/referrals"
             className="text-accent-strong underline underline-offset-2"
@@ -65,15 +68,15 @@ export default async function ReferralPayoutsPage({
 
       {wallets.length === 0 ? (
         <p className="rounded-[var(--radius-card)] border border-dashed border-line p-8 text-center text-sm text-muted">
-          You haven&rsquo;t earned anything yet, so there&rsquo;s nothing to withdraw.
+          You haven&rsquo;t earned anything yet, so there&rsquo;s nothing to be paid out.
           Add your bank details whenever you like — they&rsquo;ll be ready when you need
           them.
         </p>
       ) : (
         <section className="rounded-[var(--radius-card)] border border-line bg-surface p-6">
-          <h3 className="font-display text-xl">Withdraw</h3>
+          <h3 className="font-display text-xl">Request a payout</h3>
           <div className="mt-4">
-            {selected && <WithdrawSection
+            {selected && <PayoutRequestSection
               wallet={selected}
               hasMethod={methods.some((m) => m.currency === selected.currency)}
               needsTerms={needsTerms}
@@ -137,7 +140,7 @@ export default async function ReferralPayoutsPage({
   );
 }
 
-function WithdrawSection({
+function PayoutRequestSection({
   wallet,
   hasMethod,
   needsTerms,
@@ -180,7 +183,7 @@ function WithdrawSection({
   }
   if (wallet.open_request_id !== null) {
     // A request exists but is not on this page of the history (a long history, page 2).
-    // Rare, and it must still not offer a second withdrawal.
+    // Rare, and it must still not offer a second payout request.
     return (
       <p className="text-sm text-muted">
         Your {wallet.currency} payout is being processed — see the history below.
@@ -191,7 +194,7 @@ function WithdrawSection({
     return (
       <p className="text-sm text-muted">
         Add the bank account you want your {wallet.currency} payouts sent to, below, and
-        the withdraw button will appear here.
+        the payout button will appear here.
       </p>
     );
   }

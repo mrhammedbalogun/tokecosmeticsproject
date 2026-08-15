@@ -25,7 +25,7 @@ export interface Wallet {
   can_request: boolean;
   remaining_to_threshold: string;
   remaining_to_threshold_display: string;
-  /** Set while a payout for this currency is being reviewed or sent — the withdraw
+  /** Set while a payout for this currency is being reviewed or sent — the payout
    * button is off and the customer is told why, rather than being told they have ₦0. */
   open_request_id: number | null;
 }

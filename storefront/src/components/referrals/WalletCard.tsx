@@ -2,7 +2,14 @@
  * One currency's balance, and the single most important question on the page: can I
  * take this money out yet, and if not, how much further is it?
  *
- * A server component — nothing here is interactive except the withdraw link, which is a
+ * VOCABULARY, decided 2026-08-15: this surface says "payout", never "withdraw" and never
+ * "wallet". What the shop owes an affiliate is a trade payable it settles by bank
+ * transfer — an ordinary supplier payment — and words that suggest the shop is holding
+ * customer funds describe something it never does. See the runbook's "Questions for a
+ * Nigerian fintech lawyer" for the reasoning. (The `Wallet` TYPE name is internal and
+ * stays; no customer reads a type.)
+ *
+ * A server component — nothing here is interactive except the payout link, which is a
  * plain anchor to the payouts page. The page never invents a cross-currency total: the
  * programme does not convert, so one card per currency is the honest shape.
  */
@@ -17,7 +24,7 @@ export function WalletCard({ wallet }: { wallet: Wallet }) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">
-            Available to withdraw
+            Available for payout
           </p>
           <p className="mt-1 font-display text-4xl leading-none text-accent-strong">
             {wallet.available_display}
@@ -27,11 +34,11 @@ export function WalletCard({ wallet }: { wallet: Wallet }) {
           </p>
         </div>
 
-        <WithdrawControl wallet={wallet} />
+        <PayoutControl wallet={wallet} />
       </div>
 
       {/* The progress bar only earns its place while the customer is still short. Once
-          they can withdraw it says nothing the button above has not already said. */}
+          they can request a payout it says nothing the button above has not already said. */}
       {!wallet.can_request && wallet.open_request_id === null && (
         <div className="mt-6">
           <div
@@ -59,7 +66,7 @@ export function WalletCard({ wallet }: { wallet: Wallet }) {
                 <strong className="font-medium text-foreground">
                   {wallet.remaining_to_threshold_display}
                 </strong>{" "}
-                to go before you can withdraw. Your balance rolls over until then.
+                to go before you can request a payout. Your balance rolls over until then.
               </>
             )}
           </p>
@@ -75,7 +82,7 @@ export function WalletCard({ wallet }: { wallet: Wallet }) {
   );
 }
 
-function WithdrawControl({ wallet }: { wallet: Wallet }) {
+function PayoutControl({ wallet }: { wallet: Wallet }) {
   if (wallet.open_request_id !== null) {
     return (
       <div className="rounded-[var(--radius-card)] bg-beige px-4 py-3 text-sm">
@@ -92,7 +99,7 @@ function WithdrawControl({ wallet }: { wallet: Wallet }) {
         className="cursor-not-allowed rounded-[var(--radius-card)] border border-line px-5 py-2.5 text-sm text-muted"
         aria-disabled="true"
       >
-        Withdraw
+        Request a payout
       </span>
     );
   }
@@ -101,7 +108,7 @@ function WithdrawControl({ wallet }: { wallet: Wallet }) {
       href={`/account/referrals/payouts?currency=${wallet.currency}`}
       className="rounded-[var(--radius-card)] bg-accent px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-strong"
     >
-      Withdraw {wallet.available_display}
+      Request a payout of {wallet.available_display}
     </Link>
   );
 }

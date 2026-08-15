@@ -26,7 +26,7 @@ const STEPS = [
     body: "Commission is worked out on the products only — delivery and tax are not included.",
   },
   {
-    title: "Withdraw to your bank",
+    title: "Get paid to your bank",
     body: "Once your balance clears the minimum, request a payout and we'll send it by bank transfer.",
   },
 ] as const;
