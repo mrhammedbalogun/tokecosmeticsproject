@@ -7,13 +7,14 @@ import { NAV_ITEMS, activeHref, visibleNav } from "@/lib/nav";
 const OWNER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "cms.manage", "reports.view", "staff.manage",
-  "settings.manage",
+  "settings.manage", "referrals.view", "referrals.manage", "referrals.pay",
 ];
 const MANAGER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
-  "customers.view", "marketing.manage", "reports.view",
+  "customers.view", "marketing.manage", "reports.view", "referrals.view",
+  "referrals.manage",
 ];
-const SUPPORT = ["orders.view", "orders.operate", "customers.view"];
+const SUPPORT = ["orders.view", "orders.operate", "customers.view", "referrals.view"];
 const CONTENT = ["cms.manage"];
 
 const labels = (scopes: string[]) => visibleNav(scopes).map((i) => i.label);
@@ -30,7 +31,11 @@ describe("the sidebar renders only what the scopes allow", () => {
       "Dashboard", "Orders", "Deliveries", "Products", "Categories", "Inventory",
       "Customers", "Reviews",
       "Coupons",
-      "Home Content", "Reports",
+      "Home Content",
+      // `referrals.view` — a Manager reads the payout queue and may approve or reject;
+      // only an Owner may mark one PAID (that scope is on the endpoint, not the nav).
+      "Referrals",
+      "Reports",
       // Settings is any-of `settings.manage` / `products.manage`: the Delivery section
       // runs on `products.manage`, so a Manager gets the door. The index page then shows
       // only Delivery; Payments and Audit stay behind `settings.manage`.
@@ -41,7 +46,11 @@ describe("the sidebar renders only what the scopes allow", () => {
   it("Support sees orders, deliveries and customers only", () => {
     // Deliveries opens on `orders.view` — the shipment table is desk reading; the
     // door page then hides the Pickup-locations card Support cannot use.
-    expect(labels(SUPPORT)).toEqual(["Dashboard", "Orders", "Deliveries", "Customers"]);
+    // Referrals is on the list for the same reason Orders is: the desk answers "where
+    // is my commission?" and needs to see the request without being able to decide it.
+    expect(labels(SUPPORT)).toEqual([
+      "Dashboard", "Orders", "Deliveries", "Customers", "Referrals",
+    ]);
   });
 
   it("Content sees content only — customer reviews are shop management, not copy", () => {

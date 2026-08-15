@@ -88,6 +88,19 @@ MATRIX: list[Row] = [
     Row("PriceAdminViewSet", "get", "/api/v1/admin/prices/", _MANAGERS),
     Row("ProductCSVExportView", "get", "/api/v1/admin/products/export.csv", _MANAGERS),
     Row("ProductCSVImportView", "post", "/api/v1/admin/products/import.csv", _MANAGERS),
+    # --- referrals: reading the queue means reading a customer's bank account, which
+    # Support needs to answer "where is my commission?"; deciding a request does not.
+    # Marking one PAID carries its own scope even though Manager holds that too — the
+    # claim "the money went" is a different claim from "we should send this", and
+    # splitting them is what lets the grant change without touching the other.
+    Row("PayoutQueueViewSet", "get", "/api/v1/admin/referral-payouts/",
+        {"Owner", "Manager", "Support"}),
+    Row("ApprovePayoutView", "post", "/api/v1/admin/referral-payouts/999999/approve/",
+        _MANAGERS),
+    Row("RejectPayoutView", "post", "/api/v1/admin/referral-payouts/999999/reject/",
+        _MANAGERS, body={"customer_message": "no"}),
+    Row("MarkPayoutPaidView", "post", "/api/v1/admin/referral-payouts/999999/mark-paid/",
+        _MANAGERS, body={"reference": "TRF-1"}),
     # --- cms: Content holds this and nothing else; Manager and Support do not.
     Row("PageAdminViewSet", "get", "/api/v1/admin/pages/", _CONTENT),
     Row("MenuItemAdminViewSet", "get", "/api/v1/admin/menu-items/", _CONTENT),

@@ -615,6 +615,58 @@ def _case_devices_revoke(client, monkeypatch):
     return client.post("/api/v1/auth/admin-devices/revoke/"), 200
 
 
+def _payout_awaiting_review():
+    """A referrer with one available commission and an open payout request.
+
+    Built through the real services rather than by hand: a `PayoutRequest` with no
+    claimed `Commission` rows behind it is a shape the production code cannot produce,
+    and a case that succeeds against an impossible row proves nothing about the wrapper.
+    """
+    from django.contrib.auth import get_user_model
+
+    from apps.referrals.models import Commission
+    from apps.referrals.services import (
+        accrue_for_order, ensure_profile, request_payout, save_payout_method,
+    )
+    from apps.referrals.tests.factories import make_order, ngn
+
+    User = get_user_model()
+    ref_user = User.objects.create_user(email="audit-referrer@x.com", password=None)
+    profile = ensure_profile(ref_user)
+    buyer = User.objects.create_user(email="audit-buyer@x.com", password=None)
+    order = make_order(user=buyer, subtotal="300000.00", referral_code=profile.code)
+    commission = accrue_for_order(order)
+    Commission.objects.filter(pk=commission.pk).update(status="available")
+    save_payout_method(
+        ref_user, currency=ngn(), bank_name="GTBank", account_name="AUDIT REFERRER",
+        account_number="0123456789",
+    )
+    return request_payout(ref_user, "NGN", accept_terms=True)
+
+
+def _case_payout_approve(client, monkeypatch):
+    payout = _payout_awaiting_review()
+    return client.post(
+        f"/api/v1/admin/referral-payouts/{payout.pk}/approve/", {}, format="json",
+    ), 200
+
+
+def _case_payout_reject(client, monkeypatch):
+    payout = _payout_awaiting_review()
+    return client.post(
+        f"/api/v1/admin/referral-payouts/{payout.pk}/reject/",
+        {"customer_message": "We could not match the account name."}, format="json",
+    ), 200
+
+
+def _case_payout_paid(client, monkeypatch):
+    payout = _payout_awaiting_review()
+    return client.post(
+        f"/api/v1/admin/referral-payouts/{payout.pk}/mark-paid/",
+        {"reference": "GTB/2026/0042"}, format="json",
+    ), 200
+
+
 WRITE_CASES: dict[str, tuple] = {
     # Self-service, but still a write worth a row: it changes what a stolen laptop is
     # worth. Revoking zero devices is a success (the state the caller wanted is true).
@@ -625,6 +677,11 @@ WRITE_CASES: dict[str, tuple] = {
     # the action recorded is the DRF action name for the PATCH.
     "ProductReviewAdminViewSet": (_case_review_hide, "partial_update"),
     "AdminGigCaptureView": (_case_gig_capture, "gig_capture"),
+    # The three money actions on the referral payout queue. `payout_paid` is the one that
+    # asserts cash left the company account, which is precisely the row an auditor wants.
+    "ApprovePayoutView": (_case_payout_approve, "payout_approve"),
+    "RejectPayoutView": (_case_payout_reject, "payout_reject"),
+    "MarkPayoutPaidView": (_case_payout_paid, "payout_paid"),
     "AdminGigLabelView": (_case_gig_label, "gig_label"),
     "ProductAdminViewSet": (_case_product, "create"),
     "CategoryAdminViewSet": (_case_category, "create"),
@@ -687,6 +744,11 @@ READ_ONLY_VIEWS = frozenset(
         # Plan-32a: the fulfilment panel is GET-only; its writes are the two views
         # above. Read-audited — declared in test_audit_guard.READ_AUDITED_VIEWS.
         "AdminGigShipmentView",
+        # The referral payout queue: GET-only by design — its writes are the three views
+        # above, each with its own scope and its own audit case. Read-audited, because it
+        # is the one endpoint that unmasks a bank account number (declared in
+        # test_audit_guard.READ_AUDITED_VIEWS).
+        "PayoutQueueViewSet",
         # Plan-35: the deliveries table — GET-only by design (the table reads, the
         # order page acts). Read-audited — declared in READ_AUDITED_VIEWS.
         "AdminGigShipmentListView",

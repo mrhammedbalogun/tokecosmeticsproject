@@ -40,6 +40,9 @@ OWNER = {
     "reports.view",
     "staff.manage",
     "settings.manage",
+    "referrals.view",
+    "referrals.manage",
+    "referrals.pay",  # asserting cash left the bank; Owner and Manager
 }
 MANAGER = {
     "orders.view",
@@ -50,8 +53,15 @@ MANAGER = {
     "customers.view",
     "marketing.manage",  # coupons + banners; NOT cms.manage — see rbac.py
     "reports.view",
+    "referrals.view",
+    "referrals.manage",
+    # Hammed's call 2026-08-15: the Manager runs the monthly bank transfers, so the
+    # Manager marks them paid. Withholding it just gets the Owner's login borrowed.
+    "referrals.pay",
 }
-SUPPORT = {"orders.view", "orders.operate", "customers.view"}
+# Support reads the payout queue for the same reason it reads orders: answering
+# "where is my commission?" is the job. It decides nothing.
+SUPPORT = {"orders.view", "orders.operate", "customers.view", "referrals.view"}
 CONTENT = {"cms.manage"}
 
 MATRIX = {"Owner": OWNER, "Manager": MANAGER, "Support": SUPPORT, "Content": CONTENT}
@@ -83,8 +93,9 @@ def test_every_scope_ends_in_a_recognised_verb():
     `test_admin_surface_guard.py::test_nothing_named_view_is_routed_onto_a_writing_method`.
     """
     for scope in SCOPES:
-        assert scope.endswith((".view", ".operate", ".manage", ".delete")), (
-            f"{scope} uses an unrecognised verb; use .view, .operate, .manage or .delete"
+        assert scope.endswith((".view", ".operate", ".manage", ".delete", ".pay")), (
+            f"{scope} uses an unrecognised verb; use .view, .operate, .manage, .delete "
+            f"or .pay"
         )
 
 

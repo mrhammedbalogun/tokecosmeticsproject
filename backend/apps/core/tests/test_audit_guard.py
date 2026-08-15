@@ -74,6 +74,11 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     # can be dumped in one call. The on-screen report is deliberately NOT audited.
     "CustomerAdminViewSet": "the customer list and detail: name, email, phone, addresses and lifetime spend — the densest PII surface on the admin",
     "ReportExportView": "bulk egress — a whole reporting range in one file, and one report names customers",
+    # The ONLY endpoint in the product that publishes an unmasked bank account number.
+    # Customers see `•••• 6789` everywhere else; staff cannot make a transfer to that, so
+    # this one screen unmasks — and if a number ever surfaces where it should not, a row
+    # written at read time is the only thing that can say who looked.
+    "PayoutQueueViewSet": "unmasked bank account numbers — the highest-value read on the admin surface",
 }
 
 

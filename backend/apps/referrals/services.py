@@ -1010,7 +1010,14 @@ def reject_payout(request_id: int, *, staff_user, customer_message: str, admin_n
     update. Rejection has to be reversible or it is a data-loss button.
     """
     req = PayoutRequest.objects.select_for_update().get(pk=request_id)
-    if req.status != "requested":
+    # `approved` is rejectable too, not just `requested`. Approval only means "we mean to
+    # send this"; the money leaves by hand days later, so the two things that happen in
+    # that gap both need a way back — a transfer the bank bounced, and fraud noticed after
+    # someone clicked approve. Without this an approved request can only ever go to `paid`,
+    # so the only way to undo one is a hand-written SQL update, which is exactly what
+    # rejection exists to avoid. `paid` is NOT rejectable: money has left, and reversing
+    # that is a clawback (`ReferralAdjustment`), not a status change.
+    if req.status not in ("requested", "approved"):
         raise ReferralError("payout_not_open", "That request is no longer open.", http=409)
     req.status = "rejected"
     req.decided_at = timezone.now()
@@ -1034,6 +1041,13 @@ def reject_payout(request_id: int, *, staff_user, customer_message: str, admin_n
     # once when the next recompute reduces the released row.
     for commission in released:
         recompute_for_order(commission.order)
+
+    # AFTER the release, and on_commit: the mail says "the money is back in your
+    # available balance", and that sentence must not be able to go out ahead of the
+    # rows that make it true — nor at all if this transaction rolls back.
+    from apps.referrals.emails import enqueue_payout_rejected
+
+    transaction.on_commit(lambda: enqueue_payout_rejected(req.pk))
     return req
 
 
@@ -1135,6 +1149,26 @@ def fraud_flags(request: PayoutRequest) -> list[str]:
 
     if request.referrer.date_joined > request.created_at - timezone.timedelta(days=30):
         flags.append("referrer account is less than 30 days old")
+
+    # THE ACCOUNT-TAKEOVER SIGNAL. The request carries a snapshot of the bank account as
+    # it was when the customer asked, and `mark_payout_paid` pays that snapshot rather
+    # than whatever the account says today — so a hijacker who changes the details after a
+    # request is in flight does NOT get the money. This flag is the other half of that
+    # control: it puts the change in front of the reviewer, because the innocent version
+    # (the customer noticed a typo in their own account number) and the hostile version
+    # look identical in the data and only a human can tell them apart by asking.
+    snapshot = request.method_snapshot or {}
+    current = PayoutMethod.objects.filter(
+        user=request.referrer, currency=request.currency
+    ).first()
+    if current and snapshot.get("account_number") and (
+        current.account_number != snapshot.get("account_number")
+        or current.bank_name != snapshot.get("bank_name")
+    ):
+        flags.append(
+            "bank details were CHANGED after this request was made — paying the snapshot, "
+            "not the current account"
+        )
 
     return flags
 

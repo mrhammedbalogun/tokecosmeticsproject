@@ -16,7 +16,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from apps.orders.models import OrderEvent
-from apps.referrals.models import Commission
+from apps.referrals.models import Commission, PayoutRequest
 from apps.referrals.services import (
     DEAD_ORDER_STATUSES,
     SHIPPED_ONWARDS,
@@ -193,6 +193,43 @@ def mature_commissions() -> dict:
             "referral maturity sweep left %s commission(s) unreleased past their holding "
             "period — the sweep is not doing its job", result["stalled"],
         )
+    result["aging_payouts"] = _alert_on_aging_payouts()
     if any(result.values()):
         logger.info("referral maturity sweep: %s", result)
     return result
+
+
+#: How long a payout request may sit unanswered before the sweep starts complaining.
+#: Payouts are processed by hand once a month, so a week is not late — it is the normal
+#: shape of the process. Fourteen days means a full monthly cycle has been missed.
+PAYOUT_AGING_DAYS = 14
+
+
+def _alert_on_aging_payouts() -> int:
+    """Payout requests nobody has answered. Returns how many, and logs if any.
+
+    This is the failure mode the programme is most likely to actually suffer, and the
+    one with a real person on the other end of it. Everything else here is automatic:
+    commissions accrue in the payment path, mature on a timer, reverse on a refund. A
+    payout request is the ONE step that waits on a human remembering, and the customer
+    cannot chase what they cannot see — their screen says "we're reviewing it" whether it
+    was submitted yesterday or in March.
+
+    Deliberately a log line rather than an email: the admin payout queue is where this
+    belongs as a badge, and a daily email nobody wired up an inbox rule for is how alerts
+    get filtered into a folder and stop being read. Sentry raises on ERROR, which is the
+    channel already being watched.
+    """
+    cutoff = timezone.now() - timezone.timedelta(days=PAYOUT_AGING_DAYS)
+    aging = list(
+        PayoutRequest.objects.filter(status="requested", created_at__lt=cutoff)
+        .values_list("pk", "currency_id", "amount")
+    )
+    if aging:
+        logger.error(
+            "%s payout request(s) unanswered for more than %s days — a referrer is "
+            "waiting on money: %s",
+            len(aging), PAYOUT_AGING_DAYS,
+            ", ".join(f"#{pk} {cur} {amt}" for pk, cur, amt in aging),
+        )
+    return len(aging)

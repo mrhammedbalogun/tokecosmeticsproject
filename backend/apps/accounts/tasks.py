@@ -75,6 +75,27 @@ def _anonymize_one(pk: int) -> bool:
             return False
         if user.email.endswith(_SENTINEL_DOMAIN):
             return False  # already scrubbed — idempotent
+        # MONEY OWED BLOCKS THE SCRUB, temporarily. `_scrub_payout_details` below reduces
+        # every PayoutRequest snapshot to the last four digits, which is right for
+        # settled history and catastrophic for a request still waiting to be paid: the
+        # shop would be left owing a debt it can no longer transfer, with no account
+        # number anywhere and a customer whose email is now a sentinel. Deletion is not
+        # refused, only deferred — the task runs daily, so it completes on the next pass
+        # after staff pay or reject the request. Logged at WARNING because a request that
+        # sits open for weeks is now also blocking someone's deletion, and that is worth
+        # someone noticing.
+        from apps.referrals.models import PayoutRequest
+
+        open_payouts = PayoutRequest.objects.filter(
+            referrer=user, status__in=("requested", "approved")
+        ).count()
+        if open_payouts:
+            logger.warning(
+                "anonymisation deferred for user %s: %s open payout request(s) — "
+                "settle or reject them first",
+                user.pk, open_payouts,
+            )
+            return False
         sentinel = f"deleted-{user.toke_id}{_SENTINEL_DOMAIN}"
         # Captured BEFORE the address is overwritten: it is the needle used to find
         # audit rows that recorded a staff SEARCH for this customer, which have no

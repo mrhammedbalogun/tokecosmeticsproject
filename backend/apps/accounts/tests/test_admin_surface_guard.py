@@ -152,6 +152,18 @@ ADMIN_VIEWS_OUTSIDE_THE_PREFIX: tuple[str, ...] = ("admin_me", "admin_devices_re
 # the URLconf exposes, in both directions. An entry with no route is dead text; a route
 # with no entry fails `test_every_routed_admin_view_is_declared`.
 ADMIN_SURFACE: dict[str, str | None] = {
+    # --- referrals: the payout queue ---------------------------------------------
+    # Reads and writes are separate CLASSES here rather than a viewset with elevating
+    # `@action`s, because `test_nothing_named_view_is_routed_onto_a_writing_method` reads
+    # the URLconf and cannot see a decorator's elevation — correctly, since that is the
+    # property that matters. `MATRIX` in test_admin_role_matrix.py pins all four rows
+    # over real HTTP.
+    "PayoutQueueViewSet": "referrals.view",
+    "ApprovePayoutView": "referrals.manage",
+    "RejectPayoutView": "referrals.manage",
+    # Owner alone. Marking a payout paid asserts cash left the company account and is the
+    # end of the audit trail rather than a step in it.
+    "MarkPayoutPaidView": "referrals.pay",
     # --- catalog: everything here writes the product catalogue -------------------
     "ProductAdminViewSet": "products.manage",
     "CategoryAdminViewSet": "products.manage",

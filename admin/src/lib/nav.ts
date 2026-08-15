@@ -49,6 +49,10 @@ export const NAV_ITEMS: NavItem[] = [
   // slides, news, reviews and the product-row collections, in section order.
   { label: "Home Content", href: "/home-content", scopes: ["marketing.manage"] },
   { label: "Content", href: "/content", scopes: ["cms.manage"] },
+  // Support sees it too — `referrals.view` — because "where is my commission?" arrives at
+  // the same desk as "where is my order?". Deciding and paying carry their own scopes on
+  // the endpoints; this item is only the door.
+  { label: "Referrals", href: "/referrals", scopes: ["referrals.view"] },
   { label: "Reports", href: "/reports", scopes: ["reports.view"] },
   { label: "Settings", href: "/settings", scopes: ["settings.manage", "products.manage"] },
   { label: "Staff", href: "/staff", scopes: ["staff.manage"] },

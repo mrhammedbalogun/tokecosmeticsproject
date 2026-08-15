@@ -305,3 +305,66 @@ The customer experience is complete. The staff side is not:
 - **Withholding tax.** A business paying commissions to individuals in Nigeria may have
   WHT obligations. Verify with an accountant **before the first payout run**, not after.
   `PayoutRequest` can carry a deduction line when that is decided.
+- **`referrals.*` RBAC scopes ARE now defined** (2026-08-15, `accounts/rbac.py`):
+  `referrals.view` (Owner/Manager/Support), `referrals.manage` (Owner/Manager),
+  `referrals.pay` (Owner only — marking a payout paid asserts cash left the company
+  account and nothing downstream re-checks it). The endpoints that use them are next.
+
+---
+
+## Questions for a Nigerian fintech lawyer and accountant
+
+Raised 2026-08-15 while designing the single-balance / "wallet" proposal (master plan
+Plan-29 Amendment 2). **Nobody involved in writing this is a lawyer.** These are drafted
+so the professional consult is cheap and targeted — send them close to verbatim.
+
+The design intent they are testing: customers never deposit money with us. A balance only
+ever arises from (a) affiliate commission we owe under the published terms, payable
+monthly to a Nigerian bank account above ₦20,000, and (b) promotional loyalty points
+redeemable only as a discount on our own products, never for cash, never transferable.
+
+1. Does either (a) or (b) fall within the CBN definition of electronic money, or any
+   licensable payment-service category (MMO, PSSP, super-agent)?
+2. Is paying affiliate commission by direct transfer from our corporate account an
+   ordinary trade payable, or does it need a licence or registration? Does the answer
+   change if the affiliate may instead apply the commission against a purchase at our
+   own checkout?
+3. Is there a scale threshold (users, value outstanding, transaction volume) at which
+   this attracts CBN/NDIC attention even if it is not e-money?
+4. Does Nigeria recognise a closed-loop / limited-network carve-out for single-merchant
+   store credit and loyalty points? Any constraints on issuing, expiring, or converting
+   points into store credit, provided they are never cash-redeemable?
+5. What FCCPA consumer-protection terms must a points / store-credit policy carry,
+   particularly on expiry and forfeiture?
+6. What WHT rate applies to affiliate commissions paid to resident individuals (and to
+   non-residents), who do we remit to, and **is WHT also due when a commission is settled
+   by set-off against a purchase rather than paid in cash?**
+7. When a customer pays part of an order with commission credit, is VAT due on the full
+   price? When loyalty points are applied as a discount, is VAT due on the discounted
+   amount? Where do we stand against the small-company VAT threshold under the 2025/2026
+   reforms?
+8. Before making bank payouts to affiliates, is there any KYC/BVN verification or
+   reporting obligation beyond normal supplier-payment records?
+
+**Design rules adopted pending those answers** (they are what keep this arrangement
+ordinary store credit plus an ordinary payable, rather than stored value):
+
+- **No customer top-up, ever.** No money the customer handed over is held. This is the
+  single feature doing most of the work — e-money is defined as value issued *against
+  funds received from the holder*.
+- **Nothing but commission is ever withdrawable.** Points and store credit never convert
+  into anything that can leave as cash.
+- **No fungible balance table.** Payouts keep claiming specific `Commission` rows, as
+  today. Merging ledgers into one balance and debiting *that* on withdrawal would make
+  points cash-redeemable pro rata — manufacturing stored value in substance, whatever it
+  is called.
+- **No transfers between customers**, and redemption only at tokecosmetics.com.
+- **One page, two figures — never one merged number.** "Affiliate earnings (withdrawable)"
+  and "Store credit / points (spend at checkout)" shown separately.
+- **Vocabulary:** the page is **Rewards**. Say "request a payout of your commission" and
+  "store credit". Avoid *wallet, e-wallet, cash balance, funds, top up, withdraw funds* —
+  not because the word is decisive (behaviour governs) but because it is the term every
+  CBN circular and PSP compliance screen pattern-matches on, and it buys nothing.
+- Terms copy must state that points and credit have **no cash value**, are
+  **non-transferable**, are redeemable **only at tokecosmetics.com**, and that commissions
+  are payments under the affiliate agreement — **not deposits, no interest**.

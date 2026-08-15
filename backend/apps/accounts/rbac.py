@@ -121,6 +121,31 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     # system (Plan-16 Amendment 1's catastrophic scenario).
     "staff.manage": frozenset({"Owner"}),
     "settings.manage": frozenset({"Owner"}),
+    # REFERRALS SPLIT THREE WAYS, because "look at the queue", "decide a request" and
+    # "assert money left the bank" are three different amounts of trust.
+    #
+    # `referrals.view` — the payout queue, a referrer's ledger, the fraud flags. Support
+    # holds it for the same reason it holds `orders.view`: the person answering "where is
+    # my commission?" needs to see the answer.
+    # `referrals.manage` — approve, reject, block a referrer, write a manual adjustment.
+    # Rejection releases commissions back to `available` and an adjustment moves a
+    # balance, so this is Manager-and-above, matching `orders.manage`.
+    # `referrals.pay` — mark a request PAID: the claim that cash has actually left the
+    # company account. Its own scope even though the same roles hold `referrals.manage`,
+    # because "we should send this" and "the money went" are different assertions, and
+    # splitting them means either grant can change later without dragging the other with
+    # it. It is the END of an audit trail rather than a step in it — nothing downstream
+    # re-checks it — which is why it is not simply folded into manage.
+    #
+    # HAMMED'S CALL, 2026-08-15: Manager holds it, not Owner alone. My argument for
+    # Owner-only was the `products.delete` parallel; his is operational and it wins — the
+    # Manager is who actually runs the monthly bank transfers, and a scope withheld from
+    # the person doing the work gets worked around by borrowing the Owner's login, which
+    # is strictly worse than granting it. The audit row names whoever clicked, and that is
+    # what makes widening this safe.
+    "referrals.view": frozenset({"Owner", "Manager", "Support"}),
+    "referrals.manage": frozenset({"Owner", "Manager"}),
+    "referrals.pay": frozenset({"Owner", "Manager"}),
 }
 
 SCOPES: frozenset[str] = frozenset(SCOPE_GRANTS)

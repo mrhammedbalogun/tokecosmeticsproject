@@ -101,5 +101,7 @@ def test_the_sweep_is_idempotent(django_user_model):
     second = mature_commissions()
 
     assert first["released"] == 1
-    assert second == {"stamped": 0, "recomputed": 0, "released": 0, "stalled": 0}
+    assert second == {
+        "stamped": 0, "recomputed": 0, "released": 0, "stalled": 0, "aging_payouts": 0,
+    }
     assert Commission.objects.get(pk=commission.pk).status == "available"
