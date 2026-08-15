@@ -5,6 +5,7 @@ Everything else is scaffolding around it.
 """
 
 import json
+from datetime import datetime, timezone as dt_timezone
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
@@ -314,8 +315,18 @@ def test_an_unknown_store_is_refused(tmp_path):
         call_command("import_orders", str(bad))
 
 
-def test_THE_CHASE_CSV_IS_0600_AND_HOLDS_ONLY_RECENT_UNPAID_TRANSFERS(tmp_path):
+def test_THE_CHASE_CSV_IS_0600_AND_HOLDS_ONLY_RECENT_UNPAID_TRANSFERS(tmp_path, monkeypatch):
     import stat
+
+    # The clock is pinned because the fixture dates are fixed and the chase window is
+    # relative (`now - CHASE_WINDOW_DAYS`). Left to the real clock this test passes until
+    # the fixture's 2026-07-15 order falls out of the 30-day window and then fails
+    # forever after — which is exactly what happened on 2026-08-15. Pinning keeps the
+    # assertion about the WINDOW LOGIC rather than about what today's date happens to be.
+    import apps.migration_wp.management.commands.import_orders as cmd
+
+    pinned = datetime(2026, 7, 20, tzinfo=dt_timezone.utc)
+    monkeypatch.setattr(cmd.timezone, "now", lambda: pinned)
 
     csv_path = tmp_path / "chase.csv"
     call_command("import_orders", str(FIXTURES / "orders-legacy_ng.json"),
