@@ -1,0 +1,22 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Hi{% if first_name %} {{ first_name }}{% endif %},</p>
+
+<p style="margin:0 0 16px;">We could not process your payout request of
+  <strong>{{ amount }}</strong> this time.</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:#f6f6f4;border-radius:8px;padding:16px;width:100%;">
+  <tr><td style="font-size:14px;line-height:1.7;color:#555;">{{ customer_message }}</td></tr>
+</table>
+
+<p style="margin:0 0 16px;">Your balance has <strong>not</strong> been lost. The
+  {{ amount }} is back in your available {{ currency }} balance, and you can request it
+  again once this is sorted out.</p>
+
+<p style="margin:0 0 20px;">
+  <a href="{{ referrals_url }}" style="color:#145f30;">View your referrals</a>
+</p>
+
+<p style="margin:24px 0 0;color:#777;font-size:13px;">If that message does not make sense,
+  reply to this email and a person will look.</p>
+{% endblock %}

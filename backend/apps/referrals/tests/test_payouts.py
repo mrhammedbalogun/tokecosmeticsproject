@@ -216,6 +216,36 @@ def test_changing_the_payout_account_emails_the_holder_but_the_first_save_does_n
 
 
 @pytest.mark.django_db
+def test_rejecting_emails_the_referrer_the_reason_and_says_the_money_came_back(
+    django_user_model, django_capture_on_commit_callbacks
+):
+    """A rejection the customer only discovers by revisiting a page reads, from their
+    side, as the shop quietly keeping the money. The mail carries the reviewer's own
+    sentence and the fact that matters most: the balance is available again."""
+    ref_user, profile = referrer(django_user_model)
+    _with_method(ref_user)
+    _earn(django_user_model, ref_user, profile, "300000.00")
+    payout = request_payout(ref_user, "NGN", accept_terms=True)
+    staff = customer(django_user_model, "staff-reject@toke.test", is_staff=True)
+
+    mail.outbox.clear()
+    with django_capture_on_commit_callbacks(execute=True):
+        reject_payout(
+            payout.pk, staff_user=staff,
+            customer_message="The account name does not match your bank records.",
+        )
+
+    assert len(mail.outbox) == 1
+    body = mail.outbox[0].body
+    assert "The account name does not match your bank records." in body, (
+        "the reviewer's own words, not a paraphrase — they are the only one who knows"
+    )
+    assert "available balance" in body
+    # The full account number never leaves in an email, here as anywhere else.
+    assert "0123456789" not in body
+
+
+@pytest.mark.django_db
 def test_a_blocked_referrer_cannot_request_a_payout(django_user_model):
     ref_user, profile = referrer(django_user_model)
     _with_method(ref_user)

@@ -1,0 +1,14 @@
+Hi{% if first_name %} {{ first_name }}{% endif %},
+
+We could not process your payout request of {{ amount }} this time.
+
+  {{ customer_message }}
+
+Your {{ currency }} balance has NOT been lost — the {{ amount }} is back in your
+available balance and you can request it again once this is sorted out.
+
+  {{ referrals_url }}
+
+If that message does not make sense, reply to this email and a person will look.
+
+— Toke Cosmetics

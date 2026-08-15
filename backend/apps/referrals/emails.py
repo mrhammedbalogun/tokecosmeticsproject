@@ -1,10 +1,16 @@
-"""The two referral emails that exist, and the reasoning for the ones that do not.
+"""The three referral emails that exist, and the reasoning for the ones that do not.
 
 `payout_method_changed` is a SECURITY email, not a courtesy one. It is the control that
 turns an account-takeover payout redirect from silent into noisy (see
 `models.PayoutMethod` for why that, rather than encryption, is where the effort went),
 so it is sent on every change and it is not gated on marketing consent — transactional
 security notices are not marketing.
+
+`payout_rejected` exists because the alternative is silence. A refusal that only appears
+on a page the customer has no reason to revisit reads, from their side, as the shop
+quietly keeping the money — and the one thing they most need to know is the thing the
+page states least loudly: the balance came BACK and they can ask again. Added 2026-08-15
+on Hammed's word.
 
 `payout_paid` closes the loop on money leaving. Anything that quotes an account number
 quotes only the masked form: this mail lands in an inbox, which is the least controlled
@@ -70,5 +76,38 @@ def enqueue_payout_paid(request_pk: int) -> None:
             # money went) and an email is not the place for it.
             "account_masked": f"•••• {account[-4:]}" if len(account) > 4 else account,
             "reference": req.reference,
+        },
+    )
+
+
+def enqueue_payout_rejected(request_pk: int) -> None:
+    """Tell the referrer their request was refused, why, and that the money is still theirs.
+
+    Sends the staff member's own `customer_message` verbatim rather than a template
+    sentence: the reviewer is the only person who knows what went wrong, the serializer
+    makes the field mandatory for exactly that reason, and paraphrasing it here would
+    reintroduce the vagueness the mandatory field exists to remove.
+
+    NOT gated on marketing consent — this is a transactional notice about the customer's
+    own money, in the same class as `payout_method_changed`.
+    """
+    req = (
+        PayoutRequest.objects.select_related("referrer", "currency")
+        .filter(pk=request_pk)
+        .first()
+    )
+    if req is None:
+        return
+    send_email_task.delay(
+        "referral_payout_rejected",
+        req.referrer.email,
+        {
+            "first_name": req.referrer.first_name,
+            "amount": format_money(req.amount, req.currency),
+            "currency": req.currency.code,
+            "customer_message": req.customer_message,
+            # Same reasoning as the security mail's `security_url`: built from settings so
+            # dev, staging and production each send people to their own storefront.
+            "referrals_url": f"{settings.FRONTEND_URL.rstrip('/')}/account/referrals",
         },
     )
