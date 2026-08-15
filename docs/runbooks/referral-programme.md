@@ -312,13 +312,17 @@ The customer experience is complete. The staff side is not:
 
 ---
 
-## Questions for a Nigerian fintech lawyer and accountant
+## Questions for the lawyer, and questions for the accountant
 
-Raised 2026-08-15 while designing the single-balance / "wallet" proposal (master plan
-Plan-29 Amendment 2). **Nobody involved in writing this is a lawyer.** These are drafted
-so the professional consult is cheap and targeted — send them close to verbatim.
+Two different professionals, two different lists. Raised 2026-08-15 while designing the
+single-balance proposal (master plan Plan-29 Amendment 2) and sharpened the same day
+against the primary tax texts. **Nobody who wrote this is a lawyer or an accountant.**
+Send them close to verbatim; the citations are there so the professional can start from
+the same page rather than from scratch.
 
-The design intent they are testing: customers never deposit money with us. A balance only
+### For a Nigerian fintech lawyer — the CBN / e-money question
+
+The design intent being tested: customers never deposit money with us. A balance only
 ever arises from (a) affiliate commission we owe under the published terms, payable
 monthly to a Nigerian bank account above ₦20,000, and (b) promotional loyalty points
 redeemable only as a discount on our own products, never for cash, never transferable.
@@ -332,19 +336,73 @@ redeemable only as a discount on our own products, never for cash, never transfe
 3. Is there a scale threshold (users, value outstanding, transaction volume) at which
    this attracts CBN/NDIC attention even if it is not e-money?
 4. Does Nigeria recognise a closed-loop / limited-network carve-out for single-merchant
-   store credit and loyalty points? Any constraints on issuing, expiring, or converting
-   points into store credit, provided they are never cash-redeemable?
+   store credit and loyalty points, and are there constraints on issuing, expiring or
+   converting points into store credit, provided they are never cash-redeemable?
 5. What FCCPA consumer-protection terms must a points / store-credit policy carry,
    particularly on expiry and forfeiture?
-6. What WHT rate applies to affiliate commissions paid to resident individuals (and to
-   non-residents), who do we remit to, and **is WHT also due when a commission is settled
-   by set-off against a purchase rather than paid in cash?**
-7. When a customer pays part of an order with commission credit, is VAT due on the full
-   price? When loyalty points are applied as a discount, is VAT due on the discounted
-   amount? Where do we stand against the small-company VAT threshold under the 2025/2026
-   reforms?
-8. Before making bank payouts to affiliates, is there any KYC/BVN verification or
+6. Before making bank payouts to affiliates, is there any KYC/BVN verification or
    reporting obligation beyond normal supplier-payment records?
+
+### For the accountant — withholding tax and treatment
+
+**Questions 1 and 2 block the first payout run.** The rest can follow.
+
+1. **Our turnover is ₦___.** Are we exempt from the duty to deduct at source as a small
+   company — the 2024 Regulations tie the exemption to a ₦25m gross-turnover test plus a
+   valid supplier TIN and ≤ ₦2m to that supplier in the calendar month, while the Nigeria
+   Tax Act 2025 (from 1 Jan 2026) redefines a small company as turnover ≤ ₦100m and fixed
+   assets ≤ ₦250m. Which reading governs now? If we DO have to deduct: confirm 5% for
+   resident individuals, doubled where the affiliate has no TIN, and that remittance goes
+   to **each affiliate's State IRS** rather than FIRS — by which day, on which platform,
+   and will you file the monthly return? (Sources conflict on the state deadline: the
+   Regulations say the 30th for non-PAYE deductions, NTAA 2025 s.107 penalises anything
+   unremitted after the 21st. We will work to the 21st unless you say otherwise.)
+2. Per deduction, what exactly must we hand the affiliate and the tax authority — the
+   receipt/statement under reg. 6, the monthly return schedule — and what records do you
+   want out of our system to produce them?
+3. We read "payment is made **or otherwise settled**" (NTAA 2025 s.51(1); same wording in
+   the 2024 Regulations) as meaning WHT falls due, on the gross, when an affiliate applies
+   commission against a purchase instead of taking cash. Confirm — it decides where in our
+   system the deduction is recorded.
+4. UK/US-resident affiliates paid in GBP/USD into foreign accounts: 10% final WHT on the
+   gross? Remitted in which currency? Any UK-treaty relief worth pursuing at these
+   volumes (under about £100/month)? And must we self-account 7.5% VAT on their
+   commission as an imported service under NTA 2025 s.150(2)?
+5. VAT: (a) confirm our affiliates — resident individuals far below the small-business
+   line — charge no VAT and that we have no reverse-charge obligation for them; (b) when
+   commission credit part-pays an order we believe VAT is due on the **full** price,
+   because the credit settles a payable rather than reducing the price (NTA 2025 s.148),
+   while a loyalty-points discount does reduce the taxable amount. Confirm both.
+6. Confirm the accounting: commission expensed at accrual (when the referred order is
+   confirmed) as a distinct marketing service under IFRS 15.70–72 rather than as a
+   reduction of revenue; deductible for CIT on accrual; and tell us which year-end
+   schedules you want (pending/available/paid cut-off, clawback receivables, and
+   retranslation of the foreign-currency commission payables).
+
+### What the tax research already settled, pending sign-off
+
+Read against the primary texts on 2026-08-15 — the Nigeria Tax Administration Act 2025,
+the Nigeria Tax Act 2025, the Deduction at Source (Withholding) Regulations 2024 via two
+law-firm reviews, and PwC's Nigeria WHT summary (reviewed 29 May 2026). Two claims were
+independently re-checked against source before being written here: the 5%/10% commission
+rates, and the ₦25m/₦2m/TIN shape of the small-payer exemption.
+
+- **There is no general de-minimis.** The only relief from deducting is the small-PAYER
+  exemption above. If Toke qualifies, most payouts need no deduction at all — which is
+  why question 1 comes first.
+- **5% to resident individuals, 10% to non-residents** (final tax for non-residents
+  absent a Nigerian permanent establishment). **Doubled where the affiliate has no TIN**,
+  so a TIN is worth collecting either way — the exemption needs one too.
+- **Individuals' WHT is remitted to the affiliate's State IRS**, not FIRS. At scale that
+  means remitting to many different states, so we need each affiliate's state of
+  residence, not just their bank details.
+- **WHT attaches at SETTLEMENT, not at bank transfer** — "payment is made or otherwise
+  settled". A future checkout set-off is a settlement.
+- **VAT stays on the full price when commission credit part-pays an order.** Concrete code
+  rule that follows: `apps/checkout/services/totals.py` computes
+  `taxable = subtotal - discount`, so commission credit must be applied as a TENDER after
+  tax, never through `discount`. Points, being a real discount, may use `discount`.
+- Unverified, ask: the remittance currency for GBP/USD commissions.
 
 **Design rules adopted pending those answers** (they are what keep this arrangement
 ordinary store credit plus an ordinary payable, rather than stored value):
