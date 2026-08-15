@@ -2,8 +2,8 @@
 
 /**
  * Side nav (desktop) / scrollable tabs (mobile) for the account area. Lists ONLY
- * pages that exist — orders arrived with 15c, addresses and wishlist with 15d; a
- * visible link to a 404 is worse than no link.
+ * pages that exist — orders arrived with 15c, addresses and wishlist with 15d,
+ * referrals with the referral programme; a visible link to a 404 is worse than no link.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -11,6 +11,9 @@ import { usePathname } from "next/navigation";
 const LINKS = [
   { href: "/account", label: "Dashboard" },
   { href: "/account/orders", label: "Orders" },
+  // Above Addresses on purpose: it is the one entry here a customer might come to the
+  // account area specifically to use, rather than visiting when something needs fixing.
+  { href: "/account/referrals", label: "Refer & earn" },
   { href: "/account/addresses", label: "Addresses" },
   { href: "/account/wishlist", label: "Wishlist" },
   { href: "/account/profile", label: "Profile" },

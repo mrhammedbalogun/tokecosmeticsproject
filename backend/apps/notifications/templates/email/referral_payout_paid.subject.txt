@@ -1,0 +1,1 @@
+Your Toke Cosmetics payout of {{ amount }} is on its way

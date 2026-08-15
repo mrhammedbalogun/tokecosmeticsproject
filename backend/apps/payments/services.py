@@ -86,6 +86,19 @@ def _fulfil_locked(order, payment) -> None:
             defaults={"user": order.user, "email": order.email},
         )
 
+    # Referral commission, from the code stamped on the order at placement. It accrues
+    # HERE, at the moment the money is confirmed, and never at placement — an order that
+    # is never paid for must never look like earnings.
+    #
+    # `accrue_for_order` is contractually incapable of raising: it catches everything and
+    # logs. That is deliberate and it is the only reason this call belongs inside the
+    # lock. A commission that fails to write is a bookkeeping gap a backfill command
+    # closes; an exception here would roll back a CHARGED payment and leave a paid
+    # customer with an order that expires. See its docstring for the full reasoning.
+    from apps.referrals.services import accrue_for_order
+
+    accrue_for_order(order)
+
     payment.status = "succeeded"
     payment.save(update_fields=["status", "updated_at"])
     order.reservation_expires_at = None

@@ -6,6 +6,7 @@ import { useCheckout } from "@/components/checkout/CheckoutContext";
 import { useCart } from "@/hooks/useCart";
 import { formatMoney } from "@/lib/country";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
+import { ReferralCodeField } from "@/components/checkout/ReferralCodeField";
 import { couponMessage } from "@/lib/coupon-messages";
 import { paymentLabel } from "@/lib/payment-labels";
 import { stashBankHandoff } from "@/lib/bank-handoff";
@@ -315,6 +316,22 @@ export function ReviewStep() {
             {couponMessage(couponError)}
           </p>
         )}
+      </div>
+
+      {/* Under the coupon, same as on the cart page, and for the same reason: to a
+          shopper both are "a code I was given", so they belong next to each other — but
+          a referral code does not move the total and must not be mistaken for a
+          discount, hence its own component and wording rather than a second mode of the
+          box above.
+
+          This is the LAST point at which attribution can still be claimed, and for
+          anyone who arrived via "Buy now" or the cart drawer it is the ONLY one — those
+          two routes never render /cart. Applying here is safe with no re-quote: the
+          field's POST /api/referral writes the httpOnly cookie server-side, and the
+          checkout BFF reads that cookie when the order is placed, not when it is
+          quoted. Nothing in `totals` depends on it. */}
+      <div className="border-t border-line pt-4">
+        <ReferralCodeField variant="inline" />
       </div>
 
       <div className="border-t border-line pt-4">

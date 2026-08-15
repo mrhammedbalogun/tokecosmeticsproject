@@ -29,6 +29,40 @@ GRACE_DAYS = 30
 _SENTINEL_DOMAIN = ANONYMISED_EMAIL_DOMAIN
 
 
+def _scrub_payout_details(user) -> None:
+    """Remove a deleted customer's bank details, keeping the financial record.
+
+    Two different things live in the referrals app and they get different treatment,
+    because "delete my account" and "keep honest books" pull in opposite directions:
+
+    * `PayoutMethod` is a standing instruction — where to send the NEXT payout. There
+      will not be one, so the row is DELETED outright, like the address book above it.
+    * `PayoutRequest.method_snapshot` is the record of where money the shop actually
+      sent went. That has to survive (it is the answer to "prove you paid me"), but it
+      holds the full account number, so it is REDUCED to the bank name and the last four
+      digits — the same masked form the API has always shown the customer.
+
+    So the shop can still say "₦31,000 went to GTBank ••••6789 on 30 September, reference
+    GTB/2026/0042" without holding a deleted customer's account number.
+
+    Imported inside the function: `apps.accounts` is imported by nearly everything, and a
+    module-level import of the referrals app here would be a circular one.
+    """
+    from apps.referrals.models import PayoutMethod, PayoutRequest
+
+    PayoutMethod.objects.filter(user=user).delete()
+    for payout in PayoutRequest.objects.filter(referrer=user):
+        snapshot = payout.method_snapshot or {}
+        number = str(snapshot.get("account_number", ""))
+        payout.method_snapshot = {
+            "bank_name": snapshot.get("bank_name", ""),
+            "currency": snapshot.get("currency", ""),
+            "account_number": f"••••{number[-4:]}" if len(number) > 4 else "",
+            "redacted": True,
+        }
+        payout.save(update_fields=["method_snapshot", "updated_at"])
+
+
 def _anonymize_one(pk: int) -> bool:
     from apps.core.audit import redact_audit_values
     from apps.orders.models import Order
@@ -65,6 +99,7 @@ def _anonymize_one(pk: int) -> bool:
         Order.objects.filter(user=user).update(
             email=sentinel, phone="", shipping_address={}, billing_address={},
         )
+        _scrub_payout_details(user)
         # THE ROW SURVIVES, THE VALUES DO NOT (Plan-16 Task 4). Audit rows about this
         # customer keep their keys, object id, actor, IP, session and timestamp, and
         # lose only the values — so "staff member X edited customer 123's address at

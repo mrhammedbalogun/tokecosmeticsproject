@@ -47,12 +47,27 @@ describe("AccountNav active state", () => {
     expect(current()).toEqual(["Dashboard"]);
   });
 
-  it("links Addresses immediately after Orders", () => {
+  // Replaces the two pairwise "X immediately after Y" checks that grew one per shipped
+  // page. Those pinned insertion POSITION, so adding a link between two of them failed a
+  // test that was not about the new link at all (Refer & earn, 2026-08-14). One list is
+  // both stricter and easier to update deliberately: the order is stated once, and a
+  // reviewer can see what it is meant to be.
+  it("lists the sections in the intended order", () => {
     pathname = "/account";
     render(<AccountNav />);
 
     const labels = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(labels.indexOf("Addresses")).toBe(labels.indexOf("Orders") + 1);
+    expect(labels).toEqual([
+      "Dashboard",
+      "Orders",
+      // Above the maintenance pages on purpose: it is the one entry a customer might come
+      // to the account area specifically to USE, rather than to fix something.
+      "Refer & earn",
+      "Addresses",
+      "Wishlist",
+      "Profile",
+      "Security",
+    ]);
   });
 
   it("marks Addresses current on /account/addresses", () => {
@@ -62,18 +77,19 @@ describe("AccountNav active state", () => {
     expect(current()).toEqual(["Addresses"]);
   });
 
-  it("links Wishlist immediately after Addresses", () => {
-    pathname = "/account";
-    render(<AccountNav />);
-
-    const labels = screen.getAllByRole("link").map((a) => a.textContent);
-    expect(labels.indexOf("Wishlist")).toBe(labels.indexOf("Addresses") + 1);
-  });
-
   it("marks Wishlist current on /account/wishlist", () => {
     pathname = "/account/wishlist";
     render(<AccountNav />);
 
     expect(current()).toEqual(["Wishlist"]);
+  });
+
+  it("keeps Refer & earn highlighted on its sub-pages", () => {
+    // /account/referrals/payouts and /account/referrals/activity are both inside the
+    // section, and the prefix rule has to survive two levels, not just one.
+    pathname = "/account/referrals/payouts";
+    render(<AccountNav />);
+
+    expect(current()).toEqual(["Refer & earn"]);
   });
 });

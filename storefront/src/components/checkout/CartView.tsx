@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCart } from "@/hooks/useCart";
 import { formatMoney } from "@/lib/country";
 import { couponMessage } from "@/lib/coupon-messages";
+import { ReferralCodeField } from "@/components/checkout/ReferralCodeField";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
 import type { Totals } from "@/lib/checkout";
 
@@ -182,6 +183,12 @@ export function CartView() {
             )}
           </p>
         </div>
+
+        {/* Under the coupon box, collapsed. A referral code is the same SHAPE of thing
+            to a shopper ("I was given a code") so it belongs here, but it does not
+            touch the price and must not be confused with a discount — hence its own
+            component and its own wording rather than a second mode of the box above. */}
+        <ReferralCodeField />
 
         <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
           <OrderSummary totals={totals} fallbackSubtotal={cart.subtotal} currency={cart.currency} />

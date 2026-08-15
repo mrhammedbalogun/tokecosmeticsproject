@@ -51,4 +51,45 @@ describe("place-order BFF", () => {
     const sentBody = JSON.parse((init as RequestInit).body as string);
     expect(sentBody.idempotency_key).toBeUndefined();
   });
+
+  // --- referral attribution ---------------------------------------------------------
+  // This is the only field in the checkout payload that sends money to a third party, so
+  // where it comes from matters more than what it contains.
+
+  it("forwards the referral code from the httpOnly cookie", async () => {
+    store.set("tc_ref", "AMINA7K3P");
+    const f = upstream(201, { order_number: "TC-1", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    await POST(req({ cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer" }));
+    const sent = JSON.parse((f.mock.calls[0][1] as RequestInit).body as string);
+    expect(sent.referral_code).toBe("AMINA7K3P");
+    store.delete("tc_ref");
+  });
+
+  it("IGNORES a referral code supplied in the request body", async () => {
+    // Without this, any logged-in customer could credit an arbitrary referrer — or
+    // themselves via a second account — by editing one field in devtools. The cookie is
+    // httpOnly and can only have been set by the proxy seeing a real ?ref= navigation.
+    store.set("tc_ref", "AMINA7K3P");
+    const f = upstream(201, { order_number: "TC-1", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    await POST(req({
+      cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer",
+      referral_code: "ATTACKER99",
+    }));
+    const sent = JSON.parse((f.mock.calls[0][1] as RequestInit).body as string);
+    expect(sent.referral_code).toBe("AMINA7K3P");
+    store.delete("tc_ref");
+  });
+
+  it("sends an empty referral code when there is no cookie, and drops a malformed one", async () => {
+    const f = upstream(201, { order_number: "TC-1", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    await POST(req({ cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer" }));
+    expect(JSON.parse((f.mock.calls[0][1] as RequestInit).body as string).referral_code).toBe("");
+
+    // A hand-edited or format-drifted cookie is re-validated on the way out, not trusted.
+    store.set("tc_ref", "not a code");
+    const g = upstream(201, { order_number: "TC-2", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    await POST(req({ cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer" }));
+    expect(JSON.parse((g.mock.calls[0][1] as RequestInit).body as string).referral_code).toBe("");
+    store.delete("tc_ref");
+  });
 });

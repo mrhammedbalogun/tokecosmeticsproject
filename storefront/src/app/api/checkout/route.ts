@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
 import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
+import { REFERRAL_COOKIE, normalizeReferralCode } from "@/lib/referral";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -31,11 +32,21 @@ export async function POST(req: Request) {
   // returning a spurious cart_not_active. Fall back to minting one server-side for
   // any caller that doesn't send one. Never forward it in the upstream body — it's
   // a header concern only.
-  const { idempotency_key: clientKey, ...upstreamBody } = body;
+  const { idempotency_key: clientKey, referral_code: _ignored, ...upstreamBody } = body;
   const idempotencyKey = typeof clientKey === "string" && clientKey ? clientKey : randomUUID();
+  // Referral attribution is read from the httpOnly cookie HERE and never from the
+  // request body — a client-supplied `referral_code` is destructured out above and
+  // discarded. The browser must not be able to name who gets paid: this is the only
+  // field in the checkout payload that decides where money goes to a third party, and
+  // the cookie can only have been set by the proxy having seen a real ?ref= navigation.
+  //
+  // Re-normalised rather than trusted: the cookie is ours, but a value that survived a
+  // format change (or a hand-edited dev jar) should be dropped, not forwarded.
+  const referralCode = normalizeReferralCode(jar.get(REFERRAL_COOKIE)?.value);
   try {
     const out = await fetchWithAuth("/checkout/", {
-      method: "POST", country, body: upstreamBody,
+      method: "POST", country,
+      body: { ...upstreamBody, referral_code: referralCode },
       headers: { "Idempotency-Key": idempotencyKey },
     });
     return json(out, 201);

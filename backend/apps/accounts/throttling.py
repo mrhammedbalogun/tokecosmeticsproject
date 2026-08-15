@@ -494,6 +494,19 @@ class RegisterEmailThrottle(_EmailKeyedThrottle):
     scope = "register_email"
 
 
+# --- referral code lookup -----------------------------------------------------
+# The public "is this code real, and whose?" endpoint. A junk-volume cap rather than a
+# guess cap: a guessed code credits a stranger with commission, which costs nobody
+# anything, so the number is set where it cannot inconvenience a real customer typing a
+# code they read off a phone screen. Subject to the shared-bucket caveat at the top of
+# `_IPKeyedThrottle` — storefront traffic arrives via the BFF, so this is one bucket for
+# the whole shop and is deliberately generous because of it.
+
+
+class ReferralLookupThrottle(_IPKeyedThrottle):
+    scope = "referral_lookup"
+
+
 # --- password reset ----------------------------------------------------------
 # Keying on the target email is the only key that protects the victim's inbox; the IP
 # key caps total outbound volume the same way it does for registration.

@@ -1,4 +1,5 @@
 """Base settings shared across environments. Env-specific values live in dev.py / prod.py."""
+from decimal import Decimal
 from pathlib import Path
 
 import environ
@@ -56,6 +57,7 @@ INSTALLED_APPS = [
     "apps.wishlist",
     "apps.reviews",
     "apps.newsletter",
+    "apps.referrals",
     "apps.migration_wp",
 ]
 
@@ -245,6 +247,10 @@ REST_FRAMEWORK = {
         "suggest": "60/min",
         "cart": "120/min",
         "newsletter": "5/min",
+        # Public referral-code lookup. Shared bucket via the BFF (see
+        # `_IPKeyedThrottle`), so generous on purpose: this must never stop a real
+        # customer typing a code, and a guessed code costs nobody anything.
+        "referral_lookup": "60/min",
         # Auth. Email-keyed unless the name says _ip.
         #
         # login_ip is the VOLUME cap and must stay listed first on LoginView: without it
@@ -369,6 +375,57 @@ RESERVATION_TTL_MINUTES = env.int("RESERVATION_TTL_MINUTES", default=30)
 # admin; whichever happens first wins. Plan-11's verified-purchase review rule and
 # Plan-28's accounting both read this status, so it has to actually get set.
 RETURN_WINDOW_DAYS = env.int("RETURN_WINDOW_DAYS", default=14)
+
+# --- Referral programme (Plan-29, referral half) ---
+#
+# THESE NUMBERS ARE PUBLISHED TERMS, not tuning knobs. Every one of them is on
+# https://tokecosmetics.com/affiliates-2/ where customers can read it, so changing one
+# changes what the shop has promised. They live in settings (env-overridable) rather
+# than in a SiteSetting row precisely BECAUSE they are not meant to be edited casually
+# from an admin screen — a rate change is a deploy and a terms update, together.
+#
+# Note what does NOT follow from a change here: commissions already earned keep the
+# rate they were earned under, because `Commission.rate_percent` is a snapshot.
+REFERRAL_COMMISSION_PERCENT = env("REFERRAL_COMMISSION_PERCENT", default="10.00")
+
+# The click-attribution window. A visit carrying ?ref=CODE credits that referrer for
+# any order the visitor places in the next 30 days. Read by the STOREFRONT too (its
+# cookie max-age must match, or the two disagree about who earned what) — see
+# storefront/src/lib/referral.ts, which restates it and says so.
+REFERRAL_COOKIE_DAYS = env.int("REFERRAL_COOKIE_DAYS", default=30)
+
+# The holding period, counted from the order SHIPPING (not from payment — see
+# Commission's docstring). Deliberately longer than RETURN_WINDOW_DAYS: the shop's own
+# return window is 14 days, and the affiliate terms promise a more conservative 60
+# before commission is payable. Being more cautious than the terms is safe; being less
+# is a breach, so this must never be lowered below the published number.
+REFERRAL_HOLD_DAYS = env.int("REFERRAL_HOLD_DAYS", default=60)
+
+# Minimum balance before a payout can be requested, PER CURRENCY. ₦20,000 is the
+# published figure; the other three are this platform's own numbers, since the
+# WordPress programme only ever ran in Nigeria. Balances roll over until met, exactly
+# as the terms say. A currency absent from this map cannot be paid out at all, which is
+# the safe direction to be wrong in.
+REFERRAL_PAYOUT_THRESHOLDS = {
+    "NGN": Decimal("20000.00"),
+    "GBP": Decimal("20.00"),
+    "USD": Decimal("25.00"),
+    "CAD": Decimal("30.00"),
+}
+
+# The "₦200k Club": referred sales over ₦200,000 in any rolling 90-day window unlock
+# manually-fulfilled perks (retainer talks, PR packages, early access). Computed on the
+# fly from Commission.base_amount — there is no stored tier, because a stored tier is a
+# thing that goes stale the day someone's 90-day window rolls past a big order.
+# NGN-only on purpose: the tier is naira-denominated in the published terms, and
+# inventing a GBP equivalent would be inventing a promise.
+REFERRAL_ELITE_THRESHOLDS = {"NGN": Decimal("200000.00")}
+REFERRAL_ELITE_WINDOW_DAYS = env.int("REFERRAL_ELITE_WINDOW_DAYS", default=90)
+
+# Bumped when the affiliate terms change; stamped onto ReferralProfile at the first
+# payout request so a dispute can be answered with "you agreed to v1 of these terms on
+# this date". A date string rather than an integer so it reads as what it is.
+REFERRAL_TERMS_VERSION = env("REFERRAL_TERMS_VERSION", default="2026-08-14")
 
 # --- Staff invites ---
 # How long an invite link stays usable. 72 hours is long enough to survive a weekend
@@ -579,6 +636,10 @@ CELERY_BEAT_SCHEDULE = {
     "monitor-gig-wallet": {
         "task": "apps.delivery.tasks.monitor_gig_wallet",
         "schedule": 21600.0,  # every 6h — the wallet drains at fulfilment speed, not checkout speed
+    },
+    "mature-referral-commissions": {
+        "task": "apps.referrals.tasks.mature_commissions",
+        "schedule": 86400.0,  # daily — the holding period is measured in days
     },
     "refresh-google-reviews-meta": {
         "task": "apps.cms.tasks.refresh_google_reviews_meta",

@@ -55,6 +55,18 @@ class Order(TimeStampedModel):
     # Attempt-suffixed reservation ledger key (starts == number; "/2" on re-reserve).
     reservation_reference = models.CharField(max_length=24, blank=True)
 
+    # The referral code this order was attributed to at PLACEMENT, or "". A plain string
+    # rather than an FK to referrals.ReferralProfile, for the same reason
+    # `checkout.CouponRedemption.order_number` is a soft reference: this is the order's
+    # own record of what the customer arrived with, and it must survive the referrer's
+    # profile being deleted with the answer intact.
+    #
+    # Stamped here — not resolved later — because the only place the attribution cookie
+    # exists is the checkout request. Payment confirmation runs off a gateway webhook
+    # with no browser and no cookie behind it, so a commission worked out at that point
+    # would have nothing to work from. See referrals/services.accrue_for_order.
+    referral_code = models.CharField(max_length=32, blank=True)
+
     source = models.CharField(max_length=20, default="web")  # web|legacy_ng|legacy_intl|admin
     legacy_number = models.CharField(max_length=20, blank=True, db_index=True)
     placed_at = models.DateTimeField(default=timezone.now)

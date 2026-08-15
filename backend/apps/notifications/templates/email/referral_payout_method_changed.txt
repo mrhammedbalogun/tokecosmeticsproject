@@ -1,0 +1,15 @@
+Hi{% if first_name %} {{ first_name }}{% endif %},
+
+The bank account for your {{ currency }} affiliate payouts was just changed to:
+
+  {{ bank_name }}
+  {{ account_name }}
+  {{ account_masked }}
+
+If that was you, there's nothing to do.
+
+If it wasn't, someone may have access to your account. Change your password
+straight away at {{ security_url }} and reply to
+this email so we can put your payouts on hold.
+
+— Toke Cosmetics

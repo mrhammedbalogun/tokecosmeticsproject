@@ -27,6 +27,7 @@ from apps.orders.state import record_event
 from apps.payments.gateways.registry import active_gateways_for, get_gateway
 from apps.payments.models import Payment
 from apps.pricing.services import resolve_price
+from apps.referrals.services import attribution_code_for_order
 
 
 class CheckoutError(Exception):
@@ -61,7 +62,8 @@ def _address_snapshot(addr: Address) -> dict:
 
 def place_order(*, user, country, key: str, cart_id, address_id, delivery_option_id,
                 payment_gateway: str, billing_address_id=None, coupon_code: str = "",
-                notes: str = "", expected_total=None, gig_centre_id=None) -> CheckoutResult:
+                notes: str = "", expected_total=None, gig_centre_id=None,
+                referral_code: str = "") -> CheckoutResult:
     # Durable backstop: a payment already exists for this key.
     existing = Payment.objects.filter(idempotency_key=key, order__user=user).select_related("order").first()
     if existing:
@@ -145,6 +147,14 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             raise CheckoutError("cart_changed", "Totals changed.",
                                 extra={"totals": _totals_dict(totals)})
 
+        # Referral attribution. THIS IS THE LAST MOMENT IT CAN HAPPEN: the code comes
+        # from a 30-day cookie the storefront's BFF read off the checkout request, and
+        # payment confirmation runs off a gateway webhook with no browser behind it. So
+        # the code is resolved and validated here (unknown / blocked / self-referral all
+        # collapse to "") and stamped on the order; the money row is written later, from
+        # the payment path, off this stamp. Never raises — see referrals.services.
+        attributed_code = attribution_code_for_order(referral_code, user)
+
         number = next_order_number()
         try:
             for variant, qty in lines:
@@ -160,6 +170,7 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             coupon=coupon, delivery_option_name=chosen["name"],
             shipping_address=_address_snapshot(address), billing_address=_address_snapshot(billing),
             customer_note=notes, reservation_reference=number,
+            referral_code=attributed_code,
             # Per-gateway: a card resolves in seconds, a bank transfer waits on staff
             # working hours. The gateway is already known and validated here, and its
             # Payment row is created in this same transaction, so nothing needs

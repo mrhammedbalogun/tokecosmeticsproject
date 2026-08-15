@@ -1,0 +1,12 @@
+Hi{% if first_name %} {{ first_name }}{% endif %},
+
+We've sent your affiliate payout of {{ amount }}.
+
+  To:        {{ bank_name }} {{ account_masked }}
+  Reference: {{ reference }}
+
+Depending on your bank it can take a few working days to land.
+
+Thank you for sharing Toke Cosmetics.
+
+— Toke Cosmetics

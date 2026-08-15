@@ -137,6 +137,15 @@ class CheckoutView(APIView):
             "payment_gateway": request.data.get("payment_gateway"),
             "gig_centre_id": request.data.get("gig_centre_id"),
         }
+        # `referral_code` is DELIBERATELY ABSENT from the hashed payload above, having
+        # briefly been in it. The hash exists to catch "same key, genuinely different
+        # order" and answer 422; the attribution cookie is not part of what the customer
+        # is buying, and it is VOLATILE — it expires on its own 30-day clock and changes
+        # if they open another referrer's link. Hashing it means a legitimate retry of a
+        # lost 201, sent with the same Idempotency-Key, can be refused as "key reused"
+        # because a cookie moved between the two attempts. Left out, the first attempt's
+        # attribution simply wins, which is both the safer failure and the fairer answer.
+        referral_code = request.data.get("referral_code", "")
         request_hash = hash_payload(payload)
         try:
             replay = begin(request.user.id, key, request_hash)
@@ -158,6 +167,7 @@ class CheckoutView(APIView):
                 notes=request.data.get("notes", ""),
                 expected_total=request.data.get("expected_total"),
                 gig_centre_id=payload["gig_centre_id"],
+                referral_code=referral_code,
             )
         except CheckoutError as exc:
             body = {"error": exc.code, "detail": exc.detail, **exc.extra}

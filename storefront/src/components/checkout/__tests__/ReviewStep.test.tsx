@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useEffect } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CheckoutProvider, useCheckout } from "@/components/checkout/CheckoutContext";
 import { ReviewStep } from "@/components/checkout/ReviewStep";
@@ -304,6 +304,57 @@ describe("ReviewStep", () => {
     fireEvent.click(screen.getByRole("button", { name: /place order/i }));
     await waitFor(() => expect(screen.getByTestId("launcher")).toBeInTheDocument());
     expect(readBankHandoff("TC-201")).toBeNull();
+  });
+
+  // --- referral code -----------------------------------------------------------------
+  // The field also lives on /cart, but "Buy now" and the cart drawer both reach checkout
+  // without rendering that page, so for those shoppers this is the only place a code
+  // read off a WhatsApp message can be entered.
+
+  it("offers the referral field collapsed, with no input until asked for", async () => {
+    mockFetch({
+      [QUOTE_URL]: {
+        status: 200,
+        body: { totals: { subtotal: "20.00", discount: "0.00", delivery: "5.00", tax: "0.00", grand_total: "25.00", currency: "GBP" }, coupon: { ok: true } },
+      },
+    });
+    renderHarness();
+    // Let the mount quote settle before asserting, so the state update it causes lands
+    // inside the test rather than after it (React act warning otherwise).
+    await waitFor(() => expect(screen.getByText("£25.00")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /friend.s referral code/i })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/friend.s referral code/i)).not.toBeInTheDocument();
+  });
+
+  it("applies a referral code without re-quoting the order", async () => {
+    // The whole point of keeping this separate from the coupon box: attribution changes
+    // who gets paid later, never what this shopper pays. A re-quote here would be both
+    // wasted work and a chance to drop the code on the quote path.
+    const f = mockFetch({
+      [QUOTE_URL]: {
+        status: 200,
+        body: { totals: { subtotal: "20.00", discount: "0.00", delivery: "5.00", tax: "0.00", grand_total: "25.00", currency: "GBP" }, coupon: { ok: true } },
+      },
+      "/api/referral": { status: 200, body: { valid: true, referrer_name: "Amina" } },
+    });
+    renderHarness();
+    await waitFor(() => expect(screen.getByText("£25.00")).toBeInTheDocument());
+    const quotesBefore = f.mock.calls.filter(([url]) => url === QUOTE_URL).length;
+
+    fireEvent.click(screen.getByRole("button", { name: /friend.s referral code/i }));
+    const input = screen.getByLabelText(/friend.s referral code/i);
+    fireEvent.change(input, { target: { value: "amina7k3p" } });
+    // Scoped to the field's own row: the coupon box above has an "Apply" button too, and
+    // a page-wide lookup would be ambiguous.
+    fireEvent.click(within(input.parentElement as HTMLElement).getByRole("button", { name: /apply/i }));
+
+    await waitFor(() => expect(screen.getByText(/Amina.s link/)).toBeInTheDocument());
+    const call = f.mock.calls.find(([url]) => url === "/api/referral");
+    // Sent as typed — normalisation and validation are the server's job, and the cookie
+    // it sets is the only thing checkout will trust.
+    expect(JSON.parse(String(call?.[1]?.body))).toEqual({ code: "amina7k3p" });
+    expect(f.mock.calls.filter(([url]) => url === QUOTE_URL).length).toBe(quotesBefore);
+    expect(screen.getByText("£25.00")).toBeInTheDocument();
   });
 
   it("clears the guest coupon stash on the online-gateway path too", async () => {

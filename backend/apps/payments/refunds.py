@@ -200,6 +200,16 @@ def apply_succeeded_refund(refund, *, restock: bool = False, user=None) -> None:
         )
 
         order = Order.objects.select_for_update().get(pk=payment.order_id)
+
+        # Un-earn referral commission in proportion to what went back. Placed here, in
+        # the one choke point every refund passes through (full or partial, staff or
+        # webhook), and handed the RUNNING TOTAL rather than this one refund so a
+        # redelivered webhook recomputes the same number instead of deducting twice.
+        # Cannot raise — see referrals.services.reverse_for_refund.
+        from apps.referrals.services import reverse_for_refund
+
+        reverse_for_refund(order, succeeded)
+
         if fully and order.status != "refunded":
             # Guarded rather than unconditional: this is also the async refund-completion
             # webhook's entry point, and gateways redeliver. A replay must be a no-op, not

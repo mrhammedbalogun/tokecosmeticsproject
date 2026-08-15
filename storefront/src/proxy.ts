@@ -2,6 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { REFRESH_COOKIE } from "@/lib/auth";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { GEO_COUNTRY_HEADER } from "@/lib/geo";
+import {
+  REFERRAL_COOKIE,
+  REFERRAL_COOKIE_MAX_AGE,
+  REFERRAL_PARAM,
+  normalizeReferralCode,
+} from "@/lib/referral";
 
 // Shared with the POST /api/country route handler so the seeded default and an explicit user
 // choice are stored with identical flags. `country` is deliberately NOT httpOnly — client UI
@@ -19,6 +25,17 @@ const COUNTRY_COOKIE_OPTIONS = {
 // dependency-free — see the note below about CDN-edge deployment.
 const MARKET_CODES = ["NG", "GB", "US", "CA", "ZZ"];
 const REST_OF_WORLD = "ZZ";
+
+// httpOnly, unlike the country cookie: no page JavaScript has any business reading or
+// writing the attribution, and making it unreadable means the only path from a URL to a
+// commission runs through this file and then straight to the server-side checkout call.
+const REFERRAL_COOKIE_OPTIONS = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: REFERRAL_COOKIE_MAX_AGE,
+  secure: process.env.NODE_ENV === "production",
+};
 
 /** Mirror of lib/country's normalizeCountry: geo absent -> NG default; a real market ->
  * itself; any other country -> ZZ (international, USD). */
@@ -66,17 +83,53 @@ export function proxy(req: NextRequest) {
     );
   }
 
-  const res = isGatedAccountPath(req.nextUrl.pathname) && !req.cookies.get(REFRESH_COOKIE)
-    ? NextResponse.redirect(loginUrl(req))
-    : NextResponse.next({ request: { headers: requestHeaders } });
+  // Referral attribution. A visit carrying ?ref=CODE on ANY route starts (or restarts)
+  // that referrer's 30-day window — the link a referrer shares is usually the homepage,
+  // but a product link with ?ref= appended has to work identically or the first thing
+  // they try will silently earn nothing.
+  //
+  // The URL is deliberately NOT rewritten to strip the parameter. A redirect here would
+  // cost every referred landing an extra round-trip, and it would break any UTM
+  // parameters the referrer is running alongside it in an ad tool. `?ref=` in the
+  // address bar is harmless; the pages ignore it.
+  // Two ways in, one mechanism. `?ref=CODE` on any URL is what the share buttons emit;
+  // `/r/CODE` is the short form a referrer can say out loud or print. The short link
+  // resolves here rather than as a page so it costs no render and cannot 404 — it sets
+  // the same cookie and sends the visitor to the homepage.
+  const shortCode = normalizeReferralCode(shortLinkCode(req.nextUrl.pathname));
+  const referral = shortCode
+    || normalizeReferralCode(req.nextUrl.searchParams.get(REFERRAL_PARAM));
+
+  const res = shortCode
+    ? NextResponse.redirect(new URL("/", req.nextUrl))
+    : isGatedAccountPath(req.nextUrl.pathname) && !req.cookies.get(REFRESH_COOKIE)
+      ? NextResponse.redirect(loginUrl(req))
+      : NextResponse.next({ request: { headers: requestHeaders } });
 
   // Set on the redirect too: a first-time visitor deep-linking into /account must not come
   // back from login without a market, or they'd be shown the wrong currency.
   if (seed) {
     res.cookies.set(COUNTRY_COOKIE, seed, COUNTRY_COOKIE_OPTIONS);
   }
+  // Overwrite unconditionally when a valid code is present — that IS the last-click rule
+  // (see lib/referral.ts), and it also refreshes the 30 days from the newest click.
+  if (referral) {
+    res.cookies.set(REFERRAL_COOKIE, referral, REFERRAL_COOKIE_OPTIONS);
+  }
 
   return res;
+}
+
+/**
+ * The code in `/r/AMINA7K3P`, or "" for any other path.
+ *
+ * Exactly two segments, so `/r/CODE/anything` is not a referral link — the returned
+ * value is normalised by the caller anyway, but matching loosely here would send a
+ * visitor from a real deep link to the homepage for no reason.
+ */
+function shortLinkCode(pathname: string): string {
+  const segments = pathname.split("/").filter(Boolean);
+  return segments.length === 2 && segments[0] === "r" ? segments[1] : "";
 }
 
 /** Exact segment match — `/accountants-special` is not an account route. */
