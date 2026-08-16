@@ -18,6 +18,13 @@ export interface PayoutRow {
   status: PayoutStatus;
   currency: string;
   amount: string;
+  /** The withholding split. Zero by ruling (backend `REFERRAL_WHT_PERCENT`), so the card
+   *  hides it rather than printing "WHT 0.00" on every row — a figure that is always
+   *  zero is a figure people stop reading, including on the day it is not. */
+  wht_rate_percent: string;
+  wht_amount: string;
+  /** What the bank actually sends. Equal to `amount` today. */
+  net_amount: string;
 
   referrer_id: number;
   referrer_name: string;
@@ -78,6 +85,12 @@ export function isAging(row: PayoutRow): boolean {
 /** Money as the queue shows it. The API sends decimal strings and the currency code
  *  separately; nothing here converts between currencies, because the programme never
  *  does — a GBP balance is paid in GBP or not at all. */
+/** True when a deduction was actually taken, i.e. when gross and net differ. The card
+ *  only shows the split then. */
+export function hasWithholding(row: PayoutRow): boolean {
+  return Number(row.wht_amount) !== 0;
+}
+
 export function payoutAmount(row: PayoutRow): string {
   return `${row.currency} ${Number(row.amount).toLocaleString("en-NG", {
     minimumFractionDigits: 2,

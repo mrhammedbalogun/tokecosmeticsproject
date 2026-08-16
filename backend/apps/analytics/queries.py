@@ -300,3 +300,82 @@ def coupon_performance(window: Range) -> list[dict]:
         entry["redemptions"] += 1
         entry["discount_total"] += discount
     return sorted(per_coupon.values(), key=lambda r: -r["discount_total"])
+
+
+def referrer_commission(window: Range) -> list[dict]:
+    """"Referrer Commission Paid", and the four states it passes through to get there.
+
+    ── WHAT "PAID" MEANS HERE, AND WHY IT IS NOT `Commission.status` ────────────────
+
+    `Commission.status == "paid"` means CLAIMED BY A PAYOUT REQUEST, not money sent —
+    the row is stamped the moment a referrer asks, days or weeks before anybody opens a
+    banking app. Counting it as cash out would overstate this report by every request
+    currently sitting in the queue.
+
+    So `paid` here is keyed off `PayoutRequest.paid_at`, the timestamp a human wrote when
+    the transfer actually left, and it uses `net_amount` — what the bank sent — rather
+    than the gross. Those are equal today (withholding is zero by ruling) and the
+    distinction is what stops this report quietly becoming wrong the day it is not.
+
+    ── WHY IT IS ITS OWN REPORT AND NOT A LINE ON `revenue` ────────────────────────
+
+    Commission is a marketing EXPENSE, not a reduction of sales. Netting it against
+    revenue would answer "what did we sell" with a number that has affiliate costs
+    already taken out of it, which is the one thing a revenue figure must not do. Hammed
+    asked for paid commission to be identifiable separately from product sales; separate
+    is what that means.
+
+    Windowing differs per bucket ON PURPOSE. `earned` and `paid` are events and are
+    windowed. `pending`, `available` and `requested` are POSITIONS — what is held, owed
+    and in flight right now — and a position filtered to last month is a number nobody
+    can act on. The keys say which is which.
+    """
+    from apps.referrals.models import Commission, PayoutRequest
+
+    def by_currency(qs, field: str, filters: dict) -> dict:
+        rows = (
+            qs.filter(**filters)
+            .values("currency_id")
+            .annotate(total=Coalesce(Sum(field), _ZERO))
+        )
+        return {r["currency_id"]: r["total"] for r in rows}
+
+    commissions = Commission.objects.all()
+    payouts = PayoutRequest.objects.all()
+
+    earned = by_currency(
+        commissions, "amount",
+        {"created_at__gte": window.start, "created_at__lt": window.end},
+    )
+    paid = by_currency(
+        payouts, "net_amount",
+        {"status": "paid", "paid_at__gte": window.start, "paid_at__lt": window.end},
+    )
+    reversed_ = by_currency(
+        commissions, "amount",
+        {"reversed_at__gte": window.start, "reversed_at__lt": window.end},
+    )
+    pending = by_currency(commissions, "amount", {"status": "pending"})
+    available = by_currency(commissions, "amount", {"status": "available"})
+    requested = by_currency(
+        payouts, "net_amount", {"status__in": ("requested", "approved")},
+    )
+
+    currencies = sorted(
+        set(earned) | set(paid) | set(reversed_) | set(pending)
+        | set(available) | set(requested)
+    )
+    return [
+        {
+            "currency": code,
+            # Events, inside the window.
+            "earned": earned.get(code, Decimal("0.00")),
+            "paid": paid.get(code, Decimal("0.00")),
+            "reversed": reversed_.get(code, Decimal("0.00")),
+            # Positions, as they stand right now.
+            "pending_now": pending.get(code, Decimal("0.00")),
+            "available_now": available.get(code, Decimal("0.00")),
+            "requested_now": requested.get(code, Decimal("0.00")),
+        }
+        for code in currencies
+    ]

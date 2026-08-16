@@ -25,6 +25,11 @@ class PayoutQueueSerializer(serializers.Serializer):
     status = serializers.CharField()
     currency = serializers.CharField(source="currency.code")
     amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    # The withholding split. Zero by ruling, so the admin hides these rather than
+    # printing "WHT NGN 0.00" on every card — noise that trains people not to read.
+    wht_rate_percent = serializers.DecimalField(max_digits=5, decimal_places=2)
+    wht_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    net_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
 
     referrer_name = serializers.SerializerMethodField()
     referrer_email = serializers.CharField(source="referrer.email")

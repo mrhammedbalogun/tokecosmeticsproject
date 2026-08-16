@@ -38,6 +38,11 @@ REPORTS = {
     "sales_by_category": queries.sales_by_category,
     "top_customers": queries.top_customers,
     "coupons": queries.coupon_performance,
+    # Affiliate commission. Its own report rather than a line on `revenue`, because
+    # commission is a marketing expense and netting it against sales would answer "what
+    # did we sell" with affiliate costs already deducted. See the query's docstring for
+    # why "paid" is keyed off the payout's `paid_at` and not `Commission.status`.
+    "referrer_commission": queries.referrer_commission,
 }
 
 # Reports whose rows name a customer. Exporting one is bulk egress of personal data and

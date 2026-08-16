@@ -392,6 +392,35 @@ class PayoutRequest(TimeStampedModel):
     # Frozen copy of the PayoutMethod as it was when the request was made. The method
     # itself may be edited or deleted afterwards; this is what the money was sent to.
     method_snapshot = models.JSONField(default=dict)
+
+    # ── WITHHOLDING, SNAPSHOT AT REQUEST TIME ────────────────────────────────────────
+    #
+    # `amount` above is the GROSS — what the referrer earned, and what the commission
+    # rows behind this request add up to. It keeps that meaning; the three fields here
+    # are what happens to it on the way out.
+    #
+    # ZERO TODAY. Hammed's ruling of 2026-08-15 is that commission is paid in full, to
+    # residents and non-residents alike. The fields exist anyway, because the alternative
+    # is discovering on the day an accountant says otherwise that "how much did we
+    # actually send" and "how much did they earn" were the same column all along — and by
+    # then there are rows nobody can restate. Recording a zero deduction against a stated
+    # rate is also the honest answer to "why was nothing withheld from this payment".
+    #
+    # The RATE is snapshot, not read live, for the same reason `Commission.rate_percent`
+    # is: a rate change must not silently re-cut a request that is already open, and a
+    # row should be able to answer what it was paid under without consulting settings
+    # that have moved on. See `settings.REFERRAL_WHT_PERCENT`.
+    wht_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    wht_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # What actually leaves the bank: gross minus withholding. Stored rather than derived
+    # because it is the figure a bank statement is reconciled against, and a derived
+    # column that disagrees with a statement is an argument nobody can settle.
+    net_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # Filled only if a deduction is ever actually remitted to a tax authority. Nullable
+    # and empty by design: with the rate at zero there is nothing to remit, and a blank
+    # here means "no deduction was taken", not "we forgot".
+    wht_remittance_reference = models.CharField(max_length=100, blank=True)
+    wht_remitted_at = models.DateTimeField(null=True, blank=True)
     decided_at = models.DateTimeField(null=True, blank=True)
     decided_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,

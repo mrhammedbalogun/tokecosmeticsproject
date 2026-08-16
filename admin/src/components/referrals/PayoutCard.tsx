@@ -1,6 +1,7 @@
 import {
   PAYOUT_AGING_DAYS,
   STATUS_LABEL,
+  hasWithholding,
   isAging,
   payoutAmount,
   type PayoutRow,
@@ -70,6 +71,15 @@ export function PayoutCard({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="font-medium">{payoutAmount(row)}</p>
+          {hasWithholding(row) && (
+            /* Only when a deduction was actually taken. The gross stays the headline —
+               it is what the referrer earned and what the commissions add up to — and
+               this line says what will leave the bank instead. */
+            <p className="text-sm text-warn">
+              Send {row.currency} {row.net_amount} — {row.wht_rate_percent}% withheld (
+              {row.currency} {row.wht_amount})
+            </p>
+          )}
           <p className="text-sm text-muted">
             {row.referrer_name} · {row.referrer_email} · {row.referrer_toke_id}
           </p>

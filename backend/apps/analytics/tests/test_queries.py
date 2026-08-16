@@ -209,3 +209,85 @@ def test_orders_by_status_counts_EVERY_status_including_unpaid():
     rows = {r["status"]: r["orders"] for r in queries.orders_by_status(_window())}
 
     assert rows == {"pending_payment": 1, "processing": 1}
+
+
+# --- referrer commission ---------------------------------------------------------------
+
+
+def _commission_fixture(django_user_model):
+    """A referrer with one matured commission and one still held."""
+    from apps.referrals.models import Commission
+    from apps.referrals.services import accrue_for_order, ensure_profile
+    from apps.referrals.tests.factories import customer, make_order
+
+    ref_user = django_user_model.objects.create_user(email="rep@x.com", password=None)
+    profile = ensure_profile(ref_user)
+    held = accrue_for_order(
+        make_order(user=customer(django_user_model, "b1@x.com"), subtotal="100000.00",
+                   referral_code=profile.code)
+    )
+    ready = accrue_for_order(
+        make_order(user=customer(django_user_model, "b2@x.com"), subtotal="300000.00",
+                   referral_code=profile.code)
+    )
+    Commission.objects.filter(pk=ready.pk).update(status="available")
+    return ref_user, profile, held, ready
+
+
+def test_commission_paid_counts_money_that_left_not_money_that_was_claimed(
+    django_user_model,
+):
+    """THE TRAP THIS REPORT EXISTS TO AVOID. `Commission.status == "paid"` means claimed
+    by a request, which happens the moment a referrer asks — days before anybody opens a
+    banking app. Counting it as cash out overstates by every request in the queue."""
+    from apps.referrals.services import (
+        mark_payout_paid, request_payout, save_payout_method,
+    )
+    from apps.referrals.tests.factories import ngn
+
+    ref_user, _profile, _held, _ready = _commission_fixture(django_user_model)
+    save_payout_method(ref_user, currency=ngn(), bank_name="GTBank",
+                       account_name="R", account_number="0123456789")
+    payout = request_payout(ref_user, "NGN", accept_terms=True)
+
+    # Requested but NOT yet transferred: the commissions are already status="paid".
+    rows = queries.referrer_commission(_window())
+    ngn_row = next(r for r in rows if r["currency"] == "NGN")
+    assert ngn_row["paid"] == Decimal("0.00"), "nothing has left the bank yet"
+    assert ngn_row["requested_now"] == Decimal("30000.00")
+
+    staff = django_user_model.objects.create_user(email="s@x.com", password=None,
+                                                  is_staff=True)
+    mark_payout_paid(payout.pk, staff_user=staff, reference="GTB/1")
+
+    rows = queries.referrer_commission(_window())
+    ngn_row = next(r for r in rows if r["currency"] == "NGN")
+    assert ngn_row["paid"] == Decimal("30000.00"), "now it has"
+    assert ngn_row["requested_now"] == Decimal("0.00")
+
+
+def test_the_report_separates_held_money_from_payable_money(django_user_model):
+    """Six figures rather than one, because "what do we owe" and "what could be asked for
+    tomorrow" are different questions and the 60-day hold is the whole difference."""
+    _commission_fixture(django_user_model)
+
+    ngn_row = next(r for r in queries.referrer_commission(_window()) if r["currency"] == "NGN")
+
+    assert ngn_row["earned"] == Decimal("40000.00"), "both commissions were earned"
+    assert ngn_row["pending_now"] == Decimal("10000.00"), "still inside the holding period"
+    assert ngn_row["available_now"] == Decimal("30000.00")
+    assert ngn_row["paid"] == Decimal("0.00")
+
+
+def test_commission_never_mixes_currencies(django_user_model):
+    """Same rule as every other report here: a single figure that silently folded GBP
+    into naira would be worse than no figure."""
+    from apps.referrals.models import Commission
+
+    _ref, _profile, held, _ready = _commission_fixture(django_user_model)
+    Commission.objects.filter(pk=held.pk).update(currency_id="GBP")
+
+    rows = queries.referrer_commission(_window())
+
+    assert {r["currency"] for r in rows} == {"NGN", "GBP"}
+    assert next(r for r in rows if r["currency"] == "GBP")["earned"] == Decimal("10000.00")

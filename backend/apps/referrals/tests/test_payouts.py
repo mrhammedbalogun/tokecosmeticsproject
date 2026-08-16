@@ -246,6 +246,49 @@ def test_rejecting_emails_the_referrer_the_reason_and_says_the_money_came_back(
 
 
 @pytest.mark.django_db
+def test_a_payout_is_paid_in_full_because_withholding_is_zero(django_user_model):
+    """Hammed's ruling, 2026-08-15: commission is paid in full. A referrer with ₦30,000
+    available receives ₦30,000, not ₦28,500."""
+    ref_user, profile = referrer(django_user_model)
+    _with_method(ref_user)
+    _earn(django_user_model, ref_user, profile, "300000.00")
+
+    payout = request_payout(ref_user, "NGN", accept_terms=True)
+
+    assert payout.amount == Decimal("30000.00")
+    assert payout.wht_rate_percent == Decimal("0.00")
+    assert payout.wht_amount == Decimal("0.00")
+    assert payout.net_amount == payout.amount, "net is what leaves the bank"
+
+
+@pytest.mark.django_db
+def test_the_withholding_rate_is_a_setting_and_is_snapshot_on_the_request(
+    django_user_model, settings,
+):
+    """THE POINT OF BUILDING THE MECHANISM AT ZERO. The tax position is the kind of thing
+    an accountant changes; changing it should be an env var, not a migration and a
+    rewrite. Snapshot rather than read live, exactly like `Commission.rate_percent`, so a
+    later change never re-cuts a request that is already open."""
+    settings.REFERRAL_WHT_PERCENT = "5.00"
+    ref_user, profile = referrer(django_user_model)
+    _with_method(ref_user)
+    _earn(django_user_model, ref_user, profile, "300000.00")
+
+    payout = request_payout(ref_user, "NGN", accept_terms=True)
+
+    assert payout.amount == Decimal("30000.00"), "gross is still what they earned"
+    assert payout.wht_rate_percent == Decimal("5.00")
+    assert payout.wht_amount == Decimal("1500.00")
+    assert payout.net_amount == Decimal("28500.00")
+
+    # Moving the setting afterwards must not touch a request already in the queue.
+    settings.REFERRAL_WHT_PERCENT = "10.00"
+    payout.refresh_from_db()
+    assert payout.wht_rate_percent == Decimal("5.00")
+    assert payout.net_amount == Decimal("28500.00")
+
+
+@pytest.mark.django_db
 def test_a_blocked_referrer_cannot_request_a_payout(django_user_model):
     ref_user, profile = referrer(django_user_model)
     _with_method(ref_user)

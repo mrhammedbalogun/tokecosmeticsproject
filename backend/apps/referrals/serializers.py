@@ -251,6 +251,11 @@ class PayoutRequestSerializer(serializers.Serializer):
     currency = serializers.CharField(source="currency.code")
     amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     amount_display = serializers.SerializerMethodField()
+    # What the bank will actually send. Equal to `amount` while withholding is zero (it
+    # is, by ruling) — published anyway so the storefront reads the field that stays
+    # correct if that ever changes, rather than the one that would quietly overstate.
+    net_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    net_amount_display = serializers.SerializerMethodField()
     status = serializers.CharField()
     status_label = serializers.SerializerMethodField()
     paid_at = serializers.DateTimeField()
@@ -261,6 +266,9 @@ class PayoutRequestSerializer(serializers.Serializer):
 
     def get_amount_display(self, r) -> str:
         return format_money(r.amount, r.currency)
+
+    def get_net_amount_display(self, r) -> str:
+        return format_money(r.net_amount, r.currency)
 
     def get_status_label(self, r) -> str:
         return {

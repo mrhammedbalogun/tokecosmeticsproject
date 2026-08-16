@@ -19,6 +19,10 @@ function row(overrides: Partial<PayoutRow> = {}): PayoutRow {
     status: "requested",
     currency: "NGN",
     amount: "30000.00",
+    // Zero by ruling — the card hides the split unless a deduction was actually taken.
+    wht_rate_percent: "0.00",
+    wht_amount: "0.00",
+    net_amount: "30000.00",
     referrer_id: 7,
     referrer_name: "Amina Okoro",
     referrer_email: "amina@example.com",

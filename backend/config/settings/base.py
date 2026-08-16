@@ -427,6 +427,26 @@ REFERRAL_ELITE_WINDOW_DAYS = env.int("REFERRAL_ELITE_WINDOW_DAYS", default=90)
 # this date". A date string rather than an integer so it reads as what it is.
 REFERRAL_TERMS_VERSION = env("REFERRAL_TERMS_VERSION", default="2026-08-14")
 
+# Withholding tax deducted from a payout, as a percentage of the gross.
+#
+# ZERO BY HAMMED'S RULING, 2026-08-15: referral commission is paid in full, to residents
+# and non-residents alike — a referrer with ₦50,000 available receives ₦50,000. The
+# mechanism exists anyway, and that is the whole point of this setting: the tax position
+# is the kind of thing an accountant changes, and changing it should be an env var and a
+# month's payouts, not a schema migration and a rewrite.
+#
+# The rate is SNAPSHOT onto each `PayoutRequest` when it is created, exactly as
+# `Commission.rate_percent` snapshots the commission rate. So raising this never
+# retroactively re-cuts a request that is already open, and a payout can always answer
+# "what rate was I paid under" from its own row.
+#
+# If it ever goes above zero, four things need attention, in this order: the storefront
+# must show the NET the customer will receive (it reads `net_amount`, which already
+# exists); the payout email must state the deduction; the remittance fields on
+# `PayoutRequest` need filling; and someone must actually remit. See
+# `docs/runbooks/referral-programme.md` for the accountant's answers this setting encodes.
+REFERRAL_WHT_PERCENT = env("REFERRAL_WHT_PERCENT", default="0.00")
+
 # --- Staff invites ---
 # How long an invite link stays usable. 72 hours is long enough to survive a weekend
 # and short enough that a link forwarded, screenshotted or left in a mailbox stops

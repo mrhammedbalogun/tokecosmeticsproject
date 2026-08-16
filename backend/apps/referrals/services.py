@@ -980,8 +980,17 @@ def request_payout(user, currency_code: str, *, accept_terms: bool = False) -> P
             "Your balance rolls over until then.",
         )
 
+    # Withholding, snapshot at request time. Zero by ruling (see
+    # `settings.REFERRAL_WHT_PERCENT`), which makes `net_amount == amount` today — the
+    # arithmetic is written out anyway so that changing one env var changes what the
+    # shop sends, rather than requiring anybody to find every place a payout is summed.
+    wht_rate = Decimal(settings.REFERRAL_WHT_PERCENT)
+    wht_amount = q2(amount * wht_rate / Decimal("100"))
     request = PayoutRequest.objects.create(
         referrer=user, currency=currency, amount=amount,
+        wht_rate_percent=wht_rate,
+        wht_amount=wht_amount,
+        net_amount=q2(amount - wht_amount),
         method_snapshot=method.snapshot(),
     )
     Commission.objects.filter(pk__in=[c.pk for c in claimed]).update(

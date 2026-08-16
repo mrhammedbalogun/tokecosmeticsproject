@@ -343,6 +343,26 @@ redeemable only as a discount on our own products, never for cash, never transfe
 6. Before making bank payouts to affiliates, is there any KYC/BVN verification or
    reporting obligation beyond normal supplier-payment records?
 
+### ANSWERED — Hammed's rulings, 2026-08-15
+
+He ruled directly rather than waiting for the consult. What is implemented:
+
+| Decision | Implementation |
+|---|---|
+| **No WHT deducted, from anyone** — residents and non-residents alike get the full amount | `REFERRAL_WHT_PERCENT = "0.00"`, snapshot per request as `wht_rate_percent` / `wht_amount` / `net_amount` |
+| Tax rules must stay **configurable** without a rewrite | One env var changes it; the arithmetic and the fields already exist |
+| **Commission cannot be spent at checkout** — payout only, never store credit, a tender, a discount or points | Nothing built; the spend-at-checkout slice is cancelled (master plan Amendment 3b) |
+| Record-keeping | Already satisfied — see the field map in Amendment 3(c) |
+| Paid commission reported separately as **"Referrer Commission Paid"** | `referrer_commission` report in `apps/analytics`, keyed off `PayoutRequest.paid_at` |
+
+**The questions below are therefore NOT blocking anything.** They are worth putting to an
+accountant at the next opportunity — the small-payer exemption question in particular, so
+that "we do not deduct" is a position somebody qualified has confirmed rather than a
+default. If the answer ever comes back "you must deduct", the change is
+`REFERRAL_WHT_PERCENT` plus actually remitting; the schema is already there.
+
+Two of them are now moot and struck through: there is no set-off and no credit tender.
+
 ### For the accountant — withholding tax and treatment
 
 **Questions 1 and 2 block the first payout run.** The rest can follow.
@@ -360,19 +380,17 @@ redeemable only as a discount on our own products, never for cash, never transfe
 2. Per deduction, what exactly must we hand the affiliate and the tax authority — the
    receipt/statement under reg. 6, the monthly return schedule — and what records do you
    want out of our system to produce them?
-3. We read "payment is made **or otherwise settled**" (NTAA 2025 s.51(1); same wording in
-   the 2024 Regulations) as meaning WHT falls due, on the gross, when an affiliate applies
-   commission against a purchase instead of taking cash. Confirm — it decides where in our
-   system the deduction is recorded.
+3. ~~WHT on set-off when commission is applied against a purchase~~ — **MOOT.**
+   Commission cannot be spent at checkout (Hammed, 2026-08-15), so no settlement other
+   than a bank transfer exists.
 4. UK/US-resident affiliates paid in GBP/USD into foreign accounts: 10% final WHT on the
    gross? Remitted in which currency? Any UK-treaty relief worth pursuing at these
    volumes (under about £100/month)? And must we self-account 7.5% VAT on their
    commission as an imported service under NTA 2025 s.150(2)?
 5. VAT: (a) confirm our affiliates — resident individuals far below the small-business
-   line — charge no VAT and that we have no reverse-charge obligation for them; (b) when
-   commission credit part-pays an order we believe VAT is due on the **full** price,
-   because the credit settles a payable rather than reducing the price (NTA 2025 s.148),
-   while a loyalty-points discount does reduce the taxable amount. Confirm both.
+   line — charge no VAT and that we have no reverse-charge obligation for them; ~~(b) VAT when commission credit part-pays an order~~ — **MOOT**, same reason.
+   (Keep the reasoning for whenever loyalty points are built: points are a real discount
+   and reduce the taxable amount; commission would not have.)
 6. Confirm the accounting: commission expensed at accrual (when the referred order is
    confirmed) as a distinct marketing service under IFRS 15.70–72 rather than as a
    reduction of revenue; deductible for CIT on accrual; and tell us which year-end
