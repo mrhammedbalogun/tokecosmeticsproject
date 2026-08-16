@@ -64,7 +64,13 @@ describe("category tree helpers", () => {
 });
 
 describe("fetchPlpPage (shared PLP 404-swallow policy)", () => {
-  beforeEach(() => mockApiFetch.mockReset());
+  // Block body: `mockReset()` returns the mock, and vitest treats a function returned
+  // from `beforeEach` as a teardown callback — so the concise form calls the mock again
+  // after every test. Harmless while every implementation here resolves; it fails the
+  // whole file the day one of them rejects.
+  beforeEach(() => {
+    mockApiFetch.mockReset();
+  });
 
   it("passes a successful page through untouched", async () => {
     const page: Paginated<ProductCard> = { count: 1, next: null, previous: null, results: [] };

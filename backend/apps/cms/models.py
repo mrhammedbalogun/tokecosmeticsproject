@@ -138,6 +138,14 @@ class Banner(TimeStampedModel):
         ("babies", "Babies section banner"),
         ("tiktok", "TikTok section banner"),
         ("trio", "Collections trio tile"),
+        # /affiliates (2026-08-16). The referral page is the first NON-homepage surface to
+        # take banner artwork, which is safe because `PublicHomepageView` already serves
+        # every live banner regardless of placement — the endpoint is named for its first
+        # consumer, not its contents. Both slots are OPTIONAL by design: with no banner
+        # the page drops the band entirely rather than rendering an empty coloured
+        # rectangle, so it reads as finished either way (see the storefront page's note).
+        ("affiliate_hero", "Affiliates page — hero image"),
+        ("affiliate_tier", "Affiliates page — ₦200k Club image"),
     ]
 
     title = models.CharField(max_length=200)

@@ -26,8 +26,10 @@ from apps.referrals.models import (
     ReferralAdjustment,
     ReferralProfile,
 )
+from apps.payments.money import format_money
 from apps.referrals.serializers import (
     AdjustmentSerializer,
+    club_name,
     CommissionSerializer,
     PayoutCreateSerializer,
     PayoutMethodSerializer,
@@ -156,6 +158,80 @@ class ReferralCodeLookupView(APIView):
             # First name only, and never the email. "A friend" for an account with no
             # name on it, so the confirmation line always reads as a sentence.
             "referrer_name": profile.user.first_name.strip() or "a friend",
+        })
+
+
+class ReferralTermsView(APIView):
+    """GET /api/v1/referrals/terms/ — the programme's published numbers, for anybody.
+
+    ── WHY A PUBLIC ENDPOINT AND NOT A CONSTANT IN THE STOREFRONT ──────────────────
+
+    `/affiliates` is a MARKETING page: it tells the world "10% of every sale", "30-day
+    window", "60-day hold", "₦20,000 minimum". Those four sentences are advertising, and
+    the shop is bound by them. `ReferralOverviewView` already argues this out for the
+    signed-in dashboard — a hardcoded "10%" in JSX is a promise written somewhere that
+    cannot change when the promise does. The public page needed the identical guarantee
+    and had no way to get it, because every other endpoint in this app is
+    `IsAuthenticated`.
+
+    So this serves the SAME `settings.*` values the commission is actually calculated
+    from. Change `REFERRAL_COMMISSION_PERCENT` and the advertisement moves with the
+    payment, in one deploy, with no second place to remember.
+
+    ── WHAT IT DOES NOT DISCLOSE ──────────────────────────────────────────────────
+
+    Nothing about any person. No codes, no balances, no counts, no names. Every value
+    below is already published at tokecosmetics.com/affiliates-2/ and printed on the
+    terms, so this endpoint's entire content is a page of the contract. That is why it
+    is `AllowAny` and unthrottled where `lookup/` is neither: there is nothing here to
+    enumerate.
+
+    ── A CURRENCY WITH NO `Currency` ROW IS SKIPPED, NOT GUESSED ──────────────────
+
+    `format_money` needs the row (it reads `decimal_places` and `symbol`), and inventing
+    a symbol for a missing one would publish a threshold in the wrong denomination. A
+    currency the shop cannot format is a currency it should not be advertising a minimum
+    in — and `services` already refuses to pay one out.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        currencies = {c.code: c for c in Currency.objects.all()}
+
+        thresholds = [
+            {
+                "currency": code,
+                "amount": str(amount),
+                "amount_display": format_money(amount, currencies[code]),
+            }
+            # SORTED, and every configured currency is listed. The storefront leads with
+            # the visitor's own market but names the others too — a naira threshold shown
+            # alone to a UK shopper reads as "£20,000" to anybody skimming.
+            for code, amount in sorted(settings.REFERRAL_PAYOUT_THRESHOLDS.items())
+            if code in currencies
+        ]
+
+        elite = [
+            {
+                "currency": code,
+                "threshold": str(threshold),
+                "threshold_display": format_money(threshold, currencies[code]),
+                "club_name": club_name(threshold, currencies[code]),
+                "window_days": settings.REFERRAL_ELITE_WINDOW_DAYS,
+            }
+            # NGN-only today, shaped as a list so it stays honest if that ever changes.
+            for code, threshold in sorted(settings.REFERRAL_ELITE_THRESHOLDS.items())
+            if code in currencies
+        ]
+
+        return Response({
+            "commission_percent": str(settings.REFERRAL_COMMISSION_PERCENT),
+            "cookie_days": settings.REFERRAL_COOKIE_DAYS,
+            "hold_days": settings.REFERRAL_HOLD_DAYS,
+            "terms_version": settings.REFERRAL_TERMS_VERSION,
+            "payout_thresholds": thresholds,
+            "elite_tiers": elite,
         })
 
 

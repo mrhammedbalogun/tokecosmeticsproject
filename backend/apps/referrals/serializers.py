@@ -66,6 +66,30 @@ class WalletSerializer(serializers.Serializer):
         return w.open_request.pk if w.open_request else None
 
 
+def club_name(threshold, currency) -> str:
+    """The tier's NAME, which is not the same thing as its threshold formatted.
+
+    The shop published this as "The ₦200k Club" and that is what customers have already
+    seen. `format_money` correctly renders the threshold as "₦200,000.00" — correct for
+    money, wrong for a name, and "The ₦200,000.00 Club" reads like a spreadsheet cell
+    wandered into the marketing.
+
+    Built here rather than hardcoded in the storefront so the name still follows
+    `REFERRAL_ELITE_THRESHOLDS` if the number ever moves. Falls back to the full
+    formatted amount for any threshold that is not a clean multiple of a thousand,
+    because "₦199.5k" is worse than the honest number.
+
+    MODULE-LEVEL, not a method: `ReferralTermsView` serves this same name to the public
+    /affiliates page. A customer who reads "the ₦200k Club" in the marketing and "the
+    ₦200,000.00 Club" on their dashboard is looking at a mistake, and two copies of this
+    rule is how that happens.
+    """
+    whole = int(threshold)
+    if threshold == whole and whole >= 1000 and whole % 1000 == 0:
+        return f"The {currency.symbol}{whole // 1000:,}k Club"
+    return f"The {format_money(threshold, currency)} Club"
+
+
 class TierSerializer(serializers.Serializer):
     """₦200k Club progress. `qualifying_sales` is net SALES driven, not commission — see
     `services.tier_progress` for why those are different numbers."""
@@ -87,22 +111,7 @@ class TierSerializer(serializers.Serializer):
         return format_money(t.threshold, t.currency)
 
     def get_club_name(self, t) -> str:
-        """The tier's NAME, which is not the same thing as its threshold formatted.
-
-        The shop published this as "The ₦200k Club" and that is what customers have
-        already seen. `format_money` correctly renders the threshold as "₦200,000.00" —
-        correct for money, wrong for a name, and "The ₦200,000.00 Club" reads like a
-        spreadsheet cell wandered into the marketing.
-
-        Built here rather than hardcoded in the storefront so the name still follows
-        `REFERRAL_ELITE_THRESHOLDS` if the number ever moves. Falls back to the full
-        formatted amount for any threshold that is not a clean multiple of a thousand,
-        because "₦199.5k" is worse than the honest number.
-        """
-        whole = int(t.threshold)
-        if t.threshold == whole and whole >= 1000 and whole % 1000 == 0:
-            return f"The {t.currency.symbol}{whole // 1000:,}k Club"
-        return f"The {format_money(t.threshold, t.currency)} Club"
+        return club_name(t.threshold, t.currency)
 
 
 class CommissionSerializer(serializers.Serializer):

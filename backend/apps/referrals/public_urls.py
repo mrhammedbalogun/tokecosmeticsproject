@@ -1,4 +1,4 @@
-"""The one referral endpoint that is NOT about the caller's own account.
+"""The referral endpoints that are NOT about the caller's own account.
 
 Its own module rather than a second list in `urls.py`, because `include()` only ever
 reads `urlpatterns` — a `public_urlpatterns` name in that file would silently never be
@@ -7,8 +7,9 @@ prefix instead.
 """
 from django.urls import path
 
-from apps.referrals.views import ReferralCodeLookupView
+from apps.referrals.views import ReferralCodeLookupView, ReferralTermsView
 
 urlpatterns = [
     path("lookup/", ReferralCodeLookupView.as_view(), name="referral-lookup"),
+    path("terms/", ReferralTermsView.as_view(), name="referral-terms"),
 ]
