@@ -21,11 +21,16 @@ const COLUMNS: { heading: string; links: readonly (readonly [string, string])[] 
   {
     heading: "Company",
     links: [
-      ["About", "/page/about"],
-      ["Blog", "/page/blog"],
+      // REPOINTED 2026-08-16 at the real code routes the `More` menu ships. These four
+      // used to point at `/page/{slug}`, and PRODUCTION HAS ZERO CMS PAGES — measured,
+      // `GET /cms/pages/` returns `[]` — so all four were live 404s. The remaining
+      // `/page/*` links below are still 404s for the same reason; they need CMS rows
+      // written, which is a separate job.
+      ["About", "/about-us"],
+      ["Blog", "/blog"],
       ["Community", "/page/community"],
       ["Wholesale", "/page/wholesale"],
-      ["Affiliates", "/page/affiliates"],
+      ["Affiliates", "/affiliates"],
     ],
   },
   {
@@ -33,7 +38,7 @@ const COLUMNS: { heading: string; links: readonly (readonly [string, string])[] 
     links: [
       ["Shipping & delivery", "/page/shipping"],
       ["Returns & refunds", "/page/returns"],
-      ["Contact us", "/page/contact"],
+      ["Contact us", "/contact-us"],
       ["FAQs", "/page/faqs"],
     ],
   },

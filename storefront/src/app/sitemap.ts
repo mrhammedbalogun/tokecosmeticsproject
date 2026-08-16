@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { flattenCategories, getCategoryTree, getProducts } from "@/lib/catalog";
 import { getPages } from "@/lib/cms";
+import { MORE_LINKS } from "@/lib/site-pages";
 import { absoluteUrl } from "@/lib/seo";
 import { DEFAULT_COUNTRY } from "@/lib/country";
 
@@ -8,12 +9,25 @@ import { DEFAULT_COUNTRY } from "@/lib/country";
  * catalog ever approaches ~10k). Uses the NG default market — URLs are country-
  * agnostic (one URL set; currency is an in-session choice, see architecture.md).
  * CMS pages (/page/*) joined in Plan-19a; only PUBLISHED ones are listed, because the
- * API only serves those. /search and /cart and /checkout are deliberately absent. */
+ * API only serves those. The header's `More` pages (/about-us, /careers, …) are code
+ * routes and join from `lib/site-pages.ts` — the same list the nav renders from.
+ * /search and /cart and /checkout are deliberately absent. */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: absoluteUrl("/"), changeFrequency: "daily", priority: 1 },
     { url: absoluteUrl("/products"), changeFrequency: "daily", priority: 0.9 },
   ];
+
+  // The `More` menu's pages (2026-08-16). Static code routes, so unlike the CMS block
+  // below there is no fetch to fail and no published/draft distinction — if the link is
+  // in the header it is in the sitemap, by construction.
+  for (const link of MORE_LINKS) {
+    entries.push({
+      url: absoluteUrl(link.href),
+      changeFrequency: "monthly",
+      priority: link.priority,
+    });
+  }
 
   // Policy and editorial pages. A failure costs the sitemap those URLs, never the whole
   // file — the same posture the catalogue fetches below take.

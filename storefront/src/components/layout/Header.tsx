@@ -11,6 +11,7 @@ import { AccountMenu } from "@/components/layout/AccountMenu";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { SearchBar } from "@/components/layout/SearchBar";
 import { CategoryDropdown } from "@/components/layout/CategoryDropdown";
+import { MoreMenu } from "@/components/layout/MoreMenu";
 
 interface Category { name: string; slug: string; children: Category[] }
 
@@ -35,7 +36,9 @@ export async function Header() {
           </Link>
         </div>
         {/* The approved artifact's menu: Home · All Products · Shop by Category ·
-            Skin Quiz · Blog. Categories live in the dropdown, not inline. */}
+            Skin Quiz · More. Categories live in the dropdown, not inline.
+            Blog moved INSIDE `More` on 2026-08-16 — nine supporting pages were due and a
+            flat nav of fourteen items is not a nav. See `lib/site-pages.ts`. */}
         <nav className="hidden items-center gap-6 md:flex">
           <Link href="/" className="text-sm hover:text-accent">
             Home
@@ -47,9 +50,7 @@ export async function Header() {
           <Link href="/skin-quiz" className="text-sm hover:text-accent">
             Skin Quiz
           </Link>
-          <Link href="/blog" className="text-sm hover:text-accent">
-            Blog
-          </Link>
+          <MoreMenu />
         </nav>
         <SearchBar />
         <div className="flex items-center gap-5">

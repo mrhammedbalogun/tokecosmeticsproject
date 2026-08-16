@@ -1,23 +1,25 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { PagePlaceholder } from "@/components/content/PagePlaceholder";
+import { pageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Skin Quiz — Toke Cosmetics" };
+/** `/skin-quiz` — a top-level header nav item.
+ *
+ * Placeholder so the approved nav never 404s; the real Skin Quiz is on the roadmap.
+ * Converted to the shared `PagePlaceholder` (2026-08-16); see that component for why. */
+export const metadata: Metadata = pageMetadata({
+  // BARE title — the root layout appends " | Toke Cosmetics". This page used to declare
+  // "Skin Quiz — Toke Cosmetics" and therefore rendered the brand twice.
+  title: "Skin Quiz",
+  description:
+    "Answer a few questions and we will match you to a Toke Cosmetics routine for your skin.",
+  path: "/skin-quiz",
+});
 
-/** Placeholder so the approved nav never 404s; the real Skin Quiz is on the roadmap. */
 export default function Page() {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-24 text-center">
-      <h1 className="font-display text-4xl">Skin Quiz</h1>
-      <p className="mt-4 text-muted">
-        We are putting the finishing touches on this. In the meantime, the whole
-        collection is a click away.
-      </p>
-      <Link
-        href="/products"
-        className="mt-8 inline-block rounded-full bg-accent px-8 py-3.5 font-medium text-surface transition hover:bg-accent-strong"
-      >
-        Shop all products
-      </Link>
-    </div>
+    <PagePlaceholder
+      title="Skin Quiz"
+      intro="Answer a few questions and we will match you to a routine built for your skin. We are putting the finishing touches on this — in the meantime, the whole collection is a click away."
+    />
   );
 }

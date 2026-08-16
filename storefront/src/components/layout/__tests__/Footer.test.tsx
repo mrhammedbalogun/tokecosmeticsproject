@@ -3,16 +3,34 @@ import { render, screen } from "@testing-library/react";
 import { Footer } from "@/components/layout/Footer";
 
 describe("Footer (large upgrade)", () => {
-  it("preserves every Plan-12 policy link to /page/[slug]", () => {
+  it("preserves the Plan-12 policy links that are still CMS pages", () => {
     render(<Footer />);
+    // These four remain `/page/[slug]` because they are policy text a Content editor
+    // owns. THEY 404 IN PRODUCTION TODAY — `GET /cms/pages/` returns `[]`, so the rows
+    // were never written. The links are correct; the content is missing.
     const expected: [RegExp, string][] = [
       [/privacy policy/i, "/page/privacy"],
       [/terms & conditions/i, "/page/terms"],
       [/shipping & delivery/i, "/page/shipping"],
       [/returns & refunds/i, "/page/returns"],
-      [/contact us/i, "/page/contact"],
     ];
     for (const [name, href] of expected) {
+      expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
+    }
+  });
+
+  it("points the links that now have real routes at those routes (2026-08-16)", () => {
+    render(<Footer />);
+    // Repointed when the header's `More` menu shipped these as code routes. Keeping the
+    // footer on `/page/about` would have left two competing URLs for one page — one of
+    // them a 404 — and split whatever ranking either earned.
+    const moved: [RegExp, string][] = [
+      [/^about$/i, "/about-us"],
+      [/^blog$/i, "/blog"],
+      [/^affiliates$/i, "/affiliates"],
+      [/contact us/i, "/contact-us"],
+    ];
+    for (const [name, href] of moved) {
       expect(screen.getByRole("link", { name })).toHaveAttribute("href", href);
     }
   });
