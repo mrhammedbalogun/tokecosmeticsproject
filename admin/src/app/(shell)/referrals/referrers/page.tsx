@@ -10,6 +10,7 @@ import { getAdminMeOrNull } from "@/lib/admin-me";
 import { ApiError } from "@/lib/api";
 import { pageCount } from "@/lib/pagination";
 import {
+  REFERRAL_PAGE_SIZE,
   parseReferrerFilters,
   referrersQueryString,
   type ReferrerPage,
@@ -144,7 +145,7 @@ export default async function ReferrersPage({
           <Pagination
             basePath={PATH}
             page={filters.page}
-            total={pageCount(page.count)}
+            total={pageCount(page.count, REFERRAL_PAGE_SIZE)}
             buildQuery={(target) =>
               referrersQueryString({ ...filters, page: target }).replace(/^\?/, "")
             }

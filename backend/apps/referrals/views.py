@@ -16,7 +16,7 @@ from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.throttling import ReferralLookupThrottle
+from apps.accounts.throttling import PayoutMethodWriteThrottle, ReferralLookupThrottle
 from apps.core.models import Currency
 from apps.referrals import services
 from apps.referrals.models import (
@@ -202,6 +202,16 @@ class PayoutMethodView(APIView):
     """
 
     permission_classes = [permissions.IsAuthenticated]
+
+    def get_throttles(self):
+        # ADDED to the defaults for writes, not substituted for them: assigning
+        # `throttle_classes` here would strip the global user throttle from this view
+        # and cap reads at the write rate. See PayoutMethodWriteThrottle for why the
+        # write needs its own, much lower number (every change is an outbound email).
+        throttles = super().get_throttles()
+        if self.request.method == "PUT":
+            throttles.append(PayoutMethodWriteThrottle())
+        return throttles
 
     def get(self, request):
         methods = PayoutMethod.objects.filter(user=request.user).select_related("currency")

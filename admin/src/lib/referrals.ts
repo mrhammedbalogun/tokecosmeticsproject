@@ -12,6 +12,12 @@
 export const PAYOUT_STATUSES = ["requested", "approved", "paid", "rejected"] as const;
 export type PayoutStatus = (typeof PAYOUT_STATUSES)[number];
 
+/** Mirrors `_Page.page_size` in `backend/apps/referrals/views.py` — the referral
+ * endpoints page at 20, NOT the global DRF PAGE_SIZE of 24. If the two drift, the pager
+ * under the payout queue stops lining up with the pages the API actually serves, and
+ * the rows past the phantom last page are real payout requests nobody can reach. */
+export const REFERRAL_PAGE_SIZE = 20;
+
 export interface PayoutRow {
   id: number;
   created_at: string;

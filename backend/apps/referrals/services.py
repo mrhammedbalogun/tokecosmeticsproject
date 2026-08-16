@@ -859,11 +859,17 @@ def save_payout_method(user, *, currency: Currency, bank_name: str, account_name
                        account_number: str, bank_code: str = "", extra: dict | None = None):
     """Create or replace this referrer's payout account for one currency.
 
-    Emails the account holder on every CHANGE (not on the first save — there is nothing
-    to warn about yet, and a "your details changed" mail for details that did not exist
-    trains people to ignore the one that matters). This is the control that turns an
-    account-takeover payout redirect from silent into noisy; see `PayoutMethod`'s
+    Emails the account holder on the FIRST SAVE and on every CHANGE — two different
+    templates, because they are two different sentences. This is the control that turns
+    an account-takeover payout redirect from silent into noisy; see `PayoutMethod`'s
     docstring for why it, rather than encryption, is where the effort went.
+
+    The add-email was originally omitted ("there is nothing to warn about yet") and the
+    2026-08-15 review reversed that: the first save is exactly the takeover window. A
+    victim with accrued earnings and NO account on file heard nothing when a hijacker
+    added one — the first email they ever got was "you've been paid". What stays true
+    from the original reasoning is that a no-op resave sends nothing: an alert that
+    fires when nothing happened trains people to ignore the one that matters.
     """
     existing = PayoutMethod.objects.filter(user=user, currency=currency).first()
     changed = existing is not None and (
@@ -879,10 +885,14 @@ def save_payout_method(user, *, currency: Currency, bank_name: str, account_name
             "extra": extra or {},
         },
     )
-    if changed:
-        from apps.referrals.emails import enqueue_payout_method_changed
+    if existing is None or changed:
+        from apps.referrals.emails import (
+            enqueue_payout_method_added,
+            enqueue_payout_method_changed,
+        )
 
-        transaction.on_commit(lambda: enqueue_payout_method_changed(method.pk))
+        notify = enqueue_payout_method_added if existing is None else enqueue_payout_method_changed
+        transaction.on_commit(lambda: notify(method.pk))
     return method
 
 

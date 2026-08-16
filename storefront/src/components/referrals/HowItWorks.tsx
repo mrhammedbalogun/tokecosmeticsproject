@@ -15,7 +15,7 @@
 const STEPS = [
   {
     title: "Share your link",
-    body: "Post it, message it, put it in your bio. Anyone who opens it is yours for the tracking window — even if they come back days later.",
+    body: "Post it, message it, put it in your bio. Anyone who opens it is tracked to you — even if they come back days later. If they use someone else's link afterwards, the most recent link gets the credit.",
   },
   {
     title: "They shop as normal",
@@ -63,7 +63,7 @@ export function HowItWorks({
 
       <dl className="mt-8 grid gap-4 border-t border-line pt-6 sm:grid-cols-3">
         <Fact term={`${commissionPercent}%`} detail="of every qualifying sale" />
-        <Fact term={`${cookieDays} days`} detail="tracking window from their first click" />
+        <Fact term={`${cookieDays} days`} detail="tracking window from their latest click" />
         <Fact term={`${holdDays} days`} detail="held after dispatch, in case of returns" />
       </dl>
 

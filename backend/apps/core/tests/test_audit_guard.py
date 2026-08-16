@@ -48,7 +48,11 @@ from apps.core.audit import AdminAuditMixin
 # scope table but has no endpoint yet (verified 2026-07-29), which is exactly why this is
 # written as a PREFIX RULE rather than a list of view names — the first customers
 # endpoint is read-audited by the guard before anybody remembers to ask for it.
-PII_SCOPE_PREFIXES = ("orders.", "customers.")
+# `referrals.*` was added in the 2026-08-15 review: it is the scope family holding the
+# only unmasked bank account read in the product, and its three existing read views were
+# each individually pinned below while the rule that would catch the FOURTH was not
+# looking at them at all.
+PII_SCOPE_PREFIXES = ("orders.", "customers.", "referrals.")
 
 # Views that audit their READS, enumerated. The rule above discovers most of them; this
 # list is the second, independent statement, and it is what catches the two directions a

@@ -21,8 +21,9 @@ import type { PayoutRow } from "@/lib/referrals";
  * ── WHAT THIS COMPONENT DOES NOT DECIDE ─────────────────────────────────────────────
  *
  * Whether the viewer may pay. `canPay` is passed in from the server's scope list purely
- * so the button is not dangled in front of a Manager who will only get a 403 — the
- * enforcement is `referrals.pay` on the endpoint, and re-deciding it here would put a
+ * so the button is not dangled in front of someone who will only get a 403 (Support
+ * holds `referrals.view` alone; Owner and Manager hold `referrals.pay`) — the
+ * enforcement is the scope on the endpoint, and re-deciding it here would put a
  * second, weaker copy of the rule in a bundle anyone can read.
  */
 export function PayoutDecision({
@@ -67,6 +68,17 @@ export function PayoutDecision({
     );
   }
 
+  // The ONLY way a panel opens or closes. Clearing on every move — cancel included —
+  // is what stops a half-typed rejection surviving into the next panel's submit; these
+  // fields end up on audit rows and in customer emails, so stale text is not cosmetic.
+  const openPanel = (next: "none" | "reject" | "paid") => {
+    setPanel(next);
+    setCustomerMessage("");
+    setReference("");
+    setAdminNote("");
+    setError(null);
+  };
+
   const run = (fn: () => Promise<PayoutActionState>) => {
     setError(null);
     startTransition(async () => {
@@ -75,10 +87,7 @@ export function PayoutDecision({
         setError(result.message);
         return;
       }
-      setPanel("none");
-      setCustomerMessage("");
-      setReference("");
-      setAdminNote("");
+      openPanel("none");
     });
   };
 
@@ -105,7 +114,7 @@ export function PayoutDecision({
             <button
               type="button"
               disabled={pending}
-              onClick={() => setPanel("paid")}
+              onClick={() => openPanel("paid")}
               className={`${BTN} border-accent bg-accent text-surface hover:bg-accent-strong`}
             >
               Mark paid
@@ -115,7 +124,7 @@ export function PayoutDecision({
             <button
               type="button"
               disabled={pending}
-              onClick={() => setPanel("reject")}
+              onClick={() => openPanel("reject")}
               className={`${BTN} border-line text-muted hover:border-warn hover:text-warn`}
             >
               Reject
@@ -139,6 +148,15 @@ export function PayoutDecision({
             Confirm the transfer has actually left the account. The customer is emailed
             this reference.
           </p>
+          <label className="block text-xs text-muted">
+            Internal note <span className="text-muted/70">(optional — staff only, never shown to the customer)</span>
+            <input
+              value={adminNote}
+              onChange={(e) => setAdminNote(e.target.value)}
+              placeholder="e.g. matched against the June statement"
+              className={`mt-1 ${FIELD}`}
+            />
+          </label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -153,7 +171,7 @@ export function PayoutDecision({
             <button
               type="button"
               disabled={pending}
-              onClick={() => setPanel("none")}
+              onClick={() => openPanel("none")}
               className={`${BTN} border-line text-muted`}
             >
               Cancel
@@ -178,6 +196,15 @@ export function PayoutDecision({
             Rejecting returns the commission to their available balance — they can request
             again once this is sorted out.
           </p>
+          <label className="block text-xs text-muted">
+            Internal note <span className="text-muted/70">(optional — staff only, never shown to the customer)</span>
+            <input
+              value={adminNote}
+              onChange={(e) => setAdminNote(e.target.value)}
+              placeholder="e.g. matched against the June statement"
+              className={`mt-1 ${FIELD}`}
+            />
+          </label>
           <div className="flex gap-2">
             <button
               type="button"
@@ -192,7 +219,7 @@ export function PayoutDecision({
             <button
               type="button"
               disabled={pending}
-              onClick={() => setPanel("none")}
+              onClick={() => openPanel("none")}
               className={`${BTN} border-line text-muted`}
             >
               Cancel

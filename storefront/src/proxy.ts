@@ -57,7 +57,7 @@ function marketForGeo(geo: string): string {
 // it is not authorization: it only avoids rendering eight dynamic pages for an obviously
 // logged-out visitor and attaches a correct ?next= on a direct URL hit. The real gate is
 // each account page's own data fetch (see lib/session.ts requireAuth).
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const existing = req.cookies.get(COUNTRY_COOKIE)?.value;
 
   // Trust ONLY the platform-injected geo header (Vercel sets x-vercel-ip-country in prod).
@@ -94,13 +94,17 @@ export function proxy(req: NextRequest) {
   // address bar is harmless; the pages ignore it.
   // Two ways in, one mechanism. `?ref=CODE` on any URL is what the share buttons emit;
   // `/r/CODE` is the short form a referrer can say out loud or print. The short link
-  // resolves here rather than as a page so it costs no render and cannot 404 — it sets
-  // the same cookie and sends the visitor to the homepage.
-  const shortCode = normalizeReferralCode(shortLinkCode(req.nextUrl.pathname));
-  const referral = shortCode
+  // resolves here rather than as a page so it costs no render and cannot 404 — ANY
+  // two-segment /r/* path redirects to the homepage, valid code or not, because the
+  // excluded characters (0/1/I/O) are exactly the ones people mistype from a printed
+  // card, and a mistyped card must land on the shop rather than an error page. The
+  // cookie is only set when the code survives normalisation.
+  const rawShortCode = shortLinkCode(req.nextUrl.pathname);
+  const isShortLink = rawShortCode !== "";
+  const referral = normalizeReferralCode(rawShortCode)
     || normalizeReferralCode(req.nextUrl.searchParams.get(REFERRAL_PARAM));
 
-  const res = shortCode
+  const res = isShortLink
     ? NextResponse.redirect(new URL("/", req.nextUrl))
     : isGatedAccountPath(req.nextUrl.pathname) && !req.cookies.get(REFRESH_COOKIE)
       ? NextResponse.redirect(loginUrl(req))
@@ -111,13 +115,48 @@ export function proxy(req: NextRequest) {
   if (seed) {
     res.cookies.set(COUNTRY_COOKIE, seed, COUNTRY_COOKIE_OPTIONS);
   }
-  // Overwrite unconditionally when a valid code is present — that IS the last-click rule
-  // (see lib/referral.ts), and it also refreshes the 30 days from the newest click.
+  // LAST-CLICK WINS, with one referee. A valid competing code overwrites the stored one
+  // (that IS the rule — see lib/referral.ts) and any set refreshes the 30 days. But
+  // "well-formed" is not "real": before the existence check, `?ref=BOGUSQ9X2` — pattern-
+  // valid, never minted, craftable by anyone — clobbered a genuine referrer's stored
+  // attribution with garbage. The typed-code path (/api/referral) always refused that;
+  // this brings the link path level. The lookup runs ONLY in the contested case (a
+  // stored code, and a different one arriving), so the common paths — first click, and
+  // the same link re-clicked — stay zero-round-trip on a hook that runs every
+  // navigation. On lookup failure the STORED code survives: an unverifiable new claim
+  // must not destroy a verified old one.
   if (referral) {
-    res.cookies.set(REFERRAL_COOKIE, referral, REFERRAL_COOKIE_OPTIONS);
+    const stored = req.cookies.get(REFERRAL_COOKIE)?.value ?? "";
+    const contested = stored !== "" && stored !== referral;
+    if (!contested || (await referralCodeExists(referral))) {
+      res.cookies.set(REFERRAL_COOKIE, referral, REFERRAL_COOKIE_OPTIONS);
+    }
   }
 
   return res;
+}
+
+/**
+ * "Was this code ever minted?" — asked of the backend's public lookup, the same one
+ * /api/referral validates typed codes against. Inlined fetch rather than lib/api's
+ * client because the proxy must stay dependency-free (see the note above), and
+ * anonymous on purpose: the only question here is existence, and the lookup already
+ * refuses to distinguish blocked from nonexistent. False on ANY failure — the caller
+ * treats false as "keep the stored attribution", which is the conservative direction.
+ */
+async function referralCodeExists(code: string): Promise<boolean> {
+  const base = process.env.API_URL ?? "http://localhost:8000";
+  try {
+    const r = await fetch(
+      `${base}/api/v1/referrals/lookup/?code=${encodeURIComponent(code)}`,
+      { cache: "no-store", signal: AbortSignal.timeout(1500) },
+    );
+    if (!r.ok) return false;
+    const body = (await r.json()) as { valid?: boolean };
+    return body.valid === true;
+  } catch {
+    return false;
+  }
 }
 
 /**

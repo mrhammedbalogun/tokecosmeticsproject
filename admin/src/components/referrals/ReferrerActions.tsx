@@ -66,6 +66,16 @@ export function ReferrerActions({
     );
   }
 
+  // The ONLY way a panel opens or closes. One `reason` state serves both panels, so
+  // clearing on every move — cancel included — is what stops a block justification
+  // leaking onto an immutable adjustment row (found in the 2026-08-15 review).
+  const openPanel = (next: "none" | "block" | "adjust") => {
+    setPanel(next);
+    setReason("");
+    setAmount("");
+    setError(null);
+  };
+
   const run = (fn: () => Promise<ReferrerActionState>) => {
     setError(null);
     startTransition(async () => {
@@ -74,9 +84,7 @@ export function ReferrerActions({
         setError(result.message);
         return;
       }
-      setPanel("none");
-      setReason("");
-      setAmount("");
+      openPanel("none");
     });
   };
 
@@ -89,8 +97,8 @@ export function ReferrerActions({
   const preview =
     amount.trim() && Number.isFinite(parsed) && parsed !== 0
       ? parsed < 0
-        ? `Takes ${currency} ${Math.abs(parsed).toLocaleString("en-NG", { minimumFractionDigits: 2 })} OFF this referrer's balance.`
-        : `Adds ${currency} ${parsed.toLocaleString("en-NG", { minimumFractionDigits: 2 })} TO this referrer's balance.`
+        ? `Takes ${currency} ${Math.abs(parsed).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} OFF this referrer's balance.`
+        : `Adds ${currency} ${parsed.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} TO this referrer's balance.`
       : "Negative takes money away, positive gives it.";
 
   return (
@@ -110,7 +118,7 @@ export function ReferrerActions({
             <button
               type="button"
               disabled={pending}
-              onClick={() => setPanel("block")}
+              onClick={() => openPanel("block")}
               className={`${BTN} border-line text-muted hover:border-warn hover:text-warn`}
             >
               Block
@@ -119,7 +127,7 @@ export function ReferrerActions({
           <button
             type="button"
             disabled={pending}
-            onClick={() => setPanel("adjust")}
+            onClick={() => openPanel("adjust")}
             className={`${BTN} border-line hover:border-accent hover:text-accent`}
           >
             Adjust balance
@@ -153,7 +161,7 @@ export function ReferrerActions({
             >
               {pending ? "Saving…" : "Confirm block"}
             </button>
-            <button type="button" disabled={pending} onClick={() => setPanel("none")}
+            <button type="button" disabled={pending} onClick={() => openPanel("none")}
                     className={`${BTN} border-line text-muted`}>
               Cancel
             </button>
@@ -225,7 +233,7 @@ export function ReferrerActions({
             >
               {pending ? "Saving…" : "Write adjustment"}
             </button>
-            <button type="button" disabled={pending} onClick={() => setPanel("none")}
+            <button type="button" disabled={pending} onClick={() => openPanel("none")}
                     className={`${BTN} border-line text-muted`}>
               Cancel
             </button>

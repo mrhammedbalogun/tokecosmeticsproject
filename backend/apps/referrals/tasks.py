@@ -128,7 +128,7 @@ def _release_matured() -> int:
     """pending -> available for everything past its holding date.
 
     The order-status filter is re-applied here and not merely trusted from
-    `_reverse_dead_orders` above: the two passes run in the same second, but this is the
+    `_recompute_affected` above: the two passes run in the same second, but this is the
     query that actually releases money, and it costs nothing for it to state its own
     precondition rather than depend on a sibling having run first.
     """

@@ -251,6 +251,11 @@ REST_FRAMEWORK = {
         # `_IPKeyedThrottle`), so generous on purpose: this must never stop a real
         # customer typing a code, and a guessed code costs nobody anything.
         "referral_lookup": "60/min",
+        # Writes to a referrer's payout bank account. Every change sends the
+        # account-takeover security email, so this is an outbound-mail cap as much as
+        # an abuse cap; keyed per-user (unforgeable), applied to PUT only — see
+        # PayoutMethodWriteThrottle.
+        "payout_method_write": "6/hour",
         # Auth. Email-keyed unless the name says _ip.
         #
         # login_ip is the VOLUME cap and must stay listed first on LoginView: without it

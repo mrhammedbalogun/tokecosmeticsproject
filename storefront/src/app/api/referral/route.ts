@@ -23,8 +23,14 @@ import {
  * same reason the proxy does: a Route Handler may set cookies, and doing it explicitly
  * here keeps the flags (httpOnly, lax, 30 days) in one shape with `proxy.ts`.
  *
- * GET, not POST, would have been wrong: this mutates state (it re-points 30 days of
- * attribution), so it is a POST and gets Next's Origin/Host CSRF protection.
+ * GET would have been wrong: this mutates state (it re-points 30 days of attribution),
+ * so it is a POST. NOTE the honest limit of that: Next's Origin/Host CSRF check covers
+ * Server ACTIONS only — a Route Handler like this one gets no such protection, and
+ * `req.json()` parses a cross-site text/plain form POST happily. Acceptable HERE
+ * because any site can already set a visitor's attribution with a top-level `?ref=`
+ * link (that is the product), so this route grants a cross-site caller nothing new.
+ * If it ever does more than apply a validated code — clearing the cookie, accepting
+ * any other mutation — it needs its own origin check first.
  */
 function json(data: unknown, status = 200, cookie?: string) {
   const headers = new Headers({ "content-type": "application/json" });
@@ -56,10 +62,16 @@ export async function POST(req: Request) {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
 
   try {
-    const out = await apiFetch<Lookup>(
+    const raw = await apiFetch<Lookup>(
       `/referrals/lookup/?code=${encodeURIComponent(code)}`,
       { token, cache: "no-store" },
     );
+    // PROJECTED, never passed through: the "first-name-level only" guarantee must hold
+    // even if the backend serializer grows a field for some other consumer — this
+    // response goes to anonymous browsers.
+    const out: Lookup = { valid: raw.valid === true };
+    if (raw.reason !== undefined) out.reason = raw.reason;
+    if (raw.referrer_name !== undefined) out.referrer_name = raw.referrer_name;
     if (!out.valid) {
       // No cookie written — a wrong code must not silently replace attribution the
       // visitor already has from a link they really did click.

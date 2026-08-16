@@ -49,6 +49,9 @@ export async function setReferrerBlockedAction(input: {
       body: { blocked: input.blocked, reason: input.reason.trim() },
     });
   } catch (e) {
+    // Same rule as the payout actions: a refusal re-reads the page too, so a card that
+    // changed underneath the click is replaced rather than left stale.
+    revalidatePath(PAGE);
     return referrerError(e, "That referrer could not be updated.");
   }
   revalidatePath(PAGE);
@@ -82,6 +85,7 @@ export async function addAdjustmentAction(input: {
       },
     });
   } catch (e) {
+    revalidatePath(PAGE);
     return referrerError(e, "That adjustment could not be saved.");
   }
   revalidatePath(PAGE);

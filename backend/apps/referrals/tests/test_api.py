@@ -232,3 +232,45 @@ def test_a_referrer_with_no_first_name_still_reads_as_a_sentence(django_user_mod
     body = APIClient().get(LOOKUP, {"code": profile.code}).json()
 
     assert body["referrer_name"] == "a friend"
+
+
+@pytest.mark.django_db
+def test_payout_methods_and_payouts_are_isolated_per_user(django_user_model):
+    """The IDOR pin the 2026-08-15 review found missing: commissions had one, the two
+    surfaces that carry BANK data did not. The querysets scope on request.user in the
+    query; this holds them to it."""
+    amina = customer(django_user_model, "amina@x.com")
+    bola = customer(django_user_model, "bola@x.com")
+    save_payout_method(
+        amina, currency=ngn(), bank_name="GTBank", account_name="Amina A",
+        account_number="0123456789",
+    )
+
+    assert _client(amina).get(METHODS).json() != []
+    assert _client(bola).get(METHODS).json() == []
+    assert _client(bola).get(PAYOUTS).json()["results"] == []
+
+
+@pytest.mark.django_db
+def test_the_full_account_number_is_absent_from_the_whole_payouts_response(
+    django_user_model,
+):
+    """`method_snapshot` holds the full number on purpose (the shop's own audit record);
+    one careless serializer field would ship it to the browser. Assert on the raw
+    response TEXT, not a field, so a new field leaking it fails here too."""
+    from apps.referrals.services import request_payout
+
+    ref_user, profile = referrer(django_user_model)
+    buyer = customer(django_user_model, "buyer@x.com")
+    order = make_order(user=buyer, subtotal="300000.00", referral_code=profile.code)
+    commission = accrue_for_order(order)
+    Commission.objects.filter(pk=commission.pk).update(status="available")
+    save_payout_method(
+        ref_user, currency=ngn(), bank_name="GTBank", account_name="Amina A",
+        account_number="0123456789",
+    )
+    request_payout(ref_user, "NGN", accept_terms=True)
+
+    text = _client(ref_user).get(PAYOUTS).content.decode()
+    assert "0123456789" not in text
+    assert "•••• 6789" in text

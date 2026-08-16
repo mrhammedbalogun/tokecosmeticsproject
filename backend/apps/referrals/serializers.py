@@ -234,6 +234,15 @@ class PayoutMethodWriteSerializer(serializers.Serializer):
         # tight rule invented here would reject a legitimate international account.
         if len(cleaned) < 5:
             raise serializers.ValidationError("That account number looks too short.")
+        # ASCII letters and digits only. This value is published UNMASKED on the admin
+        # payout queue — the screen staff copy into a banking app — so RTL overrides,
+        # zero-width junk and full-width lookalike digits must not be storable. Every
+        # legitimate shape this field holds (NUBAN, IBAN, sort-code/account pair) is
+        # plain alphanumeric once spaces and hyphens are stripped.
+        if not (cleaned.isascii() and cleaned.isalnum()):
+            raise serializers.ValidationError(
+                "Use letters and digits only — spaces and hyphens are fine."
+            )
         return cleaned
 
 

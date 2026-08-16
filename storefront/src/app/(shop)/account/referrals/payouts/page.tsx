@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ApiError } from "@/lib/api";
 import {
   formatReferralDate,
   getPayoutMethods,
@@ -11,6 +13,7 @@ import {
 import { first } from "@/lib/search-params";
 import { PayoutMethodForm } from "@/components/referrals/PayoutMethodForm";
 import { RequestPayoutForm } from "@/components/referrals/RequestPayoutForm";
+import { Pagination } from "@/components/ui/Pagination";
 import { requestPayoutAction, savePayoutMethodAction } from "../actions";
 
 export const metadata: Metadata = { title: "Referral payouts" };
@@ -18,6 +21,22 @@ export const metadata: Metadata = { title: "Referral payouts" };
 const PATH = "/account/referrals/payouts";
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
+
+/** Untrusted URL input → a page number DRF will accept; same rule as the activity page. */
+function parsePage(raw: string | string[] | undefined): number {
+  const page = Number(first(raw));
+  return Number.isSafeInteger(page) && page > 0 ? page : 1;
+}
+
+async function loadPayouts(page: number, currentPath: string) {
+  try {
+    return await getPayouts(page, currentPath);
+  } catch (e) {
+    // DRF 404s a page past the last one ("Invalid page") — a bad URL, not an error.
+    if (e instanceof ApiError && e.status === 404) notFound();
+    throw e;
+  }
+}
 
 /**
  * Bank details, the request-a-payout button, and the history of what has been sent.
@@ -39,11 +58,20 @@ export default async function ReferralPayoutsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const requested = (first((await searchParams).currency) ?? "").toUpperCase();
+  const params = await searchParams;
+  const requested = (first(params.currency) ?? "").toUpperCase();
+  const page = parsePage(params.page);
+  // The bounce target must be this exact URL, page and currency included, or renewing a
+  // stale session mid-history dumps the customer back on page 1 of the wrong wallet.
+  const query = new URLSearchParams();
+  if (requested) query.set("currency", requested);
+  if (page > 1) query.set("page", String(page));
+  const currentPath = query.size ? `${PATH}?${query}` : PATH;
+
   const [overview, methods, payouts] = await Promise.all([
-    getReferralOverview(PATH),
-    getPayoutMethods(PATH),
-    getPayouts(PATH),
+    getReferralOverview(currentPath),
+    getPayoutMethods(currentPath),
+    loadPayouts(page, currentPath),
   ]);
 
   const wallets = overview.wallets;
@@ -135,9 +163,23 @@ export default async function ReferralPayoutsPage({
             </ul>
           )}
         </div>
+        <Pagination
+          page={page}
+          prevHref={payouts.previous === null ? null : historyHref(page - 1, requested)}
+          nextHref={payouts.next === null ? null : historyHref(page + 1, requested)}
+        />
       </section>
     </div>
   );
+}
+
+/** History page links keep the selected wallet: losing `?currency=` on a page turn
+ * would silently re-select a different wallet's request form above the list. */
+function historyHref(page: number, currency: string): string {
+  const q = new URLSearchParams();
+  if (currency) q.set("currency", currency);
+  if (page > 1) q.set("page", String(page));
+  return q.size ? `${PATH}?${q}` : PATH;
 }
 
 function PayoutRequestSection({

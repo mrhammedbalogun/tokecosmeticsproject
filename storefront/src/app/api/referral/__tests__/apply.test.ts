@@ -94,3 +94,18 @@ describe("apply-a-referral-code BFF", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 });
+
+describe("response projection", () => {
+  it("passes only the three public fields through, whatever the backend grows", async () => {
+    // The privacy guarantee ("first-name-level only") must not live solely in the
+    // backend serializer: a field added there for the admin's benefit would otherwise
+    // ship straight to any anonymous browser through this passthrough.
+    upstream(200, {
+      valid: true, referrer_name: "Amina",
+      referrer_email: "amina@secret.example", referrer_id: 7, internal_flags: ["vip"],
+    });
+    const res = await POST(req({ code: "amina7k3p" }));
+
+    expect(await res.json()).toEqual({ valid: true, referrer_name: "Amina" });
+  });
+});

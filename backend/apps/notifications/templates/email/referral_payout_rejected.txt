@@ -1,4 +1,4 @@
-Hi{% if first_name %} {{ first_name }}{% endif %},
+{% autoescape off %}Hi{% if first_name %} {{ first_name }}{% endif %},
 
 We could not process your payout request of {{ amount }} this time.
 
@@ -12,3 +12,4 @@ available balance and you can request it again once this is sorted out.
 If that message does not make sense, reply to this email and a person will look.
 
 — Toke Cosmetics
+{% endautoescape %}

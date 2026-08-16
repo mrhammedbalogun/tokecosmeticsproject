@@ -507,6 +507,30 @@ class ReferralLookupThrottle(_IPKeyedThrottle):
     scope = "referral_lookup"
 
 
+class PayoutMethodWriteThrottle(CloudflareIdentMixin, throttling.UserRateThrottle):
+    """Cap on WRITES to a referrer's payout bank account (see `payout_method_write`).
+
+    Keyed on `request.user.pk` from a validated token — unforgeable and unshared, the
+    same argument as `AdminSearchThrottle` — so the only person a caller can throttle
+    is themselves, and the shared-egress caveat that governs the IP-keyed classes does
+    not apply.
+
+    The number is an EMAIL-volume cap more than an abuse cap: every detail change sends
+    the account-takeover security notice (`referrals.emails`), so under the global user
+    allowance alone (120/min) this PUT was a transactional-mail cannon pointed at the
+    shop's own sender reputation — and at the one real "details changed" alert a
+    takeover victim needs to be able to find in their inbox. The rate is set where a
+    real customer fixing typos across four currency accounts never meets it.
+
+    Applied per-METHOD in `PayoutMethodView.get_throttles` rather than via
+    `throttle_classes`, because listing classes on a view REPLACES the global defaults:
+    that would cap GETs at the same handful per hour, on a list the account page
+    renders every visit.
+    """
+
+    scope = "payout_method_write"
+
+
 # --- password reset ----------------------------------------------------------
 # Keying on the target email is the only key that protects the victim's inbox; the IP
 # key caps total outbound volume the same way it does for registration.

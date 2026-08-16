@@ -17,9 +17,10 @@ read time. Same reasoning as the product CSV export, applied to something worth 
 ── THE THREE SCOPES ─────────────────────────────────────────────────────────────────
 
 `referrals.view` reads the queue. `referrals.manage` approves, rejects. `referrals.pay`
-marks a request PAID and is Owner-only — see `accounts/rbac.py` for the argument, but
-briefly: it is the one action asserting cash left the company account, and nothing
-downstream ever re-checks it.
+marks a request PAID and is held by Owner AND Manager — Hammed's ruling of 2026-08-15,
+recorded in `accounts/rbac.py`: the Manager runs the monthly transfers, and withholding
+the scope would just get the Owner's login borrowed. It is still the one action
+asserting cash left the company account, and nothing downstream ever re-checks it.
 """
 from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django_filters.rest_framework import DjangoFilterBackend
@@ -56,9 +57,10 @@ from apps.referrals.views import _Page as ReferralPagination
 
 
 def _referral_error(exc: services.ReferralError) -> Response:
-    """Same shape the storefront gets: a stable code plus a human sentence. The code
-    matters here too — the admin UI special-cases `payout_not_open`, which is what two
-    staff clicking Approve on the same row at the same time produces."""
+    """Same shape the storefront gets: a stable code plus a human sentence.
+    `payout_not_open` (409) is what two staff clicking Approve on the same row at the
+    same time produces; the admin surfaces `detail` beside the button and re-reads the
+    queue so the loser sees the row's real state."""
     return Response({"error": exc.code, "detail": exc.detail}, status=exc.http)
 
 
@@ -199,7 +201,8 @@ class RejectPayoutView(_PayoutActionView):
 
 
 class MarkPayoutPaidView(_PayoutActionView):
-    """`referrals.pay` — OWNER ONLY. The transfer left the bank.
+    """`referrals.pay` (Owner + Manager — see the module docstring). The transfer left
+    the bank.
 
     The one action in the programme that asserts cash has actually moved, and nothing
     downstream re-checks it. The bank's reference is required (the service refuses

@@ -129,3 +129,36 @@ describe("ReferrerActions", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("does not pay out GBP");
   });
 });
+
+describe("panel state hygiene (2026-08-15 review)", () => {
+  it("a reason typed into Block does not leak into Adjust", () => {
+    // One `reason` state used to serve both panels, and Cancel did not clear it — so a
+    // block justification could end up on an immutable ledger row via a hurried Adjust.
+    setup();
+    click(screen.getByRole("button", { name: /^block$/i }));
+    type(screen.getByLabelText(/why are you blocking/i), "suspected self-referral fraud");
+    click(screen.getByRole("button", { name: /cancel/i }));
+
+    click(screen.getByRole("button", { name: /adjust balance/i }));
+    expect(screen.getByLabelText(/^reason$/i)).toHaveValue("");
+  });
+
+  it("cancelling Adjust clears the amount for the next open", () => {
+    setup();
+    click(screen.getByRole("button", { name: /adjust balance/i }));
+    type(screen.getByLabelText(/amount/i), "-2500");
+    click(screen.getByRole("button", { name: /cancel/i }));
+
+    click(screen.getByRole("button", { name: /adjust balance/i }));
+    expect(screen.getByLabelText(/amount/i)).toHaveValue("");
+  });
+
+  it("the words preview never shows more than two decimal places", () => {
+    // "-2500.005" used to preview as NGN 2,500.005 — three decimals the backend would
+    // then refuse. The preview must speak in money, like every other amount on the page.
+    setup();
+    click(screen.getByRole("button", { name: /adjust balance/i }));
+    type(screen.getByLabelText(/amount/i), "-2500.005");
+    expect(screen.getByText(/2,500\.01 OFF|2,500\.00 OFF/)).toBeInTheDocument();
+  });
+});

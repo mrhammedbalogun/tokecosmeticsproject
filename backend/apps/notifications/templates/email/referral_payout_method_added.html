@@ -1,0 +1,22 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;">Hi{% if first_name %} {{ first_name }}{% endif %},</p>
+
+<p style="margin:0 0 16px;">A bank account was just added for your <strong>{{ currency }}</strong> affiliate payouts:</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:#f6f6f4;border-radius:8px;padding:16px;width:100%;">
+  <tr><td style="font-size:14px;line-height:1.7;">
+    {{ bank_name }}<br>
+    {{ account_name }}<br>
+    <span style="font-family:monospace;">{{ account_masked }}</span>
+  </td></tr>
+</table>
+
+<p style="margin:0 0 16px;color:#555;">If that was you, there's nothing to do — this is where your payouts will be sent.</p>
+
+<p style="margin:0 0 16px;color:#8a1c1c;"><strong>If it wasn't you</strong>, someone may have access to your account.
+  <a href="{{ security_url }}" style="color:#145f30;">Change your password</a>
+  straight away, and reply to this email so we can put your payouts on hold.</p>
+
+<p style="margin:24px 0 0;color:#777;font-size:13px;">We send this whenever payout details are added or changed — it's how you'd find out if someone else did it.</p>
+{% endblock %}

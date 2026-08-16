@@ -12,6 +12,7 @@ import { ApiError } from "@/lib/api";
 import { pageCount } from "@/lib/pagination";
 import {
   PAYOUT_STATUSES,
+  REFERRAL_PAGE_SIZE,
   STATUS_LABEL,
   isAging,
   parsePayoutFilters,
@@ -176,7 +177,7 @@ export default async function ReferralPayoutsPage({
           <Pagination
             basePath={PATH}
             page={filters.page}
-            total={pageCount(page.count)}
+            total={pageCount(page.count, REFERRAL_PAGE_SIZE)}
             // `buildQuery` wants no leading "?" (see Pagination) — the same builder the
             // page filtered with, so page 2 keeps the filters page 1 was showing.
             buildQuery={(target) =>

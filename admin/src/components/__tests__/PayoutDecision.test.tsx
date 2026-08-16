@@ -161,3 +161,40 @@ describe("PayoutDecision", () => {
     expect(screen.getByRole("button", { name: /^reject$/i })).toBeInTheDocument();
   });
 });
+
+describe("panel state hygiene (2026-08-15 review)", () => {
+  it("cancel clears what was typed, for both panels", () => {
+    setup();
+    click(screen.getByRole("button", { name: /reject/i }));
+    type(screen.getByLabelText(/what the customer will see/i), "half-typed refusal");
+    click(screen.getByRole("button", { name: /cancel/i }));
+
+    click(screen.getByRole("button", { name: /mark paid/i }));
+    type(screen.getByLabelText(/bank transfer reference/i), "GTB/2026/0042");
+    click(screen.getByRole("button", { name: /cancel/i }));
+
+    click(screen.getByRole("button", { name: /reject/i }));
+    expect(screen.getByLabelText(/what the customer will see/i)).toHaveValue("");
+    click(screen.getByRole("button", { name: /cancel/i }));
+    click(screen.getByRole("button", { name: /mark paid/i }));
+    expect(screen.getByLabelText(/bank transfer reference/i)).toHaveValue("");
+  });
+
+  it("both panels carry an optional internal note that reaches the action", async () => {
+    // `adminNote` was declared state with NO input rendering it — every action sent ""
+    // and the internal-note half of the audit story did not exist in the UI.
+    const { onMarkPaid } = setup();
+    click(screen.getByRole("button", { name: /mark paid/i }));
+    type(screen.getByLabelText(/bank transfer reference/i), "GTB/2026/0042");
+    type(screen.getByLabelText(/internal note/i), "matched against the June statement");
+    click(screen.getByRole("button", { name: /confirm paid/i }));
+
+    await waitFor(() =>
+      expect(onMarkPaid).toHaveBeenCalledWith({
+        id: 42,
+        reference: "GTB/2026/0042",
+        adminNote: "matched against the June statement",
+      }),
+    );
+  });
+});

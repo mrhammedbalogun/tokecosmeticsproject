@@ -196,16 +196,23 @@ def test_marking_paid_requires_a_bank_reference_and_mails_the_referrer(
 
 
 @pytest.mark.django_db
-def test_changing_the_payout_account_emails_the_holder_but_the_first_save_does_not(
+def test_both_the_first_save_and_a_change_email_the_holder_with_the_right_verb(
     django_user_model, django_capture_on_commit_callbacks
 ):
+    """This test used to pin the OPPOSITE for the first save ("nothing to warn about
+    yet") and the 2026-08-15 review reversed the ruling: the ADD is the account-takeover
+    window — a victim with earnings and no account on file heard nothing when a hijacker
+    added one. Full behaviour coverage lives in test_payout_method_guards.py; this keeps
+    the two templates' verbs from swapping."""
     ref_user, _profile = referrer(django_user_model)
 
     mail.outbox.clear()
     with django_capture_on_commit_callbacks(execute=True):
         _with_method(ref_user)
-    assert mail.outbox == [], "nothing to warn about on a first save"
+    assert len(mail.outbox) == 1
+    assert "payout account was added" in mail.outbox[0].subject
 
+    mail.outbox.clear()
     with django_capture_on_commit_callbacks(execute=True):
         save_payout_method(
             ref_user, currency=ngn(), bank_name="Zenith", account_name="AMINA OKORO",

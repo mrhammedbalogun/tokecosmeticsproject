@@ -12,7 +12,7 @@ const OWNER = [
 const MANAGER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "reports.view", "referrals.view",
-  "referrals.manage",
+  "referrals.manage", "referrals.pay",
 ];
 const SUPPORT = ["orders.view", "orders.operate", "customers.view", "referrals.view"];
 const CONTENT = ["cms.manage"];
@@ -32,8 +32,9 @@ describe("the sidebar renders only what the scopes allow", () => {
       "Customers", "Reviews",
       "Coupons",
       "Home Content",
-      // `referrals.view` — a Manager reads the payout queue and may approve or reject;
-      // only an Owner may mark one PAID (that scope is on the endpoint, not the nav).
+      // `referrals.view` — a Manager reads the payout queue, decides requests, and
+      // (Hammed's ruling, 2026-08-15) holds `referrals.pay` too: the Manager runs the
+      // monthly transfers. The scopes live on the endpoints, not the nav.
       "Referrals",
       "Reports",
       // Settings is any-of `settings.manage` / `products.manage`: the Delivery section

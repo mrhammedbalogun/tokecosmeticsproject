@@ -4,7 +4,7 @@
  * The three decisions on a payout request.
  *
  * Each one is a single POST to an endpoint that carries its own scope — `referrals.manage`
- * for approve and reject, `referrals.pay` (Owner alone) for mark-paid. Nothing is
+ * for approve and reject, `referrals.pay` (Owner and Manager) for mark-paid. Nothing is
  * pre-checked here beyond an empty-field message: the backend services own the state
  * machine, and a second copy of "may this be rejected?" in the browser is a copy that
  * will disagree with the first one eventually.
@@ -28,7 +28,10 @@ function payoutError(e: unknown, fallback: string): PayoutActionState {
   if (!(e instanceof ApiError)) return { message: "The API is not responding." };
   const data = e.data as { detail?: string; error?: string } | undefined;
   if (e.status === 403) {
-    return { message: "Your role cannot do that. Marking a payout paid is the Owner's." };
+    // Generic on purpose: this mapper serves all three actions, and the old copy
+    // ("…is the Owner's") was wrong twice — it fired on approve/reject too, and
+    // `referrals.pay` is Owner AND Manager (rbac.py, Hammed's ruling 2026-08-15).
+    return { message: "Your role cannot do that." };
   }
   // The service's own sentence is better than anything invented here: it knows whether
   // the row was already paid, already rejected, or never open.
@@ -39,6 +42,11 @@ async function post(path: string, body: Record<string, unknown>, fallback: strin
   try {
     await fetchWithAuth(path, { method: "POST", body });
   } catch (e) {
+    // Revalidate on FAILURE too, not just success. The refusal that matters is the 409
+    // (somebody else decided the row while this page was open), and the sentence alone
+    // left the stale card sitting there with live buttons — on the screen staff copy
+    // account numbers from. Re-reading the queue replaces it with the row's real state.
+    revalidatePath(PAGE);
     return payoutError(e, fallback);
   }
   revalidatePath(PAGE);

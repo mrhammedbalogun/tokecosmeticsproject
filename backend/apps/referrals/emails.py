@@ -1,10 +1,16 @@
-"""The three referral emails that exist, and the reasoning for the ones that do not.
+"""The four referral emails that exist, and the reasoning for the ones that do not.
 
 `payout_method_changed` is a SECURITY email, not a courtesy one. It is the control that
 turns an account-takeover payout redirect from silent into noisy (see
 `models.PayoutMethod` for why that, rather than encryption, is where the effort went),
 so it is sent on every change and it is not gated on marketing consent — transactional
 security notices are not marketing.
+
+`payout_method_added` is the same control aimed at the FIRST save. The original design
+sent nothing on an add ("there is nothing to warn about yet") — but the add is exactly
+the takeover window: a victim with accrued earnings and no account on file got no email
+when a hijacker added one, and the first mail they ever received was `payout_paid`,
+after the money had left. Caught in the 2026-08-15 review.
 
 `payout_rejected` exists because the alternative is silence. A refusal that only appears
 on a page the customer has no reason to revisit reads, from their side, as the shop
@@ -31,14 +37,22 @@ from apps.payments.money import format_money
 from apps.referrals.models import PayoutMethod, PayoutRequest
 
 
+def enqueue_payout_method_added(method_pk: int) -> None:
+    _enqueue_method_notice("referral_payout_method_added", method_pk)
+
+
 def enqueue_payout_method_changed(method_pk: int) -> None:
+    _enqueue_method_notice("referral_payout_method_changed", method_pk)
+
+
+def _enqueue_method_notice(template: str, method_pk: int) -> None:
     method = (
         PayoutMethod.objects.select_related("user", "currency").filter(pk=method_pk).first()
     )
     if method is None:
         return
     send_email_task.delay(
-        "referral_payout_method_changed",
+        template,
         method.user.email,
         {
             "first_name": method.user.first_name,

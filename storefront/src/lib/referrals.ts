@@ -147,10 +147,10 @@ export function getCommissions(page: number, currentPath: string): Promise<Commi
   );
 }
 
-export function getPayouts(currentPath: string): Promise<PayoutPage> {
-  return fetchWithAuthOrBounce<PayoutPage>("/me/referrals/payouts/", currentPath, {
-    cache: "no-store",
-  });
+export function getPayouts(page: number, currentPath: string): Promise<PayoutPage> {
+  return fetchWithAuthOrBounce<PayoutPage>(
+    `/me/referrals/payouts/?page=${page}`, currentPath, { cache: "no-store" },
+  );
 }
 
 export function getPayoutMethods(currentPath: string): Promise<PayoutMethod[]> {

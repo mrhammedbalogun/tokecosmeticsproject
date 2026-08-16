@@ -10,9 +10,12 @@
  *  page numbers rendered here stop lining up with the pages the API returns. */
 export const PAGE_SIZE = 24;
 
-export function pageCount(total: number): number {
+export function pageCount(total: number, size: number = PAGE_SIZE): number {
   // An empty list is one empty page, not zero pages: "Page 1 of 0" is nonsense on screen.
-  return Math.max(1, Math.ceil(total / PAGE_SIZE));
+  // `size` exists because not every endpoint uses the global PAGE_SIZE — the referral
+  // endpoints page at 20 (backend `_Page`), and dividing their counts by 24 made the
+  // payout queue's last rows unreachable from the pager.
+  return Math.max(1, Math.ceil(total / size));
 }
 
 /**

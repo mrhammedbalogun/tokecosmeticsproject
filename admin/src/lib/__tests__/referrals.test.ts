@@ -94,3 +94,17 @@ describe("payoutAmount", () => {
     expect(payoutAmount(row({ currency: "GBP", amount: "42.50" }))).toBe("GBP 42.50");
   });
 });
+
+describe("REFERRAL_PAGE_SIZE (2026-08-15 review)", () => {
+  it("is 20, matching the backend's ReferralPagination — not the global 24", async () => {
+    // The queue pages divided page.count by the global PAGE_SIZE (24) while the
+    // referral endpoints serve 20 a page: at 45 rows the pager offered 2 pages and
+    // rows 41-45 — real payout requests — were unreachable except by hand-typed URL.
+    const { REFERRAL_PAGE_SIZE } = await import("../referrals");
+    const { pageCount } = await import("../pagination");
+    expect(REFERRAL_PAGE_SIZE).toBe(20);
+    expect(pageCount(45, REFERRAL_PAGE_SIZE)).toBe(3);
+    expect(pageCount(40, REFERRAL_PAGE_SIZE)).toBe(2);
+    expect(pageCount(0, REFERRAL_PAGE_SIZE)).toBe(1);
+  });
+});
