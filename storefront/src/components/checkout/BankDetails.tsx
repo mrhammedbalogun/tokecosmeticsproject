@@ -87,7 +87,19 @@ export function BankDetails({
         </p>
       )}
 
-      {data.instructions && <p className="mt-4 text-sm text-muted">{data.instructions}</p>}
+      {data.instructions &&
+        // Admin-authored rich HTML since 2026-08-16 (nh3-sanitised on write, same
+        // contract as product prose). The gateway's plain-text fallback line and any
+        // pre-rich-text value must not print literal angle brackets — same
+        // looksLikeHtml split as PdpAccordions.
+        (/<[a-z][^>]*>/i.test(data.instructions) ? (
+          <div
+            className="rich-text mt-4 text-sm text-muted"
+            dangerouslySetInnerHTML={{ __html: data.instructions }}
+          />
+        ) : (
+          <p className="mt-4 text-sm text-muted">{data.instructions}</p>
+        ))}
     </div>
   );
 }

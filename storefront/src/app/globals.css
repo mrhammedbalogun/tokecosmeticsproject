@@ -81,6 +81,21 @@ html[data-scrolled] header[data-site-header] .site-logo { transform: scale(0.85)
 }
 @keyframes heroTab { from { width: 0; } to { width: 100%; } }
 
+/* Admin-authored rich HTML (nh3-sanitised on the backend) rendered via
+   dangerouslySetInnerHTML — payment instructions modal, post-order details card.
+   Tailwind preflight strips list/heading styling, so restore just enough for
+   TipTap's vocabulary (headings, lists, emphasis, links) to read as written. */
+.rich-text h2, .rich-text h3, .rich-text h4 { margin-top: 1em; font-weight: 600; }
+.rich-text h2 { font-size: 1.1em; }
+.rich-text p { margin-top: 0.75em; }
+.rich-text ul, .rich-text ol { margin-top: 0.75em; padding-left: 1.25em; }
+.rich-text ul { list-style: disc; }
+.rich-text ol { list-style: decimal; }
+.rich-text li { margin-top: 0.25em; }
+.rich-text a { text-decoration: underline; text-underline-offset: 2px; }
+.rich-text blockquote { margin-top: 0.75em; border-left: 2px solid var(--color-line); padding-left: 0.75em; }
+.rich-text > :first-child { margin-top: 0; }
+
 /* Currency welcome popup: backdrop fades, card rises like a lid lifting. Mount-only
    keyframes (no exit animation — dismissal should feel instant). The global
    prefers-reduced-motion catch-all above neutralises both. */

@@ -169,7 +169,7 @@ def test_the_catalog_is_owner_only():
 # Enabling bank transfer for a market was one click; entering WHAT customers pay into was
 # impossible — the screen only edited rows that already existed, so a new market (the
 # CA/US state payments.W002 warns about) stayed stranded. POST was always allowed on the
-# viewset; these pin the create path the UI now uses, plus the two new Woo-style fields.
+# viewset; these pin the create path the UI now uses.
 
 
 def test_an_account_can_be_created_for_a_stranded_market(owner):
@@ -183,8 +183,7 @@ def test_an_account_can_be_created_for_a_stranded_market(owner):
             "country": us.pk, "currency": us.currency_id, "bank_name": "Chase",
             "account_name": "Toke Cosmetics LLC", "account_number": "000123456789",
             "extra": {"Routing number": "021000021"},
-            "description": "Wire transfer. We confirm within one business day.",
-            "instructions": "Quote your order number as the wire reference.",
+            "instructions": "<p>Quote your order number as the wire reference.</p>",
             "is_active": True,
         },
         format="json",
@@ -193,7 +192,7 @@ def test_an_account_can_be_created_for_a_stranded_market(owner):
     assert response.status_code == 201, response.data
     account = BankAccount.objects.get(country=us)
     assert account.extra == {"Routing number": "021000021"}
-    assert account.description.startswith("Wire transfer.")
+    assert account.instructions == "<p>Quote your order number as the wire reference.</p>"
 
 
 def test_a_second_account_for_the_same_market_is_refused(owner):
@@ -232,3 +231,26 @@ def test_extra_fields_must_be_flat_text(owner):
 
     assert response.status_code == 400
     assert "extra" in response.data
+
+
+def test_instructions_are_sanitised_on_write(owner):
+    """Instructions are admin-authored HTML rendered on the checkout origin via
+    dangerouslySetInnerHTML — the write path must strip anything scriptable so the
+    database only ever holds safe HTML (apps/cms/sanitize.py, product-prose contract)."""
+    us = Country.objects.get(code="US")
+    BankAccount.objects.filter(country=us).delete()
+
+    response = owner.post(
+        "/api/v1/admin/bank-accounts/",
+        {"country": us.pk, "currency": us.currency_id, "bank_name": "Chase",
+         "account_name": "Toke", "account_number": "1",
+         "instructions": '<h3>Pay us</h3><script>steal()</script>'
+                         '<p onclick="x()">Send <strong>receipt</strong> via '
+                         '<a href="javascript:bad()">this link</a>.</p>'},
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    saved = BankAccount.objects.get(country=us).instructions
+    assert "<script" not in saved and "onclick" not in saved and "javascript:" not in saved
+    assert "<h3>Pay us</h3>" in saved and "<strong>receipt</strong>" in saved

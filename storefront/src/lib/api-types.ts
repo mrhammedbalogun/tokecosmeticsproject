@@ -5728,7 +5728,6 @@ export interface components {
             account_name: string;
             account_number: string;
             extra?: unknown;
-            description?: string;
             instructions?: string;
             is_active?: boolean;
             /** Format: date-time */
@@ -6840,7 +6839,6 @@ export interface components {
             account_name?: string;
             account_number?: string;
             extra?: unknown;
-            description?: string;
             instructions?: string;
             is_active?: boolean;
             /** Format: date-time */

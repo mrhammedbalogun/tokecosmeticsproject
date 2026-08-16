@@ -82,21 +82,40 @@ describe("PaymentStep", () => {
     expect(url).toContain("country=NG");
   });
 
-  it("shows the market's own description instead of the stock note when the API sends one", async () => {
+  it("offers instructions behind a link, not inline — the modal opens without selecting", async () => {
     mockFetch(200, [
       {
         gateway: "bank_transfer",
         sort_order: 1,
-        description: "Transfer to our Zenith account. We confirm within the hour.",
+        instructions: "<h3>Payment Instructions</h3><p>Send your receipt to <strong>sales</strong>.</p>",
       },
     ]);
     renderHarness();
 
     await waitFor(() => expect(screen.getByText("Bank transfer")).toBeInTheDocument());
+    // The policy wall must NOT be dumped on the card — that was the bad UI.
+    expect(screen.queryByText("Payment Instructions")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /read payment instructions/i }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Payment Instructions");
+    expect(dialog).toHaveTextContent("Send your receipt to sales.");
+    // Reading is not choosing: step 4 stays incomplete.
+    expect(screen.getByTestId("completed")).not.toHaveTextContent("4");
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Close" })[1]);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("shows no instructions link when the method sends none", async () => {
+    mockFetch(200, [{ gateway: "bank_transfer", sort_order: 1, instructions: "" }]);
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByText("Bank transfer")).toBeInTheDocument());
     expect(
-      screen.getByText(/transfer to our zenith account/i),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/pay by transfer/i)).not.toBeInTheDocument();
+      screen.queryByRole("button", { name: /read payment instructions/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("selecting bank_transfer completes step 4 with paymentGateway: bank_transfer", async () => {

@@ -30,7 +30,7 @@ const catalogEntry = (code: string, over: Partial<GatewayCatalogEntry> = {}): Ga
 const account = (country: string, is_active = true): BankAccountRow => ({
   id: Math.random(), country, country_name: country, currency: "NGN",
   bank_name: "GTBank", account_name: "Toke", account_number: "1", extra: {},
-  description: "", instructions: "", is_active, updated_at: "",
+  instructions: "", is_active, updated_at: "",
 });
 
 const coupon = (over: Partial<CouponRow> = {}): CouponRow => ({

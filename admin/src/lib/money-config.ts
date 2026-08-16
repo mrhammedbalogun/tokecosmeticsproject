@@ -9,9 +9,8 @@ export interface BankAccountRow {
   account_name: string;
   account_number: string;
   extra: Record<string, string>;
-  /** Checkout copy shown while the customer is CHOOSING the method (Woo's
-   * "Description"); `instructions` is the post-order text sent with the details. */
-  description: string;
+  /** Admin-authored rich HTML (nh3-sanitised on write) — shown behind a "Read payment
+   * instructions" link at checkout and with the details after the order. */
   instructions: string;
   is_active: boolean;
   updated_at: string;

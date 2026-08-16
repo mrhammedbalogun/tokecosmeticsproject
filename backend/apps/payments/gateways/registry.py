@@ -75,17 +75,18 @@ def active_gateways_for(country) -> list[dict]:
     for r in rows:
         if not _is_configured(r.gateway, country):
             continue
-        entry = {"gateway": r.gateway, "sort_order": r.sort_order, "description": ""}
+        entry = {"gateway": r.gateway, "sort_order": r.sort_order, "instructions": ""}
         if r.gateway == "bank_transfer":
-            # The market's own checkout copy for bank transfer (admin-entered, same row
-            # as the account details). "" lets the storefront fall back to its stock
-            # note. _is_configured just proved an active account exists.
+            # The market's payment instructions (admin-authored HTML, nh3-sanitised on
+            # write) — the storefront shows them behind a "Read payment instructions"
+            # link on the method card. "" hides the link. _is_configured just proved an
+            # active account exists.
             account = (
                 BankAccount.objects.filter(country=country, is_active=True)
-                .only("description")
+                .only("instructions")
                 .first()
             )
             if account is not None:
-                entry["description"] = account.description
+                entry["instructions"] = account.instructions
         methods.append(entry)
     return methods

@@ -31,9 +31,10 @@ export interface GigCentreOption {
 export interface PaymentMethod {
   gateway: string;
   sort_order: number;
-  /** The market's own checkout copy (admin-entered; today only bank_transfer sends
-   * one). "" or absent -> the stock note in payment-labels renders instead. */
-  description?: string;
+  /** The market's payment instructions — admin-authored rich HTML, nh3-sanitised on
+   * the backend (today only bank_transfer sends one). Non-empty -> the method card
+   * offers a "Read payment instructions" link that opens them in a modal. */
+  instructions?: string;
 }
 
 /** Public (AllowAny) — safe with apiFetch + country. */

@@ -134,12 +134,12 @@ class BankAccount(models.Model):
     # prettified, so `sort_code` renders as "Sort code", while a key with any capital in it
     # is left exactly as typed — write `IBAN` or `SWIFT BIC` and that is what is sent.
     extra = models.JSONField(default=dict, blank=True)
-    # Shown at CHECKOUT when the customer is choosing a payment method — the "why/how"
-    # copy for bank transfer in this market. `instructions` is the POST-order text
-    # (thank-you page and emails, sent with the account details). Same split WooCommerce
-    # makes between a method's Description and its Instructions. Plain text; blank falls
-    # back to the storefront's stock note for the method.
-    description = models.TextField(blank=True)
+    # The market's payment/refund copy, admin-authored RICH HTML (TipTap in the admin,
+    # sanitised on write through apps/cms/sanitize.py — same contract as the product
+    # prose fields). Shown behind a "Read payment instructions" link at checkout and
+    # with the account details after the order. A short-lived plain-text `description`
+    # sibling existed for one release (0011/0012) and was folded into this field: one
+    # box, because the owner pastes one Woo-style policy block, not two.
     instructions = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

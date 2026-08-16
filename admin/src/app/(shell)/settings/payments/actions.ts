@@ -34,7 +34,7 @@ interface BankAccountFields {
   account_number: string;
   /** [label, value] pairs, order preserved — keys become the labels customers read. */
   extra: [string, string][];
-  description: string;
+  /** Rich HTML from the TipTap editor; the backend sanitises it on write. */
   instructions: string;
   is_active: boolean;
 }
@@ -65,7 +65,6 @@ function bankAccountBody(
       account_name: input.account_name.trim(),
       account_number: number,
       extra,
-      description: input.description,
       instructions: input.instructions,
       is_active: input.is_active,
     },

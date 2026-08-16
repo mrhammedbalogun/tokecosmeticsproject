@@ -16,6 +16,7 @@
  * `initiate()` fail with nothing for the customer to read.
  */
 import { startTransition, useState } from "react";
+import { RichTextField } from "@/components/RichTextField";
 import {
   addGatewayAction,
   createBankAccountAction,
@@ -158,7 +159,6 @@ function AccountCard({ account }: { account: BankAccountRow }) {
   const [accountName, setAccountName] = useState(account.account_name);
   const [accountNumber, setAccountNumber] = useState(account.account_number);
   const [extra, setExtra] = useState<[string, string][]>(Object.entries(account.extra));
-  const [description, setDescription] = useState(account.description);
   const [instructions, setInstructions] = useState(account.instructions);
   const [isActive, setIsActive] = useState(account.is_active);
   const [pending, setPending] = useState(false);
@@ -181,7 +181,6 @@ function AccountCard({ account }: { account: BankAccountRow }) {
         account_name: accountName,
         account_number: accountNumber,
         extra,
-        description,
         instructions,
         is_active: isActive,
       });
@@ -269,26 +268,15 @@ function AccountCard({ account }: { account: BankAccountRow }) {
 
       <ExtraFieldsEditor extra={extra} onChange={setExtra} error={errors.extra} />
 
-      <label className="mt-3 block text-xs text-muted">
-        Description shown at checkout, while choosing how to pay
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={2}
-          placeholder="e.g. Pay by transfer — we confirm your order once the funds arrive."
-          className={`mt-1 ${FIELD}`}
-        />
-      </label>
-
-      <label className="mt-3 block text-xs text-muted">
-        Instructions shown with the details, after the order is placed
-        <textarea
+      <div className="mt-3">
+        <RichTextField
+          label='Payment instructions — behind "Read payment instructions" at checkout, and shown with the details after the order'
+          placeholder="Payment & refund information, delivery timelines, where to send the receipt…"
           value={instructions}
-          onChange={(e) => setInstructions(e.target.value)}
-          rows={2}
-          className={`mt-1 ${FIELD}`}
+          onChange={setInstructions}
+          error={errors.instructions}
         />
-      </label>
+      </div>
 
       {confirming && numberChanged && (
         <div className="mt-3 rounded border border-warn/40 bg-warn/5 p-3" role="alert">
@@ -347,7 +335,6 @@ function AddAccountCard({
   const [accountName, setAccountName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [extra, setExtra] = useState<[string, string][]>([]);
-  const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -369,7 +356,6 @@ function AddAccountCard({
         account_name: accountName,
         account_number: accountNumber,
         extra,
-        description,
         instructions,
         // Live immediately: entering details for a stranded market IS the fix for the
         // "on but hidden" warning. The gateway toggle above stays the offer switch.
@@ -382,7 +368,6 @@ function AddAccountCard({
         setAccountName("");
         setAccountNumber("");
         setExtra([]);
-        setDescription("");
         setInstructions("");
       }
       setErrors(state.fieldErrors ?? {});
@@ -464,27 +449,15 @@ function AddAccountCard({
 
           <ExtraFieldsEditor extra={extra} onChange={setExtra} error={errors.extra} />
 
-          <label className="mt-3 block text-xs text-muted">
-            Description shown at checkout, while choosing how to pay
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              placeholder="e.g. Pay by transfer — we confirm your order once the funds arrive."
-              className={`mt-1 ${FIELD}`}
-            />
-          </label>
-
-          <label className="mt-3 block text-xs text-muted">
-            Instructions shown with the details, after the order is placed
-            <textarea
+          <div className="mt-3">
+            <RichTextField
+              label='Payment instructions — behind "Read payment instructions" at checkout, and shown with the details after the order'
+              placeholder="Payment & refund information, delivery timelines, where to send the receipt…"
               value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              rows={2}
-              placeholder="e.g. Use your order number as the transfer reference."
-              className={`mt-1 ${FIELD}`}
+              onChange={setInstructions}
+              error={errors.instructions}
             />
-          </label>
+          </div>
 
           <button
             type="submit"

@@ -20,7 +20,7 @@ class BankAccountAdminSerializer(serializers.ModelSerializer):
 
     audit_allowlist = (
         "country", "currency", "bank_name", "account_name", "account_number",
-        "extra", "description", "instructions", "is_active",
+        "extra", "instructions", "is_active",
     )
 
     country_name = serializers.CharField(source="country.name", read_only=True)
@@ -29,9 +29,17 @@ class BankAccountAdminSerializer(serializers.ModelSerializer):
         model = BankAccount
         fields = [
             "id", "country", "country_name", "currency", "bank_name", "account_name",
-            "account_number", "extra", "description", "instructions", "is_active",
-            "updated_at",
+            "account_number", "extra", "instructions", "is_active", "updated_at",
         ]
+
+    def validate_instructions(self, value):
+        # Admin-authored rich HTML, rendered by the storefront via
+        # dangerouslySetInnerHTML (checkout instructions modal + post-order details
+        # card). Cleaned ON WRITE through the same nh3 allow-list as the product prose
+        # fields, so the database only ever holds safe HTML — see apps/cms/sanitize.py.
+        from apps.cms.sanitize import clean_html
+
+        return clean_html(value)
 
     def validate_extra(self, value):
         # Keys become the labels the customer reads and values are copied into a banking

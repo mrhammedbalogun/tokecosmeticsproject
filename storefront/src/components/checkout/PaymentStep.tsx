@@ -1,9 +1,64 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
+import { OverlayPortal } from "@/components/layout/OverlayPortal";
 import { useCart } from "@/hooks/useCart";
 import { paymentLabel } from "@/lib/payment-labels";
 import type { PaymentMethod } from "@/lib/checkout";
+
+/** The market's payment instructions (admin-authored, nh3-sanitised HTML) in a modal —
+ * the method card offers them behind a "Read payment instructions" link instead of
+ * dumping a wall of policy text into the chooser. */
+function InstructionsModal({
+  title,
+  html,
+  onClose,
+}: {
+  title: string;
+  html: string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <OverlayPortal>
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 sm:items-center sm:p-6">
+        <button aria-label="Close" tabIndex={-1} onClick={onClose} className="absolute inset-0 cursor-default" />
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="payment-instructions-title"
+          className="relative flex max-h-[85vh] w-full flex-col rounded-t-2xl bg-surface shadow-2xl sm:max-w-lg sm:rounded-2xl"
+        >
+          <div className="flex items-center justify-between border-b border-line px-6 py-4">
+            <h2 id="payment-instructions-title" className="font-display text-lg">
+              {title}
+            </h2>
+            <button
+              onClick={onClose}
+              aria-label="Close"
+              className="text-muted transition-colors hover:text-foreground"
+            >
+              ✕
+            </button>
+          </div>
+          <div
+            className="rich-text overflow-y-auto px-6 py-4 text-sm leading-relaxed"
+            // Sanitised on the backend on write (nh3 allow-list, apps/cms/sanitize.py)
+            // — same contract as the product prose fields.
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </div>
+      </div>
+    </OverlayPortal>
+  );
+}
 
 /** Step 4 of checkout: the payment-method chooser (Plan-14 Task 9).
  *
@@ -31,6 +86,7 @@ export function PaymentStep() {
   const country = cart.country;
 
   const [result, setResult] = useState<FetchResult | null>(null);
+  const [reading, setReading] = useState<PaymentMethod | null>(null);
 
   useEffect(() => {
     if (!country) return;
@@ -92,28 +148,48 @@ export function PaymentStep() {
           {methods.map((method) => {
             const checked = visualGateway === method.gateway;
             const label = paymentLabel(method.gateway);
-            // The market's own copy (admin-entered, e.g. NG's bank-transfer terms)
-            // beats the stock note; whitespace-pre-line keeps its paragraph breaks.
-            const note = method.description?.trim() || label.note;
+            const hasInstructions = Boolean(method.instructions?.trim());
+            // The selectable area and the read-instructions link are SIBLINGS inside
+            // the bordered card — a button cannot legally nest another button, and the
+            // link must not also select the method.
             return (
-              <button
+              <div
                 key={method.gateway}
-                type="button"
-                role="radio"
-                aria-checked={checked}
-                onClick={() => handleSelect(method.gateway)}
-                className={`block w-full rounded-[var(--radius-card)] border p-4 text-left text-sm transition-colors ${
+                className={`rounded-[var(--radius-card)] border text-sm transition-colors ${
                   checked ? "border-accent bg-accent/5" : "border-line hover:border-accent/60"
                 }`}
               >
-                <span className="font-medium">{label.name}</span>
-                {note && (
-                  <span className="mt-1 block whitespace-pre-line text-muted">{note}</span>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  onClick={() => handleSelect(method.gateway)}
+                  className="block w-full p-4 text-left"
+                >
+                  <span className="font-medium">{label.name}</span>
+                  {label.note && <span className="mt-1 block text-muted">{label.note}</span>}
+                </button>
+                {hasInstructions && (
+                  <button
+                    type="button"
+                    onClick={() => setReading(method)}
+                    className="block px-4 pb-3 text-xs font-medium text-accent underline underline-offset-2 hover:text-accent-strong"
+                  >
+                    Read payment instructions
+                  </button>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>
+      )}
+
+      {reading?.instructions && (
+        <InstructionsModal
+          title={`${paymentLabel(reading.gateway).name} — payment instructions`}
+          html={reading.instructions}
+          onClose={() => setReading(null)}
+        />
       )}
     </div>
   );
