@@ -189,7 +189,7 @@ The migration runs at least three times: dry run, rehearsal, and the Plan-27 cut
 
 ### The clobber trap
 
-[`master-tokerebuild.md:1309`](../../../../master-tokerebuild.md) has Plan-27 cutover perform a "fresh full migration run against current live data."
+[`master-tokerebuild.md:1309`](../../../master-tokerebuild.md) has Plan-27 cutover perform a "fresh full migration run against current live data."
 
 - **Intl prices are safe.** Plan-27 sequences the run *before* Hammed's team enters GBP/USD/CAD prices.
 - **Stock is not.** Real Lagos and UK counts are entered before launch (D2), and a fresh run would reset them to placeholders.
