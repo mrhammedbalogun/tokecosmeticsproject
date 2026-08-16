@@ -40,9 +40,9 @@ const FIELD =
  * exactly the moment it becomes urgent.
  *
  * WHAT IS NOT HERE, deliberately: blocking a referrer and writing a manual adjustment.
- * Both services exist and are tested; neither has an endpoint yet. They are a different
- * job — this page is "settle what people have asked for", and mixing "punish a referrer"
- * into the same screen invites doing it in the same rushed month-end pass.
+ * Those live at `/referrals/referrers`. Different job — this page is "settle what people
+ * have asked for", and mixing "punish a referrer" into the same screen invites doing it
+ * in the same rushed month-end pass.
  */
 export default async function ReferralPayoutsPage({
   searchParams,
@@ -79,12 +79,22 @@ export default async function ReferralPayoutsPage({
 
   return (
     <section className="mx-auto max-w-5xl">
-      <header className="mb-4">
-        <h1 className="font-display text-2xl">Referral payouts</h1>
-        <p className="mt-1 text-sm text-muted">
-          Commission referrers have asked to be paid. Transfers are made by hand — record
-          the bank&rsquo;s reference when the money leaves.
-        </p>
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl">Referral payouts</h1>
+          <p className="mt-1 text-sm text-muted">
+            Commission referrers have asked to be paid. Transfers are made by hand — record
+            the bank&rsquo;s reference when the money leaves.
+          </p>
+        </div>
+        {/* Blocking and hand-written corrections live on their own page, off the screen
+            that gets worked in a rush at month end. */}
+        <Link
+          href="/referrals/referrers"
+          className="text-sm text-accent-strong underline underline-offset-2"
+        >
+          Referrers
+        </Link>
       </header>
 
       {late.length > 0 && (

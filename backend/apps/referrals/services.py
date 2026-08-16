@@ -1091,6 +1091,99 @@ def mark_payout_paid(request_id: int, *, staff_user, reference: str, admin_note:
     return req
 
 
+# --- blocking, and manual corrections -----------------------------------------------
+
+
+@transaction.atomic
+def set_referrer_blocked(user, *, blocked: bool, reason: str, staff_user) -> ReferralProfile:
+    """Stop (or resume) a referrer earning. The whole of the abuse response for v1.
+
+    ── WHAT BLOCKING DOES AND, MORE IMPORTANTLY, DOES NOT DO ───────────────────────
+
+    It stops NEW commissions accruing (`_refuse_attribution` refuses the code at
+    checkout) and stops new payout requests (`request_payout` raises
+    `referrer_blocked`). It does NOT touch money already earned, and that restraint is
+    deliberate: taking earned money back is `ReferralAdjustment`'s job, it requires
+    somebody to type a reason, and it leaves a signed row behind. A block that silently
+    zeroed a balance would be the same destructive act with no audit trail and no
+    reversal.
+
+    It also does not touch an OPEN payout request. If a referrer is blocked mid-review,
+    the request is still sitting in the queue and a human still has to decide it —
+    rejecting it is one click and releases the money, which is the honest sequence.
+    Auto-rejecting here would bury a money decision inside an abuse action.
+
+    A reason is REQUIRED to block and ignored to unblock. Blocking is the destructive
+    direction and "why is this person blocked" is the question somebody will ask in six
+    months, most likely a different person; unblocking needs no justification because it
+    restores the default.
+    """
+    profile = ReferralProfile.objects.select_for_update().filter(user=user).first()
+    if profile is None:
+        profile = ensure_profile(user)
+        profile = ReferralProfile.objects.select_for_update().get(pk=profile.pk)
+    if blocked and not reason.strip():
+        raise ReferralError("reason_required", "Say why this referrer is being blocked.")
+    profile.is_blocked = blocked
+    profile.blocked_reason = reason.strip() if blocked else ""
+    profile.save(update_fields=["is_blocked", "blocked_reason", "updated_at"])
+    logger.info(
+        "referral profile %s %s by %s",
+        profile.code, "blocked" if blocked else "unblocked", getattr(staff_user, "pk", None),
+    )
+    return profile
+
+
+@transaction.atomic
+def add_adjustment(
+    referrer, *, currency: Currency, amount: Decimal, kind: str, reason: str, staff_user
+) -> ReferralAdjustment:
+    """Move a referrer's balance by hand, in one currency, with a reason attached.
+
+    The signed amount IS the interface — negative takes money away, positive gives it.
+    Not an unsigned amount plus a direction, for the reason `ReferralAdjustment.amount`
+    already gives: a sum that has to consult a flag is a sum somebody gets backwards.
+
+    ── WHY THIS DELIBERATELY REFUSES ALMOST NOTHING ────────────────────────────────
+
+    A manual adjustment is the escape hatch for the cases the model did not anticipate —
+    a goodwill payment, a ₦200k Club retainer, a correction after a support call, money
+    owed from the WordPress programme. Validation that second-guesses the human defeats
+    the purpose. So the only refusals are the ones that would corrupt the ledger rather
+    than merely be unwise: a zero amount (a row that changes nothing but implies
+    something happened), a missing reason, and a currency the shop cannot pay out at all
+    — a balance in a currency with no threshold can never be withdrawn, so crediting one
+    creates money the referrer can see and never receive.
+
+    NOT refused, on purpose: a negative adjustment larger than the current balance. The
+    balance is allowed to go negative (see `ReferralAdjustment`'s docstring — a clawback
+    after a payout does exactly this) and `request_payout` already refuses while it is.
+    Clamping here would silently forgive the remainder, which is the one direction of
+    this bug that costs the shop money.
+    """
+    amount = q2(Decimal(amount))
+    if amount == ZERO:
+        raise ReferralError("amount_required", "An adjustment of zero changes nothing.")
+    if not reason.strip():
+        raise ReferralError("reason_required", "Say why — this row outlives everyone here.")
+    if threshold_for(currency.code) is None:
+        raise ReferralError(
+            "currency_not_payable",
+            f"The shop does not pay out {currency.code}, so a {currency.code} balance "
+            f"could never be withdrawn.",
+        )
+    adjustment = ReferralAdjustment.objects.create(
+        referrer=referrer, currency=currency, amount=amount, kind=kind,
+        reason=reason.strip(), created_by=staff_user,
+    )
+    logger.info(
+        "referral adjustment %s: %s %s for user %s by %s (%s)",
+        adjustment.pk, amount, currency.code, referrer.pk,
+        getattr(staff_user, "pk", None), kind,
+    )
+    return adjustment
+
+
 # --- fraud signals (read by the admin payout queue) ---------------------------------
 
 

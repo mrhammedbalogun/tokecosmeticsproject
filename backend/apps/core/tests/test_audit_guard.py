@@ -79,6 +79,8 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     # this one screen unmasks — and if a number ever surfaces where it should not, a row
     # written at read time is the only thing that can say who looked.
     "PayoutQueueViewSet": "unmasked bank account numbers — the highest-value read on the admin surface",
+    "ReferrerListView": "every referrer, their contact details and what they have earned — a list of people and what they are worth",
+    "ReferrerAdjustmentsView": "one referrer's hand-written balance corrections, each with a staff reason attached",
 }
 
 

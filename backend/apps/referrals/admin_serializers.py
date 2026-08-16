@@ -134,3 +134,89 @@ class MarkPaidSerializer(serializers.Serializer):
 
     reference = serializers.CharField(max_length=100, allow_blank=False)
     admin_note = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+
+
+class ReferrerSerializer(serializers.Serializer):
+    """A referrer as the abuse/adjustment screen sees them.
+
+    Balances are computed per row rather than annotated, which is O(referrers) queries
+    and is the right trade at this size: `services.balances()` is the ONLY place that
+    knows what a balance is (matured commissions, unsettled adjustments, per currency,
+    no FX), and a hand-written annotation here would be a second definition of money
+    that drifts from the first. Revisit if this list ever pages past a few hundred.
+    """
+
+    id = serializers.IntegerField(source="user.id")
+    email = serializers.CharField(source="user.email")
+    toke_id = serializers.CharField(source="user.toke_id")
+    name = serializers.SerializerMethodField()
+    code = serializers.CharField()
+    is_blocked = serializers.BooleanField()
+    blocked_reason = serializers.CharField()
+    joined = serializers.DateTimeField(source="user.date_joined")
+    referred_customers = serializers.SerializerMethodField()
+    balances = serializers.SerializerMethodField()
+
+    def get_name(self, p) -> str:
+        return f"{p.user.first_name} {p.user.last_name}".strip() or p.user.email
+
+    def get_referred_customers(self, p) -> int:
+        from apps.referrals.services import referred_customer_count
+
+        return referred_customer_count(p.user)
+
+    def get_balances(self, p) -> list[dict]:
+        from apps.referrals.services import balances
+
+        return [
+            {
+                "currency": w.currency.code,
+                "available": str(w.available),
+                "pending": str(w.pending),
+                "lifetime": str(w.lifetime),
+            }
+            for w in balances(p.user)
+        ]
+
+
+class BlockReferrerSerializer(serializers.Serializer):
+    """`reason` is required to block and ignored to unblock — see
+    `services.set_referrer_blocked` for why the two directions differ."""
+
+    blocked = serializers.BooleanField()
+    reason = serializers.CharField(max_length=1000, required=False, allow_blank=True)
+
+
+class AdjustmentSerializer(serializers.Serializer):
+    """A hand-written correction. `amount` is SIGNED: negative takes money away.
+
+    Deliberately not split into an unsigned amount plus a direction dropdown. The sign is
+    the whole meaning of the row, and a UI that hides it behind a select is a UI where
+    somebody eventually credits what they meant to claw back.
+    """
+
+    currency = serializers.CharField(max_length=3)
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    kind = serializers.ChoiceField(choices=["clawback", "bonus", "correction"])
+    reason = serializers.CharField(max_length=1000, allow_blank=False)
+
+
+class AdjustmentRowSerializer(serializers.Serializer):
+    """An adjustment already written, for the history list under the form."""
+
+    id = serializers.IntegerField()
+    created_at = serializers.DateTimeField()
+    currency = serializers.CharField(source="currency.code")
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    kind = serializers.CharField()
+    reason = serializers.CharField()
+    created_by_email = serializers.SerializerMethodField()
+    settled = serializers.SerializerMethodField()
+
+    def get_created_by_email(self, a) -> str:
+        return a.created_by.email if a.created_by_id else "system"
+
+    def get_settled(self, a) -> bool:
+        """Whether a payout has already absorbed it. A settled adjustment is history; an
+        unsettled one is still moving the referrer's available balance right now."""
+        return a.settled_by_id is not None

@@ -24,6 +24,7 @@ downstream ever re-checks it.
 from django.db.models import Case, IntegerField, Prefetch, Value, When
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import serializers, status, viewsets
+from rest_framework.generics import ListAPIView
 from rest_framework.decorators import action
 from rest_framework.filters import SearchFilter
 from rest_framework.response import Response
@@ -34,13 +35,23 @@ from apps.accounts.rbac import HasAdminScope
 from apps.core.audit import AdminAuditMixin
 from apps.referrals import services
 from apps.referrals.admin_serializers import (
+    AdjustmentRowSerializer,
+    AdjustmentSerializer,
     ApprovePayoutSerializer,
+    BlockReferrerSerializer,
     MarkPaidSerializer,
     PayoutCommissionSerializer,
     PayoutQueueSerializer,
     RejectPayoutSerializer,
+    ReferrerSerializer,
 )
-from apps.referrals.models import Commission, PayoutRequest
+from apps.core.models import Currency
+from apps.referrals.models import (
+    Commission,
+    PayoutRequest,
+    ReferralAdjustment,
+    ReferralProfile,
+)
 from apps.referrals.views import _Page as ReferralPagination
 
 
@@ -208,3 +219,122 @@ class MarkPayoutPaidView(_PayoutActionView):
             reference=data["reference"],
             admin_note=data.get("admin_note", ""),
         )
+
+
+# ── REFERRERS: THE ABUSE AND CORRECTION SURFACE ──────────────────────────────────────
+#
+# A separate screen from the payout queue on purpose. The queue answers "settle what
+# people have asked for"; this answers "something is wrong with this person's account".
+# Mixing them would mean the month-end payment pass, which is rushed by nature, is also
+# where somebody reaches for the block button.
+
+
+class ReferrerListView(AdminAuditMixin, ListAPIView):
+    """`GET /admin/referrers/` — every customer with a referral profile.
+
+    Read-audited for the same reason the payout queue is: the rows carry a customer's
+    name, email and what they have earned. Not as expensive a read as a bank account
+    number, but it is still a list of people and what they are worth.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("referrals.view")]
+    serializer_class = ReferrerSerializer
+    pagination_class = ReferralPagination
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["is_blocked"]
+    search_fields = ["user__email", "user__toke_id", "code", "user__first_name", "user__last_name"]
+    audit_reads = True
+    audit_model_label = "referrals.referralprofile"
+
+    def get_queryset(self):
+        return ReferralProfile.objects.select_related("user").order_by(
+            # Blocked first: if somebody opens this screen without searching, it is
+            # usually to see who is currently stopped and why.
+            "-is_blocked", "-created_at",
+        )
+
+
+class ReferrerAdjustmentsView(AdminAuditMixin, ListAPIView):
+    """`GET /admin/referrers/<pk>/adjustments/` — what has already been done by hand."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("referrals.view")]
+    serializer_class = AdjustmentRowSerializer
+    pagination_class = ReferralPagination
+    audit_reads = True
+    audit_model_label = "referrals.referraladjustment"
+
+    def get_queryset(self):
+        return (
+            ReferralAdjustment.objects.select_related("currency", "created_by")
+            .filter(referrer_id=self.kwargs["pk"])
+            .order_by("-created_at")
+        )
+
+
+class BlockReferrerView(AdminAuditMixin, APIView):
+    """`referrals.manage` — stop or resume a referrer earning.
+
+    Does not touch money already earned and does not decide an open payout request; see
+    `services.set_referrer_blocked` for why both restraints are deliberate.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("referrals.manage")]
+    audit_action = "referrer_block"
+    audit_model_label = "referrals.referralprofile"
+
+    def post(self, request, pk: int):
+        body = BlockReferrerSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        profile = ReferralProfile.objects.select_related("user").filter(user_id=pk).first()
+        if profile is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            profile = services.set_referrer_blocked(
+                profile.user,
+                blocked=body.validated_data["blocked"],
+                reason=body.validated_data.get("reason", ""),
+                staff_user=request.user,
+            )
+        except services.ReferralError as exc:
+            return _referral_error(exc)
+        return Response(ReferrerSerializer(profile).data)
+
+
+class CreateAdjustmentView(AdminAuditMixin, APIView):
+    """`referrals.manage` — move a balance by hand, with a reason that outlives everyone.
+
+    The amount is signed and the service refuses very little on purpose (see
+    `services.add_adjustment`): this is the escape hatch for cases the model did not
+    anticipate, and validation that second-guesses the human defeats the point.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("referrals.manage")]
+    audit_action = "referral_adjustment"
+    audit_model_label = "referrals.referraladjustment"
+
+    def post(self, request, pk: int):
+        body = AdjustmentSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        profile = ReferralProfile.objects.select_related("user").filter(user_id=pk).first()
+        if profile is None:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        currency = Currency.objects.filter(code=body.validated_data["currency"].upper()).first()
+        if currency is None:
+            return Response({"error": "unknown_currency", "detail": "No such currency."},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            adjustment = services.add_adjustment(
+                profile.user,
+                currency=currency,
+                amount=body.validated_data["amount"],
+                kind=body.validated_data["kind"],
+                reason=body.validated_data["reason"],
+                staff_user=request.user,
+            )
+        except services.ReferralError as exc:
+            return _referral_error(exc)
+        return Response(AdjustmentRowSerializer(adjustment).data, status=status.HTTP_201_CREATED)

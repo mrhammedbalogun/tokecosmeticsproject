@@ -164,6 +164,13 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # Owner alone. Marking a payout paid asserts cash left the company account and is the
     # end of the audit trail rather than a step in it.
     "MarkPayoutPaidView": "referrals.pay",
+    # The abuse/correction surface, kept off the payout queue on purpose — see
+    # `admin_views`. Reading it is `referrals.view` (it lists people and what they are
+    # worth); blocking someone and moving a balance by hand are `referrals.manage`.
+    "ReferrerListView": "referrals.view",
+    "ReferrerAdjustmentsView": "referrals.view",
+    "BlockReferrerView": "referrals.manage",
+    "CreateAdjustmentView": "referrals.manage",
     # --- catalog: everything here writes the product catalogue -------------------
     "ProductAdminViewSet": "products.manage",
     "CategoryAdminViewSet": "products.manage",

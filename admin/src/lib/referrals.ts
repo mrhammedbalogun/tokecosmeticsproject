@@ -122,3 +122,96 @@ export function parsePayoutFilters(
     search: one("search").trim(),
   };
 }
+
+
+// --- referrers: the abuse and correction surface -------------------------------------
+
+export interface ReferrerBalance {
+  currency: string;
+  available: string;
+  pending: string;
+  lifetime: string;
+}
+
+export interface ReferrerRow {
+  id: number;
+  email: string;
+  toke_id: string;
+  name: string;
+  code: string;
+  is_blocked: boolean;
+  blocked_reason: string;
+  joined: string;
+  referred_customers: number;
+  balances: ReferrerBalance[];
+}
+
+export interface ReferrerPage {
+  count: number;
+  results: ReferrerRow[];
+}
+
+export const ADJUSTMENT_KINDS = ["clawback", "bonus", "correction"] as const;
+export type AdjustmentKind = (typeof ADJUSTMENT_KINDS)[number];
+
+export const ADJUSTMENT_KIND_LABEL: Record<AdjustmentKind, string> = {
+  clawback: "Clawback — refunded after payout",
+  bonus: "Bonus / retainer",
+  correction: "Manual correction",
+};
+
+export interface AdjustmentRow {
+  id: number;
+  created_at: string;
+  currency: string;
+  amount: string;
+  kind: string;
+  reason: string;
+  created_by_email: string;
+  /** True once a payout has absorbed it. An unsettled row is still moving what the
+   *  referrer can request right now, which is a different thing to show. */
+  settled: boolean;
+}
+
+/** Signed money, with the sign kept visible. A "-" that a reader can miss is the whole
+ *  risk of this screen: crediting what you meant to claw back looks identical until
+ *  someone reconciles the month. */
+export function signedAmount(currency: string, amount: string): string {
+  const n = Number(amount);
+  const body = Math.abs(n).toLocaleString("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  return `${n < 0 ? "−" : "+"}${currency} ${body}`;
+}
+
+export function referrersQueryString(params: {
+  page?: number;
+  search?: string;
+  blocked?: string;
+}): string {
+  const q = new URLSearchParams();
+  if (params.page && params.page > 1) q.set("page", String(params.page));
+  if (params.search) q.set("search", params.search);
+  // Only "true" filters. "false" would hide nobody worth hiding and reads as a bug when
+  // the list comes back looking unfiltered.
+  if (params.blocked === "true") q.set("is_blocked", "true");
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+export function parseReferrerFilters(
+  searchParams: Record<string, string | string[] | undefined>,
+): { page: number; search: string; blocked: string } {
+  const one = (key: string): string => {
+    const raw = searchParams[key];
+    return (Array.isArray(raw) ? raw[0] : raw) ?? "";
+  };
+  const page = Number.parseInt(one("page"), 10);
+  const blocked = one("blocked");
+  return {
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+    search: one("search").trim(),
+    blocked: blocked === "true" ? "true" : "",
+  };
+}

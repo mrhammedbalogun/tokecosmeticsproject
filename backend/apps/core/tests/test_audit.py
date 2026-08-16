@@ -667,6 +667,34 @@ def _case_payout_paid(client, monkeypatch):
     ), 200
 
 
+def _referrer_for_admin_actions():
+    """A referrer with a profile, for the block and adjustment cases."""
+    from django.contrib.auth import get_user_model
+
+    from apps.referrals.services import ensure_profile
+
+    user = get_user_model().objects.create_user(email="audit-block@x.com", password=None)
+    ensure_profile(user)
+    return user
+
+
+def _case_referrer_block(client, monkeypatch):
+    user = _referrer_for_admin_actions()
+    return client.post(
+        f"/api/v1/admin/referrers/{user.pk}/block/",
+        {"blocked": True, "reason": "Ordering through their own link."}, format="json",
+    ), 200
+
+
+def _case_referral_adjustment(client, monkeypatch):
+    user = _referrer_for_admin_actions()
+    return client.post(
+        f"/api/v1/admin/referrers/{user.pk}/adjust/",
+        {"currency": "NGN", "amount": "-2500.00", "kind": "clawback",
+         "reason": "Refund landed after the payout went."}, format="json",
+    ), 201
+
+
 WRITE_CASES: dict[str, tuple] = {
     # Self-service, but still a write worth a row: it changes what a stolen laptop is
     # worth. Revoking zero devices is a success (the state the caller wanted is true).
@@ -682,6 +710,10 @@ WRITE_CASES: dict[str, tuple] = {
     "ApprovePayoutView": (_case_payout_approve, "payout_approve"),
     "RejectPayoutView": (_case_payout_reject, "payout_reject"),
     "MarkPayoutPaidView": (_case_payout_paid, "payout_paid"),
+    # Blocking someone and moving their balance by hand are the two admin actions with no
+    # customer-visible receipt at all, which makes the audit row the only record.
+    "BlockReferrerView": (_case_referrer_block, "referrer_block"),
+    "CreateAdjustmentView": (_case_referral_adjustment, "referral_adjustment"),
     "AdminGigLabelView": (_case_gig_label, "gig_label"),
     "ProductAdminViewSet": (_case_product, "create"),
     "CategoryAdminViewSet": (_case_category, "create"),
@@ -749,6 +781,11 @@ READ_ONLY_VIEWS = frozenset(
         # is the one endpoint that unmasks a bank account number (declared in
         # test_audit_guard.READ_AUDITED_VIEWS).
         "PayoutQueueViewSet",
+        # The referrer list and one referrer's adjustment history: GET-only: their writes
+        # are BlockReferrerView and CreateAdjustmentView above. Both read-audited
+        # (declared in test_audit_guard.READ_AUDITED_VIEWS).
+        "ReferrerListView",
+        "ReferrerAdjustmentsView",
         # Plan-35: the deliveries table — GET-only by design (the table reads, the
         # order page acts). Read-audited — declared in READ_AUDITED_VIEWS.
         "AdminGigShipmentListView",
