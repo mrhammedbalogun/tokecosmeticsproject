@@ -71,8 +71,21 @@ def active_gateways_for(country) -> list[dict]:
     rows = CountryPaymentGateway.objects.filter(country=country, is_active=True).order_by(
         "sort_order"
     )
-    return [
-        {"gateway": r.gateway, "sort_order": r.sort_order}
-        for r in rows
-        if _is_configured(r.gateway, country)
-    ]
+    methods = []
+    for r in rows:
+        if not _is_configured(r.gateway, country):
+            continue
+        entry = {"gateway": r.gateway, "sort_order": r.sort_order, "description": ""}
+        if r.gateway == "bank_transfer":
+            # The market's own checkout copy for bank transfer (admin-entered, same row
+            # as the account details). "" lets the storefront fall back to its stock
+            # note. _is_configured just proved an active account exists.
+            account = (
+                BankAccount.objects.filter(country=country, is_active=True)
+                .only("description")
+                .first()
+            )
+            if account is not None:
+                entry["description"] = account.description
+        methods.append(entry)
+    return methods

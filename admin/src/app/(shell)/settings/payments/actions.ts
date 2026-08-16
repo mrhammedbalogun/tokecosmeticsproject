@@ -28,14 +28,22 @@ function fail(e: unknown, fallback: string): ConfigState {
   return { message: fallback };
 }
 
-export async function saveBankAccountAction(input: {
-  id: number;
+interface BankAccountFields {
   bank_name: string;
   account_name: string;
   account_number: string;
+  /** [label, value] pairs, order preserved — keys become the labels customers read. */
+  extra: [string, string][];
+  description: string;
   instructions: string;
   is_active: boolean;
-}): Promise<ConfigState> {
+}
+
+/** Shared validation + payload shaping for create and save. Returns field errors, or
+ * the request body ready to send. */
+function bankAccountBody(
+  input: BankAccountFields,
+): { fieldErrors: Record<string, string> } | { body: Record<string, unknown> } {
   const number = input.account_number.trim();
   if (!number) {
     return { fieldErrors: { account_number: "Customers need a number to pay into." } };
@@ -43,20 +51,61 @@ export async function saveBankAccountAction(input: {
   if (!input.bank_name.trim() || !input.account_name.trim()) {
     return { fieldErrors: { bank_name: "The bank and account name both appear at checkout." } };
   }
+  const extra: Record<string, string> = {};
+  for (const [label, value] of input.extra) {
+    if (!label.trim()) continue; // an unnamed row is an unfinished row — drop it
+    if (label.trim() in extra) {
+      return { fieldErrors: { extra: `"${label.trim()}" appears twice — labels must be unique.` } };
+    }
+    extra[label.trim()] = value.trim();
+  }
+  return {
+    body: {
+      bank_name: input.bank_name.trim(),
+      account_name: input.account_name.trim(),
+      account_number: number,
+      extra,
+      description: input.description,
+      instructions: input.instructions,
+      is_active: input.is_active,
+    },
+  };
+}
+
+export async function saveBankAccountAction(
+  input: BankAccountFields & { id: number },
+): Promise<ConfigState> {
+  const shaped = bankAccountBody(input);
+  if ("fieldErrors" in shaped) return shaped;
 
   try {
     await fetchWithAuth(`/admin/bank-accounts/${input.id}/`, {
       method: "PATCH",
-      body: {
-        bank_name: input.bank_name.trim(),
-        account_name: input.account_name.trim(),
-        account_number: number,
-        instructions: input.instructions,
-        is_active: input.is_active,
-      },
+      body: shaped.body,
     });
   } catch (e) {
     return fail(e, "That account could not be saved.");
+  }
+  revalidatePath("/settings/payments");
+  return { savedAt: Date.now() };
+}
+
+/** Give a market its account — the missing half of "enable bank transfer here". The
+ * currency comes from the market's gateway rows (the backend enforces it matches the
+ * country anyway), so the form never asks. */
+export async function createBankAccountAction(
+  input: BankAccountFields & { country: string; currency: string },
+): Promise<ConfigState> {
+  const shaped = bankAccountBody(input);
+  if ("fieldErrors" in shaped) return shaped;
+
+  try {
+    await fetchWithAuth("/admin/bank-accounts/", {
+      method: "POST",
+      body: { ...shaped.body, country: input.country, currency: input.currency },
+    });
+  } catch (e) {
+    return fail(e, "That account could not be created.");
   }
   revalidatePath("/settings/payments");
   return { savedAt: Date.now() };

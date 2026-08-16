@@ -875,6 +875,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/gig-shipments/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/gig-shipments/ — the deliveries table (Plan-35): every GIG
+         *     shipment with its origin, destination, customer and money columns, newest first.
+         *     The packing-desk question it exists to answer: "what must MY shop pack today?"
+         *     (filter by origin).
+         *
+         *     `orders.view` and READ-AUDITED, the order-list posture exactly: every row names a
+         *     customer and their phone. Paginated — this table grows with every order, and an
+         *     unpaginated dump would be bulk PII egress in one call (the CSV precedent gates
+         *     that at `orders.manage`; no export exists here on purpose).
+         *
+         *     The table READS; the order page ACTS (plan ruling 4): no capture or label
+         *     endpoints hang off this route — rows link to the order, where the confirm
+         *     ritual lives.
+         *
+         *     Filters: `status`, `origin` (snapshot id; 0 matches BOTH id-0 snapshots and the
+         *     empty pre-Plan-34 dict, so history never vanishes from a filtered view),
+         *     `service` (door|pickup, resolved from the centre snapshot), `placed_after`/
+         *     `placed_before` (the order's placed date).
+         */
+        get: operations["v1_admin_gig_shipments_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/google-reviews/": {
         parameters: {
             query?: never;
@@ -2390,6 +2426,230 @@ export interface paths {
         patch: operations["v1_admin_redirects_partial_update"];
         trace?: never;
     };
+    "/api/v1/admin/referral-payouts/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/admin/referral-payouts/` and the three actions on a row.
+         *
+         *     Default ordering is OLDEST REQUESTED FIRST, not newest. A payout queue is a work
+         *     queue: the interesting row is the one that has been waiting longest, and a
+         *     newest-first list buries it exactly as it becomes urgent. `days_open` rides along on
+         *     every open row so the UI can shout about it without a second query.
+         */
+        get: operations["v1_admin_referral_payouts_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referral-payouts/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /api/v1/admin/referral-payouts/` and the three actions on a row.
+         *
+         *     Default ordering is OLDEST REQUESTED FIRST, not newest. A payout queue is a work
+         *     queue: the interesting row is the one that has been waiting longest, and a
+         *     newest-first list buries it exactly as it becomes urgent. `days_open` rides along on
+         *     every open row so the UI can shout about it without a second query.
+         */
+        get: operations["v1_admin_referral_payouts_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referral-payouts/{id}/approve/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `referrals.manage` — staff mean to send this.
+         *
+         *     Optional in a one-person shop: `mark_payout_paid` accepts a `requested` row directly,
+         *     so Hammed can go straight to paid. Approve earns its keep when the person who checks
+         *     the fraud flags is not the person who opens the banking app.
+         */
+        post: operations["v1_admin_referral_payouts_approve_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referral-payouts/{id}/commissions/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The orders this payout is made of. Separate from the row so the list stays
+         *     one query per page rather than one per row.
+         */
+        get: operations["v1_admin_referral_payouts_commissions_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referral-payouts/{id}/mark-paid/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `referrals.pay` (Owner + Manager — see the module docstring). The transfer left
+         *     the bank.
+         *
+         *     The one action in the programme that asserts cash has actually moved, and nothing
+         *     downstream re-checks it. The bank's reference is required (the service refuses
+         *     without one): it is the only artefact that answers "I never received it". Sends the
+         *     customer their payout email.
+         */
+        post: operations["v1_admin_referral_payouts_mark_paid_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referral-payouts/{id}/reject/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `referrals.manage` — refuse it and RELEASE the commissions back to available.
+         *
+         *     Rejection is reversible by design and that is the whole point: a refused request that
+         *     kept its commissions claimed would read as a zero balance forever with no row
+         *     explaining it. Accepts an `approved` row too, for a transfer the bank bounced.
+         */
+        post: operations["v1_admin_referral_payouts_reject_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referrers/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET /admin/referrers/` — every customer with a referral profile.
+         *
+         *     Read-audited for the same reason the payout queue is: the rows carry a customer's
+         *     name, email and what they have earned. Not as expensive a read as a bank account
+         *     number, but it is still a list of people and what they are worth.
+         */
+        get: operations["v1_admin_referrers_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referrers/{id}/adjust/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `referrals.manage` — move a balance by hand, with a reason that outlives everyone.
+         *
+         *     The amount is signed and the service refuses very little on purpose (see
+         *     `services.add_adjustment`): this is the escape hatch for cases the model did not
+         *     anticipate, and validation that second-guesses the human defeats the point.
+         */
+        post: operations["v1_admin_referrers_adjust_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referrers/{id}/adjustments/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description `GET /admin/referrers/<pk>/adjustments/` — what has already been done by hand. */
+        get: operations["v1_admin_referrers_adjustments_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/referrers/{id}/block/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `referrals.manage` — stop or resume a referrer earning.
+         *
+         *     Does not touch money already earned and does not decide an open payout request; see
+         *     `services.set_referrer_blocked` for why both restraints are deliberate.
+         */
+        post: operations["v1_admin_referrers_block_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/refunds-owed/": {
         parameters: {
             query?: never;
@@ -2627,6 +2887,104 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sender-locations/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Pickup origins (Plan-34): the Toke locations GIG collects from. Same scope
+         *     reasoning as delivery options — an operational number, `products.manage`.
+         *
+         *     Delete is refused once any shipment's origin snapshot references the row:
+         *     the snapshot answers history on its own, but reusing a freed pk would let a
+         *     NEW row silently inherit an old shipment's identity in the audit trail.
+         *     "This shop closed" is `is_active=False`; delete is for typos that never
+         *     shipped anything. Deactivating every row is safe by construction — selection
+         *     falls back to the `GIG_SENDER_*` env origin, it never breaks a checkout.
+         */
+        get: operations["v1_admin_sender_locations_list"];
+        put?: never;
+        /**
+         * @description Pickup origins (Plan-34): the Toke locations GIG collects from. Same scope
+         *     reasoning as delivery options — an operational number, `products.manage`.
+         *
+         *     Delete is refused once any shipment's origin snapshot references the row:
+         *     the snapshot answers history on its own, but reusing a freed pk would let a
+         *     NEW row silently inherit an old shipment's identity in the audit trail.
+         *     "This shop closed" is `is_active=False`; delete is for typos that never
+         *     shipped anything. Deactivating every row is safe by construction — selection
+         *     falls back to the `GIG_SENDER_*` env origin, it never breaks a checkout.
+         */
+        post: operations["v1_admin_sender_locations_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/sender-locations/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Pickup origins (Plan-34): the Toke locations GIG collects from. Same scope
+         *     reasoning as delivery options — an operational number, `products.manage`.
+         *
+         *     Delete is refused once any shipment's origin snapshot references the row:
+         *     the snapshot answers history on its own, but reusing a freed pk would let a
+         *     NEW row silently inherit an old shipment's identity in the audit trail.
+         *     "This shop closed" is `is_active=False`; delete is for typos that never
+         *     shipped anything. Deactivating every row is safe by construction — selection
+         *     falls back to the `GIG_SENDER_*` env origin, it never breaks a checkout.
+         */
+        get: operations["v1_admin_sender_locations_retrieve"];
+        /**
+         * @description Pickup origins (Plan-34): the Toke locations GIG collects from. Same scope
+         *     reasoning as delivery options — an operational number, `products.manage`.
+         *
+         *     Delete is refused once any shipment's origin snapshot references the row:
+         *     the snapshot answers history on its own, but reusing a freed pk would let a
+         *     NEW row silently inherit an old shipment's identity in the audit trail.
+         *     "This shop closed" is `is_active=False`; delete is for typos that never
+         *     shipped anything. Deactivating every row is safe by construction — selection
+         *     falls back to the `GIG_SENDER_*` env origin, it never breaks a checkout.
+         */
+        put: operations["v1_admin_sender_locations_update"];
+        post?: never;
+        /**
+         * @description Pickup origins (Plan-34): the Toke locations GIG collects from. Same scope
+         *     reasoning as delivery options — an operational number, `products.manage`.
+         *
+         *     Delete is refused once any shipment's origin snapshot references the row:
+         *     the snapshot answers history on its own, but reusing a freed pk would let a
+         *     NEW row silently inherit an old shipment's identity in the audit trail.
+         *     "This shop closed" is `is_active=False`; delete is for typos that never
+         *     shipped anything. Deactivating every row is safe by construction — selection
+         *     falls back to the `GIG_SENDER_*` env origin, it never breaks a checkout.
+         */
+        delete: operations["v1_admin_sender_locations_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Pickup origins (Plan-34): the Toke locations GIG collects from. Same scope
+         *     reasoning as delivery options — an operational number, `products.manage`.
+         *
+         *     Delete is refused once any shipment's origin snapshot references the row:
+         *     the snapshot answers history on its own, but reusing a freed pk would let a
+         *     NEW row silently inherit an old shipment's identity in the audit trail.
+         *     "This shop closed" is `is_active=False`; delete is for typos that never
+         *     shipped anything. Deactivating every row is safe by construction — selection
+         *     falls back to the `GIG_SENDER_*` env origin, it never breaks a checkout.
+         */
+        patch: operations["v1_admin_sender_locations_partial_update"];
         trace?: never;
     };
     "/api/v1/admin/staff/": {
@@ -4545,6 +4903,104 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/me/referrals/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/me/referrals/ — everything the account page's hero needs, in one call.
+         *
+         *     Deliberately one endpoint rather than four: this page is a dashboard, every widget
+         *     on it is above the fold, and four round-trips through the BFF to render one screen
+         *     is four chances for a partial render.
+         *
+         *     This is also the endpoint that CREATES the referral profile, via `ensure_profile` —
+         *     see that function for why the programme has no signup and no signal.
+         */
+        get: operations["v1_me_referrals_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/referrals/commissions/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/me/referrals/commissions/ — the activity feed, newest first.
+         *
+         *     Adjustments ride along in the same response rather than getting their own endpoint:
+         *     they belong in the same visual list (a clawback is an event in the referrer's
+         *     earnings history, not a separate concept they should have to go looking for), and
+         *     there are never many of them.
+         */
+        get: operations["v1_me_referrals_commissions_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/referrals/payout-methods/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET/PUT /api/v1/me/referrals/payout-methods/ — where the money goes.
+         *
+         *     PUT rather than POST, and keyed on currency inside the body rather than in the path:
+         *     a referrer has at most one account per currency, so this is a replace, and modelling
+         *     it as a collection would invite a second account nobody can choose between.
+         */
+        get: operations["v1_me_referrals_payout_methods_retrieve"];
+        /**
+         * @description GET/PUT /api/v1/me/referrals/payout-methods/ — where the money goes.
+         *
+         *     PUT rather than POST, and keyed on currency inside the body rather than in the path:
+         *     a referrer has at most one account per currency, so this is a replace, and modelling
+         *     it as a collection would invite a second account nobody can choose between.
+         */
+        put: operations["v1_me_referrals_payout_methods_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/referrals/payouts/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description GET/POST /api/v1/me/referrals/payouts/ — history, and asking for the next one. */
+        get: operations["v1_me_referrals_payouts_retrieve"];
+        put?: never;
+        /** @description GET/POST /api/v1/me/referrals/payouts/ — history, and asking for the next one. */
+        post: operations["v1_me_referrals_payouts_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me/wishlist/": {
         parameters: {
             query?: never;
@@ -4851,6 +5307,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/referrals/lookup/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/referrals/lookup/?code=X — "is this a real code, and whose?"
+         *
+         *     THE ONLY PUBLIC ENDPOINT IN THIS APP, and it exists so a bare code is usable at all.
+         *     The programme is link-first (`?ref=`), but people share codes in captions, voice
+         *     notes and over the phone, and until this landed the share card advertised a code that
+         *     nothing could redeem.
+         *
+         *     ── WHAT IT DISCLOSES, AND WHY THAT IS ACCEPTABLE ───────────────────────────────
+         *
+         *     A first name, for a code that is designed to be published. That is the whole point:
+         *     "✓ You're shopping with Amina's link" is what tells someone they typed it correctly,
+         *     and without it the field is a black box. No email, no surname, no totals, no
+         *     indication of whether the referrer has ever earned anything.
+         *
+         *     It is still an enumeration surface — guess codes, harvest first names — so it is
+         *     throttled. The cap is a junk-volume cap rather than a guess cap: a guessed code
+         *     credits a stranger with commission, which costs that stranger nothing and the shop
+         *     nothing beyond noise, so the threat does not justify a tighter limit that would
+         *     catch real customers. Note the shared-bucket caveat in `accounts.throttling`: the
+         *     storefront reaches this through the BFF, so all customers share one IP bucket.
+         *
+         *     ── SELF-REFERRAL IS ANSWERED HERE, NOT SWALLOWED ──────────────────────────────
+         *
+         *     `attribution_code_for_order` silently drops a self-referral at order time, which is
+         *     right for a cookie the customer never chose. But somebody who TYPES their own code
+         *     and is told "✓ You're shopping with Amina's link" — their own name — would reasonably
+         *     expect to be paid. So an authenticated caller applying their own code is refused
+         *     explicitly. This leaks nothing: they already know their own code.
+         */
+        get: operations["v1_referrals_lookup_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search/": {
         parameters: {
             query?: never;
@@ -4953,6 +5455,23 @@ export interface components {
             longitude?: string | null;
             readonly is_default_shipping: boolean;
             readonly is_default_billing: boolean;
+        };
+        /** @description An adjustment already written, for the history list under the form. */
+        AdjustmentRow: {
+            id: number;
+            /** Format: date-time */
+            created_at: string;
+            currency: string;
+            /** Format: decimal */
+            amount: string;
+            kind: string;
+            reason: string;
+            readonly created_by_email: string;
+            /**
+             * @description Whether a payout has already absorbed it. A settled adjustment is history; an
+             *     unsettled one is still moving the referrer's available balance right now.
+             */
+            readonly settled: boolean;
         };
         /**
          * @description Shape of `/auth/admin-me/`. Response-only — the admin shell reads it to decide
@@ -5209,6 +5728,7 @@ export interface components {
             account_name: string;
             account_number: string;
             extra?: unknown;
+            description?: string;
             instructions?: string;
             is_active?: boolean;
             /** Format: date-time */
@@ -5544,6 +6064,50 @@ export interface components {
             token: string;
         };
         /**
+         * @description One row of the deliveries table (Plan-35) — READ ONLY, composed entirely from
+         *     snapshots the shipment and its order already hold, so a page of rows costs one
+         *     query and zero HTTP. The origin/centre/address snapshots are the source, not the
+         *     live tables: this list answers "what happened", and history must not shift when
+         *     a location is renamed or a centre closes.
+         */
+        GigShipmentRow: {
+            readonly order_number: string;
+            /** Format: date-time */
+            readonly placed_at: string;
+            status?: components["schemas"]["GigShipmentRowStatusEnum"];
+            waybill?: string;
+            /**
+             * @description An empty snapshot means pre-Plan-34 or the env fallback — labelled as the
+             *     built-in origin (id 0) so old shipments stay legible and filterable, never
+             *     resolved against today's settings (which may have moved since).
+             */
+            readonly origin: {
+                [key: string]: unknown;
+            };
+            readonly service: string;
+            readonly destination: string;
+            readonly customer_name: string;
+            readonly customer_phone: string;
+            /** Format: decimal */
+            charged: string;
+            /** Format: decimal */
+            cost?: string | null;
+            readonly currency: string;
+            last_scan?: unknown;
+            /** Format: date-time */
+            last_tracked_at?: string | null;
+        };
+        /**
+         * @description * `quoted` - Quoted
+         *     * `created` - Waybill created
+         *     * `in_transit` - In transit
+         *     * `delivered` - Delivered
+         *     * `create_unconfirmed` - Capture unconfirmed — check with GIG
+         *     * `abandoned` - Abandoned
+         * @enum {string}
+         */
+        GigShipmentRowStatusEnum: "quoted" | "created" | "in_transit" | "delivered" | "create_unconfirmed" | "abandoned";
+        /**
          * @description Everything is audited: a fabricated five-star review on the homepage is a
          *     reputational incident, and the trail must say who put it there.
          */
@@ -5711,6 +6275,21 @@ export interface components {
          * @enum {string}
          */
         PageAdminStatusEnum: "draft" | "published";
+        PaginatedAdjustmentRowList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["AdjustmentRow"][];
+        };
         PaginatedAdminOrderListList: {
             /** @example 123 */
             count: number;
@@ -5861,6 +6440,21 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["CustomerList"][];
         };
+        PaginatedGigShipmentRowList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["GigShipmentRow"][];
+        };
         PaginatedGoogleReviewAdminList: {
             /** @example 123 */
             count: number;
@@ -5950,6 +6544,21 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["PageAdmin"][];
+        };
+        PaginatedPayoutQueueList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["PayoutQueue"][];
         };
         PaginatedPriceAdminList: {
             /** @example 123 */
@@ -6055,6 +6664,21 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["RedirectAdmin"][];
+        };
+        PaginatedReferrerList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["Referrer"][];
         };
         PaginatedRefundOwedList: {
             /** @example 123 */
@@ -6216,6 +6840,7 @@ export interface components {
             account_name?: string;
             account_number?: string;
             extra?: unknown;
+            description?: string;
             instructions?: string;
             is_active?: boolean;
             /** Format: date-time */
@@ -6590,6 +7215,29 @@ export interface components {
             /** Format: date-time */
             readonly created_at?: string;
         };
+        /**
+         * @description Plan-34: one Toke fulfilment point GIG collects from. The pin prices every
+         *     quote and is where the rider drives; the phone is who GIG calls to coordinate
+         *     the pickup — both are validated hard, not trusted.
+         */
+        PatchedSenderLocationAdmin: {
+            readonly id?: number;
+            name?: string;
+            phone?: string;
+            address?: string;
+            locality?: string;
+            /** Format: decimal */
+            latitude?: string;
+            /** Format: decimal */
+            longitude?: string;
+            /** @description Display only — routing follows the pin, never this label. */
+            state?: string;
+            /** @description Display only — routing follows the pin, never this label. */
+            lga?: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
         PatchedTagAdmin: {
             readonly id?: number;
             /** Format: date-time */
@@ -6627,6 +7275,58 @@ export interface components {
              *     serving them. `is_active=False` is not cover, because `reserve()` skips it.
              */
             readonly countries_left_unserved?: string[];
+        };
+        /** @description One row of the queue. Read-only; every state change goes through a service. */
+        PayoutQueue: {
+            id: number;
+            /** Format: date-time */
+            created_at: string;
+            status: string;
+            currency: string;
+            /** Format: decimal */
+            amount: string;
+            /** Format: decimal */
+            wht_rate_percent: string;
+            /** Format: decimal */
+            wht_amount: string;
+            /** Format: decimal */
+            net_amount: string;
+            readonly referrer_name: string;
+            referrer_email: string;
+            referrer_toke_id: string;
+            referrer_id: number;
+            readonly referrer_is_blocked: boolean;
+            readonly bank_name: string;
+            readonly account_name: string;
+            readonly account_number: string;
+            readonly bank_code: string;
+            readonly commission_count: number;
+            /**
+             * @description Computed per row rather than stored. A flag is a reading of the data as it is
+             *     NOW — "bank details changed since the request" becomes true after the fact, and a
+             *     stored copy would still say the request was clean.
+             */
+            readonly flags: string[];
+            /**
+             * @description How long the customer has been waiting, for requests nobody has answered.
+             *
+             *     None once a decision exists, because the number stops meaning anything then. The
+             *     queue sorts on it, and the storefront tells the customer nothing but "we're
+             *     reviewing it", so this is the only place the wait is visible to anyone.
+             */
+            readonly days_open: number | null;
+            /** Format: date-time */
+            decided_at: string;
+            /**
+             * @description Who decided it. Blank rather than null while nobody has — the queue renders it
+             *     straight into a cell, and "None" is not a person's name.
+             */
+            readonly decided_by_email: string;
+            /** Format: date-time */
+            paid_at: string;
+            reference: string;
+            admin_note: string;
+            customer_message: string;
         };
         /**
          * @description * `hero` - Hero slide
@@ -6830,6 +7530,30 @@ export interface components {
             readonly created_at: string;
         };
         /**
+         * @description A referrer as the abuse/adjustment screen sees them.
+         *
+         *     Balances are computed per row rather than annotated, which is O(referrers) queries
+         *     and is the right trade at this size: `services.balances()` is the ONLY place that
+         *     knows what a balance is (matured commissions, unsettled adjustments, per currency,
+         *     no FX), and a hand-written annotation here would be a second definition of money
+         *     that drifts from the first. Revisit if this list ever pages past a few hundred.
+         */
+        Referrer: {
+            id: number;
+            email: string;
+            toke_id: string;
+            readonly name: string;
+            code: string;
+            is_blocked: boolean;
+            blocked_reason: string;
+            /** Format: date-time */
+            joined: string;
+            readonly referred_customers: number;
+            readonly balances: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
          * @description One row of the refunds-owed worklist. The amounts are the whole point of the
          *     screen, so they are computed here from the payment ledger, never from a cached field.
          *
@@ -6942,6 +7666,29 @@ export interface components {
             /** @default false */
             trust_device: boolean;
             device_token?: string;
+        };
+        /**
+         * @description Plan-34: one Toke fulfilment point GIG collects from. The pin prices every
+         *     quote and is where the rider drives; the phone is who GIG calls to coordinate
+         *     the pickup — both are validated hard, not trusted.
+         */
+        SenderLocationAdmin: {
+            readonly id: number;
+            name: string;
+            phone: string;
+            address: string;
+            locality: string;
+            /** Format: decimal */
+            latitude: string;
+            /** Format: decimal */
+            longitude: string;
+            /** @description Display only — routing follows the pin, never this label. */
+            state?: string;
+            /** @description Display only — routing follows the pin, never this label. */
+            lga?: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
         };
         /**
          * @description READ shape. Note what is absent: `token_hash`.
@@ -8330,6 +9077,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeliveryOptionAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_gig_shipments_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedGigShipmentRowList"];
                 };
             };
         };
@@ -10233,6 +11002,237 @@ export interface operations {
             };
         };
     };
+    v1_admin_referral_payouts_list: {
+        parameters: {
+            query?: {
+                currency?: string;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description Number of results to return per page. */
+                page_size?: number;
+                /** @description A search term. */
+                search?: string;
+                /**
+                 * @description * `requested` - Requested
+                 *     * `approved` - Approved
+                 *     * `paid` - Paid
+                 *     * `rejected` - Rejected
+                 */
+                status?: "approved" | "paid" | "rejected" | "requested";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedPayoutQueueList"];
+                };
+            };
+        };
+    };
+    v1_admin_referral_payouts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this payout request. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayoutQueue"];
+                };
+            };
+        };
+    };
+    v1_admin_referral_payouts_approve_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_referral_payouts_commissions_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this payout request. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PayoutQueue"];
+                };
+            };
+        };
+    };
+    v1_admin_referral_payouts_mark_paid_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_referral_payouts_reject_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_referrers_list: {
+        parameters: {
+            query?: {
+                is_blocked?: boolean;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description Number of results to return per page. */
+                page_size?: number;
+                /** @description A search term. */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedReferrerList"];
+                };
+            };
+        };
+    };
+    v1_admin_referrers_adjust_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_referrers_adjustments_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description Number of results to return per page. */
+                page_size?: number;
+            };
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAdjustmentRowList"];
+                };
+            };
+        };
+    };
+    v1_admin_referrers_block_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_admin_refunds_owed_list: {
         parameters: {
             query?: {
@@ -10490,6 +11490,149 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    v1_admin_sender_locations_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SenderLocationAdmin"][];
+                };
+            };
+        };
+    };
+    v1_admin_sender_locations_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SenderLocationAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["SenderLocationAdmin"];
+                "multipart/form-data": components["schemas"]["SenderLocationAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SenderLocationAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_sender_locations_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this GIG sender location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SenderLocationAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_sender_locations_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this GIG sender location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SenderLocationAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["SenderLocationAdmin"];
+                "multipart/form-data": components["schemas"]["SenderLocationAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SenderLocationAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_sender_locations_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this GIG sender location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_sender_locations_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this GIG sender location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedSenderLocationAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedSenderLocationAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedSenderLocationAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SenderLocationAdmin"];
+                };
             };
         };
     };
@@ -12312,6 +13455,114 @@ export interface operations {
             };
         };
     };
+    v1_me_referrals_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_me_referrals_commissions_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_me_referrals_payout_methods_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_me_referrals_payout_methods_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_me_referrals_payouts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_me_referrals_payouts_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_me_wishlist_retrieve: {
         parameters: {
             query?: never;
@@ -12659,6 +13910,24 @@ export interface operations {
             path: {
                 slug: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_referrals_lookup_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

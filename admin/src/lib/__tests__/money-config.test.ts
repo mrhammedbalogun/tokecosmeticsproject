@@ -3,6 +3,7 @@ import {
   addableGateways,
   couponInactiveReason,
   gatewayObstacle,
+  marketsAddableForAccount,
   marketsWithoutAnAccount,
   nextSortOrder,
   type BankAccountRow,
@@ -29,7 +30,7 @@ const catalogEntry = (code: string, over: Partial<GatewayCatalogEntry> = {}): Ga
 const account = (country: string, is_active = true): BankAccountRow => ({
   id: Math.random(), country, country_name: country, currency: "NGN",
   bank_name: "GTBank", account_name: "Toke", account_number: "1", extra: {},
-  instructions: "", is_active, updated_at: "",
+  description: "", instructions: "", is_active, updated_at: "",
 });
 
 const coupon = (over: Partial<CouponRow> = {}): CouponRow => ({
@@ -144,5 +145,31 @@ describe("nextSortOrder", () => {
 
   it("starts at 1 for an empty market", () => {
     expect(nextSortOrder([])).toBe(1);
+  });
+});
+
+describe("marketsAddableForAccount", () => {
+  it("offers every market the gateway table knows that has no account row", () => {
+    const markets = marketsAddableForAccount(
+      [
+        gateway("US", "bank_transfer", true, { country_name: "United States", country_currency: "USD" }),
+        gateway("US", "paypal", false, { country_name: "United States", country_currency: "USD" }),
+        gateway("NG", "bank_transfer"),
+      ],
+      [account("NG")],
+    );
+    expect(markets).toEqual([{ code: "US", name: "United States", currency: "USD" }]);
+  });
+
+  it("does NOT offer a market whose account merely sits inactive — one row per market, edited in place", () => {
+    expect(marketsAddableForAccount([gateway("NG", "bank_transfer")], [account("NG", false)])).toEqual([]);
+  });
+
+  it("sorts by country code so the picker is stable", () => {
+    const codes = marketsAddableForAccount(
+      [gateway("US", "paypal"), gateway("CA", "paypal"), gateway("GB", "paypal")],
+      [],
+    ).map((m) => m.code);
+    expect(codes).toEqual(["CA", "GB", "US"]);
   });
 });

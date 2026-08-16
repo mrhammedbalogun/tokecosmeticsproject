@@ -9,6 +9,9 @@ export interface BankAccountRow {
   account_name: string;
   account_number: string;
   extra: Record<string, string>;
+  /** Checkout copy shown while the customer is CHOOSING the method (Woo's
+   * "Description"); `instructions` is the post-order text sent with the details. */
+  description: string;
   instructions: string;
   is_active: boolean;
   updated_at: string;
@@ -106,6 +109,29 @@ export function marketsWithoutAnAccount(
         .map((g) => g.country),
     ),
   ].sort();
+}
+
+/** Markets that could still be GIVEN an account: every market the gateway table knows
+ * about, minus those that already have a row (active or not — `BankAccount.country` is
+ * OneToOne, so a market's account is edited, never duplicated). The gateway table is the
+ * right universe: a market absent from it cannot offer bank transfer anyway, and its rows
+ * carry the country name and currency the create form needs. */
+export function marketsAddableForAccount(
+  gateways: GatewayRow[],
+  accounts: BankAccountRow[],
+): { code: string; name: string; currency: string }[] {
+  const taken = new Set(accounts.map((a) => a.country));
+  const seen = new Map<string, { code: string; name: string; currency: string }>();
+  for (const g of gateways) {
+    if (!taken.has(g.country) && !seen.has(g.country)) {
+      seen.set(g.country, {
+        code: g.country,
+        name: g.country_name,
+        currency: g.country_currency,
+      });
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.code.localeCompare(b.code));
 }
 
 /** Why a switched-on gateway row would still not appear at checkout (or null if it

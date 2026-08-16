@@ -82,6 +82,23 @@ describe("PaymentStep", () => {
     expect(url).toContain("country=NG");
   });
 
+  it("shows the market's own description instead of the stock note when the API sends one", async () => {
+    mockFetch(200, [
+      {
+        gateway: "bank_transfer",
+        sort_order: 1,
+        description: "Transfer to our Zenith account. We confirm within the hour.",
+      },
+    ]);
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByText("Bank transfer")).toBeInTheDocument());
+    expect(
+      screen.getByText(/transfer to our zenith account/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/pay by transfer/i)).not.toBeInTheDocument();
+  });
+
   it("selecting bank_transfer completes step 4 with paymentGateway: bank_transfer", async () => {
     mockFetch(200, [{ gateway: "bank_transfer", sort_order: 1 }]);
     renderHarness();

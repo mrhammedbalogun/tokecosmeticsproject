@@ -18,6 +18,7 @@
 import { startTransition, useState } from "react";
 import {
   addGatewayAction,
+  createBankAccountAction,
   removeGatewayAction,
   reorderGatewaysAction,
   saveBankAccountAction,
@@ -26,6 +27,7 @@ import {
 import {
   addableGateways,
   gatewayObstacle,
+  marketsAddableForAccount,
   marketsWithoutAnAccount,
   nextSortOrder,
   type BankAccountRow,
@@ -66,13 +68,15 @@ export function PaymentsConfig({
           What a customer paying by transfer is told. One per market.
         </p>
         <div className="mt-3 space-y-4">
-          {accounts.length === 0 ? (
+          {accounts.length === 0 && (
             <p className="rounded-[var(--radius-card)] border border-dashed border-line p-6 text-center text-sm text-muted">
               No bank accounts yet.
             </p>
-          ) : (
-            accounts.map((account) => <AccountCard key={account.id} account={account} />)
           )}
+          {accounts.map((account) => (
+            <AccountCard key={account.id} account={account} />
+          ))}
+          <AddAccountCard markets={marketsAddableForAccount(gateways, accounts)} />
         </div>
       </section>
 
@@ -88,10 +92,73 @@ export function PaymentsConfig({
   );
 }
 
+/** The extra display rows a market's wire needs beyond bank/name/number — sort code
+ * (GB), routing number (US), IBAN/SWIFT. Labels are shown to the customer exactly as
+ * typed (capitals preserved: write `IBAN`, not `iban`). */
+function ExtraFieldsEditor({
+  extra,
+  onChange,
+  error,
+}: {
+  extra: [string, string][];
+  onChange: (next: [string, string][]) => void;
+  error?: string;
+}) {
+  const set = (index: number, part: 0 | 1, value: string) => {
+    onChange(extra.map((row, i) => (i === index ? ((part === 0 ? [value, row[1]] : [row[0], value]) as [string, string]) : row)));
+  };
+  return (
+    <div className="mt-3">
+      <p className="text-xs text-muted">
+        Extra details shown with the account (e.g. Sort code, IBAN, SWIFT). Labels appear
+        to the customer exactly as typed.
+      </p>
+      {extra.map(([label, value], index) => (
+        <div key={index} className="mt-2 flex items-center gap-2">
+          <input
+            type="text"
+            value={label}
+            onChange={(e) => set(index, 0, e.target.value)}
+            placeholder="Label (e.g. Sort code)"
+            aria-label={`Extra detail ${index + 1} label`}
+            className={`${FIELD} max-w-[14rem]`}
+          />
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => set(index, 1, e.target.value)}
+            placeholder="Value"
+            aria-label={`Extra detail ${index + 1} value`}
+            className={`font-mono ${FIELD}`}
+          />
+          <button
+            type="button"
+            onClick={() => onChange(extra.filter((_, i) => i !== index))}
+            aria-label={`Remove extra detail ${index + 1}`}
+            className="shrink-0 text-xs text-muted hover:text-warn"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      {error && <p className="mt-1 text-xs text-warn">{error}</p>}
+      <button
+        type="button"
+        onClick={() => onChange([...extra, ["", ""]])}
+        className="mt-2 text-xs text-accent hover:underline"
+      >
+        + Add a detail
+      </button>
+    </div>
+  );
+}
+
 function AccountCard({ account }: { account: BankAccountRow }) {
   const [bankName, setBankName] = useState(account.bank_name);
   const [accountName, setAccountName] = useState(account.account_name);
   const [accountNumber, setAccountNumber] = useState(account.account_number);
+  const [extra, setExtra] = useState<[string, string][]>(Object.entries(account.extra));
+  const [description, setDescription] = useState(account.description);
   const [instructions, setInstructions] = useState(account.instructions);
   const [isActive, setIsActive] = useState(account.is_active);
   const [pending, setPending] = useState(false);
@@ -113,6 +180,8 @@ function AccountCard({ account }: { account: BankAccountRow }) {
         bank_name: bankName,
         account_name: accountName,
         account_number: accountNumber,
+        extra,
+        description,
         instructions,
         is_active: isActive,
       });
@@ -198,8 +267,21 @@ function AccountCard({ account }: { account: BankAccountRow }) {
         </label>
       </div>
 
+      <ExtraFieldsEditor extra={extra} onChange={setExtra} error={errors.extra} />
+
       <label className="mt-3 block text-xs text-muted">
-        Instructions shown with the details
+        Description shown at checkout, while choosing how to pay
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          placeholder="e.g. Pay by transfer — we confirm your order once the funds arrive."
+          className={`mt-1 ${FIELD}`}
+        />
+      </label>
+
+      <label className="mt-3 block text-xs text-muted">
+        Instructions shown with the details, after the order is placed
         <textarea
           value={instructions}
           onChange={(e) => setInstructions(e.target.value)}
@@ -247,6 +329,175 @@ function AccountCard({ account }: { account: BankAccountRow }) {
         >
           {pending ? "Saving…" : "Save account"}
         </button>
+      )}
+    </form>
+  );
+}
+
+/** Give a market its account — the missing half of "enable bank transfer here". Only
+ * markets with no row at all are offered (one account per market); existing accounts
+ * are edited in place above. */
+function AddAccountCard({
+  markets,
+}: {
+  markets: { code: string; name: string; currency: string }[];
+}) {
+  const [country, setCountry] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [accountName, setAccountName] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [extra, setExtra] = useState<[string, string][]>([]);
+  const [description, setDescription] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [pending, setPending] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState<string | null>(null);
+
+  if (markets.length === 0) return null;
+  const market = markets.find((m) => m.code === country);
+
+  const create = () => {
+    if (!market) return;
+    setPending(true);
+    setErrors({});
+    setMessage(null);
+    startTransition(async () => {
+      const state = await createBankAccountAction({
+        country: market.code,
+        currency: market.currency,
+        bank_name: bankName,
+        account_name: accountName,
+        account_number: accountNumber,
+        extra,
+        description,
+        instructions,
+        // Live immediately: entering details for a stranded market IS the fix for the
+        // "on but hidden" warning. The gateway toggle above stays the offer switch.
+        is_active: true,
+      });
+      setPending(false);
+      if (state.savedAt) {
+        setCountry("");
+        setBankName("");
+        setAccountName("");
+        setAccountNumber("");
+        setExtra([]);
+        setDescription("");
+        setInstructions("");
+      }
+      setErrors(state.fieldErrors ?? {});
+      setMessage(state.message ?? null);
+    });
+  };
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        create();
+      }}
+      className="rounded-[var(--radius-card)] border border-dashed border-line p-4"
+    >
+      <h3 className="text-sm font-medium">Add a bank account</h3>
+      <div className="mt-2 flex items-center gap-2">
+        <label className="sr-only" htmlFor="add-account-market">
+          Market
+        </label>
+        <select
+          id="add-account-market"
+          value={country}
+          onChange={(e) => setCountry(e.target.value)}
+          className={`${FIELD} max-w-xs`}
+        >
+          <option value="">Choose a market…</option>
+          {markets.map((m) => (
+            <option key={m.code} value={m.code}>
+              {m.name} ({m.code} · {m.currency})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {market && (
+        <>
+          {message && (
+            <p
+              className="mt-3 rounded border border-warn/30 bg-warn/5 p-2 text-sm text-warn"
+              role="alert"
+            >
+              {message}
+            </p>
+          )}
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <label className="block text-xs text-muted">
+              Bank
+              <input
+                type="text"
+                value={bankName}
+                onChange={(e) => setBankName(e.target.value)}
+                className={`mt-1 ${FIELD}`}
+              />
+              {errors.bank_name && <p className="mt-1 text-xs text-warn">{errors.bank_name}</p>}
+            </label>
+            <label className="block text-xs text-muted">
+              Account name
+              <input
+                type="text"
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                className={`mt-1 ${FIELD}`}
+              />
+            </label>
+            <label className="block text-xs text-muted">
+              Account number
+              <input
+                type="text"
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                className={`mt-1 font-mono ${FIELD}`}
+              />
+              {errors.account_number && (
+                <p className="mt-1 text-xs text-warn">{errors.account_number}</p>
+              )}
+            </label>
+          </div>
+
+          <ExtraFieldsEditor extra={extra} onChange={setExtra} error={errors.extra} />
+
+          <label className="mt-3 block text-xs text-muted">
+            Description shown at checkout, while choosing how to pay
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              placeholder="e.g. Pay by transfer — we confirm your order once the funds arrive."
+              className={`mt-1 ${FIELD}`}
+            />
+          </label>
+
+          <label className="mt-3 block text-xs text-muted">
+            Instructions shown with the details, after the order is placed
+            <textarea
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              rows={2}
+              placeholder="e.g. Use your order number as the transfer reference."
+              className={`mt-1 ${FIELD}`}
+            />
+          </label>
+
+          <button
+            type="submit"
+            disabled={pending}
+            className="mt-3 rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-40"
+          >
+            {pending ? "Creating…" : `Create ${market.code} account`}
+          </button>
+          <p className="mt-2 text-xs text-muted">
+            Customers in {market.name} start seeing these details as soon as bank transfer
+            is switched on for that market.
+          </p>
+        </>
       )}
     </form>
   );

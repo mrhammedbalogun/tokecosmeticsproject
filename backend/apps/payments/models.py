@@ -134,6 +134,12 @@ class BankAccount(models.Model):
     # prettified, so `sort_code` renders as "Sort code", while a key with any capital in it
     # is left exactly as typed — write `IBAN` or `SWIFT BIC` and that is what is sent.
     extra = models.JSONField(default=dict, blank=True)
+    # Shown at CHECKOUT when the customer is choosing a payment method — the "why/how"
+    # copy for bank transfer in this market. `instructions` is the POST-order text
+    # (thank-you page and emails, sent with the account details). Same split WooCommerce
+    # makes between a method's Description and its Instructions. Plain text; blank falls
+    # back to the storefront's stock note for the method.
+    description = models.TextField(blank=True)
     instructions = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -20,7 +20,7 @@ class BankAccountAdminSerializer(serializers.ModelSerializer):
 
     audit_allowlist = (
         "country", "currency", "bank_name", "account_name", "account_number",
-        "extra", "instructions", "is_active",
+        "extra", "description", "instructions", "is_active",
     )
 
     country_name = serializers.CharField(source="country.name", read_only=True)
@@ -29,8 +29,19 @@ class BankAccountAdminSerializer(serializers.ModelSerializer):
         model = BankAccount
         fields = [
             "id", "country", "country_name", "currency", "bank_name", "account_name",
-            "account_number", "extra", "instructions", "is_active", "updated_at",
+            "account_number", "extra", "description", "instructions", "is_active",
+            "updated_at",
         ]
+
+    def validate_extra(self, value):
+        # Keys become the labels the customer reads and values are copied into a banking
+        # app — both must be flat strings. A nested object here would render as
+        # "[object Object]" at checkout, which for payment details is unacceptable.
+        if not isinstance(value, dict) or any(
+            not isinstance(k, str) or not isinstance(v, str) for k, v in value.items()
+        ):
+            raise serializers.ValidationError("Extra fields must be text labels and text values.")
+        return value
 
 
 class CountryPaymentGatewayAdminSerializer(serializers.ModelSerializer):

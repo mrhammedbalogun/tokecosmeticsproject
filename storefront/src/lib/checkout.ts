@@ -28,7 +28,13 @@ export interface GigCentreOption {
   address: string;
   distance_km: number;
 }
-export interface PaymentMethod { gateway: string; sort_order: number }
+export interface PaymentMethod {
+  gateway: string;
+  sort_order: number;
+  /** The market's own checkout copy (admin-entered; today only bank_transfer sends
+   * one). "" or absent -> the stock note in payment-labels renders instead. */
+  description?: string;
+}
 
 /** Public (AllowAny) — safe with apiFetch + country. */
 export async function getPaymentMethods(country: string) {

@@ -92,6 +92,9 @@ export function PaymentStep() {
           {methods.map((method) => {
             const checked = visualGateway === method.gateway;
             const label = paymentLabel(method.gateway);
+            // The market's own copy (admin-entered, e.g. NG's bank-transfer terms)
+            // beats the stock note; whitespace-pre-line keeps its paragraph breaks.
+            const note = method.description?.trim() || label.note;
             return (
               <button
                 key={method.gateway}
@@ -104,7 +107,9 @@ export function PaymentStep() {
                 }`}
               >
                 <span className="font-medium">{label.name}</span>
-                {label.note && <span className="mt-1 block text-muted">{label.note}</span>}
+                {note && (
+                  <span className="mt-1 block whitespace-pre-line text-muted">{note}</span>
+                )}
               </button>
             );
           })}

@@ -45,3 +45,24 @@ def test_payment_methods_omits_a_gateway_that_cannot_take_a_payment(settings):
 
     r = APIClient().get("/api/v1/checkout/payment-methods/?country=TG")
     assert [row["gateway"] for row in r.data] == []
+
+
+def test_bank_transfer_carries_the_markets_own_checkout_description():
+    """The admin-entered description (the Woo-style "what to expect" copy) rides the
+    payment-methods response so the storefront shows the market's words, not its stock
+    note. Other gateways answer "" — the storefront falls back for them."""
+    ngn = Currency.objects.create(code="TGX", symbol="T")
+    tg = Country.objects.create(code="TG", name="Togo", currency=ngn)
+    CountryPaymentGateway.objects.create(country=tg, gateway="bank_transfer", sort_order=1)
+    BankAccount.objects.create(
+        country=tg, currency=ngn, bank_name="Ecobank",
+        account_name="Toke Cosmetics", account_number="0123456789",
+        description="Pay by transfer. Orders ship 3-5 working days after payment confirms.",
+    )
+
+    r = APIClient().get("/api/v1/checkout/payment-methods/?country=TG")
+    assert r.data == [{
+        "gateway": "bank_transfer",
+        "sort_order": 1,
+        "description": "Pay by transfer. Orders ship 3-5 working days after payment confirms.",
+    }]

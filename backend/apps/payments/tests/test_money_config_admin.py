@@ -162,3 +162,73 @@ def test_the_catalog_lists_every_adapter(owner):
 def test_the_catalog_is_owner_only():
     assert APIClient().get("/api/v1/admin/payment-gateways/catalog/").status_code in (401, 403)
 
+
+
+# --- creating an account from the admin (2026-08-16) ------------------------------------
+#
+# Enabling bank transfer for a market was one click; entering WHAT customers pay into was
+# impossible — the screen only edited rows that already existed, so a new market (the
+# CA/US state payments.W002 warns about) stayed stranded. POST was always allowed on the
+# viewset; these pin the create path the UI now uses, plus the two new Woo-style fields.
+
+
+def test_an_account_can_be_created_for_a_stranded_market(owner):
+    """The exact W002 case: bank transfer on, no account, no way in. Now: POST."""
+    us = Country.objects.get(code="US")
+    BankAccount.objects.filter(country=us).delete()
+
+    response = owner.post(
+        "/api/v1/admin/bank-accounts/",
+        {
+            "country": us.pk, "currency": us.currency_id, "bank_name": "Chase",
+            "account_name": "Toke Cosmetics LLC", "account_number": "000123456789",
+            "extra": {"Routing number": "021000021"},
+            "description": "Wire transfer. We confirm within one business day.",
+            "instructions": "Quote your order number as the wire reference.",
+            "is_active": True,
+        },
+        format="json",
+    )
+
+    assert response.status_code == 201, response.data
+    account = BankAccount.objects.get(country=us)
+    assert account.extra == {"Routing number": "021000021"}
+    assert account.description.startswith("Wire transfer.")
+
+
+def test_a_second_account_for_the_same_market_is_refused(owner):
+    """OneToOne on country: the market's account is edited, never duplicated."""
+    ng = Country.objects.get(code="NG")
+    BankAccount.objects.get_or_create(
+        country=ng, defaults=dict(
+            currency=ng.currency, bank_name="GTBank",
+            account_name="Toke", account_number="0123456789",
+        ),
+    )
+
+    response = owner.post(
+        "/api/v1/admin/bank-accounts/",
+        {"country": ng.pk, "currency": ng.currency_id, "bank_name": "Zenith",
+         "account_name": "Toke", "account_number": "1224748585"},
+        format="json",
+    )
+
+    assert response.status_code == 400
+
+
+def test_extra_fields_must_be_flat_text(owner):
+    """Keys are the labels customers read; values go into banking apps. A nested blob
+    would render as [object Object] on the payment page."""
+    us = Country.objects.get(code="US")
+    BankAccount.objects.filter(country=us).delete()
+
+    response = owner.post(
+        "/api/v1/admin/bank-accounts/",
+        {"country": us.pk, "currency": us.currency_id, "bank_name": "Chase",
+         "account_name": "Toke", "account_number": "1",
+         "extra": {"routing": {"aba": "021000021"}}},
+        format="json",
+    )
+
+    assert response.status_code == 400
+    assert "extra" in response.data
