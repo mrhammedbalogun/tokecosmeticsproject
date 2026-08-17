@@ -19,6 +19,23 @@ const CONTENT = ["cms.manage"];
 
 const labels = (scopes: string[]) => visibleNav(scopes).map((i) => i.label);
 
+describe("activeHref picks the LONGEST matching item, not the last declared", () => {
+  it("highlights the child, not its parent", () => {
+    // `/content/affiliates` is declared BEFORE `/content`, and the old implementation
+    // returned the last match in array order — so the sidebar lit "Content" while the
+    // Affiliates page was on screen. Declaration order must not decide this.
+    expect(activeHref("/content/affiliates")).toBe("/content/affiliates");
+    expect(activeHref("/content")).toBe("/content");
+    expect(activeHref("/content/some-slug")).toBe("/content");
+  });
+
+  it("still resolves the ordinary nested cases", () => {
+    expect(activeHref("/orders/42")).toBe("/orders");
+    expect(activeHref("/deliveries/pickup-locations")).toBe("/deliveries");
+    expect(activeHref("/nowhere")).toBe("/");
+  });
+});
+
 describe("the sidebar renders only what the scopes allow", () => {
   it("Owner sees everything", () => {
     expect(labels(OWNER)).toEqual(NAV_ITEMS.map((i) => i.label));
@@ -32,6 +49,11 @@ describe("the sidebar renders only what the scopes allow", () => {
       "Customers", "Reviews",
       "Coupons",
       "Home Content",
+      // Same `marketing.manage` as Home Content — it is the same job (banner artwork) on
+      // a different page. It is NOT under Content, which is `cms.manage`: a marketer who
+      // can upload this artwork may not hold that scope, and putting the only route to it
+      // behind a door they cannot open is how it went unreachable in the first place.
+      "Affiliates page",
       // `referrals.view` — a Manager reads the payout queue, decides requests, and
       // (Hammed's ruling, 2026-08-15) holds `referrals.pay` too: the Manager runs the
       // monthly transfers. The scopes live on the endpoints, not the nav.

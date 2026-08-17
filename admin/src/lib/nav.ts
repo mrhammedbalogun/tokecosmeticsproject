@@ -48,6 +48,13 @@ export const NAV_ITEMS: NavItem[] = [
   // One door for everything the landing page shows (Hammed's ask, 2026-08-05):
   // slides, news, reviews and the product-row collections, in section order.
   { label: "Home Content", href: "/home-content", scopes: ["marketing.manage"] },
+  // Sits next to Home Content because it is the same job — banner artwork — on a
+  // different page, and it is scoped `marketing.manage` for the same reason. It gets a
+  // nav item of its own rather than living as a link inside Content because Content is
+  // `cms.manage`: a marketer who can upload this artwork may never see that door at all,
+  // and hiding the only route to it behind a scope they lack is how it stayed
+  // unreachable until 2026-08-16.
+  { label: "Affiliates page", href: "/content/affiliates", scopes: ["marketing.manage"] },
   { label: "Content", href: "/content", scopes: ["cms.manage"] },
   // Support sees it too — `referrals.view` — because "where is my commission?" arrives at
   // the same desk as "where is my order?". Deciding and paying carry their own scopes on
@@ -65,10 +72,21 @@ export function visibleNav(scopes: readonly string[] | undefined): NavItem[] {
   );
 }
 
-/** Longest-prefix match, so `/orders/42` highlights `Orders` and not `Dashboard`. */
+/** Longest-prefix match, so `/orders/42` highlights `Orders` and not `Dashboard`.
+ *
+ * ACTUALLY LONGEST, not last-in-the-array. This used to return the final match in
+ * `NAV_ITEMS` order, which gave the right answer only because no nested pair existed
+ * where the parent was declared after the child. `/content/affiliates` (2026-08-16) is
+ * declared before `/content`, so both matched and the parent won: the sidebar lit up
+ * "Content" while the Affiliates page was on screen. Sorting by href length makes the
+ * behaviour match the sentence above regardless of declaration order.
+ */
 export function activeHref(pathname: string): string {
   const matches = NAV_ITEMS.filter(
     (item) => item.href !== "/" && (pathname === item.href || pathname.startsWith(`${item.href}/`)),
   );
-  return matches.length ? matches[matches.length - 1].href : "/";
+  if (!matches.length) return "/";
+  return matches.reduce((best, item) =>
+    item.href.length > best.href.length ? item : best,
+  ).href;
 }

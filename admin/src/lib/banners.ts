@@ -286,6 +286,32 @@ export const PLACEMENTS: PlacementSpec[] = [
       },
     ],
   },
+  // ── /affiliates (2026-08-16) ──────────────────────────────────────────────────────
+  // The referral page is the first non-homepage surface to take banner artwork, so
+  // these are edited at /content/affiliates rather than /home-content. Both are
+  // OPTIONAL: with no banner the page drops the band and runs the tier panel full
+  // width, which is a finished layout rather than a gap — see the storefront's
+  // `HeroBand` and `TierPanel`.
+  {
+    value: "affiliate_hero",
+    label: "Affiliates hero",
+    guide: "The full-width band above “Already in.” Image or video, 1920×1080 (16:9) — it is cropped to a letterbox, so keep the subject centred. Leave empty and the page opens straight on the wordmark.",
+    fields: [],
+    media: true,
+    aspect: "aspect-video",
+    slots: 1,
+    defaults: [{ title: "Affiliates — hero" }],
+  },
+  {
+    value: "affiliate_tier",
+    label: "₦200k Club image",
+    guide: "Sits beside the green ₦200k Club panel. Portrait, around 900×1150 (3:4) — it fills the right half on desktop and a wide band on mobile, so keep the subject centred. Leave empty and the green panel runs full width.",
+    fields: [],
+    media: true,
+    aspect: "aspect-[3/4]",
+    slots: 1,
+    defaults: [{ title: "Affiliates — ₦200k Club" }],
+  },
 ];
 
 export function placementSpec(value: string): PlacementSpec {

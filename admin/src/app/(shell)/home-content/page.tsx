@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { HomePlacementEditor } from "@/components/content/HomePlacementEditor";
 import {
   GoogleReviewsManager,
@@ -131,6 +132,13 @@ export default async function HomeContentPage() {
             built-in
           </span>{" "}
           are showing the shop&apos;s built-in look; nothing ever goes blank.
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Pictures for the referral page live on{" "}
+          <Link href="/content/affiliates" className="underline underline-offset-2 hover:text-accent">
+            Affiliates page
+          </Link>{" "}
+          — this screen is the landing page only.
         </p>
       </div>
 

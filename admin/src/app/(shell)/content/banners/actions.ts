@@ -16,9 +16,22 @@ export interface BannerState {
   message?: string | null;
 }
 
-/** The homepage editor lives at /home-content; /content/banners now redirects there. */
+/**
+ * Every screen that edits a banner, refreshed together.
+ *
+ * These actions do not know WHICH placement the caller was editing — and even if they
+ * did, one banner list feeds more than one screen. /home-content owns the landing page's
+ * placements; /content/affiliates owns the two on the referral page (added 2026-08-16).
+ * Refreshing only the first meant a marketer could upload the affiliate hero and watch
+ * the tile stay empty until they reloaded by hand.
+ *
+ * If a third screen ever edits banners, add it here — a missing entry fails silently,
+ * which is the worst way for this to be wrong.
+ */
+const BANNER_SCREENS = ["/home-content", "/content/affiliates"] as const;
+
 function revalidateHome() {
-  revalidatePath("/home-content");
+  for (const path of BANNER_SCREENS) revalidatePath(path);
 }
 
 function fail(e: unknown, fallback: string): BannerState {
