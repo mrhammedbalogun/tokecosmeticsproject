@@ -214,7 +214,7 @@ export function CartView() {
           <OrderSummary totals={totals} fallbackSubtotal={cart.subtotal} currency={cart.currency} />
         </div>
 
-        <p className="text-center text-xs text-muted">Secure checkout · 14-day returns</p>
+        <p className="text-center text-xs text-muted">Secure checkout</p>
 
         <Link
           href="/checkout"

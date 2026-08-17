@@ -56,7 +56,6 @@ export const WHY_CHOOSE = [
   { icon: "heart", title: "Cruelty free", body: "Never tested on animals." },
   { icon: "globe", title: "Worldwide shipping", body: "Lagos to London, New York to Nairobi." },
   { icon: "shield", title: "Secure payments", body: "Bank-grade encryption on every order." },
-  { icon: "refresh", title: "Money-back promise", body: "14-day returns, no questions asked." },
 ] as const;
 
 export const TESTIMONIALS = [

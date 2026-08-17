@@ -53,7 +53,7 @@ export function BuyBox({ product, deliveryLine }: {
       <QtySelector />
       <BuyButtons />
       <PdpWishlistButton name={product.name} />
-      <p className="mt-4 text-center text-xs text-muted">Secure worldwide checkout · 14-day returns</p>
+      <p className="mt-4 text-center text-xs text-muted">Secure worldwide checkout</p>
     </div>
   );
 }
