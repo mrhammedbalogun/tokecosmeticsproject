@@ -132,6 +132,15 @@ def test_outage_skips_the_pass_without_touching_shipments():
 @override_settings(**SETTINGS)
 @respx.mock
 def test_wallet_alert_fires_on_the_crossing_only_and_rearms_on_recovery():
+    # The alert is addressed to the "GIG wallet running low" list on the Email
+    # Notifications screen (`apps/notifications/events.py`) rather than to
+    # `DEFAULT_FROM_EMAIL`, which had no inbox. This test is about the CROSSING logic,
+    # not about who hears it, so it needs one subscriber to have anything to count.
+    from apps.notifications.models import NotificationRecipient
+
+    NotificationRecipient.objects.create(event="delivery.gig_wallet_low",
+                                         email="ops@x.com")
+
     def balance_response(amount):
         return httpx.Response(200, json=_envelope({"data": [{"WalletAmount": amount}]}))
 

@@ -1,0 +1,12 @@
+BANK TRANSFER EXPECTED — nothing is paid yet ({{ country }})
+
+The customer has the account details and was asked to quote {{ number }} as the
+reference.
+
+*** {% if expires_at %}This order expires {{ expires_at }}.{% else %}This order expires
+once its stock reservation lapses.{% endif %} If the transfer is not matched and
+confirmed by then, the stock is released and the customer is told the order lapsed —
+even if their money has already left their account. ***
+
+{% include "email/_staff_order.txt" %}
+— Toke Cosmetics admin

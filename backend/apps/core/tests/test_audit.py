@@ -346,6 +346,16 @@ def _case_redirect_create(client, monkeypatch):
     ), 201
 
 
+def _case_notification_recipient_create(client, monkeypatch):
+    """Adding a recipient is the canonical "camera" case: somebody already inside,
+    quietly arranging for a copy of every order to reach an address of their choosing."""
+    return client.post(
+        "/api/v1/admin/notification-recipients/",
+        {"event": "order.paid", "email": "packing@example.com"},
+        format="json",
+    ), 201
+
+
 def _case_page_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/pages/",
@@ -735,6 +745,7 @@ WRITE_CASES: dict[str, tuple] = {
     "HomepageSectionAdminViewSet": (_case_homepage_section_create, "create"),
     "MenuItemAdminViewSet": (_case_menu_item_create, "create"),
     "RedirectAdminViewSet": (_case_redirect_create, "create"),
+    "NotificationRecipientAdminViewSet": (_case_notification_recipient_create, "create"),
     "BankAccountAdminViewSet": (_case_bank_account_create, "create"),
     "CountryPaymentGatewayAdminViewSet": (_case_payment_gateway_create, "create"),
     "CouponAdminViewSet": (_case_coupon_create, "create"),

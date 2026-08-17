@@ -3,7 +3,8 @@ from django.db.models import F
 
 from apps.inventory.csv_io import import_stock_csv, parse_csv_bytes
 from apps.inventory.models import StockItem
-from apps.notifications.send import send_email
+from apps.notifications.models import resolve_recipients
+from apps.notifications.staff import notify_staff
 
 
 @shared_task
@@ -55,8 +56,6 @@ def low_stock_digest() -> int:
     low rows found, whether or not anything was sent, so the beat log still shows the
     position.
     """
-    from django.conf import settings
-
     from apps.core.models import SiteSetting
 
     low = list(
@@ -93,12 +92,28 @@ def low_stock_digest() -> int:
         if f"{r['sku']}@{r['warehouse']}{'!' if r['available'] <= 0 else ''}" not in previously
     ]
 
-    send_email(
-        "low_stock_digest",
-        settings.DEFAULT_FROM_EMAIL,
+    # Addressed to the "Low stock" subscriber list, NOT `DEFAULT_FROM_EMAIL`. It was
+    # the latter until 2026-08-16, which meant every digest since this task shipped went
+    # to `hello@mg.tokecosmetics.com` — the Resend SENDING subdomain, which has no
+    # inbox. The alert has never reached a person. See `apps/notifications/events.py`.
+    sent = notify_staff(
+        "inventory.low_stock",
         {"rows": rows, "newly_low": newly, "is_first": not last_signature},
     )
-    SiteSetting.objects.update_or_create(
-        key=_DIGEST_STATE_KEY, defaults={"value": signature, "value_type": "str"}
-    )
+
+    # THE SIGNATURE IS ONLY RECORDED IF SOMETHING ACTUALLY WENT OUT. This task is
+    # edge-triggered: writing the signature means "they have been told", and it silences
+    # the digest until the low LIST changes. Writing it unconditionally would turn one
+    # broker blip into a digest nobody ever receives — the SKUs stay low, the list stays
+    # identical, and the next 24 runs an hour compare equal and send nothing.
+    #
+    # Nobody subscribed is NOT a failure to retry: `sent == 0` there is a configuration
+    # the Owner chose on the Email Notifications screen, and re-sending on every run
+    # would not reach them either. Leaving the state unwritten in that case would just
+    # mean re-rendering an email into the void hourly, so only a genuine enqueue failure
+    # (subscribers exist, none could be queued) holds the state back.
+    if sent or not resolve_recipients("inventory.low_stock"):
+        SiteSetting.objects.update_or_create(
+            key=_DIGEST_STATE_KEY, defaults={"value": signature, "value_type": "str"}
+        )
     return len(rows)

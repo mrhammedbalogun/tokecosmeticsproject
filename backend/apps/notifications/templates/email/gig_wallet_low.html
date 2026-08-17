@@ -1,4 +1,7 @@
-<h2>GIG wallet low: ₦{{ balance }}</h2>
+{% if is_preview %}<p style="padding:12px;border-radius:8px;background:#eef4ff;border:1px solid #c9d8f0;">
+<strong>This is a test.</strong> The numbers below are made up — it was sent from the
+admin's Email Notifications screen to check that this address receives mail.</p>
+{% endif %}<h2>GIG wallet low: ₦{{ balance }}</h2>
 <p>The GIG Logistics wallet is below the ₦{{ threshold }} alert threshold.</p>
 <p><strong>Every waybill debits its full delivery cost from this wallet at creation.</strong>
 When the balance cannot cover a shipment, paid orders stop shipping — the customer has paid,

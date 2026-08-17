@@ -216,6 +216,13 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # Google reviews above, and from orders' fraud resolve-review. Its own scope:
     # rbac.py argues why Owner + Manager and not Content.
     "ProductReviewAdminViewSet": "reviews.manage",
+    # --- notifications: who is emailed when the shop needs a human ---------------
+    # Owner-only, and NOT because the data is precious — the list itself is four events
+    # and a handful of addresses. A row on it can be a bare email with no account, no
+    # invite and no second factor, which receives order contents forever; that is a
+    # standing exfiltration channel with the ergonomics of a settings toggle. Filed
+    # beside the payout bank account rather than beside the delivery prices.
+    "NotificationRecipientAdminViewSet": "settings.manage",
     # --- inventory ---------------------------------------------------------------
     # Warehouses are where stock physically is, and `serves_countries` on one of them
     # decides whether a market can be sold to at all. Same scope as the stock it holds.

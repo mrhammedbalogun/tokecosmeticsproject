@@ -4,7 +4,8 @@ from django.conf import settings
 from apps.core.models import SiteSetting
 from apps.delivery.gig.client import GigError
 from apps.delivery.gig.coverage import sync_gig_coverage
-from apps.notifications.send import send_email
+from apps.notifications.models import resolve_recipients
+from apps.notifications.staff import notify_staff
 
 
 @shared_task
@@ -71,11 +72,29 @@ def monitor_gig_wallet() -> dict:
     row = SiteSetting.objects.filter(key=_WALLET_ALERT_STATE_KEY).first()
     previous = row.value if row else "ok"
     if state == "low" and previous != "low":
-        send_email(
-            "gig_wallet_low",
-            settings.DEFAULT_FROM_EMAIL,
-            {"balance": balance, "threshold": threshold},
+        # Subscriber list, not `DEFAULT_FROM_EMAIL` — same fix and same reason as the
+        # low-stock digest: the old address is the Resend sending subdomain and has no
+        # inbox, so this alert has never reached anybody either.
+        #
+        # `str(balance)` and not `balance`: this context now crosses into Celery
+        # (`CELERY_TASK_SERIALIZER = "json"`), and `wallet_balance()` returns a Decimal,
+        # which the JSON serializer refuses. The old direct `send_email` call was
+        # synchronous and never had to answer that question. The templates only ever
+        # interpolated it, so the rendered mail is unchanged.
+        sent = notify_staff(
+            "delivery.gig_wallet_low",
+            {"balance": str(balance), "threshold": threshold},
         )
+        # Same edge-trigger reasoning as the low-stock digest, and it matters more here.
+        # Recording `state="low"` means "they have been told", and re-arming needs the
+        # balance to climb back ABOVE the threshold and dip again. Record that on a run
+        # where nothing was queued and the alert is lost until someone happens to top the
+        # wallet up — which nobody will, because the alert asking them to is the thing
+        # that went missing. Staying "ok" costs one duplicate alert if the next run
+        # succeeds; the alternative costs a halted packing bench.
+        if not sent and resolve_recipients("delivery.gig_wallet_low"):
+            return {"balance": str(balance), "state": previous,
+                    "alerted": False, "enqueue_failed": True}
     if state != previous:
         SiteSetting.objects.update_or_create(
             key=_WALLET_ALERT_STATE_KEY, defaults={"value": state, "value_type": "str"}

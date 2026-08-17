@@ -142,6 +142,12 @@ PASSWORD_HASHERS = [
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"
+# The zone STAFF-FACING timestamps are rendered in. Storage stays UTC (`USE_TZ`); this is
+# a presentation choice only, and it exists because the people reading the admin's alert
+# emails are in Lagos. A UTC time in an email that asks the reader to reason about a
+# 24-hour deadline sends them to the wrong hour — see `apps/orders/emails.py::_staff_local`.
+# Customer emails are unaffected: they print dates, not times.
+STAFF_DISPLAY_TIMEZONE = env("STAFF_DISPLAY_TIMEZONE", default="Africa/Lagos")
 USE_I18N = True
 USE_TZ = True
 

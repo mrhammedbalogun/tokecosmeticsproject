@@ -63,6 +63,10 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Reports", href: "/reports", scopes: ["reports.view"] },
   { label: "Settings", href: "/settings", scopes: ["settings.manage", "products.manage"] },
   { label: "Staff", href: "/staff", scopes: ["staff.manage"] },
+  // Owner-only, like Staff above, and top-level for the same reason: it is a list of
+  // people and what reaches them, and it is the screen somebody opens when an alert did
+  // not arrive — a moment for one click rather than two through the Settings door.
+  { label: "Email Notifications", href: "/notifications", scopes: ["settings.manage"] },
 ];
 
 export function visibleNav(scopes: readonly string[] | undefined): NavItem[] {

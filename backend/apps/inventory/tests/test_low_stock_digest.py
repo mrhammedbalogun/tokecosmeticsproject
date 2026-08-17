@@ -16,6 +16,18 @@ pytestmark = pytest.mark.django_db
 
 
 @pytest.fixture(autouse=True)
+def _somebody_is_subscribed():
+    """The digest is addressed to the "Low stock" list on the Email Notifications screen
+    (`apps/notifications/events.py`) rather than to `DEFAULT_FROM_EMAIL`, which had no
+    inbox. With an empty list it correctly sends nothing — so these tests, which are
+    about WHEN the digest speaks and not about who hears it, need one subscriber."""
+    from apps.notifications.models import NotificationRecipient
+
+    NotificationRecipient.objects.create(event="inventory.low_stock", email="stock@x.com")
+
+
+
+@pytest.fixture(autouse=True)
 def _locmem(settings):
     settings.EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
     mail.outbox = []

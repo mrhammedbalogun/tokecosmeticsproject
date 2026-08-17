@@ -10,12 +10,19 @@ committed data rather than passing model instances. Money is rendered through
 """
 from __future__ import annotations
 
-from django.conf import settings
+import logging
+from zoneinfo import ZoneInfo
 
+from django.conf import settings
+from django.utils import timezone
+
+from apps.notifications.staff import notify_staff
 from apps.notifications.tasks import send_email_task
 from apps.orders.models import Order
 from apps.orders.tokens import make_tracking_token
 from apps.payments.money import format_money
+
+logger = logging.getLogger(__name__)
 
 
 def _context(order: Order) -> dict:
@@ -110,3 +117,192 @@ def enqueue_order_expired_manual(order_pk: int) -> None:
 
 def enqueue_refund_processed(order_pk: int, amount: str = "") -> None:
     _send(order_pk, "refund_processed", refund_amount=amount)
+
+
+# ── STAFF NOTIFICATIONS ─────────────────────────────────────────────────────────────
+#
+# Everything above this line emails the CUSTOMER. Everything below emails whoever the
+# Owner has subscribed on the admin's Email Notifications screen
+# (`apps/notifications/models.py`), and the two must not share a context dict.
+#
+# WHY A SEPARATE CONTEXT AND NOT `_context()` MINUS A FIELD. Two things in the customer
+# context must never reach a staff mailing list, and neither is obvious at the call site:
+#
+# 1. `tracking_url` embeds a signed, login-free bearer token for that order
+#    (`orders/tokens.py`). A subscriber list can contain bare addresses with no account
+#    behind them, so reusing the customer context would post a working credential to
+#    an address that was never invited to anything.
+# 2. `shipping_address` is the customer's full street address, and `Order.phone` sits
+#    one attribute away from any future edit to this function.
+#
+# So the staff context is built from scratch and carries the LEAST that answers "is
+# there something for me to do?": what was ordered, what it is worth, how it is being
+# delivered, and the town. A staff member who needs the doorstep address logs in — the
+# link is right there in the mail. That keeps a compromised bookkeeper's inbox worth a
+# list of order numbers rather than a customer address book.
+
+def _staff_local(when) -> str:
+    """A timestamp as the person reading it experiences it, or "" for None.
+
+    `TIME_ZONE` is UTC (`config/settings/base.py`) and the people reading these alerts
+    are in Lagos, an hour ahead. The customer emails sidestep this by printing only the
+    date; a staff alert prints the time, and the awaiting-transfer one asks the reader to
+    reason about a deadline from it. An order placed 10:00 WAT that reads "09:00" sends
+    whoever is matching bank statements to the wrong hour of the day.
+    """
+    if when is None:
+        return ""
+    try:
+        when = timezone.localtime(when, ZoneInfo(settings.STAFF_DISPLAY_TIMEZONE))
+    except Exception:  # noqa: BLE001 — unknown zone name, or a container with no tzdata
+        # Degrade to UTC rather than raise. `_notify_safely` would otherwise swallow the
+        # error and silently drop EVERY staff alert over a presentation setting; an hour's
+        # offset on a timestamp is a far smaller problem than that.
+        logger.warning("STAFF_DISPLAY_TIMEZONE %r is unusable; falling back to UTC",
+                       settings.STAFF_DISPLAY_TIMEZONE)
+    return when.strftime("%d %b %Y, %H:%M")
+
+
+def _staff_context(order: Order) -> dict:
+    money = lambda amount: format_money(amount, order.currency)  # noqa: E731
+    gig = getattr(order, "gig_shipment", None)
+    centre = getattr(gig, "centre", None)
+    return {
+        "number": order.number,
+        "placed_at": _staff_local(order.placed_at),
+        # THE REAL DEADLINE, not prose. The awaiting-transfer mail used to say "expires 24
+        # hours after it was placed", which is wrong the moment a customer retries payment:
+        # `retry_payment` pushes `reservation_expires_at` forward (never back) when the new
+        # gateway holds stock longer, so the stated deadline would understate the real one
+        # and staff would write off an order that was still live. Blank for an order with
+        # no reservation, which the template renders as nothing rather than as "None".
+        "expires_at": _staff_local(order.reservation_expires_at),
+        # Deep link into the ADMIN, not the storefront. Keyed by number because that is
+        # what `admin/src/app/(shell)/orders/[number]` routes on.
+        "admin_url": f"{settings.ADMIN_URL}/orders/{order.number}",
+        "items": [
+            {
+                "name": item.product_name,
+                "variant": item.variant_name,
+                "quantity": item.quantity,
+                "line_total": money(item.line_total),
+            }
+            for item in order.items.all()
+        ],
+        "item_count": sum(item.quantity for item in order.items.all()),
+        "grand_total": money(order.grand_total),
+        "currency": order.currency_id,
+        "country": order.country.name,
+        "delivery_option_name": order.delivery_option_name,
+        # Town and region only — see the note above on why the street line is absent.
+        "destination": _destination_line(order, centre),
+        "is_pickup": bool(centre),
+        # What the customer said at checkout. Staff act on this ("gift wrap", "call
+        # before delivery"), so an alert that omitted it would send them to the admin
+        # for the one field that changes what they do next.
+        "customer_note": order.customer_note,
+        # A flagged order needs a human before it needs a packer, and the flag is the
+        # single most important thing the mail can say.
+        "review_reason": order.review_reason,
+    }
+
+
+def _destination_line(order: Order, centre) -> str:
+    """Where it is going, at town resolution. Never the street line.
+
+    A GIG pickup centre's address is a PUBLIC depot address, not a customer's home, so it
+    is safe to state in full and useless if abbreviated — the packer needs to know which
+    depot the parcel is routed to.
+
+    `centre` IS A DICT, not a `GigCentre`. `GigShipment.centre` is a JSONField holding
+    `{"id", "name", "address"}` snapshotted at placement, because centres close and move
+    and the parcel must ship to the one that was priced. Attribute access on it raises —
+    caught by `test_pickup_confirmation_email_says_collect_from`, which is the only test
+    in the suite that routes an order through a pickup centre.
+    """
+    if centre:
+        name = centre.get("name") or "Pickup centre"
+        address = centre.get("address") or ""
+        return f"{name} (pickup)" + (f" — {address}" if address else "")
+
+    # TWO SNAPSHOT SHAPES EXIST IN THIS TABLE, and reading the wrong keys is a bug this
+    # codebase has already shipped once — see the comment at the top of
+    # `templates/email/_address.txt`, where four templates and the invoice all printed a
+    # street line and nothing else because they guessed `city`/`region`.
+    #
+    # * Orders placed through checkout carry `area` (the town) and `state`
+    #   (`checkout/services/checkout.py::_address_snapshot`).
+    # * Orders migrated from WooCommerce carry `city` and `state`
+    #   (`migration_wp/transform_orders.py::address_snapshot`).
+    #
+    # Neither writes `region`. Reading both spellings for the town is what makes this
+    # line say something for a migrated order as well as a new one; `order.country.name`
+    # is the FK and is always right.
+    address = order.shipping_address or {}
+    town = address.get("area") or address.get("city") or ""
+    parts = [town, address.get("state"), order.country.name]
+    return ", ".join(part for part in parts if part)
+
+
+def enqueue_staff_order_paid(order_pk: int) -> None:
+    """Fires on ANY move to `processing`, sharing the customer's confirmation hook.
+
+    ONE KNOWN IMPRECISION, accepted deliberately. `_effects_for` keys on the DESTINATION
+    status and hands effects nothing but a pk, so this cannot tell `pending_payment ->
+    processing` (a genuinely new order) from `on_hold -> processing` (a legacy order
+    being triaged, legal per `ALLOWED_TRANSITIONS`). Threading the from-status through
+    the effects table to separate them would change a signature every effect in the
+    codebase shares, to fix a case that arises only during migration triage.
+
+    The mitigation is in the template instead: the mail is headed "Payment confirmed",
+    not "New order", and it states `placed_at`. An order placed in March that reaches
+    processing in August announces itself honestly, which is all the distinction was
+    ever going to buy.
+    """
+    _notify_safely("order.paid", order_pk)
+
+
+def enqueue_staff_awaiting_transfer(order_pk: int) -> None:
+    """Fires at placement, for bank transfer only — the same branch that mails the
+    customer their account details.
+
+    THIS IS THE ONE THAT BREAKS THE CIRCLE. Without it the first staff alert for a
+    transfer order arrives when somebody confirms the payment, which requires somebody to
+    already know the order exists. A transfer placed at 9am and unmatched by 9am next day
+    is expired stock and a customer owed a refund, and nothing anywhere was going to
+    mention it.
+    """
+    _notify_safely("order.awaiting_transfer", order_pk)
+
+
+def _notify_safely(event: str, order_pk: int) -> None:
+    """Build the context and hand it to `notify_staff`, swallowing anything that goes
+    wrong.
+
+    THIS GUARD IS THE POINT, and it covers the WHOLE call graph rather than just the
+    enqueue. `on_commit` callbacks are not independent — one that raises abandons every
+    callback registered after it (django/db/backends/base/base.py) and propagates into
+    whatever committed the transaction. In checkout that is a 500 handed to a customer
+    whose order was just successfully placed. Two database queries run in here
+    (`_staff_order`, and `resolve_recipients` inside `notify_staff`), so "it cannot
+    raise" was never true; it was only unlikely.
+
+    A staff alert is worth strictly less than the order it describes. Losing one leaves a
+    recoverable situation — the order is in the admin queue either way — so the honest
+    behaviour is to log it and let everything else proceed.
+    """
+    try:
+        notify_staff(event, _staff_context(_staff_order(order_pk)))
+    except Exception:  # noqa: BLE001 — see docstring
+        logger.exception("staff alert %s failed for order %s", event, order_pk)
+
+
+def _staff_order(order_pk: int) -> Order:
+    """`_send`'s loader with the extra joins the staff context needs. Separate because
+    the customer path has no business fetching a country name or a GIG shipment it does
+    not render, on every one of five emails."""
+    return (
+        Order.objects.select_related("currency", "country")
+        .prefetch_related("items")
+        .get(pk=order_pk)
+    )

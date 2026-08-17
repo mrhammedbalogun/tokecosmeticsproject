@@ -1,4 +1,7 @@
-{% if newly_low and not is_first %}Newly low since the last alert:
+{% if is_preview %}*** THIS IS A TEST — the numbers below are made up. Sent from the admin's
+Email Notifications screen to check that this address receives mail. ***
+
+{% endif %}{% if newly_low and not is_first %}Newly low since the last alert:
 {% for r in newly_low %}- {{ r.sku }} @ {{ r.warehouse }}: {{ r.available }} available
 {% endfor %}
 {% endif %}

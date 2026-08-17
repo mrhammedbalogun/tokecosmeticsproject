@@ -1,0 +1,1 @@
+Awaiting bank transfer — order {{ number }} ({{ grand_total }})

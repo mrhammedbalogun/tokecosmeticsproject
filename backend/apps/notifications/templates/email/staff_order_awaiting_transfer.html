@@ -1,0 +1,26 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 4px;font-size:17px;font-weight:600;">Bank transfer expected</p>
+<p style="margin:0 0 16px;color:#777;font-size:13px;">
+  Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }} · {{ country }}
+</p>
+<p style="margin:0 0 20px;">
+  The customer has been sent the account details and asked to quote
+  <strong>{{ number }}</strong> as the reference. Nothing is paid yet.
+</p>
+{% comment %}
+The deadline is the ORDER'S OWN `reservation_expires_at`, not the prose "24 hours after
+it was placed" this used to carry. A customer who retries payment pushes that field
+forward (`checkout.py::retry_payment`, forward only), so the sentence would have
+understated the real deadline and invited staff to write off an order still holding
+stock. `expires_at` is blank for an order with no reservation, and the fallback wording
+below covers that rather than printing an empty date.
+{% endcomment %}
+<p style="margin:0 0 20px;padding:12px;border-radius:8px;background:#fff8e6;border:1px solid #f0dfb0;font-size:14px;">
+  {% if expires_at %}<strong>This order expires {{ expires_at }}.</strong>{% else %}
+  <strong>This order expires once its stock reservation lapses.</strong>{% endif %}
+  If the transfer is not matched and confirmed by then, the stock is released and the
+  customer is told the order lapsed — even if their money has already left their account.
+</p>
+{% include "email/_staff_order.html" %}
+{% endblock %}

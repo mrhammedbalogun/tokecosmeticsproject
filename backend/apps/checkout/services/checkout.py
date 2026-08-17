@@ -20,7 +20,7 @@ from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
 from apps.delivery.carriers import priced_options_for_address
 from apps.inventory.services import InsufficientStock, reserve
-from apps.orders.emails import enqueue_order_received
+from apps.orders.emails import enqueue_order_received, enqueue_staff_awaiting_transfer
 from apps.orders.models import Order, OrderItem
 from apps.orders.numbers import next_order_number
 from apps.orders.state import record_event
@@ -356,6 +356,26 @@ def _initiate_payment(payment, order) -> None:
     # A card customer is mid-redirect and owes nothing on paper, so they get nothing here.
     if init.action == "bank_details":
         transaction.on_commit(partial(enqueue_order_received, order.pk, init.data))
+        # And the other half of the same fact: money is now EXPECTED. Only the staff mail
+        # can start the 24h clock for whoever watches the bank account — until this
+        # existed, the first anyone here heard of a transfer order was when somebody
+        # confirmed its payment, which required already knowing it was there.
+        # Deliberately inside the same branch: an instant-gateway order that is abandoned
+        # mid-redirect is not news, and alerting on those would make this list noise.
+        #
+        # A RETRY RE-ALERTS, ON PURPOSE. `retry_payment` routes back through here, so a
+        # customer who switches card -> bank transfer produces a second alert for one
+        # order. Suppressing on "this order already has a goods payment" was considered
+        # and rejected: that condition is TRUE for the card -> transfer switch, which is
+        # precisely the case where nobody has been told to watch for money yet. The
+        # duplicate is also not identical — a retry pushes `reservation_expires_at`
+        # forward, so the second mail carries a later deadline than the first, and that
+        # is the number whoever is matching bank statements acts on.
+        #
+        # REGISTERED AFTER the customer's `enqueue_order_received` above, and that
+        # ordering is load-bearing: on_commit callbacks are not independent (see
+        # orders/state.py). `enqueue_staff_awaiting_transfer` also guards itself.
+        transaction.on_commit(partial(enqueue_staff_awaiting_transfer, order.pk))
 
 
 def _totals_dict(t) -> dict:

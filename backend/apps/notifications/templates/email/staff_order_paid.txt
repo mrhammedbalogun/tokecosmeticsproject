@@ -1,0 +1,4 @@
+PAYMENT CONFIRMED — {{ item_count }} item{{ item_count|pluralize }} to pack ({{ country }})
+
+{% include "email/_staff_order.txt" %}
+— Toke Cosmetics admin

@@ -1,0 +1,1 @@
+Payment confirmed — order {{ number }} ({{ grand_total }})

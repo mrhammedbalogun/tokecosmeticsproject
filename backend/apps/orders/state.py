@@ -81,7 +81,22 @@ def _effects_for(to_status: str):
     from apps.orders import emails
 
     return {
-        "processing": (emails.enqueue_order_confirmation,),
+        # Two effects, two audiences, one moment. The customer learns their payment
+        # landed; whoever the Owner subscribed on the Email Notifications screen learns
+        # there is a box to pack.
+        #
+        # THE CUSTOMER EFFECT MUST STAY FIRST, and this is load-bearing rather than
+        # stylistic. `on_commit` callbacks are NOT independent: `run_and_clear_commit_hooks`
+        # (django/db/backends/base/base.py) pops them into a local list and runs them in
+        # registration order, so a non-robust callback that raises ABANDONS every callback
+        # after it. An earlier version of this comment claimed the opposite, which would
+        # have invited someone to reorder the tuple and silently cost paying customers
+        # their confirmation email.
+        #
+        # Belt as well as braces: `enqueue_staff_order_paid` swallows its own exceptions
+        # (see orders/emails.py), so ordering is the second line of defence, not the only
+        # one. Do not rely on either alone — add new effects AFTER the customer's.
+        "processing": (emails.enqueue_order_confirmation, emails.enqueue_staff_order_paid),
         "shipped": (emails.enqueue_shipped,),
         "delivered": (emails.enqueue_delivered,),
         # Dead orders mail nothing (our words for our problems) but they do release a

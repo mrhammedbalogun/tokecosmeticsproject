@@ -1,0 +1,65 @@
+{% comment %}
+The order block shared by every staff order alert. Deliberately NOT `_order_items.html`:
+that partial renders the customer's money breakdown (subtotal, discount, tax) from a
+context the staff mail does not build, and staff need the LINES and the total, not the
+arithmetic. Nothing here renders a street address, a phone number or a tracking token —
+see `apps/orders/emails.py::_staff_context` for why.
+{% endcomment %}
+{% if is_preview %}
+<p style="margin:0 0 16px;padding:12px;border-radius:8px;background:#eef4ff;border:1px solid #c9d8f0;font-size:14px;">
+  <strong>This is a test.</strong> No such order exists — it was sent from the admin's
+  Email Notifications screen to check that this address receives mail.
+</p>
+{% endif %}
+{% if review_reason %}
+<p style="margin:0 0 16px;padding:12px;border-radius:8px;background:#fdf2f2;border:1px solid #f0c9c9;font-size:14px;">
+  <strong>Needs review:</strong> {{ review_reason }}
+</p>
+{% endif %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
+  {% for item in items %}
+  <tr>
+    <td style="padding:8px 0;border-bottom:1px solid #eee;">
+      {{ item.quantity }} &times; {{ item.name }}{% if item.variant %}<br>
+      <span style="color:#777;font-size:12px;">{{ item.variant }}</span>{% endif %}
+    </td>
+    <td align="right" style="padding:8px 0;border-bottom:1px solid #eee;white-space:nowrap;">
+      {{ item.line_total }}
+    </td>
+  </tr>
+  {% endfor %}
+  <tr>
+    <td style="padding:8px 12px 8px 0;font-weight:600;">Total</td>
+    <td align="right" style="padding:8px 0;font-weight:600;white-space:nowrap;">{{ grand_total }}</td>
+  </tr>
+</table>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+       style="margin-top:20px;font-size:13px;color:#555;">
+  <tr>
+    <td style="padding:3px 12px 3px 0;color:#888;">{% if is_pickup %}Collect from{% else %}Deliver to{% endif %}</td>
+    <td style="padding:3px 0;">{{ destination }}</td>
+  </tr>
+  <tr>
+    <td style="padding:3px 12px 3px 0;color:#888;">Method</td>
+    <td style="padding:3px 0;">{{ delivery_option_name|default:"—" }}</td>
+  </tr>
+  {% if customer_note %}
+  <tr>
+    <td style="padding:3px 12px 3px 0;color:#888;">Customer note</td>
+    <td style="padding:3px 0;">{{ customer_note }}</td>
+  </tr>
+  {% endif %}
+</table>
+
+<p style="margin:24px 0 0;">
+  <a href="{{ admin_url }}"
+     style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
+            padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
+    Open in admin
+  </a>
+</p>
+<p style="margin:12px 0 0;color:#999;font-size:12px;">
+  The customer's address and phone number are on the admin page — sign in to see them.
+</p>

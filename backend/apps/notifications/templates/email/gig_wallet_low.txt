@@ -1,4 +1,7 @@
-The GIG Logistics wallet is down to ₦{{ balance }}, below the ₦{{ threshold }} alert threshold.
+{% if is_preview %}*** THIS IS A TEST — the numbers below are made up. Sent from the admin's
+Email Notifications screen to check that this address receives mail. ***
+
+{% endif %}The GIG Logistics wallet is down to ₦{{ balance }}, below the ₦{{ threshold }} alert threshold.
 
 Every waybill debits its full delivery cost from this wallet the moment it is created.
 When the balance cannot cover a shipment, PAID orders stop shipping — the customer has

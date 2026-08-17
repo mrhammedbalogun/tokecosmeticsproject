@@ -1,0 +1,17 @@
+{% if is_preview %}*** THIS IS A TEST — no such order exists. Sent from the admin's Email
+Notifications screen to check that this address receives mail. ***
+
+{% endif %}{% if review_reason %}** NEEDS REVIEW: {{ review_reason }} **
+
+{% endif %}Order {{ number }} — placed {{ placed_at }}
+{% for item in items %}  {{ item.quantity }} x {{ item.name }}{% if item.variant %} ({{ item.variant }}){% endif %} — {{ item.line_total }}
+{% endfor %}  Total: {{ grand_total }}
+
+{% if is_pickup %}Collect from{% else %}Deliver to{% endif %}: {{ destination }}
+Method: {{ delivery_option_name|default:"—" }}{% if customer_note %}
+Customer note: {{ customer_note }}{% endif %}
+
+Open in admin:
+  {{ admin_url }}
+
+The customer's address and phone number are on the admin page — sign in to see them.

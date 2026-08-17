@@ -1,0 +1,15 @@
+{% extends "email/base.html" %}
+{% block content %}
+{% comment %}
+Headed "Payment confirmed" and NOT "New order", on purpose. This fires on any move to
+`processing`, which includes `on_hold -> processing` — a legacy order being triaged, not
+a new sale. Stating the fact that actually happened, next to the real placement date,
+keeps the mail honest in both cases. See `enqueue_staff_order_paid`.
+{% endcomment %}
+<p style="margin:0 0 4px;font-size:17px;font-weight:600;">Payment confirmed</p>
+<p style="margin:0 0 16px;color:#777;font-size:13px;">
+  Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }} · {{ country }}
+</p>
+<p style="margin:0 0 20px;">{{ item_count }} item{{ item_count|pluralize }} to pack.</p>
+{% include "email/_staff_order.html" %}
+{% endblock %}

@@ -202,6 +202,12 @@ MATRIX: list[Row] = [
     # `apps/core/tests/test_admin_search.py::test_the_scope_matrix`, which is where the
     # real authorization check for this endpoint lives.
     Row("AdminSearchView", "get", "/api/v1/admin/search/?q=zzz", ALL_ROLES),
+    # --- notifications: the subscriber list behind every staff alert -------------
+    # A Manager holds `orders.view` and packs the boxes these alerts are about, and still
+    # cannot edit this list: adding a recipient is adding a permanent, accountless copy
+    # of every order to somebody's inbox. Asking the Owner is the control.
+    Row("NotificationRecipientAdminViewSet", "get",
+        "/api/v1/admin/notification-recipients/", _OWNER),
     # --- identity: every staff member, whatever their role -----------------------
     Row("AdminMeView", "get", "/api/v1/auth/admin-me/", ALL_ROLES),
     # Self-service on the caller's own trusted devices: a lost-laptop response must
