@@ -12,6 +12,7 @@ orders to the wrong customers.
 from __future__ import annotations
 
 import datetime
+import decimal
 import json
 import os
 from pathlib import Path
@@ -29,6 +30,16 @@ class _ArtifactEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (datetime.datetime, datetime.date)):
             return obj.isoformat()
+        # HPOS money columns (`total_amount`, `tax_amount`, …) are SQL DECIMALs, so
+        # pymysql hands them back as `Decimal` and json refuses them. Serialise as a
+        # STRING, never a float: `transform_orders.money()` does `Decimal(str(value))`
+        # and already documents strings as one of the shapes it accepts, so a string
+        # round-trips exactly. A float would round the artifact before the importer's
+        # reconciliation ever got to compare it against WooCommerce's own totals, which
+        # would turn the one check that guards the money into a check that agrees with
+        # its own error.
+        if isinstance(obj, decimal.Decimal):
+            return str(obj)
         return super().default(obj)
 
 

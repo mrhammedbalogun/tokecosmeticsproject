@@ -81,6 +81,35 @@ def test_THE_13_PRE_HPOS_ORDERS_ARE_FOUND_and_the_stale_copy_is_not(stub_wp, tmp
     assert sum(o["id"] == 21446 for o in orders) == 1
 
 
+def test_DECIMAL_MONEY_SURVIVES_THE_ARTIFACT_EXACTLY(monkeypatch, stub_wp, tmp_path):
+    """The fixtures above hand money over as strings. The real driver does not.
+
+    HPOS money columns are SQL DECIMALs, so pymysql returns `Decimal`, and the encoder
+    used to raise `TypeError: Object of type Decimal is not JSON serializable` — which is
+    exactly what happened the first time this command was pointed at production, after
+    every test here had passed. The regression is that the fixtures were more convenient
+    than the database.
+
+    Asserting on the string, not on a float: money must reach the importer's
+    reconciliation with the same digits WooCommerce stored, or the one check that guards
+    the money is comparing the artifact against a rounded copy of itself.
+    """
+    from decimal import Decimal
+
+    row = dict(HPOS_ROWS[0])
+    row["total_amount"] = Decimal("187.05")
+    row["tax_amount"] = Decimal("0.00")
+    monkeypatch.setattr(wp_reader, "fetch_orders", lambda conn: [row])
+
+    out = tmp_path / "orders-legacy_ng.json"
+    call_command("extract_wp_orders", "--store", "legacy_ng", "--out", str(out),
+                 stdout=StringIO())
+
+    order = json.loads(out.read_text())["orders"][0]
+    assert order["total_amount"] == "187.05"
+    assert order["tax_amount"] == "0.00"
+
+
 def test_the_operator_is_warned(stub_wp, tmp_path):
     out = StringIO()
     call_command("extract_wp_orders", "--store", "legacy_ng",
