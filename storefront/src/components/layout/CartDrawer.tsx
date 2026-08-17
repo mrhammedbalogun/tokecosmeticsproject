@@ -230,7 +230,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                           )}
                         </p>
                         <span className="shrink-0 text-sm font-medium tabular-nums">
-                          {l.line_total ? formatMoney(l.line_total, cart.currency, "") : "—"}
+                          {l.line_total ? formatMoney(l.line_total, cart.currency) : "—"}
                         </span>
                       </div>
                       {options && <p className="mt-0.5 text-xs text-muted">{options}</p>}
@@ -263,7 +263,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
             <div className="border-t border-line px-5 pb-5 pt-4">
               <div className="flex items-baseline justify-between font-medium">
                 <span>Subtotal</span>
-                <span className="tabular-nums">{formatMoney(cart.subtotal, cart.currency, "")}</span>
+                <span className="tabular-nums">{formatMoney(cart.subtotal, cart.currency)}</span>
               </div>
               <p className="mt-1 text-xs text-muted">Delivery &amp; taxes calculated at checkout.</p>
 
@@ -276,7 +276,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
               >
                 <BagIcon />
                 Checkout
-                <span className="tabular-nums">{formatMoney(cart.subtotal, cart.currency, "")}</span>
+                <span className="tabular-nums">{formatMoney(cart.subtotal, cart.currency)}</span>
               </Link>
               <button
                 type="button"

@@ -107,7 +107,7 @@ describe("CartDrawer", () => {
     render(<CartDrawer open onClose={vi.fn()} />);
     const checkout = screen.getByRole("link", { name: /Checkout/ });
     expect(checkout).toHaveAttribute("href", "/checkout");
-    expect(within(checkout).getByText("18,500.00")).toBeInTheDocument();
+    expect(within(checkout).getByText("₦18,500.00")).toBeInTheDocument();
   });
 
   it("empty cart offers a way back to the shop and hides the footer", () => {

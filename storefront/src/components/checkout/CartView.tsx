@@ -125,7 +125,7 @@ export function CartView() {
                 <p className="text-sm text-accent">No longer available</p>
               ) : (
                 <p className="text-sm text-muted">
-                  {line.unit_price ? formatMoney(line.unit_price, cart.currency, "") : "—"} each
+                  {line.unit_price ? formatMoney(line.unit_price, cart.currency) : "—"} each
                 </p>
               )}
               </div>
@@ -153,7 +153,7 @@ export function CartView() {
                 </div>
               )}
               <span className="w-20 text-right font-medium">
-                {line.line_total ? formatMoney(line.line_total, cart.currency, "") : "—"}
+                {line.line_total ? formatMoney(line.line_total, cart.currency) : "—"}
               </span>
               <button
                 type="button"

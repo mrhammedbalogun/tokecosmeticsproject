@@ -1,4 +1,4 @@
-import { formatMoney, symbolFor } from "@/lib/country";
+import { formatMoney } from "@/lib/country";
 import type { Totals } from "@/lib/checkout";
 
 /** Module-scoped (not nested in OrderSummary) — eslint's react-hooks/static-components
@@ -9,14 +9,12 @@ function Row({
   label,
   value,
   currency,
-  symbol,
   strong = false,
   neg = false,
 }: {
   label: string;
   value: string;
   currency: string;
-  symbol: string;
   strong?: boolean;
   neg?: boolean;
 }) {
@@ -25,7 +23,7 @@ function Row({
       <span>{label}</span>
       <span>
         {neg ? "−" : ""}
-        {formatMoney(value, currency, symbol)}
+        {formatMoney(value, currency)}
       </span>
     </div>
   );
@@ -44,12 +42,10 @@ export function OrderSummary({
   fallbackSubtotal: string;
   currency: string;
 }) {
-  const sym = symbolFor(currency);
-
   if (!totals) {
     return (
       <div className="space-y-2">
-        <Row label="Subtotal" value={fallbackSubtotal} currency={currency} symbol={sym} />
+        <Row label="Subtotal" value={fallbackSubtotal} currency={currency} />
         <p className="text-xs text-muted">Delivery &amp; taxes calculated at checkout.</p>
       </div>
     );
@@ -57,14 +53,14 @@ export function OrderSummary({
 
   return (
     <div className="space-y-2">
-      <Row label="Subtotal" value={totals.subtotal} currency={currency} symbol={sym} />
+      <Row label="Subtotal" value={totals.subtotal} currency={currency} />
       {totals.discount !== "0.00" && (
-        <Row label="Discount" value={totals.discount} currency={currency} symbol={sym} neg />
+        <Row label="Discount" value={totals.discount} currency={currency} neg />
       )}
-      <Row label="Delivery" value={totals.delivery} currency={currency} symbol={sym} />
-      <Row label="Tax" value={totals.tax} currency={currency} symbol={sym} />
+      <Row label="Delivery" value={totals.delivery} currency={currency} />
+      <Row label="Tax" value={totals.tax} currency={currency} />
       <div className="mt-2 border-t border-line pt-2">
-        <Row label="Total" value={totals.grand_total} currency={currency} symbol={sym} strong />
+        <Row label="Total" value={totals.grand_total} currency={currency} strong />
       </div>
     </div>
   );

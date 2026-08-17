@@ -22,8 +22,18 @@ describe("country helpers", () => {
   });
 
   it("formats money per currency", () => {
-    expect(formatMoney("12500.00", "NGN", "₦")).toBe("₦12,500.00");
-    expect(formatMoney("19.99", "GBP", "£")).toBe("£19.99");
+    expect(formatMoney("12500.00", "NGN")).toBe("₦12,500.00");
+    expect(formatMoney("19.99", "GBP")).toBe("£19.99");
+  });
+
+  // Regression: formatMoney used to take the symbol as a third argument, and the cart
+  // shipped passing "" for it — a number with no currency in front of it. The symbol is
+  // now derived from the code, so there is no argument left to get wrong.
+  it("always carries a currency marker, even for a code it has no symbol for", () => {
+    expect(formatMoney("100.00", "USD")).toBe("$100.00");
+    expect(formatMoney("100.00", "CAD")).toBe("CA$100.00");
+    expect(formatMoney("100.00", "EUR")).toBe("EUR 100.00");
+    expect(formatMoney("100.00", "NGN")).not.toBe("100.00");
   });
 });
 

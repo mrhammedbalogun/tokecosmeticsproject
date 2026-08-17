@@ -262,11 +262,11 @@ export function ReviewStep() {
               <p className="font-medium">{line.name}</p>
               <p className="text-muted">
                 Qty {line.quantity}
-                {line.unit_price ? ` · ${formatMoney(line.unit_price, cart.currency, "")} each` : ""}
+                {line.unit_price ? ` · ${formatMoney(line.unit_price, cart.currency)} each` : ""}
               </p>
             </div>
             <span className="font-medium">
-              {line.line_total ? formatMoney(line.line_total, cart.currency, "") : "—"}
+              {line.line_total ? formatMoney(line.line_total, cart.currency) : "—"}
             </span>
           </div>
         ))}

@@ -39,23 +39,6 @@ export function normalizeCountry(
   return validCodes.includes(REST_OF_WORLD) ? REST_OF_WORLD : DEFAULT_COUNTRY;
 }
 
-/** Group/symbol formatting only — never rounds; the API already fixed the decimals. */
-export function formatMoney(amount: string, currencyCode: string, symbol: string): string {
-  const n = Number(amount);
-  const grouped = new Intl.NumberFormat("en", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(n);
-  return `${symbol}${grouped}`;
-}
-
-export function labelFor(market: Market): string {
-  // NOT "International (USD)". Every caller renders `labelFor(m) — m.currency.code`, so
-  // that spelling produced "International (USD) — USD" — the currency twice, and the
-  // longest string in the list, which is what a native <select> sizes itself to.
-  return market.is_rest_of_world ? "International" : market.name;
-}
-
 /** Display symbols for the live currencies. Server truth is /meta/countries/ —
  * this map only saves a fetch where just the symbol is needed on a card. */
 const CURRENCY_SYMBOLS: Record<string, string> = {
@@ -64,4 +47,28 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
 
 export function symbolFor(currencyCode: string): string {
   return CURRENCY_SYMBOLS[currencyCode] ?? `${currencyCode} `;
+}
+
+/** Group/symbol formatting only — never rounds; the API already fixed the decimals.
+ *
+ * The symbol is derived here, from currencyCode, on purpose. This used to take it as a
+ * third `symbol: string` argument, and three call sites shipped passing `""` — which
+ * rendered "36,281.25" with no ₦ and typechecked perfectly, because an empty string is
+ * a valid string. There is deliberately no override parameter: a caller that wants the
+ * bare number should use Intl directly, not a money formatter with its symbol switched
+ * off. */
+export function formatMoney(amount: string, currencyCode: string): string {
+  const n = Number(amount);
+  const grouped = new Intl.NumberFormat("en", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+  return `${symbolFor(currencyCode)}${grouped}`;
+}
+
+export function labelFor(market: Market): string {
+  // NOT "International (USD)". Every caller renders `labelFor(m) — m.currency.code`, so
+  // that spelling produced "International (USD) — USD" — the currency twice, and the
+  // longest string in the list, which is what a native <select> sizes itself to.
+  return market.is_rest_of_world ? "International" : market.name;
 }

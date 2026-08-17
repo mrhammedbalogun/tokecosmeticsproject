@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { formatMoney, symbolFor } from "@/lib/country";
+import { formatMoney } from "@/lib/country";
 import type { BankDetailsData } from "@/lib/bank-handoff";
 
 /** Presentational bank-transfer details card (Plan-14 Task 10). Renders exactly what
@@ -61,7 +61,7 @@ export function BankDetails({
       {amount && currency && (
         <p className="mt-3 text-sm">
           <span className="text-muted">Amount to transfer: </span>
-          <span className="font-medium">{formatMoney(amount, currency, symbolFor(currency))}</span>
+          <span className="font-medium">{formatMoney(amount, currency)}</span>
         </p>
       )}
 

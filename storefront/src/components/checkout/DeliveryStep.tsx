@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
 import { useCart } from "@/hooks/useCart";
-import { formatMoney, symbolFor } from "@/lib/country";
+import { formatMoney } from "@/lib/country";
 import type { DeliveryOption, GigCentreOption } from "@/lib/checkout";
 
 const isPickup = (o: DeliveryOption) =>
@@ -112,7 +112,7 @@ export function DeliveryStep() {
     setPickerOptionId(null);
     const price = option.quote_required || option.price === null
       ? "Quoted after checkout"
-      : formatMoney(option.price, cart.currency, symbolFor(cart.currency));
+      : formatMoney(option.price, cart.currency);
     complete(3, {
       deliveryOptionId: option.id,
       deliveryDisplay: `${option.name} — ${price}`,
@@ -161,7 +161,7 @@ export function DeliveryStep() {
             const quoted = option.quote_required || option.price === null;
             const priceLabel = quoted
               ? "Quoted after checkout"
-              : formatMoney(option.price as string, cart.currency, symbolFor(cart.currency));
+              : formatMoney(option.price as string, cart.currency);
             const etaLabel =
               option.min_days === option.max_days
                 ? `${option.min_days} days`

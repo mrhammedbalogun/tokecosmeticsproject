@@ -3,7 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { listRecentlyViewed, type RecentEntry } from "@/lib/recently-viewed";
-import { formatMoney, symbolFor } from "@/lib/country";
+import { formatMoney } from "@/lib/country";
 
 export function RecentlyViewed({ excludeSlug }: { excludeSlug: string }) {
   const [items, setItems] = useState<RecentEntry[]>([]);
@@ -28,7 +28,7 @@ export function RecentlyViewed({ excludeSlug }: { excludeSlug: string }) {
             <p className="mt-2 line-clamp-2 text-xs">{e.name}</p>
             {e.from_price && (
               <p className="text-xs font-medium">
-                {formatMoney(e.from_price, e.currency, symbolFor(e.currency))}
+                {formatMoney(e.from_price, e.currency)}
               </p>
             )}
           </Link>
