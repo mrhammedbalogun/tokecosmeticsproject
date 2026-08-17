@@ -2,14 +2,36 @@
 import Link from "next/link";
 import { useState } from "react";
 import { OverlayPortal } from "@/components/layout/OverlayPortal";
+import { CountrySwitcher } from "@/components/layout/CountrySwitcher";
+import type { Market } from "@/lib/country";
 import { MORE_LINKS, MORE_MENU_LABEL } from "@/lib/site-pages";
 
 interface Category { name: string; slug: string }
 
-export function MobileNav({ categories }: { categories: Category[] }) {
+/**
+ * The drawer, and below `lg` the ONLY place the country/currency picker lives.
+ *
+ * It used to sit in the header at every width. A native `<select>` sizes itself to its
+ * longest option, so it was 198px wide — measured 2026-08-16 — which on a 390px phone
+ * squeezed the Toke logo to 0×0 and pushed the cart button off the right edge. A picker
+ * that costs a shopper both the brand and their basket does not belong in a phone header;
+ * in a drawer it is simply a row with room to spell itself out.
+ *
+ * `lg`, not `md`: at exactly 768 the desktop nav, the search box and the header actions
+ * together overflowed by 36px, so tablets get the drawer too.
+ */
+export function MobileNav({
+  categories,
+  markets,
+  country,
+}: {
+  categories: Category[];
+  markets: Market[];
+  country: string;
+}) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="md:hidden">
+    <div className="lg:hidden">
       <button onClick={() => setOpen(true)} aria-label="Open menu" className="text-xl">☰</button>
       {open && (
         <OverlayPortal>
@@ -58,6 +80,23 @@ export function MobileNav({ categories }: { categories: Category[] }) {
                 </li>
               ))}
             </ul>
+
+            {markets.length > 0 && (
+              <div className="mt-8 border-t border-line pt-6">
+                <p className="text-xs uppercase tracking-[0.16em] text-muted">
+                  Country and currency
+                </p>
+                {/* Closes the drawer on change: `router.refresh()` repaints the prices
+                    behind it, and leaving the menu open would hide the very thing the
+                    customer just changed. */}
+                <CountrySwitcher
+                  markets={markets}
+                  current={country}
+                  onChanged={() => setOpen(false)}
+                  className="mt-3 flex w-full items-center text-sm"
+                />
+              </div>
+            )}
           </nav>
         </div>
         </OverlayPortal>

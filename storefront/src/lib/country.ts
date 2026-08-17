@@ -50,7 +50,10 @@ export function formatMoney(amount: string, currencyCode: string, symbol: string
 }
 
 export function labelFor(market: Market): string {
-  return market.is_rest_of_world ? "International (USD)" : market.name;
+  // NOT "International (USD)". Every caller renders `labelFor(m) — m.currency.code`, so
+  // that spelling produced "International (USD) — USD" — the currency twice, and the
+  // longest string in the list, which is what a native <select> sizes itself to.
+  return market.is_rest_of_world ? "International" : market.name;
 }
 
 /** Display symbols for the live currencies. Server truth is /meta/countries/ —

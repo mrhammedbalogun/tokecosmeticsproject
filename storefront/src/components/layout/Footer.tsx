@@ -80,8 +80,12 @@ export function Footer() {
     <footer className="mt-16 bg-[#111] text-[#bdb9b2]">
       <div className="wrap py-14">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-12">
-          {/* Brand + newsletter */}
-          <div className="lg:col-span-4">
+          {/* Brand + newsletter.
+              `min-w-0`: a grid item's default `min-width: auto` is its MIN-CONTENT, so
+              this column refused to go below 343px and pushed the whole page sideways on
+              anything narrower — measured 43px of horizontal scroll at 320 and 3px at 360
+              (2026-08-16). Every phone could be dragged off-centre because of it. */}
+          <div className="min-w-0 lg:col-span-4">
             <h3 className="font-display text-xl text-surface">Toke Cosmetics</h3>
             <p className="mt-2 max-w-xs text-sm leading-relaxed text-[#bdb9b2]">
               Premium skincare for melanin-rich skin — natural ingredients,
@@ -123,7 +127,7 @@ export function Footer() {
           </div>
 
           {/* Link columns */}
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-4 lg:col-span-8">
+          <div className="grid min-w-0 grid-cols-2 gap-8 sm:grid-cols-4 lg:col-span-8">
             {COLUMNS.map((col) => (
               <nav key={col.heading} aria-label={col.heading}>
                 <h4 className="text-xs font-semibold uppercase tracking-[0.16em] text-surface">{col.heading}</h4>

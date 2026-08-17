@@ -24,4 +24,33 @@ describe("CountrySwitcher", () => {
     rerender(<CountrySwitcher markets={markets} current="NG" />);
     expect(screen.getByRole("combobox")).toHaveValue("NG");
   });
+
+  it("never prints the currency twice for the rest-of-world market", () => {
+    /**
+     * Every caller renders `labelFor(m) — m.currency.code`, and `labelFor` used to return
+     * "International (USD)", so the option read "International (USD) — USD". That was not
+     * only sloppy: it was the LONGEST option in the list, and a native <select> sizes
+     * itself to its longest option, so those extra characters were part of what made this
+     * control 198px wide and pushed the cart button off a 390px phone.
+     */
+    render(
+      <CountrySwitcher
+        markets={[{
+          code: "ZZ", name: "Rest of world", is_default: false, is_rest_of_world: true,
+          area_label: "Region", currency: { code: "USD", symbol: "$", decimal_places: 2 },
+        }]}
+        current="ZZ"
+      />,
+    );
+    expect(screen.getByRole("option").textContent).toBe("International — USD");
+  });
+
+  it("accepts a className so the header can gate it to lg and the drawer can fill a row", () => {
+    // The header renders it `hidden … lg:flex`; if this prop stops being applied the
+    // 198px select returns to a phone header, which is the whole bug.
+    const { container } = render(
+      <CountrySwitcher markets={markets} current="NG" className="hidden lg:flex" />,
+    );
+    expect(container.querySelector("label")?.className).toBe("hidden lg:flex");
+  });
 });

@@ -5,7 +5,29 @@ import type { Market } from "@/lib/country";
 import { labelFor } from "@/lib/country";
 import { dismissGeoSuggestion } from "@/lib/geo";
 
-export function CountrySwitcher({ markets, current }: { markets: Market[]; current: string }) {
+/**
+ * Country + currency picker.
+ *
+ * A NATIVE `<select>` SIZES ITSELF TO ITS LONGEST OPTION, not to the selected one. With
+ * "International — USD" in the list that came to 198px, which on a 390px phone was wider
+ * than everything else in the header put together: it squeezed the Toke logo to 0×0 and
+ * pushed the cart button off the right edge (measured 2026-08-16). The header now renders
+ * this only from `lg` up and the mobile drawer carries it instead, where a 198px control
+ * is simply a row.
+ */
+export function CountrySwitcher({
+  markets,
+  current,
+  onChanged,
+  className = "flex items-center gap-1 text-sm",
+}: {
+  markets: Market[];
+  current: string;
+  /** Fired after a market is picked — the drawer uses it to close itself, so choosing a
+   *  country does not leave the customer staring at the menu they chose it from. */
+  onChanged?: () => void;
+  className?: string;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   // Optimistic mirror of the server-derived country: shows the picked value instantly
@@ -26,10 +48,11 @@ export function CountrySwitcher({ markets, current }: { markets: Market[]; curre
       });
       router.refresh(); // re-render server components with the new country -> new prices
     });
+    onChanged?.();
   }
 
   return (
-    <label className="flex items-center gap-1 text-sm">
+    <label className={className}>
       <span className="sr-only">Country and currency</span>
       <select
         value={value}
