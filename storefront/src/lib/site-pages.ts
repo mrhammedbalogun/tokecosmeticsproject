@@ -31,6 +31,7 @@ export const MORE_LINKS: readonly NavLink[] = [
   { label: "Careers", href: "/careers", priority: 0.4 },
   { label: "Find Stores", href: "/find-stores", priority: 0.5 },
   { label: "Affiliates", href: "/affiliates", priority: 0.5 },
+  { label: "Become a Distributor", href: "/become-a-distributor", priority: 0.5 },
   { label: "Entrepreneurial Program", href: "/entrepreneurial-program", priority: 0.5 },
   { label: "Disclaimer", href: "/disclaimer", priority: 0.3 },
   { label: "Follow Us", href: "/follow-us", priority: 0.4 },

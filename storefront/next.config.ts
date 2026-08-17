@@ -2,6 +2,31 @@ import type { NextConfig } from "next";
 import { CSP_HEADER_NAME, REPORT_ONLY, buildCsp, frameAncestorsPolicy } from "./src/lib/csp";
 
 const nextConfig: NextConfig = {
+  // ── LEGACY WORDPRESS MEDIA ────────────────────────────────────────────────────────
+  //
+  // The Plan-24 content import brings WordPress page and post bodies across as HTML, and
+  // `cms.sanitize`'s allow-list keeps `<img src>` absolute. Those sources are all
+  // `https://tokecosmetics.com/wp-content/uploads/...` — which resolves to WordPress
+  // today and to this app the moment the root domain cuts over, at which point every
+  // image inside 47 imported pages becomes a 404.
+  //
+  // The redirect table cannot do this: `core.Redirect` matches exact paths and the
+  // Plan-24 map only ever emits rows for pages, posts, help articles, categories and
+  // tags. Rewriting the stored HTML instead would mean editing 47 sanitised bodies and
+  // getting it right for every future import; one prefix rule covers all of them, and
+  // keeps working for any old blog post somebody links to years from now.
+  //
+  // Points at `old.` because that is where the uploads directory physically stays after
+  // the cutover — the files are not copied anywhere, the vhost simply changes name.
+  async redirects() {
+    return [
+      {
+        source: "/wp-content/:path*",
+        destination: "https://old.tokecosmetics.com/wp-content/:path*",
+        permanent: true,
+      },
+    ];
+  },
   images: {
     // Backend media (seeded product/category images) in dev, plus the production media
     // CDN when one is configured.
