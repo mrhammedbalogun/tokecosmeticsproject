@@ -36,6 +36,11 @@ class NotificationRecipientSerializer(serializers.ModelSerializer):
     address = serializers.CharField(read_only=True)
     staff_name = serializers.SerializerMethodField()
     is_external = serializers.SerializerMethodField()
+    #: External rows only start receiving once the address has clicked its link. The
+    #: screen renders the pending state prominently — an unconfirmed row that LOOKS live
+    #: is the same silent-failure shape confirmation exists to remove.
+    is_confirmed = serializers.BooleanField(read_only=True)
+    confirmed_at = serializers.DateTimeField(read_only=True)
 
     # Every key here is one a human deliberately submitted, and none is write-only —
     # `test_audit_guard.py` checks exactly that. `event` and the target are the whole
@@ -44,7 +49,8 @@ class NotificationRecipientSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = NotificationRecipient
-        fields = ["id", "event", "user", "email", "address", "staff_name", "is_external"]
+        fields = ["id", "event", "user", "email", "address", "staff_name", "is_external",
+                  "is_confirmed", "confirmed_at"]
         extra_kwargs = {
             # Both are optional at the FIELD level; `validate()` below enforces
             # exactly-one-of across the pair, which is a thing no single field can say.

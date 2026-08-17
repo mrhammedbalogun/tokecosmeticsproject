@@ -18,7 +18,12 @@ vi.mock("next/navigation", () => ({
 const revalidatePath = vi.fn();
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 
-import { addRecipientAction, removeRecipientAction, testSendAction } from "../actions";
+import {
+  addRecipientAction,
+  removeRecipientAction,
+  resendConfirmationAction,
+  testSendAction,
+} from "../actions";
 
 const originalFetch = global.fetch;
 beforeEach(() => {
@@ -206,5 +211,52 @@ describe("testSendAction", () => {
     const state = await testSendAction({}, form({ recipient_id: "9" }));
 
     expect(state.error).toMatch(/no longer active/i);
+  });
+});
+
+
+describe("resendConfirmationAction", () => {
+  it("posts only the row id to the resend endpoint", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ sent_to: "pack@x.com" }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const state = await resendConfirmationAction({}, form({ recipient_id: "9" }));
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`${BASE}resend-confirmation/`);
+    expect(JSON.parse(init.body as string)).toEqual({ recipient_id: 9 });
+    expect(state.success).toContain("pack@x.com");
+  });
+
+  it("does not revalidate — the row is still pending until they click", async () => {
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ sent_to: "pack@x.com" }),
+    ) as unknown as typeof fetch;
+
+    await resendConfirmationAction({}, form({ recipient_id: "9" }));
+
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("explains a rate limit rather than showing a bare failure", async () => {
+    // The endpoint is capped at 10/hour because it mails branded, official-looking post
+    // to an arbitrary address on demand.
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ detail: "throttled" }, 429),
+    ) as unknown as typeof fetch;
+
+    const state = await resendConfirmationAction({}, form({ recipient_id: "9" }));
+
+    expect(state.error).toMatch(/too many/i);
+  });
+
+  it("surfaces the backend refusal for an already-confirmed address", async () => {
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ detail: "That address is already confirmed." }, 400),
+    ) as unknown as typeof fetch;
+
+    const state = await resendConfirmationAction({}, form({ recipient_id: "9" }));
+
+    expect(state.error).toBe("That address is already confirmed.");
   });
 });

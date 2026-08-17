@@ -216,6 +216,16 @@ class ProductVariant(TimeStampedModel):
 class ProductImage(TimeStampedModel):
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="images")
     image = models.ImageField(upload_to="catalog/products/", max_length=IMAGE_PATH_MAX)
+    # A square 256px crop of `image`, generated on save (apps/catalog/thumbnails.py).
+    #
+    # For anywhere that cannot resize on the fly — email above all, where the client
+    # fetches the raw bytes and nothing resamples them. Blank is a supported state, not a
+    # broken one: images predating this field are filled in by
+    # `manage.py backfill_product_thumbnails`, and anything Pillow cannot read simply
+    # keeps falling back to the full-size original.
+    thumbnail = models.ImageField(
+        upload_to="catalog/thumbs/", max_length=IMAGE_PATH_MAX, blank=True
+    )
     alt = models.CharField(max_length=255, blank=True)
     position = models.PositiveIntegerField(default=0)
     variant = models.ForeignKey(
@@ -224,6 +234,19 @@ class ProductImage(TimeStampedModel):
 
     class Meta:
         ordering = ["position", "id"]
+
+    def save(self, *args, **kwargs):
+        """Generate the thumbnail on the way in, so no caller has to remember to.
+
+        Deliberately BEFORE `super().save()` and with `save=False` on the inner write, so
+        one INSERT/UPDATE carries both files rather than saving the row twice. A failure
+        here is swallowed by `ensure_thumbnail` and leaves `thumbnail` blank — saving a
+        product must not depend on Pillow's opinion of an upload.
+        """
+        from apps.catalog.thumbnails import ensure_thumbnail
+
+        ensure_thumbnail(self.image, self.thumbnail)
+        return super().save(*args, **kwargs)
 
     def __str__(self) -> str:
         return f"{self.product.name} image #{self.position}"

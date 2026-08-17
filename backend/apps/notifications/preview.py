@@ -24,9 +24,17 @@ _ORDER = {
     "placed_at": "01 Jan 2026, 09:00",
     "expires_at": "02 Jan 2026, 09:00",
     "admin_url": "",  # filled per-call, see below
+    # BOTH SAMPLE LINES HAVE NO PICTURE, on purpose. An earlier draft pointed one at a
+    # real production CDN filename; deleting or re-shooting that product would have turned
+    # every future test send into a broken-image icon, which is a worse first impression
+    # than a blank cell. The empty case is also the one worth exercising — it is what a
+    # line whose product has been deleted renders as, and the layout has to hold without
+    # the column.
     "items": [
-        {"name": "Sample Product", "variant": "100ml", "quantity": 2, "line_total": "₦20,000.00"},
-        {"name": "Another Sample", "variant": "", "quantity": 1, "line_total": "₦5,000.00"},
+        {"name": "Sample Product", "variant": "100ml", "quantity": 2,
+         "line_total": "₦20,000.00", "image": "", "image_alt": "Sample Product"},
+        {"name": "Another Sample", "variant": "", "quantity": 1,
+         "line_total": "₦5,000.00", "image": "", "image_alt": "Another Sample"},
     ],
     "item_count": 3,
     "grand_total": "₦25,000.00",

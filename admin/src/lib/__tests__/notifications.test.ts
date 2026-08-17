@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
+  activeRecipients,
+  isPending,
+  isReceiving,
   labelFor,
   orphanedRecipients,
   recipientsFor,
@@ -92,5 +95,41 @@ describe("orphanedRecipients", () => {
 
   it("is empty when every row matches a known event", () => {
     expect(orphanedRecipients([row()], EVENTS)).toEqual([]);
+  });
+});
+
+
+describe("confirmation state", () => {
+  it("counts an unconfirmed external row as not receiving", () => {
+    expect(isReceiving(row({ is_confirmed: false }))).toBe(false);
+    expect(isPending(row({ is_confirmed: false }))).toBe(true);
+  });
+
+  it("treats a backend too old to report confirmation as confirmed", () => {
+    // An admin deployed ahead of the backend must degrade to the OLD behaviour, not
+    // show every row as pending and hide every Send test button.
+    expect(isReceiving(row({}))).toBe(true);
+    expect(isPending(row({}))).toBe(false);
+  });
+
+  it("never calls a staff row pending", () => {
+    expect(isPending(row({ user: 5, is_external: false, is_confirmed: false }))).toBe(false);
+  });
+
+  it("excludes unconfirmed rows from the active count", () => {
+    // The empty-list warning counts these. An event whose only recipients are pending
+    // mails nobody, and a screen that stayed quiet would be telling the same
+    // "somebody is being told" lie the feature exists to end.
+    const rows = [
+      row({ id: 1, email: "a@x.com", address: "a@x.com", is_confirmed: false }),
+      row({ id: 2, email: "b@x.com", address: "b@x.com", is_confirmed: true }),
+    ];
+    expect(activeRecipients(rows, "order.paid").map((r) => r.id)).toEqual([2]);
+    expect(recipientsFor(rows, "order.paid")).toHaveLength(2);
+  });
+
+  it("reports an all-pending event as having nobody active", () => {
+    const rows = [row({ id: 1, is_confirmed: false })];
+    expect(activeRecipients(rows, "order.paid")).toHaveLength(0);
   });
 });

@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.utils import timezone
 
+from apps.catalog.images import storage_url, variant_image_alt, variant_image_path
 from apps.notifications.staff import notify_staff
 from apps.notifications.tasks import send_email_task
 from apps.orders.models import Order
@@ -23,6 +24,40 @@ from apps.orders.tokens import make_tracking_token
 from apps.payments.money import format_money
 
 logger = logging.getLogger(__name__)
+
+
+def _items(order: Order) -> list[dict]:
+    """The line items, as both the customer and staff templates want them.
+
+    ONE BUILDER FOR BOTH, so a customer's confirmation and the staff alert can never show
+    different pictures for the same order.
+
+    THE IMAGE FALLS BACK TO A LIVE LOOKUP when the snapshot is empty. `OrderItem.image_url`
+    was declared in orders/0001 and never written until checkout started snapshotting it,
+    so every order placed before that carries "" — including every order migrated from
+    WooCommerce. Resolving from the `variant` FK covers them. `variant` is SET_NULL, so a
+    line whose product has since been deleted simply has no picture, which the templates
+    render as a blank cell rather than a broken image.
+    """
+    rows = []
+    for item in order.items.all():
+        # The snapshot first, then a live lookup. `image_path` was only written from the
+        # day checkout started snapshotting it, so every earlier order — including every
+        # one migrated from WooCommerce — carries "" and resolves from the `variant` FK
+        # instead. `variant` is SET_NULL, so a line whose product has since been deleted
+        # simply has no picture, which the templates render as a blank cell.
+        image = storage_url(item.image_path or variant_image_path(item.variant))
+        rows.append({
+            "name": item.product_name,
+            "variant": item.variant_name,
+            "quantity": item.quantity,
+            "line_total": format_money(item.line_total, order.currency),
+            "image": image,
+            # Alt text is not decoration here: most mail clients block remote images by
+            # default, so for a large share of readers this string IS the picture.
+            "image_alt": variant_image_alt(item.variant) or item.product_name,
+        })
+    return rows
 
 
 def _context(order: Order) -> dict:
@@ -36,15 +71,7 @@ def _context(order: Order) -> dict:
             f"?token={make_tracking_token(order.number)}"
         ),
         "placed_at": order.placed_at.strftime("%d %b %Y"),
-        "items": [
-            {
-                "name": item.product_name,
-                "variant": item.variant_name,
-                "quantity": item.quantity,
-                "line_total": money(item.line_total),
-            }
-            for item in order.items.all()
-        ],
+        "items": _items(order),
         "subtotal": money(order.subtotal),
         "discount_total": money(order.discount_total) if order.discount_total else "",
         "shipping_total": money(order.shipping_total),
@@ -180,15 +207,7 @@ def _staff_context(order: Order) -> dict:
         # Deep link into the ADMIN, not the storefront. Keyed by number because that is
         # what `admin/src/app/(shell)/orders/[number]` routes on.
         "admin_url": f"{settings.ADMIN_URL}/orders/{order.number}",
-        "items": [
-            {
-                "name": item.product_name,
-                "variant": item.variant_name,
-                "quantity": item.quantity,
-                "line_total": money(item.line_total),
-            }
-            for item in order.items.all()
-        ],
+        "items": _items(order),
         "item_count": sum(item.quantity for item in order.items.all()),
         "grand_total": money(order.grand_total),
         "currency": order.currency_id,

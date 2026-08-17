@@ -28,6 +28,20 @@ def client_for(user) -> APIClient:
     return api
 
 
+def confirmed(event="order.paid", email="pack@x.com"):
+    """A CONFIRMED external recipient.
+
+    Test-send is refused for an unconfirmed address by design (see
+    `test_test_send_is_refused_for_an_unconfirmed_address`), so anything exercising the
+    send path needs a row that has already clicked.
+    """
+    from django.utils import timezone
+
+    return NotificationRecipient.objects.create(
+        event=event, email=email, confirmed_at=timezone.now()
+    )
+
+
 def in_role(email, role):
     user = User.objects.create_user(email=email, is_staff=True)
     user.groups.add(Group.objects.get(name=role))
@@ -189,7 +203,7 @@ def test_a_deactivated_staff_row_reports_no_address(owner):
 # ── the test-send button ────────────────────────────────────────────────────────────
 
 def test_test_send_mails_the_stored_row(owner, django_capture_on_commit_callbacks):
-    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    row = confirmed()
     # The enqueue is an on_commit effect, so that a rolled-back request (a failed audit
     # write) cannot leave a sent email behind. No commit, no mail.
     with django_capture_on_commit_callbacks(execute=True):
@@ -206,7 +220,7 @@ def test_test_send_ignores_any_address_in_the_body(owner, django_capture_on_comm
     """THE OPEN-RELAY GUARD. An endpoint that mails an address supplied by the caller
     would send our branded, authenticated mail anywhere a caller named, leaving no
     recipient row behind to show for it."""
-    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    row = confirmed()
     with django_capture_on_commit_callbacks(execute=True):
         client_for(owner).post(
             f"{BASE}test-send/",
@@ -234,6 +248,68 @@ def test_test_send_on_a_deactivated_account_says_so(owner):
                                       format="json")
     assert response.status_code == 400
     assert mail.outbox == []
+
+
+def test_test_send_is_refused_for_an_unconfirmed_address(owner):
+    """Allowing it would put order-shaped content in an inbox that has not agreed to
+    receive any — the exact delivery the confirmation gate exists to withhold — and would
+    let the Owner satisfy themselves that a mistyped address "works" without the address
+    ever having agreed."""
+    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+
+    response = client_for(owner).post(f"{BASE}test-send/", {"recipient_id": row.pk},
+                                      format="json")
+
+    assert response.status_code == 400
+    assert "not confirmed" in str(response.data).lower()
+    assert mail.outbox == []
+
+
+def test_adding_an_external_address_mails_it_a_confirmation(
+    owner, django_capture_on_commit_callbacks,
+):
+    with django_capture_on_commit_callbacks(execute=True):
+        created = client_for(owner).post(
+            BASE, {"event": "order.paid", "email": "pack@x.com"}, format="json"
+        )
+
+    assert created.status_code == 201
+    assert created.data["is_confirmed"] is False
+    assert [m.to for m in mail.outbox] == [["pack@x.com"]]
+    assert "Confirm" in mail.outbox[0].subject
+
+
+def test_adding_a_staff_member_mails_no_confirmation(
+    owner, django_capture_on_commit_callbacks,
+):
+    """Their address is already proven — they accepted an emailed invite at it."""
+    with django_capture_on_commit_callbacks(execute=True):
+        created = client_for(owner).post(
+            BASE, {"event": "order.paid", "user": owner.pk}, format="json"
+        )
+
+    assert created.data["is_confirmed"] is True
+    assert mail.outbox == []
+
+
+def test_resend_is_refused_for_an_already_confirmed_address(owner):
+    """A second confirmation email to someone already receiving alerts reads as a
+    security incident to the person getting it."""
+    row = confirmed()
+    response = client_for(owner).post(f"{BASE}resend-confirmation/",
+                                      {"recipient_id": row.pk}, format="json")
+    assert response.status_code == 400
+
+
+def test_resend_mails_a_pending_address_again(owner, django_capture_on_commit_callbacks):
+    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client_for(owner).post(f"{BASE}resend-confirmation/",
+                                          {"recipient_id": row.pk}, format="json")
+
+    assert response.status_code == 200
+    assert [m.to for m in mail.outbox] == [["pack@x.com"]]
 
 
 def test_a_manager_cannot_send_a_test():
@@ -283,7 +359,7 @@ def test_a_test_send_is_distinguishable_from_adding_a_recipient(owner):
     conflated them would hide one behind the other."""
     from apps.core.models import AuditLog
 
-    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    row = confirmed()
     client_for(owner).post(f"{BASE}test-send/", {"recipient_id": row.pk}, format="json")
 
     assert AuditLog.objects.latest("id").action == "test_send"
@@ -299,7 +375,7 @@ def test_a_test_send_never_logs_an_address_from_the_request(owner):
     happen, in the one table whose whole job is to be believed."""
     from apps.core.models import AuditLog
 
-    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    row = confirmed()
     client_for(owner).post(
         f"{BASE}test-send/",
         {"recipient_id": row.pk, "email": "attacker@evil.test"},

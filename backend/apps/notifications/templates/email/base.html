@@ -8,7 +8,13 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       <tr>
         <td align="center" style="padding:32px 16px;">
-          <table role="presentation" width="480" cellpadding="0" cellspacing="0"
+          {% comment %}
+          560, not 480: the line-item tables gained a 64px picture column and the product
+          name needs room to sit beside it rather than wrapping on every line. Still
+          inside the ~600px that every mail client renders without horizontal scrolling,
+          and inside Outlook's fixed reading pane.
+          {% endcomment %}
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0"
                  style="background:#ffffff;border-radius:12px;padding:32px;">
             <tr><td style="font-size:20px;font-weight:600;padding-bottom:16px;">Toke Cosmetics</td></tr>
             <tr><td style="font-size:15px;line-height:1.6;">{% block content %}{% endblock %}</td></tr>

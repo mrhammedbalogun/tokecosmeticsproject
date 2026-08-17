@@ -15,6 +15,7 @@ from django.utils import timezone
 
 from apps.accounts.models import Address
 from apps.carts.models import Cart
+from apps.catalog.images import variant_image_path
 from apps.catalog.services import sellable_in
 from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
@@ -203,6 +204,16 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
                 order=order, variant=variant, product_name=variant.product.name,
                 variant_name=", ".join(f"{k}: {v}" for k, v in (variant.option_values or {}).items()),
                 sku=variant.sku, unit_price=rp.amount, line_total=(rp.amount * qty), quantity=qty,
+                # A SNAPSHOT, like `product_name` and `sku` beside it. The field has
+                # existed since orders/0001 and nothing ever wrote it, so every order
+                # placed before today carries "" — the email templates fall back to
+                # resolving from the `variant` FK for those.
+                #
+                # Snapshotted rather than always resolved live because this is the picture
+                # of the thing they bought. Re-shoot the product next season and a
+                # re-opened confirmation email should still show what was in the box, for
+                # the same reason `product_name` is frozen here rather than followed.
+                image_path=variant_image_path(variant),
             )
         payment = Payment.objects.create(
             order=order, gateway=payment_gateway, amount=totals.grand_total,

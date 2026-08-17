@@ -1,0 +1,27 @@
+{% extends "email/base.html" %}
+{% block content %}
+<p style="margin:0 0 16px;font-size:17px;font-weight:600;">Confirm this address</p>
+<p style="margin:0 0 16px;">
+  Someone at Toke Cosmetics added <strong>{{ address }}</strong> to receive
+  <strong>{{ event_label }}</strong> notifications.
+</p>
+<p style="margin:0 0 20px;color:#555;">{{ event_description }}</p>
+<p style="margin:0 0 20px;">
+  These emails contain order details — what was bought, the total, and the town it is
+  going to. They will only start once you confirm.
+</p>
+<p style="margin:0 0 24px;">
+  <a href="{{ confirm_url }}"
+     style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
+            padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
+    Yes, send me these
+  </a>
+</p>
+<p style="margin:0 0 8px;color:#777;font-size:13px;">
+  The link expires in 7 days. If it has, ask whoever added you to send another.
+</p>
+<p style="margin:0;color:#777;font-size:13px;">
+  <strong>Not expecting this?</strong> Ignore this email and nothing will be sent. Without
+  a confirmation the address stays inactive.
+</p>
+{% endblock %}

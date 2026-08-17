@@ -193,6 +193,24 @@ STORAGES = {
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# This service's own public origin. LOAD-BEARING IN PRODUCTION — set it there.
+#
+# Two consumers, and the second is why the default must never be relied on:
+#
+# 1. Absolutising media paths for email (`apps/catalog/images.py::absolutise`). Only
+#    matters in dev/test, where no S3 bucket is configured and `image.url` returns a
+#    relative `/media/...` path that would render as a broken image inside a mail client.
+#    Production's `AWS_S3_CUSTOM_DOMAIN` makes those URLs absolute already.
+# 2. **Building the confirmation link an external notification recipient clicks**
+#    (`apps/notifications/confirm.py::confirm_url_for`). If this is unset in production,
+#    every confirmation email points at `http://localhost:8000` and the failure is
+#    invisible until a recipient clicks a dead link — and since an unconfirmed address
+#    receives nothing, the symptom is silence, which is the exact failure mode the
+#    notifications app exists to eliminate.
+#
+# `config/settings/prod.py` asserts it is set rather than trusting a deploy checklist.
+API_PUBLIC_URL = env("API_PUBLIC_URL", default="http://localhost:8000")
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 REST_FRAMEWORK = {
@@ -262,6 +280,13 @@ REST_FRAMEWORK = {
         # an abuse cap; keyed per-user (unforgeable), applied to PUT only — see
         # PayoutMethodWriteThrottle.
         "payout_method_write": "6/hour",
+        # Resending a notification-recipient confirmation. Owner-only and audited, but
+        # the endpoint mails BRANDED, AUTHENTICATED-LOOKING mail to an arbitrary address
+        # on demand — the same "open relay wearing a staff login" shape the test-send
+        # action's docstring names. A cap means a mistake, or a stolen Owner session,
+        # cannot turn it into a way to bombard somebody's inbox. Generous enough that the
+        # real use (it went to spam, send another) never hits it.
+        "recipient_confirm_resend": "10/hour",
         # Auth. Email-keyed unless the name says _ip.
         #
         # login_ip is the VOLUME cap and must stay listed first on LoginView: without it

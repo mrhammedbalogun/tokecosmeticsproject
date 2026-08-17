@@ -100,7 +100,12 @@ def test_an_unregistered_event_resolves_to_nobody_without_raising():
 
 
 def test_events_do_not_leak_into_each_other():
-    NotificationRecipient.objects.create(event="order.paid", email="a@x.com")
-    NotificationRecipient.objects.create(event="inventory.low_stock", email="b@x.com")
+    from django.utils import timezone
+
+    now = timezone.now()
+    NotificationRecipient.objects.create(event="order.paid", email="a@x.com", confirmed_at=now)
+    NotificationRecipient.objects.create(
+        event="inventory.low_stock", email="b@x.com", confirmed_at=now
+    )
     assert resolve_recipients("order.paid") == ["a@x.com"]
     assert resolve_recipients("inventory.low_stock") == ["b@x.com"]

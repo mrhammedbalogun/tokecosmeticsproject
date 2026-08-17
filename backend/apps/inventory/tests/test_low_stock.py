@@ -11,9 +11,17 @@ def _somebody_is_subscribed():
     (`apps/notifications/events.py`) rather than to `DEFAULT_FROM_EMAIL`, which had no
     inbox. With an empty list it correctly sends nothing — so these tests, which are
     about WHEN the digest speaks and not about who hears it, need one subscriber."""
+    from django.utils import timezone
+
     from apps.notifications.models import NotificationRecipient
 
-    NotificationRecipient.objects.create(event="inventory.low_stock", email="stock@x.com")
+    # `confirmed_at` because an external address receives nothing until it has clicked its
+    # confirmation link. These tests are about WHEN the digest speaks, not about the
+    # confirmation gate (`apps/notifications/tests/test_confirmation.py` owns that), so
+    # they need a subscriber who is actually live.
+    NotificationRecipient.objects.create(
+        event="inventory.low_stock", email="stock@x.com", confirmed_at=timezone.now()
+    )
 
 
 

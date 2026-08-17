@@ -53,6 +53,25 @@ strand a visible, recoverable row, not silently unsubscribe the Owner.
 `resolve_recipients()` ignores unregistered codes, and the admin serializer surfaces them
 so the screen can offer a delete rather than hiding them.
 
+── CONFIRMATION: AN EXTERNAL ADDRESS IS NOT LIVE UNTIL IT SAYS SO ──────────────────
+
+Owner-only access keeps strangers off this list. It does nothing whatsoever about the
+failure that actually happens in a small shop: the Owner mistypes. `orders@gmali.com` is
+accepted, joins the list, and receives every order forever — and nobody ever notices,
+because the symptom of a wrong address is identical to the symptom of a working one.
+Silence.
+
+So an external row starts with `confirmed_at = NULL` and `resolve_recipients()` skips it.
+Adding one sends that address a signed link (`tokens.py`); clicking it is the proof, and
+it is proof of two different things at once — that the address exists and is deliverable,
+and that a human there agreed to receive a shop's order data. Nothing else in the system
+can establish either.
+
+STAFF ROWS ARE CONFIRMED ON CREATION and are not sent a link. Their address is already
+proven: they accepted an emailed invite at it and they sign in with it. Making a
+colleague click a second confirmation to receive the alerts for a job they already hold
+is ceremony without a control behind it.
+
 ── WHY NOT AN `is_active` FLAG ON THE ROW ──────────────────────────────────────────
 
 Considered and rejected. The list is short, visible in full on one screen, and trivially
@@ -82,6 +101,8 @@ class NotificationRecipient(TimeStampedModel):
         blank=True,
         help_text="An address with no admin account. Blank on staff rows.",
     )
+    # When the address proved it wanted this. See the CONFIRMATION section below.
+    confirmed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [
@@ -130,12 +151,26 @@ class NotificationRecipient(TimeStampedModel):
         return f"{self.event} -> {self.address or '(unresolvable)'}"
 
     @property
+    def is_external(self) -> bool:
+        return self.user_id is None
+
+    @property
+    def is_confirmed(self) -> bool:
+        """Staff rows are confirmed by construction; external rows must have clicked."""
+        return not self.is_external or self.confirmed_at is not None
+
+    @property
     def address(self) -> str:
         """The address this row would be mailed at, or "" if it resolves to nobody — a
         staff account that has been deactivated or demoted out of staff.
 
-        Read by the admin serializer so the screen can SAY "this person no longer
-        receives mail" rather than showing a row that looks live and is not."""
+        DELIBERATELY IGNORES CONFIRMATION. This answers "where would this row be mailed",
+        which is what the admin screen renders and what the confirmation email itself is
+        addressed to. Whether the row is ALLOWED to receive notifications is a separate
+        question, asked by `resolve_recipients()`. Conflating the two here would make the
+        screen unable to show an unconfirmed address back to the person who typed it —
+        and seeing the typo is how the typo gets found.
+        """
         if self.user_id is None:
             return self.email
         if not (self.user.is_active and self.user.is_staff):
@@ -167,6 +202,10 @@ def resolve_recipients(event: str) -> list[str]:
         return []
     seen: dict[str, None] = {}
     for row in NotificationRecipient.objects.filter(event=event).select_related("user"):
+        # `is_confirmed` is the gate an unconfirmed external address never gets past.
+        # Staff rows pass it by construction.
+        if not row.is_confirmed:
+            continue
         address = row.address
         if address:
             seen.setdefault(address.lower(), None)

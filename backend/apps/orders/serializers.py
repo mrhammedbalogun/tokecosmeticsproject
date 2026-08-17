@@ -20,6 +20,7 @@ from apps.orders.state import (
     MACHINE_OWNED_STATUSES,
 )
 from apps.payments.models import Payment, Refund
+from apps.catalog.images import storage_url, variant_image_path
 from apps.payments.money import format_money
 from apps.payments.refunds import refundable_amount
 
@@ -31,11 +32,26 @@ _REFUNDABLE_PAYMENT_STATES = ("succeeded", "partially_refunded")
 class OrderItemSerializer(serializers.ModelSerializer):
     unit_price_display = serializers.SerializerMethodField()
     line_total_display = serializers.SerializerMethodField()
+    # THE API CONTRACT IS UNCHANGED — still `image_url`, still an absolute URL — while the
+    # model now stores a storage KEY (`OrderItem.image_path`). Deriving it here is what
+    # lets the CDN hostname move without rewriting the orders table, and it means this
+    # field finally has a value: it was declared in orders/0001, exposed here, and never
+    # written by anything, so every order page has been rendering an empty string since
+    # launch.
+    image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = OrderItem
         fields = ("product_name", "variant_name", "sku", "quantity", "unit_price",
                   "line_total", "unit_price_display", "line_total_display", "image_url")
+
+    def get_image_url(self, item) -> str:
+        # Snapshot first, live fallback for orders placed before the snapshot existed —
+        # the same order of preference the emails use, so a customer's order page and
+        # their confirmation email cannot disagree about the picture.
+        return storage_url(item.image_path) or storage_url(
+            variant_image_path(item.variant)
+        )
 
     def get_unit_price_display(self, item) -> str:
         return format_money(item.unit_price, item.order.currency)

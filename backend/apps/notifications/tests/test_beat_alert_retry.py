@@ -14,8 +14,18 @@ feature was built to end, reintroduced in the two events it was built to rescue.
 import pytest
 from django.core import mail
 
+from django.utils import timezone
+
 from apps.core.models import SiteSetting
 from apps.notifications.models import NotificationRecipient
+
+
+def subscribe(event, email):
+    """A CONFIRMED external subscriber — an unconfirmed one receives nothing, which would
+    make every assertion here pass for the wrong reason."""
+    return NotificationRecipient.objects.create(
+        event=event, email=email, confirmed_at=timezone.now()
+    )
 
 pytestmark = pytest.mark.django_db
 
@@ -42,7 +52,7 @@ def test_a_failed_enqueue_leaves_the_digest_free_to_retry(monkeypatch):
     from apps.inventory.tasks import _DIGEST_STATE_KEY, low_stock_digest
     import apps.notifications.staff as staff_mod
 
-    NotificationRecipient.objects.create(event="inventory.low_stock", email="s@x.com")
+    subscribe("inventory.low_stock", "s@x.com")
     StockItemFactory(variant=ProductVariantFactory(sku="A-1"), warehouse=WarehouseFactory(),
                      quantity=1, low_stock_threshold=5)
 
@@ -90,7 +100,7 @@ def test_a_failed_wallet_enqueue_does_not_arm_the_low_state(monkeypatch):
     import apps.notifications.staff as staff_mod
     from apps.delivery.tasks import _WALLET_ALERT_STATE_KEY, monitor_gig_wallet
 
-    NotificationRecipient.objects.create(event="delivery.gig_wallet_low", email="o@x.com")
+    subscribe("delivery.gig_wallet_low", "o@x.com")
     monkeypatch.setattr(delivery_tasks, "GigError", Exception, raising=False)
     monkeypatch.setattr(
         "apps.delivery.gig.capture.wallet_balance", lambda refresh=False: Decimal("10000")
@@ -113,7 +123,7 @@ def test_the_wallet_alert_lands_on_the_next_run_after_the_broker_recovers(monkey
     import apps.notifications.staff as staff_mod
     from apps.delivery.tasks import _WALLET_ALERT_STATE_KEY, monitor_gig_wallet
 
-    NotificationRecipient.objects.create(event="delivery.gig_wallet_low", email="o@x.com")
+    subscribe("delivery.gig_wallet_low", "o@x.com")
     monkeypatch.setattr(delivery_tasks, "GigError", Exception, raising=False)
     monkeypatch.setattr(
         "apps.delivery.gig.capture.wallet_balance", lambda refresh=False: Decimal("10000")

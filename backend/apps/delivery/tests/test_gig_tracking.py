@@ -138,8 +138,11 @@ def test_wallet_alert_fires_on_the_crossing_only_and_rearms_on_recovery():
     # not about who hears it, so it needs one subscriber to have anything to count.
     from apps.notifications.models import NotificationRecipient
 
-    NotificationRecipient.objects.create(event="delivery.gig_wallet_low",
-                                         email="ops@x.com")
+    from django.utils import timezone
+
+    NotificationRecipient.objects.create(
+        event="delivery.gig_wallet_low", email="ops@x.com", confirmed_at=timezone.now()
+    )
 
     def balance_response(amount):
         return httpx.Response(200, json=_envelope({"data": [{"WalletAmount": amount}]}))

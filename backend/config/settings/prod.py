@@ -43,3 +43,27 @@ TOTP_ENCRYPTION_KEY = env("TOTP_ENCRYPTION_KEY")
 
 # Swagger/docs are staff-only in production.
 SPECTACULAR_SETTINGS = {**globals().get("SPECTACULAR_SETTINGS", {}), "SERVE_PERMISSIONS": ["rest_framework.permissions.IsAdminUser"]}
+
+
+# --- production must not fall back to the localhost default -------------------------
+#
+# `API_PUBLIC_URL` builds the link in every external-recipient confirmation email. Unset,
+# those links point at localhost and nobody finds out, because an address that never
+# confirms simply receives nothing — silence, which is indistinguishable from "no orders
+# yet". A check at import time turns that into a failed deploy instead, which is the only
+# moment anyone is looking.
+from django.core.checks import Error, register  # noqa: E402
+
+
+@register()
+def api_public_url_is_configured(app_configs, **kwargs):
+    from django.conf import settings as dj
+
+    if not dj.API_PUBLIC_URL or "localhost" in dj.API_PUBLIC_URL:
+        return [Error(
+            "API_PUBLIC_URL is unset or still points at localhost.",
+            hint="Set API_PUBLIC_URL=https://api.tokecosmetics.com in .env.prod. It builds "
+                 "the confirmation link in external notification-recipient emails.",
+            id="config.E001",
+        )]
+    return []

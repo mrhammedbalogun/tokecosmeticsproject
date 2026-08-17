@@ -1,0 +1,19 @@
+CONFIRM THIS ADDRESS
+
+Someone at Toke Cosmetics added {{ address }} to receive "{{ event_label }}"
+notifications.
+
+{{ event_description }}
+
+These emails contain order details — what was bought, the total, and the town it is
+going to. They will only start once you confirm.
+
+Confirm here:
+  {{ confirm_url }}
+
+The link expires in 7 days. If it has, ask whoever added you to send another.
+
+Not expecting this? Ignore this email and nothing will be sent. Without a confirmation
+the address stays inactive.
+
+— Toke Cosmetics

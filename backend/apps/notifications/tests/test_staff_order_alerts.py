@@ -9,6 +9,7 @@ template that breaks in production.
 import pytest
 from django.contrib.auth import get_user_model
 from django.core import mail
+from django.utils import timezone
 
 from apps.core.models import Country
 from apps.notifications.models import NotificationRecipient
@@ -50,7 +51,16 @@ def _order(number="TC-900001", status="pending_payment", **kw):
 
 
 def _subscribe(event="order.paid", email="packing@x.com"):
-    return NotificationRecipient.objects.create(event=event, email=email)
+    """A CONFIRMED external subscriber.
+
+    `confirmed_at` is set here because an external address receives nothing until it has
+    clicked its link (`test_confirmation.py` owns that gate). These tests are about what
+    the alerts CONTAIN and when they fire, so they need a subscriber who is actually
+    receiving — leaving it unconfirmed silently empties every outbox in this file.
+    """
+    return NotificationRecipient.objects.create(
+        event=event, email=email, confirmed_at=timezone.now()
+    )
 
 
 def test_no_subscribers_means_the_customer_still_gets_their_confirmation(
@@ -420,3 +430,113 @@ def test_an_unusable_display_timezone_degrades_instead_of_losing_the_alert(
         transition_by_id(order.pk, "processing")
 
     assert any(m.to == ["packing@x.com"] for m in mail.outbox)
+
+
+# ── product pictures ────────────────────────────────────────────────────────────────
+
+def _order_with_a_real_product(number, subscribe=True):
+    """An order whose line points at a real variant with a real image, so the image path
+    exercises `ProductImage` rather than a fabricated URL."""
+    from io import BytesIO
+
+    from django.core.files.base import ContentFile
+    from PIL import Image as PILImage
+
+    from apps.catalog.factories import ProductVariantFactory
+    from apps.catalog.models import ProductImage
+    from apps.catalog.images import variant_image_path
+
+    variant = ProductVariantFactory()
+    buffer = BytesIO()
+    PILImage.new("RGB", (1200, 900), (180, 100, 80)).save(buffer, format="JPEG")
+    picture = ProductImage(product=variant.product, alt="A jar of shea butter")
+    picture.image.save("jar.jpg", ContentFile(buffer.getvalue()), save=False)
+    picture.save()
+
+    if subscribe:
+        _subscribe()
+    order = _order(number=number)
+    item = order.items.first()
+    item.variant = variant
+    item.image_path = variant_image_path(variant)
+    item.save(update_fields=["variant", "image_path"])
+    return order, picture
+
+
+def test_the_staff_email_shows_the_product_picture(django_capture_on_commit_callbacks):
+    """For the PACKER: matching a jar on the bench to a line on a list is faster by sight,
+    and it is the check that catches picking the 50ml instead of the 200ml."""
+    order, picture = _order_with_a_real_product("TC-900010")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    html = "".join(a[0] for a in staff_mail.alternatives)
+    assert picture.thumbnail.name in html
+    assert 'alt="A jar of shea butter"' in html
+    # Explicit dimensions, because Outlook honours the attributes and ignores CSS.
+    assert 'width="52" height="52"' in html
+
+
+def test_the_email_uses_the_thumbnail_not_the_full_size_original(
+    django_capture_on_commit_callbacks,
+):
+    """The whole point of the pipeline: catalogue originals average 549KB, and a mail
+    client fetches whatever `src` says with nothing resizing it in between."""
+    order, picture = _order_with_a_real_product("TC-900011")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    html = "".join(a[0] for a in staff_mail.alternatives)
+    assert "thumbs" in html
+    assert picture.image.name not in html
+
+
+def test_the_customer_confirmation_shows_the_picture_too(
+    django_capture_on_commit_callbacks,
+):
+    order, picture = _order_with_a_real_product("TC-900012", subscribe=False)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    customer_mail = next(m for m in mail.outbox if m.to == ["buyer@x.com"])
+    html = "".join(a[0] for a in customer_mail.alternatives)
+    assert picture.thumbnail.name in html
+    assert 'width="64" height="64"' in html
+
+
+def test_a_line_with_no_picture_still_renders(django_capture_on_commit_callbacks):
+    """A deleted product, or any order placed before checkout started snapshotting. The
+    row must keep its column alignment rather than shifting the table."""
+    _subscribe()
+    order = _order(number="TC-900013")  # no variant, no image
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    html = "".join(a[0] for a in staff_mail.alternatives)
+    assert "Shea Butter" in html
+    assert "<img" not in html
+
+
+def test_an_old_order_without_a_snapshot_resolves_its_picture_live(
+    django_capture_on_commit_callbacks,
+):
+    """`image_path` was only written from the day checkout started snapshotting it, so
+    every earlier order — including every one migrated from WooCommerce — carries "" and
+    must fall back to the `variant` FK."""
+    order, picture = _order_with_a_real_product("TC-900014")
+    item = order.items.first()
+    item.image_path = ""
+    item.save(update_fields=["image_path"])
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    assert picture.thumbnail.name in "".join(a[0] for a in staff_mail.alternatives)

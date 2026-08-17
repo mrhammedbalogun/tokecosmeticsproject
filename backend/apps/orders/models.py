@@ -151,7 +151,18 @@ class OrderItem(models.Model):
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)
     line_total = models.DecimalField(max_digits=12, decimal_places=2)
     quantity = models.PositiveIntegerField()
-    image_url = models.URLField(blank=True)
+    # The STORAGE KEY of the line's picture, snapshotted at checkout — not a URL.
+    #
+    # Was `image_url = URLField(blank=True)`, i.e. varchar(200), and nothing ever wrote it
+    # from orders/0001 until now. Two reasons it changed shape rather than being filled
+    # in as it stood: a catalogue image path may be 500 characters (`IMAGE_PATH_MAX`), so
+    # a CDN URL built from one raises DataError from Postgres — inside checkout's locked
+    # transaction, which is a 500 at the till; and a stored URL freezes today's CDN
+    # hostname into this table forever, breaking every historical order's picture the next
+    # time media hosting moves. `apps/catalog/images.py` has the full argument.
+    #
+    # The API still exposes `image_url`: `OrderItemSerializer` derives it from this key.
+    image_path = models.CharField(max_length=500, blank=True)
     # {"UK Warehouse": 3, "Lagos HQ": 2} — written by inventory.commit_sale via mark_paid.
     fulfillment_warehouses = models.JSONField(default=dict)
 

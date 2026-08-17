@@ -131,6 +131,40 @@ export async function removeRecipientAction(
   return {};
 }
 
+export async function resendConfirmationAction(
+  _prevState: RowState,
+  formData: FormData,
+): Promise<RowState> {
+  const id = field(formData, "recipient_id");
+  if (!isId(id)) return { error: "That recipient could not be identified." };
+
+  let sentTo = "";
+  try {
+    const result = await fetchWithAuth<{ sent_to?: string }>(`${BASE}resend-confirmation/`, {
+      method: "POST",
+      body: { recipient_id: Number(id) },
+    });
+    sentTo = result?.sent_to ?? "";
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+    if (e.status === 403) return { error: "Only the Owner can do that." };
+    // The endpoint is rate-limited (10/hour) because it mails branded, official-looking
+    // post to any address on demand. Say so rather than showing a bare failure.
+    if (e.status === 429) {
+      return { error: "Too many confirmation emails sent recently. Try again later." };
+    }
+    return { error: backendMessage(e.data) ?? "The confirmation could not be sent." };
+  }
+
+  // No `revalidatePath`: the row has not changed — it is still pending until they click —
+  // and re-rendering would discard the confirmation the operator is waiting to read.
+  return {
+    success: sentTo
+      ? `Confirmation re-sent to ${sentTo}.`
+      : "Confirmation re-sent.",
+  };
+}
+
 export async function testSendAction(
   _prevState: RowState,
   formData: FormData,

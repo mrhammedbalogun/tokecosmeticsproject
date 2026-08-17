@@ -18,19 +18,42 @@ see `apps/orders/emails.py::_staff_context` for why.
 {% endif %}
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
+  {% comment %}
+  Pictures here are for the PACKER: matching a jar on the bench to a line on a list is
+  faster by sight than by reading a variant string, and it is the check that catches
+  picking the 50ml instead of the 200ml.
+
+  This does NOT contradict the rule that the staff mail carries the least data possible
+  (see orders/emails.py). What was stripped from this mail — street address, phone, the
+  signed tracking token — is the CUSTOMER's private data, and an external recipient
+  holding it is a breach. A product photograph is public catalogue material, served
+  unauthenticated from the CDN to anyone who visits the shop. It reveals nothing about
+  the buyer.
+
+  Same email-client rules as `_order_items.html`; that file carries the full reasoning.
+  {% endcomment %}
   {% for item in items %}
   <tr>
-    <td style="padding:8px 0;border-bottom:1px solid #eee;">
+    <td width="60" style="padding:8px 12px 8px 0;border-bottom:1px solid #eee;vertical-align:top;">
+      {% if item.image %}
+      <img src="{{ item.image }}" alt="{{ item.image_alt }}" width="52" height="52"
+           style="display:block;width:52px;height:52px;border-radius:6px;
+                  border:1px solid #eee;object-fit:cover;">
+      {% else %}
+      <div style="width:52px;height:52px;border-radius:6px;background:#f2f2f0;">&nbsp;</div>
+      {% endif %}
+    </td>
+    <td style="padding:8px 0;border-bottom:1px solid #eee;vertical-align:top;">
       {{ item.quantity }} &times; {{ item.name }}{% if item.variant %}<br>
       <span style="color:#777;font-size:12px;">{{ item.variant }}</span>{% endif %}
     </td>
-    <td align="right" style="padding:8px 0;border-bottom:1px solid #eee;white-space:nowrap;">
+    <td align="right" style="padding:8px 0;border-bottom:1px solid #eee;white-space:nowrap;vertical-align:top;">
       {{ item.line_total }}
     </td>
   </tr>
   {% endfor %}
   <tr>
-    <td style="padding:8px 12px 8px 0;font-weight:600;">Total</td>
+    <td colspan="2" style="padding:8px 12px 8px 0;font-weight:600;">Total</td>
     <td align="right" style="padding:8px 0;font-weight:600;white-space:nowrap;">{{ grand_total }}</td>
   </tr>
 </table>

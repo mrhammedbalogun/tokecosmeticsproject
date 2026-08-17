@@ -23,6 +23,8 @@ import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import type { AddState, RowState } from "@/app/(shell)/notifications/actions";
 import {
+  isPending,
+  isReceiving,
   labelFor,
   type NotificationEvent,
   type NotificationRecipient,
@@ -106,6 +108,7 @@ export function NotificationSection({
   addAction,
   removeAction,
   testAction,
+  resendAction,
   initialAddState = {},
 }: {
   event: NotificationEvent;
@@ -114,6 +117,7 @@ export function NotificationSection({
   addAction: (prev: AddState, fd: FormData) => Promise<AddState>;
   removeAction: (prev: RowState, fd: FormData) => Promise<RowState>;
   testAction: (prev: RowState, fd: FormData) => Promise<RowState>;
+  resendAction: (prev: RowState, fd: FormData) => Promise<RowState>;
   initialAddState?: AddState;
 }) {
   const [addState, addFormAction] = useActionState<AddState, FormData>(
@@ -134,14 +138,22 @@ export function NotificationSection({
       <h2 className="text-sm font-semibold">{event.label}</h2>
       <p className="mt-1 text-xs text-muted">{event.description}</p>
 
-      {recipients.length === 0 ? (
+      {/* COUNTS WHO ACTUALLY RECEIVES, not who is listed. An event whose only recipients
+          are still pending confirmation mails nobody, and a screen that stayed quiet
+          about that would be telling the same "somebody is being told" lie this feature
+          exists to end. */}
+      {recipients.filter(isReceiving).length === 0 ? (
         <p
           role="alert"
           className="mt-3 rounded-md border border-warn/30 bg-warn/5 px-3 py-2 text-sm text-warn"
         >
-          Nobody receives this. It will be sent to no one until you add a recipient below.
+          {recipients.length === 0
+            ? "Nobody receives this. It will be sent to no one until you add a recipient below."
+            : "Nobody receives this yet — every address below is still waiting to confirm."}
         </p>
-      ) : (
+      ) : null}
+
+      {recipients.length === 0 ? null : (
         <ul className="mt-3 divide-y divide-line/60 border-y border-line/60">
           {recipients.map((row) => (
             <li
@@ -166,18 +178,40 @@ export function NotificationSection({
                     Account inactive — receives nothing
                   </span>
                 ) : null}
+                {isPending(row) ? (
+                  <span
+                    className="ml-2 inline-block rounded bg-warn/10 px-1.5 py-0.5 text-[11px] font-medium text-warn"
+                    title="This address has been sent a confirmation link and has not clicked it yet. It receives nothing until it does."
+                  >
+                    Awaiting confirmation
+                  </span>
+                ) : null}
                 {!row.is_external && row.address ? (
                   <span className="block text-xs text-muted">{row.address}</span>
                 ) : null}
               </span>
               <span className="flex items-center gap-2">
-                <RowForm
-                  action={testAction}
-                  recipientId={row.id}
-                  label="Send test"
-                  pendingLabel="Sending…"
-                  title={`Send a test ${event.label} email to ${labelFor(row)}`}
-                />
+                {/* A pending address is offered RESEND, never Send test. Sending it a
+                    sample order would put order-shaped content in an inbox that has not
+                    agreed to receive any — the exact delivery the confirmation gate
+                    exists to withhold. The backend refuses it too. */}
+                {isPending(row) ? (
+                  <RowForm
+                    action={resendAction}
+                    recipientId={row.id}
+                    label="Resend confirmation"
+                    pendingLabel="Sending…"
+                    title={`Resend the confirmation link to ${labelFor(row)}`}
+                  />
+                ) : (
+                  <RowForm
+                    action={testAction}
+                    recipientId={row.id}
+                    label="Send test"
+                    pendingLabel="Sending…"
+                    title={`Send a test ${event.label} email to ${labelFor(row)}`}
+                  />
+                )}
                 <RowForm
                   action={removeAction}
                   recipientId={row.id}

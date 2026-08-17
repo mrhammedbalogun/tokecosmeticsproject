@@ -12,7 +12,12 @@ import {
   type StaffOption,
 } from "@/lib/notifications";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
-import { addRecipientAction, removeRecipientAction, testSendAction } from "./actions";
+import {
+  addRecipientAction,
+  removeRecipientAction,
+  resendConfirmationAction,
+  testSendAction,
+} from "./actions";
 
 export const metadata: Metadata = { title: "Email Notifications" };
 
@@ -99,6 +104,7 @@ export default async function NotificationsPage() {
               addAction={addRecipientAction}
               removeAction={removeRecipientAction}
               testAction={testSendAction}
+              resendAction={resendConfirmationAction}
             />
           ))}
           <OrphanedRecipients
@@ -108,7 +114,9 @@ export default async function NotificationsPage() {
           <p className="text-xs text-muted">
             Emails are sent one per recipient, so nobody sees who else is on a list.
             Removing a staff account from the admin stops their notifications
-            automatically.
+            automatically. An email address you add is sent a confirmation link first and
+            receives nothing until someone there clicks it — which is what catches a
+            mistyped address, since a wrong one otherwise just fails in silence.
           </p>
         </div>
       )}

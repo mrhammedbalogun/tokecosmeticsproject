@@ -27,6 +27,8 @@ from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from rest_framework.throttling import ScopedRateThrottle
+
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
 from apps.core.audit import AdminAuditMixin
@@ -36,12 +38,24 @@ from apps.notifications.admin_serializers import (
     TestSendSerializer,
     event_catalog,
 )
+from apps.notifications.confirm import inherit_confirmation, send_confirmation
 from apps.notifications.events import EVENTS_BY_CODE
 from apps.notifications.models import NotificationRecipient
 from apps.notifications.preview import preview_context
 from apps.notifications.tasks import send_email_task
 
 User = get_user_model()
+
+
+class ResendConfirmationThrottle(ScopedRateThrottle):
+    """Caps how often a confirmation can be re-sent. See the rate's comment in settings.
+
+    Scoped rather than keyed on the recipient row: the thing worth limiting is how much
+    outbound mail one staff session can generate, and a per-row key would let a caller
+    rotate through rows to send an unbounded total.
+    """
+
+    scope = "recipient_confirm_resend"
 
 
 class NotificationRecipientAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
@@ -60,6 +74,18 @@ class NotificationRecipientAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = NotificationRecipient.objects.select_related("user").all()
     pagination_class = None
     http_method_names = ["get", "post", "delete", "head", "options"]
+
+    def perform_create(self, serializer):
+        """Create the row, then mail an external address its confirmation link.
+
+        ON COMMIT, for the reason the test-send action gives: `AdminAuditMixin` wraps this
+        request in a transaction, and a confirmation mailed for a row that then rolls back
+        is a link pointing at nothing. Staff rows are confirmed by construction and are
+        sent nothing — see `models.py`.
+        """
+        recipient = serializer.save()
+        if recipient.user_id is None and not inherit_confirmation(recipient):
+            transaction.on_commit(partial(send_confirmation, recipient))
 
     def resolve_allowlist(self) -> tuple[str, ...]:
         """Per-ACTION allowlist, because this viewset's two POST routes take two
@@ -100,6 +126,40 @@ class NotificationRecipientAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         people = User.objects.filter(is_active=True, is_staff=True).order_by("email")
         return Response(StaffPickerSerializer(people, many=True).data)
 
+    @action(detail=False, methods=["post"], url_path="resend-confirmation",
+            throttle_classes=[ResendConfirmationThrottle])
+    def resend_confirmation(self, request):
+        """`POST …/resend-confirmation/` {"recipient_id": n} — mint a fresh link.
+
+        THE RECOVERY PATH for the two ways confirmation stalls: the link expired (7 days)
+        or the mail never arrived. Both leave a row visibly pending on the screen with
+        this button next to it, which is the whole reason a short TTL is safe to choose.
+
+        Refuses an already-confirmed row rather than quietly re-sending: a second
+        confirmation email to someone already receiving alerts reads as a security
+        incident to the person getting it.
+        """
+        body = TestSendSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+
+        row = NotificationRecipient.objects.filter(
+            pk=body.validated_data["recipient_id"]
+        ).first()
+        if row is None:
+            return Response({"detail": "That recipient no longer exists."},
+                            status=status.HTTP_404_NOT_FOUND)
+        if row.user_id is not None:
+            return Response(
+                {"detail": "Staff accounts do not need to confirm."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if row.confirmed_at is not None:
+            return Response({"detail": "That address is already confirmed."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        transaction.on_commit(partial(send_confirmation, row))
+        return Response({"sent_to": row.email})
+
     @action(detail=False, methods=["post"], url_path="test-send")
     def test_send(self, request):
         """`POST …/test-send/` {"recipient_id": n} — send this row a sample of its event.
@@ -127,6 +187,19 @@ class NotificationRecipientAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         if row is None:
             return Response({"detail": "That recipient no longer exists."},
                             status=status.HTTP_404_NOT_FOUND)
+
+        # AN UNCONFIRMED ADDRESS GETS NOTHING BUT ITS CONFIRMATION LINK. Allowing a test
+        # send here would put order-shaped content in an unconfirmed inbox, which is the
+        # exact delivery the confirmation gate exists to withhold — and it would let the
+        # Owner satisfy themselves that a mistyped address "works" without the address
+        # ever having agreed. The confirmation email is the deliverability proof; the
+        # screen offers Resend confirmation in this button's place.
+        if not row.is_confirmed:
+            return Response(
+                {"detail": "That address has not confirmed yet. Resend its confirmation "
+                           "link instead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         address = row.address
         if not address:

@@ -34,6 +34,15 @@ export interface NotificationRecipient {
   address: string;
   staff_name: string;
   is_external: boolean;
+  /**
+   * Whether this row actually receives anything. Staff rows are true by construction;
+   * an external address is false until it has clicked its confirmation link.
+   *
+   * Optional so an admin deployed ahead of the backend that added it degrades to
+   * "assume confirmed" — the old behaviour — rather than showing every row as pending.
+   */
+  is_confirmed?: boolean;
+  confirmed_at?: string | null;
 }
 
 /** An option in the "add a staff member" picker. */
@@ -63,6 +72,31 @@ export function recipientsFor(
       if (a.is_external !== b.is_external) return a.is_external ? 1 : -1;
       return labelFor(a).localeCompare(labelFor(b));
     });
+}
+
+/**
+ * Rows for `event` that are ACTUALLY receiving mail today.
+ *
+ * The empty-list warning counts these, never `recipientsFor`. An event whose only
+ * recipients are unconfirmed mails nobody, and a screen that showed a populated list for
+ * it would be telling the same lie — "somebody is being told" when nobody is — that this
+ * whole feature exists to end.
+ */
+export function activeRecipients(
+  rows: readonly NotificationRecipient[],
+  event: string,
+): NotificationRecipient[] {
+  return recipientsFor(rows, event).filter(isReceiving);
+}
+
+/** Treats a backend too old to report confirmation as "confirmed", matching its behaviour. */
+export function isReceiving(row: NotificationRecipient): boolean {
+  return row.is_confirmed !== false;
+}
+
+/** An external row still waiting on its click. Staff rows are never pending. */
+export function isPending(row: NotificationRecipient): boolean {
+  return row.is_external && row.is_confirmed === false;
 }
 
 /** What to call a row on screen. Falls back through the fields that may be blank. */
