@@ -10,12 +10,10 @@ import { ReferralCodeField } from "@/components/checkout/ReferralCodeField";
 import { couponMessage } from "@/lib/coupon-messages";
 import { paymentLabel } from "@/lib/payment-labels";
 import { stashBankHandoff } from "@/lib/bank-handoff";
+import { COUPON_STORAGE_KEY } from "@/lib/coupon-storage";
 import { PaymentLauncher, type LaunchInfo } from "@/components/checkout/PaymentLauncher";
 import type { Totals } from "@/lib/checkout";
 
-// Matches CartView's sessionStorage key for a guest's applied coupon — not exported
-// from there, so the literal is duplicated here (see CartView.tsx's COUPON_STORAGE_KEY).
-const COUPON_STORAGE_KEY = "toke-coupon-code";
 
 /** Real CheckoutError codes from backend/apps/checkout/services/checkout.py, mapped to
  * shopper-facing copy. `cartLink` codes get a "Review your cart" link back to /cart;

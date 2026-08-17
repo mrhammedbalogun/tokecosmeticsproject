@@ -1,14 +1,16 @@
 "use client";
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { useCart } from "@/hooks/useCart";
+import { mediaUrl } from "@/lib/media";
 import { formatMoney } from "@/lib/country";
 import { couponMessage } from "@/lib/coupon-messages";
+import { COUPON_STORAGE_KEY } from "@/lib/coupon-storage";
 import { ReferralCodeField } from "@/components/checkout/ReferralCodeField";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
 import type { Totals } from "@/lib/checkout";
 
-const COUPON_STORAGE_KEY = "toke-coupon-code";
 
 type QuoteState =
   | { status: "idle" }
@@ -100,8 +102,25 @@ export function CartView() {
             key={line.id}
             className={`flex items-center justify-between gap-4 rounded-[var(--radius-card)] border border-line bg-surface p-4 ${line.unavailable ? "opacity-60" : ""}`}
           >
-            <div>
-              <p className="font-medium">{line.name}</p>
+            <div className="flex min-w-0 items-center gap-4">
+              {/* Same 80px square as the cart drawer, so the two views of one cart
+                  agree. bg-beige stands in for products with no photograph. */}
+              <div aria-hidden className="relative hidden h-20 w-20 shrink-0 overflow-hidden rounded-[10px] border border-line bg-beige sm:block">
+                {(() => {
+                  const img = mediaUrl(line.image);
+                  return img ? (
+                    <Image src={img} alt="" fill sizes="80px" className="object-cover" />
+                  ) : null;
+                })()}
+              </div>
+              <div className="min-w-0">
+              <p className="font-medium">
+                {line.product_slug ? (
+                  <Link href={`/product/${line.product_slug}`} className="hover:text-accent">{line.name}</Link>
+                ) : (
+                  line.name
+                )}
+              </p>
               {line.unavailable ? (
                 <p className="text-sm text-accent">No longer available</p>
               ) : (
@@ -109,6 +128,7 @@ export function CartView() {
                   {line.unit_price ? formatMoney(line.unit_price, cart.currency, "") : "—"} each
                 </p>
               )}
+              </div>
             </div>
             <div className="flex items-center gap-4">
               {!line.unavailable && (

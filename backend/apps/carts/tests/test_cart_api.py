@@ -151,3 +151,44 @@ def test_add_partially_capped_is_still_200():
                     format="json", HTTP_X_COUNTRY="NG")
     assert r.status_code == 200
     assert r.data["items"][0]["quantity"] == 2
+
+
+def test_cart_line_carries_the_product_picture_and_slug():
+    """The cart drawer shows a thumbnail per line; without these fields it could only
+    show text. Same picture the confirmation email uses — one answer, from
+    apps.catalog.images — so the cart and the email cannot disagree."""
+    from io import BytesIO
+
+    from django.core.files.base import ContentFile
+    from PIL import Image as PILImage
+
+    from apps.carts.serializers import serialize_cart
+    from apps.catalog.models import ProductImage
+
+    variant = ProductVariantFactory()
+    ng = _ng_with_stock(variant, qty=5)
+    buffer = BytesIO()
+    PILImage.new("RGB", (900, 900), (200, 180, 150)).save(buffer, format="JPEG")
+    picture = ProductImage(product=variant.product, alt="A jar of shea butter")
+    picture.image.save("jar.jpg", ContentFile(buffer.getvalue()), save=False)
+    picture.save()
+
+    cart = CartFactory(country=ng, currency=ng.currency)
+    add_item(cart, variant, 1, ng)
+
+    line = serialize_cart(cart, ng)["items"][0]
+    assert picture.thumbnail.name in line["image"]  # thumbnail preferred over the original
+    assert line["image"].startswith("http")  # absolute — next/image cannot use a bare key
+    assert line["product_slug"] == variant.product.slug
+
+
+def test_cart_line_without_a_picture_serializes_null_not_an_error():
+    from apps.carts.serializers import serialize_cart
+
+    variant = ProductVariantFactory()
+    ng = _ng_with_stock(variant, qty=5)
+    cart = CartFactory(country=ng, currency=ng.currency)
+    add_item(cart, variant, 1, ng)
+
+    line = serialize_cart(cart, ng)["items"][0]
+    assert line["image"] is None
