@@ -1,7 +1,36 @@
 # Runbook — Plan-27 cutover (WordPress → the platform)
 
-**Status: PARTIALLY EXECUTED 2026-08-17.** Written against measured production state and
-revised the same day after a Fable dissent review that corrected two of its claims.
+**Status: EXECUTED 2026-08-18 ~03:50 UTC. tokecosmetics.com serves the platform.**
+Written against measured production state and revised after a Fable dissent review that
+corrected two of its claims.
+
+## Cutover record
+
+- Apex is primary and serves the storefront (200); `www` 308s to it; `next.` 308s to it.
+- `old.tokecosmetics.com` serves the retired WordPress install, `X-Robots-Tag: noindex`.
+- Legacy redirects live; `/wp-content/*` chain verified end to end (new root → `old.` → 200).
+- Admin app, API `/healthz/`, checkout, cart, login all 200.
+
+**The break this runbook caught in flight:** the backend's `FRONTEND_URL` was still
+`next.` when DNS moved, and `CORS_ALLOWED_ORIGINS` defaults to `[FRONTEND_URL, ADMIN_URL]`
+— so browser-side API calls from the new domain were blocked, with a preflight returning
+no `access-control-allow-origin`. Carts and checkout would have failed silently.
+`CORS_ALLOWED_ORIGINS` is now set EXPLICITLY to all four origins rather than left to the
+default, because the apex/www relationship can flip at the Vercel end at any time and the
+default only ever covers whichever one `FRONTEND_URL` names.
+
+**Clock note:** the `old.` certificate expired at 23:02 UTC on 2026-08-17, partway through
+this work. It was swapped for the Cloudflare Origin cert (SAN `*.tokecosmetics.com`, valid
+to 2041). That is correct *because* `old.` is Cloudflare-proxied — an Origin CA cert is
+trusted by Cloudflare, not by browsers. **If `old.` is ever set to DNS-only it needs a
+publicly-trusted certificate instead.**
+
+**Still open after cutover:** the seven footer `/page/*` links (`privacy`, `terms`,
+`returns`, `shipping`, `faqs`, `community`, `wholesale`) 404 — no CMS page carries those
+slugs. Note they are DIFFERENT slugs from the WordPress ones the redirect map targets
+(`terms-conditions`, `returns-exchanges`), so importing the old pages does not satisfy
+them. Also open: USD/CAD prices and bank accounts for US/CA/ZZ, the four `SAMPLE —`
+homepage review cards, 47 imported CMS drafts awaiting review, and dropping `a` from SPF.
 
 Done so far, on Hammed's word:
 - Pre-cutover backups in `/root/pre-cutover-backups/`: `pg-20260817-1816.sql.gz` (547 K),
