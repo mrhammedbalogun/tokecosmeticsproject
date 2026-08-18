@@ -36,7 +36,7 @@ Done so far, on Hammed's word:
 - Pre-cutover backups in `/root/pre-cutover-backups/`: `pg-20260817-1816.sql.gz` (547 K),
   `wp-20260817-1816.sql.gz` (132 M).
 - `wp_migration` credential created and its grant proved limited (both negative checks
-  fail with 1142). **Still live — drop it in the same change window as the flip.**
+  fail with 1142). **DROPPED 2026-08-18** after the delta import, per Plan-22 §6; env file shredded.
 - **Customers imported: 1,007 people / 1,027 `LegacyIdentity` rows** across the three
   stores (729 legacy_ng + 285 legacy_ng_old + 13 legacy_intl, 17 cross-store).
   All 1,007 still carry a WordPress hash, so their existing passwords work. Staff count
@@ -53,8 +53,8 @@ Done so far, on Hammed's word:
   DECIMALs; every test fixture used strings, so the suite passed and the command had never
   met the real driver. Fixed by serialising `Decimal` as a string (never a float — the
   reconciliation is the only check guarding the money), plus a regression test.
-  **Committed and deployed? NO — the fix ran via a read-only bind mount into the one-off
-  container. It still needs a commit and a normal deploy.**
+  Shipped in `backend-v0.36.0` (commit `b4d3233`); the one-off bind mount used to run the
+  extract before the deploy has been removed.
 
 - **Redirects seeded: 250 rows, live and resolving** (`/our-story/` → `/about-us`,
   `/shop-page/` → `/products`, verified against the live meta endpoint). 47 CMS pages
@@ -64,7 +64,7 @@ Done so far, on Hammed's word:
   `entrepreneur`→`/entrepreneurial-program`, `affiliates-2`→`/affiliates`.
 - **`/wp-content/:path*` → `old.tokecosmetics.com` redirect added to
   `storefront/next.config.ts`** so the imported page bodies keep their images. Build and
-  suite verified (919 storefront tests). Not yet deployed.
+  suite verified (919 storefront tests). Deployed; chain verified live.
 - **`/become-a-distributor` built** as a code route (`app/(shop)/become-a-distributor/`)
   with copy carried across from the live WordPress page, added to `MORE_LINKS`, and its
   now-inert redirect row deleted (249 redirects remain). Build, lint and the site-pages
@@ -84,8 +84,9 @@ Decisions taken by Hammed 2026-08-17:
 - Loyalty points are **discarded** — the programme restarts from zero on the platform, no
   balance migration and no coupon compensation.
 
-Still outstanding before the flip: the VPS snapshot, the §1 money-path gate, the
-US/CA/ZZ market decision in §2, and the order import.
+The flip has since happened — see the Cutover record above. Of the gates named in §1,
+the VPS snapshot and the live-money gateway test were NOT satisfied; the GIG sender pin
+was. §1 and §2 below are kept as written, as the record of what was known beforehand.
 
 Moves `tokecosmetics.com` from WordPress to the Vercel storefront, and WordPress to
 `old.tokecosmetics.com`. Every command runs on the VPS as root from
