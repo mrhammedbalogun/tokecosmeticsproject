@@ -376,3 +376,41 @@ before assuming payment is the only dead end.
   flip they either stop or keep advertising `old.` URLs.
 - **WordPress admin password rotation** from the rogue-email incident is still pending.
 - Affiliates page hero image still missing.
+
+---
+
+## 5. Locking down `old.tokecosmetics.com` (2026-08-18)
+
+The retired store is publicly reachable, runs an install with a malware history, and its
+WordPress admin password has not been rotated since the rogue-email incident. A crawler
+directive only persuades well-behaved bots, so the control is access, not a hint.
+
+Config lives in `/var/webuzo-data/apache2/custom/domains/old.tokecosmetics.com.conf`
+(the Webuzo-regeneration-proof include), and is three things:
+
+1. **`X-Robots-Tag: noindex, nofollow`** on every response, including the 401s.
+   **Not** a `robots.txt Disallow` as the primary control — `Disallow` blocks the *fetch*,
+   so a crawler can never read the `noindex`, and any URL it already discovered lingers in
+   the index as a bare listing. Disallow governs crawl budget; noindex governs presence.
+2. **HTTP basic auth** on `/`, credentials in `/etc/httpd-old-tokecosmetics.htpasswd`
+   (`0640 root:nobody`, apr1). Anonymous requests get 401.
+3. **Two carve-outs**, because a more specific `<Location>` replaces the parent's
+   `Require`:
+   - `/wp-content/` — the live site 308s legacy image URLs here, so auth would break every
+     image inside the 47 imported CMS pages. Verified end to end: live root → `old.` → 200.
+   - `/robots.txt` — served by `Alias` from `/var/webuzo-data/apache2/custom/old-public/`,
+     leaving the on-disk file alone (it is shared with the `.com.ng` vhost). The on-disk
+     one is a **malware-era leftover**: dated Dec 2023, read-only, `Allow: /`, advertising
+     seven sitemaps including `goods.php?sitemap322.xml` — the classic spam-sitemap
+     injection pattern, pointed at the NEW domain. `goods.php` no longer exists, so it is
+     inert, but it should never have been what this host tells crawlers.
+
+The replacement keeps `/wp-content/` crawlable on purpose: pages on the live site
+reference images here, and blocking them would make those pages render image-less to a
+crawler. Nothing is indexable regardless, because of (1).
+
+**Cloudflare caches `robots.txt`.** After changing it, purge that URL in the dashboard or
+expect the stale copy to be served until the TTL lapses — verified with a cache-buster.
+
+**When `old.` is retired for good**, the whole block can be deleted along with the vhost;
+see the T+90d step. The credential file and `old-public/` should go with it.
