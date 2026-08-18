@@ -31,10 +31,19 @@ from django.conf import settings
 #: Order matters — it is the order they render in the footer, biggest audience first.
 #: `label` is also the image's alt text, so it is what a reader with images blocked
 #: sees and clicks. Keep it the plain platform name.
+#:
+#: KEEP IN STEP WITH `storefront/src/lib/social-links.ts`, which is the same list for the
+#: website. Python cannot import TypeScript and vice versa, so the duplication is
+#: unavoidable; each file is the single source for its own side.
+#:
+#: EVERY URL IS https, including Facebook — the owner's list gave that one as `http://`.
+#: It is the same page (Facebook 301s the plaintext form), and an `http://` link costs a
+#: redirect hop and reads as a downgrade to the scanners that score a message before an
+#: inbox ever sees it.
 SOCIAL_LINKS: tuple[tuple[str, str, str], ...] = (
     ("Instagram", "https://www.instagram.com/tokecosmetics_brand/", "social-instagram.png"),
     ("TikTok", "https://www.tiktok.com/@tokecosmetics", "social-tiktok.png"),
-    ("Facebook", "http://www.facebook.com/tokecosmetics", "social-facebook.png"),
+    ("Facebook", "https://www.facebook.com/tokecosmetics", "social-facebook.png"),
     ("YouTube", "https://www.youtube.com/@tokecosmetics", "social-youtube.png"),
 )
 
