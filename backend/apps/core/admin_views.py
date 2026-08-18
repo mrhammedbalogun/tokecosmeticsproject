@@ -18,11 +18,17 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
 
+from rest_framework import viewsets
+
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
 from apps.core.audit import AdminAuditMixin
-from apps.core.models import AuditLog
-from apps.core.serializers import AuditLogSerializer
+from apps.core.models import AuditLog, Country, StoreSettings
+from apps.core.serializers import (
+    AuditLogSerializer,
+    TaxCountryAdminSerializer,
+    TaxSettingsSerializer,
+)
 
 
 def _as_datetime(value: str, param: str):
@@ -94,3 +100,40 @@ class AuditLogListView(AdminAuditMixin, generics.ListAPIView):
         if v := p.get("before"):
             qs = qs.filter(created_at__lte=_as_datetime(v, "before"))
         return qs
+
+
+class TaxSettingsView(AdminAuditMixin, generics.RetrieveUpdateAPIView):
+    """GET/PATCH /api/v1/admin/tax/settings/ — the store-wide master switch.
+
+    `settings.manage` (Owner-only), same reasoning as the payments config: this
+    changes what every customer pays, which is not an operational knob. The row is a
+    singleton `StoreSettings.load()` creates on first touch, so there is no 404 arm.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("settings.manage")]
+    serializer_class = TaxSettingsSerializer
+    audit_serializers = (TaxSettingsSerializer,)
+
+    def get_object(self):
+        return StoreSettings.load()
+
+
+class TaxCountryAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """GET/PATCH /api/v1/admin/tax/countries/ — the per-market tax knobs.
+
+    GET + PATCH only: markets are created by seed migrations, never from a settings
+    screen, and deleting one would orphan every order pointing at it (the FK is
+    PROTECT anyway). Inactive markets stay listed — a switched-off market's tax
+    config should be inspectable before it is switched back on.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("settings.manage")]
+    serializer_class = TaxCountryAdminSerializer
+    audit_serializers = (TaxCountryAdminSerializer,)
+    queryset = Country.objects.select_related("currency").order_by(
+        "-is_default", "is_rest_of_world", "name"
+    )
+    pagination_class = None  # five markets; a pager would be theatre
+    http_method_names = ["get", "patch", "head", "options"]

@@ -21,7 +21,7 @@ class TestQuoteApi:
         res = c.post("/api/v1/checkout/quote/", {"cart_id": str(cart.id)}, format="json", HTTP_X_COUNTRY="NG")
         assert res.status_code == 200
         t = res.data["totals"]
-        assert set(t) == {"subtotal", "discount", "delivery", "tax", "grand_total", "currency"}
+        assert set(t) == {"subtotal", "discount", "delivery", "tax", "tax_label", "grand_total", "currency"}
         assert t["discount"] == "0.00" and t["delivery"] == "0.00"
         assert res.data["coupon"] == {"ok": True}   # no code supplied â†’ trivially ok
 

@@ -28,7 +28,7 @@ function order(overrides: Partial<OrderDetail> = {}): OrderDetail {
   return {
     number: "TC-100038", status: "pending_payment", placed_at: "2026-07-24T23:30:00Z",
     currency: "NGN", subtotal: "40000.00", discount_total: "0.00",
-    shipping_total: "2000.00", tax_total: "0.00", grand_total: "42000.00",
+    shipping_total: "2000.00", tax_total: "0.00", tax_label: "VAT", grand_total: "42000.00",
     grand_total_display: "₦42,000.00", delivery_option_name: "Lagos same-day",
     shipping_address: { first_name: "Ada", last_name: "Obi", line1: "12 Marina", city_text: "Lagos" },
     billing_address: null, customer_note: "Please call on arrival.",

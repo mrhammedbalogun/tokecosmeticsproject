@@ -58,7 +58,9 @@ export function OrderSummary({
         <Row label="Discount" value={totals.discount} currency={currency} neg />
       )}
       <Row label="Delivery" value={totals.delivery} currency={currency} />
-      <Row label="Tax" value={totals.tax} currency={currency} />
+      {totals.tax !== "0.00" && (
+        <Row label={totals.tax_label || "Tax"} value={totals.tax} currency={currency} />
+      )}
       <div className="mt-2 border-t border-line pt-2">
         <Row label="Total" value={totals.grand_total} currency={currency} strong />
       </div>

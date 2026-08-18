@@ -40,6 +40,10 @@ class Order(TimeStampedModel):
     discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     shipping_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # The slice of `tax_total` attributable to delivery (0 unless the market has
+    # `tax_applies_to_delivery`). Stored so referral commissions can subtract the
+    # ITEM tax only — see apps/referrals/services.commission_base.
+    delivery_tax_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     coupon = models.ForeignKey("checkout.Coupon", null=True, blank=True, on_delete=models.SET_NULL)

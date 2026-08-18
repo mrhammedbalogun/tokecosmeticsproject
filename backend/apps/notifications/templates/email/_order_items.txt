@@ -3,5 +3,5 @@
   Subtotal: {{ subtotal }}{% if discount_total %}
   Discount: -{{ discount_total }}{% endif %}
   Delivery ({{ delivery_option_name }}): {{ shipping_total }}{% if tax_total %}
-  Tax: {{ tax_total }}{% endif %}
+  {{ tax_label|default:"Tax" }}: {{ tax_total }}{% endif %}
   Total: {{ grand_total }}

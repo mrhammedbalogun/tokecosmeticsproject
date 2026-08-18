@@ -250,9 +250,11 @@ def commission_base(order) -> Decimal:
     anyway, because the day someone sets Nigeria's VAT to 7.5% is not the day anybody
     will remember that the referral base assumed zero.
 
-    In both cases `tax_total` is item-attributable only: `compute_totals` computes it
-    from `subtotal - discount` and never from delivery, so there is no shipping tax
-    hiding in it that would need separating out first.
+    Since the tax settings work (Plan-37), `tax_total` MAY contain a shipping-tax
+    slice — markets can opt into `tax_applies_to_delivery` — so the item-attributable
+    amount is `tax_total - delivery_tax_total`, and that is what gets subtracted.
+    `delivery_tax_total` is 0 for every order placed before the column existed, so old
+    orders compute exactly as they always did.
 
     Returns 0.00 rather than a negative number if a discount somehow exceeds the goods —
     it cannot today (`_coupon_discount` clamps to the subtotal) but a commission is not
@@ -260,7 +262,7 @@ def commission_base(order) -> Decimal:
     """
     net = Decimal(order.subtotal) - Decimal(order.discount_total)
     if order.country.prices_include_tax:
-        net -= Decimal(order.tax_total)
+        net -= Decimal(order.tax_total) - Decimal(order.delivery_tax_total)
     return max(q2(net), ZERO)
 
 

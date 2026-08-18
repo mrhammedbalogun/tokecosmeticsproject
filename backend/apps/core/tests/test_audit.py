@@ -705,6 +705,18 @@ def _case_referral_adjustment(client, monkeypatch):
     ), 201
 
 
+def _case_tax_settings(client, monkeypatch):
+    return client.patch(
+        "/api/v1/admin/tax/settings/", {"charge_tax": False}, format="json"
+    ), 200
+
+
+def _case_tax_country(client, monkeypatch):
+    return client.patch(
+        "/api/v1/admin/tax/countries/GB/", {"tax_applies_to_delivery": True}, format="json"
+    ), 200
+
+
 WRITE_CASES: dict[str, tuple] = {
     # Self-service, but still a write worth a row: it changes what a stolen laptop is
     # worth. Revoking zero devices is a success (the state the caller wanted is true).
@@ -748,6 +760,11 @@ WRITE_CASES: dict[str, tuple] = {
     "NotificationRecipientAdminViewSet": (_case_notification_recipient_create, "create"),
     "BankAccountAdminViewSet": (_case_bank_account_create, "create"),
     "CountryPaymentGatewayAdminViewSet": (_case_payment_gateway_create, "create"),
+    # Tax settings (Plan-37): both change what customers pay, so both must leave rows.
+    # `update` for the singleton view (RetrieveUpdateAPIView PATCH has no DRF action
+    # name to prefer); `partial_update` for the viewset, same as the image editor.
+    "TaxSettingsView": (_case_tax_settings, "update"),
+    "TaxCountryAdminViewSet": (_case_tax_country, "partial_update"),
     "CouponAdminViewSet": (_case_coupon_create, "create"),
     "DeliveryOptionAdminViewSet": (_case_delivery_option_create, "create"),
     "RegionAdminViewSet": (_case_region_patch, "partial_update"),

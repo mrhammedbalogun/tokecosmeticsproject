@@ -71,6 +71,9 @@ export interface OrderDetail {
   discount_total: string;
   shipping_total: string;
   tax_total: string;
+  /** The market's name for the tax line ("VAT", "Sales Tax"); optional so older
+   * cached payloads keep rendering. */
+  tax_label?: string;
   grand_total: string;
   grand_total_display: string;
   delivery_option_name: string;
@@ -145,7 +148,9 @@ export function totalRows(
   if (Number(order.shipping_total) !== 0) {
     rows.push({ label: "Delivery", value: order.shipping_total });
   }
-  if (Number(order.tax_total) !== 0) rows.push({ label: "Tax", value: order.tax_total });
+  if (Number(order.tax_total) !== 0) {
+    rows.push({ label: order.tax_label || "Tax", value: order.tax_total });
+  }
   rows.push({ label: "Total", value: order.grand_total_display, strong: true });
   return rows;
 }

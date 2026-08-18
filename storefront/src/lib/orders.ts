@@ -21,6 +21,9 @@ export interface OrderItem {
 export interface OrderDetail {
   number: string; status: string; placed_at: string; currency: string;
   subtotal: string; discount_total: string; shipping_total: string; tax_total: string;
+  /** The market's name for the tax line ("VAT", "Sales Tax"); serializer default keeps
+   * it present on every order. */
+  tax_label: string;
   grand_total: string; grand_total_display: string; delivery_option_name: string | null;
   shipping_address: Record<string, unknown> | null; billing_address: Record<string, unknown> | null;
   customer_note: string; payment_gateway: string; items: OrderItem[];

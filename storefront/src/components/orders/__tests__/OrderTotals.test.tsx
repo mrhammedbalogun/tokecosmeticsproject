@@ -4,7 +4,7 @@ import { OrderTotals } from "@/components/orders/OrderTotals";
 
 const order = {
   currency: "GBP", subtotal: "50.00", discount_total: "0.00",
-  shipping_total: "4.50", tax_total: "1.25", grand_total_display: "£55.75",
+  shipping_total: "4.50", tax_total: "1.25", tax_label: "VAT", grand_total_display: "£55.75",
 };
 
 /** Pairs a row's <dt> with its own <dd>, so a swapped label and value fails. Asserting
@@ -21,7 +21,7 @@ describe("OrderTotals", () => {
     expect(rowValue("Subtotal")).toBe("£50.00");
     expect(rowValue("Discount")).toBe("−£5.00");
     expect(rowValue("Delivery")).toBe("£4.50");
-    expect(rowValue("Tax")).toBe("£1.25");
+    expect(rowValue("VAT")).toBe("£1.25");
     // The grand total is the API's pre-formatted display string, not formatMoney output.
     expect(rowValue("Total")).toBe("£55.75");
   });
@@ -32,7 +32,7 @@ describe("OrderTotals", () => {
     expect(screen.queryByText("Discount")).not.toBeInTheDocument();
     expect(rowValue("Subtotal")).toBe("£50.00");
     expect(rowValue("Delivery")).toBe("£4.50");
-    expect(rowValue("Tax")).toBe("£1.25");
+    expect(rowValue("VAT")).toBe("£1.25");
     expect(rowValue("Total")).toBe("£55.75");
   });
 
@@ -44,5 +44,13 @@ describe("OrderTotals", () => {
     );
 
     expect(rowValue("Subtotal")).toBe("₦20,000.00");
+  });
+
+  it("hides the tax row when nothing was charged", () => {
+    render(<OrderTotals order={{ ...order, tax_total: "0.00" }} />);
+
+    expect(screen.queryByText("VAT")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tax")).not.toBeInTheDocument();
+    expect(rowValue("Total")).toBe("£55.75");
   });
 });

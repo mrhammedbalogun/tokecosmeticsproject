@@ -76,6 +76,10 @@ class OrderEventSerializer(serializers.ModelSerializer):
 class _BaseOrderSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     currency = serializers.CharField(source="currency_id", read_only=True)
+    # The market's name for its tax line ("VAT", "Sales Tax"). Read live off the
+    # country rather than snapshotted: renaming the line should rename it on old
+    # order pages too — the AMOUNT is the snapshot, the caption is presentation.
+    tax_label = serializers.CharField(source="country.tax_label", read_only=True)
     grand_total_display = serializers.SerializerMethodField()
 
     def get_grand_total_display(self, order) -> str:
@@ -103,7 +107,7 @@ class OrderSerializer(_BaseOrderSerializer):
         model = Order
         fields = ("number", "status", "placed_at", "email", "phone", "currency",
                   "subtotal", "discount_total", "shipping_total", "tax_total",
-                  "grand_total", "grand_total_display", "delivery_option_name",
+                  "tax_label", "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",
                   "tracking_carrier", "tracking_number", "payment_gateway",
                   "gig_tracking", "pickup_centre", "items")
@@ -213,7 +217,7 @@ class AdminOrderSerializer(_BaseOrderSerializer):
         model = Order
         fields = ("number", "status", "review_reason", "placed_at", "email", "phone",
                   "user_email", "country", "currency", "subtotal", "discount_total",
-                  "shipping_total", "tax_total", "grand_total", "grand_total_display",
+                  "shipping_total", "tax_total", "tax_label", "grand_total", "grand_total_display",
                   "delivery_option_name", "shipping_address", "billing_address",
                   "customer_note", "admin_note", "tracking_carrier", "tracking_number",
                   "source", "legacy_number", "items", "events",

@@ -6,6 +6,9 @@ import { apiFetch } from "@/lib/api";
 export interface Totals {
   subtotal: string; discount: string; delivery: string;
   tax: string; grand_total: string; currency: string;
+  /** The market's name for its tax line ("VAT", "Sales Tax"). Optional so cached/old
+   * quote payloads without it keep rendering — the UI falls back to "Tax". */
+  tax_label?: string;
 }
 export interface QuoteResult { totals: Totals; coupon: { ok: boolean; error_code?: string } }
 export interface DeliveryOption {

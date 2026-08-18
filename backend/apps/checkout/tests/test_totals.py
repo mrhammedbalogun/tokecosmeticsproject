@@ -107,3 +107,76 @@ def test_unpriced_line_raises():
     v = ProductVariantFactory()  # no price
     with pytest.raises(ValueError):
         compute_totals([(v, 1)], ng)
+
+
+# ── Tax switches + delivery tax (Plan-37) ──────────────────────────────────────────
+
+
+def test_master_switch_off_zeroes_tax_but_not_the_price():
+    from apps.core.models import StoreSettings
+
+    ng = _country(include_tax=True, rate="7.5")
+    v = _priced_variant(ng, "1075.00")
+    settings = StoreSettings.load()
+    settings.charge_tax = False
+    settings.save()
+    t = compute_totals([(v, 1)], ng)
+    assert t.tax == Decimal("0.00")
+    # Inclusive market: the customer pays the admin-entered price either way.
+    assert t.grand_total == Decimal("1075.00")
+
+
+def test_master_switch_off_on_an_exclusive_market_stops_the_surcharge():
+    from apps.core.models import StoreSettings
+
+    us = _country(include_tax=False, rate="10", code="US", ccy="USD")
+    v = _priced_variant(us, "100.00")
+    settings = StoreSettings.load()
+    settings.charge_tax = False
+    settings.save()
+    t = compute_totals([(v, 1)], us)
+    assert t.tax == Decimal("0.00")
+    assert t.grand_total == Decimal("100.00")  # nothing added on top
+
+
+def test_country_switch_off_beats_a_nonzero_rate():
+    ng = _country(include_tax=True, rate="7.5")
+    ng.charge_tax = False
+    ng.save()
+    v = _priced_variant(ng, "1075.00")
+    t = compute_totals([(v, 1)], ng)
+    assert t.tax == Decimal("0.00")
+    assert t.grand_total == Decimal("1075.00")
+
+
+def test_delivery_tax_exclusive_market():
+    us = _country(include_tax=False, rate="10", code="US", ccy="USD")
+    us.tax_applies_to_delivery = True
+    us.save()
+    v = _priced_variant(us, "100.00")
+    t = compute_totals([(v, 1)], us, delivery_amount=Decimal("20.00"))
+    # 10% of (100 + 20); the delivery slice reported separately.
+    assert t.tax == Decimal("12.00")
+    assert t.delivery_tax == Decimal("2.00")
+    assert t.grand_total == Decimal("132.00")
+
+
+def test_delivery_tax_inclusive_market_total_does_not_move():
+    gb = _country(include_tax=True, rate="20", code="GB", ccy="GBP")
+    gb.tax_applies_to_delivery = True
+    gb.save()
+    v = _priced_variant(gb, "120.00")
+    t = compute_totals([(v, 1)], gb, delivery_amount=Decimal("6.00"))
+    # VAT inside 126.00 at 20% = 21.00; inside the 6.00 delivery = 1.00.
+    assert t.tax == Decimal("21.00")
+    assert t.delivery_tax == Decimal("1.00")
+    assert t.grand_total == Decimal("126.00")  # inclusive: nothing added on top
+
+
+def test_delivery_untaxed_unless_the_market_opts_in():
+    us = _country(include_tax=False, rate="10", code="US", ccy="USD")
+    v = _priced_variant(us, "100.00")
+    t = compute_totals([(v, 1)], us, delivery_amount=Decimal("20.00"))
+    assert t.tax == Decimal("10.00")  # items only, as before
+    assert t.delivery_tax == Decimal("0.00")
+    assert t.grand_total == Decimal("130.00")

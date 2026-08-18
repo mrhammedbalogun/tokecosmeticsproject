@@ -82,7 +82,7 @@
     <tr><td>Subtotal</td><td class="r">{{ subtotal }}</td></tr>
     {% if discount_total %}<tr><td>Discount</td><td class="r">-{{ discount_total }}</td></tr>{% endif %}
     <tr><td>Delivery</td><td class="r">{{ shipping_total }}</td></tr>
-    {% if tax_total %}<tr><td>Tax</td><td class="r">{{ tax_total }}</td></tr>{% endif %}
+    {% if tax_total %}<tr><td>{{ tax_label|default:"Tax" }}</td><td class="r">{{ tax_total }}</td></tr>{% endif %}
     <tr class="grand"><td>Total</td><td class="r">{{ grand_total }}</td></tr>
     {% if refunded %}
     <tr class="refund"><td>Refunded</td><td class="r">-{{ refunded }}</td></tr>

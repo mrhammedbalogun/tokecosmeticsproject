@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.core.models import AuditLog, Country, Currency
+from apps.core.models import AuditLog, Country, Currency, StoreSettings
 
 
 class CurrencySerializer(serializers.ModelSerializer):
@@ -22,10 +22,56 @@ class CountrySerializer(serializers.ModelSerializer):
             "is_rest_of_world",
             "tax_rate_percent",
             "prices_include_tax",
+            "tax_label",
             "state_label",
             "area_label",
         ]
 
+
+class TaxSettingsSerializer(serializers.ModelSerializer):
+    """The store-wide master switch, `PATCH`-ed by the Owner from /settings/taxes."""
+
+    audit_allowlist = ("charge_tax",)
+
+    class Meta:
+        model = StoreSettings
+        fields = ["charge_tax"]
+
+
+class TaxCountryAdminSerializer(serializers.ModelSerializer):
+    """Per-market tax knobs. `code`/`name`/`currency_code` identify the row and are
+    read-only — creating or renaming a MARKET is schema-level work (seed migrations),
+    not a settings screen; this endpoint only tunes how an existing one taxes.
+    """
+
+    audit_allowlist = (
+        "charge_tax", "tax_rate_percent", "prices_include_tax",
+        "tax_applies_to_delivery", "tax_label",
+    )
+
+    currency_code = serializers.CharField(source="currency.code", read_only=True)
+
+    class Meta:
+        model = Country
+        fields = [
+            "code", "name", "currency_code", "is_default", "is_rest_of_world",
+            "charge_tax", "tax_rate_percent", "prices_include_tax",
+            "tax_applies_to_delivery", "tax_label",
+        ]
+        read_only_fields = ["code", "name", "currency_code", "is_default", "is_rest_of_world"]
+
+    def validate_tax_rate_percent(self, value):
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("A tax rate is a percentage between 0 and 100.")
+        return value
+
+    def validate_tax_label(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError(
+                "The tax line needs a name — customers see this word at checkout."
+            )
+        return value
 
 class AuditLogSerializer(serializers.ModelSerializer):
     """Read shape for the audit log. EVERY field is read-only, twice over.

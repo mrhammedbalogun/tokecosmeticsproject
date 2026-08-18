@@ -328,6 +328,11 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # every other role did — so the reader should be the person who decides who those
     # roles are. See apps/core/admin_views.py.
     "AuditLogListView": "settings.manage",
+    # --- tax (Plan-37) -----------------------------------------------------------
+    # Same scope as the payout account, same reasoning: the master switch and the
+    # per-market rates change what every customer PAYS. Owner-only, audited.
+    "TaxSettingsView": "settings.manage",
+    "TaxCountryAdminViewSet": "settings.manage",
 }
 
 

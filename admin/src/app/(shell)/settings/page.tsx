@@ -36,6 +36,12 @@ const SECTIONS = [
     scopes: ["products.manage"],
   },
   {
+    href: "/settings/taxes",
+    title: "Taxes",
+    blurb: "Whether tax is charged, and each market's rate, label and rules.",
+    scopes: ["settings.manage"],
+  },
+  {
     href: "/settings/audit",
     title: "Audit log",
     blurb: "Every write on the admin surface, and the reads that touch personal data.",

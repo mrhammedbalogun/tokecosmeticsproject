@@ -5,7 +5,8 @@ import type { OrderDetail } from "@/lib/orders";
  * the totals. */
 type OrderMoney = Pick<
   OrderDetail,
-  "currency" | "subtotal" | "discount_total" | "shipping_total" | "tax_total" | "grand_total_display"
+  | "currency" | "subtotal" | "discount_total" | "shipping_total" | "tax_total"
+  | "tax_label" | "grand_total_display"
 >;
 
 export function OrderTotals({ order }: { order: OrderMoney }) {
@@ -25,10 +26,12 @@ export function OrderTotals({ order }: { order: OrderMoney }) {
         <dt className="text-muted">Delivery</dt>
         <dd>{formatMoney(order.shipping_total, order.currency)}</dd>
       </div>
-      <div className="flex justify-between gap-4">
-        <dt className="text-muted">Tax</dt>
-        <dd>{formatMoney(order.tax_total, order.currency)}</dd>
-      </div>
+      {order.tax_total !== "0.00" && (
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted">{order.tax_label || "Tax"}</dt>
+          <dd>{formatMoney(order.tax_total, order.currency)}</dd>
+        </div>
+      )}
       <div className="flex justify-between gap-4 border-t border-line pt-2 text-base font-medium">
         <dt>Total</dt>
         <dd>{order.grand_total_display}</dd>

@@ -109,6 +109,17 @@ class Country(models.Model):
     is_rest_of_world = models.BooleanField(default=False)         # the "ZZ" catch-all
     tax_rate_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     prices_include_tax = models.BooleanField(default=True)
+    # Tax controls (Plan-37). `charge_tax` is this market's own switch; the store-wide
+    # master lives on `StoreSettings.charge_tax`, and BOTH must be on for
+    # `compute_totals` to tax an order. When either is off the customer pays exactly
+    # the admin-entered price — for a `prices_include_tax` market that means the total
+    # does not move, the tax line simply stops being shown.
+    charge_tax = models.BooleanField(default=True)
+    # UK VAT legally applies to shipping; NG practice doesn't. Off by default so
+    # enabling tax never silently starts taxing freight.
+    tax_applies_to_delivery = models.BooleanField(default=False)
+    # What the checkout/email line is called: "VAT" (NG/GB), "Sales Tax" (US/CA), …
+    tax_label = models.CharField(max_length=30, default="Tax")
     # Local names for the region levels (Countries_breakdown mapping). Level 1:
     # "State" (NG/US), "Province" (CA), "Country" (GB's constituent countries).
     state_label = models.CharField(max_length=30, default="State")
@@ -120,6 +131,34 @@ class Country(models.Model):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.code})"
+
+
+class StoreSettings(models.Model):
+    """The store-wide switches. ONE row, pk forced to 1 — a second row would mean two
+    sources of truth for "is tax on", so `save()` refuses to create one.
+
+    A model rather than a settings.py constant because the Owner flips it from the
+    admin UI at runtime; a table rather than a cache key because it must survive
+    restarts and appear in backups. Read through `load()`, which creates the row with
+    defaults on first touch so no deploy step is needed.
+    """
+
+    charge_tax = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name_plural = "store settings"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls) -> "StoreSettings":
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def __str__(self) -> str:
+        return f"store settings (tax {'on' if self.charge_tax else 'off'})"
 
 
 class AuditLogImmutable(Exception):

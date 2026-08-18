@@ -74,7 +74,7 @@ nothing says what it is until you have read three rows of it.
         <span style="color:#8a857c;">({{ delivery_option_name }})</span></td>
       <td align="right" style="padding:3px 0;white-space:nowrap;">{{ shipping_total }}</td></tr>
   {% if tax_total %}
-  <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Tax</td>
+  <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">{{ tax_label|default:"Tax" }}</td>
       <td align="right" style="padding:3px 0;white-space:nowrap;">{{ tax_total }}</td></tr>
   {% endif %}
   <tr><td colspan="2" style="padding:12px 12px 0 0;font-size:16px;font-weight:bold;

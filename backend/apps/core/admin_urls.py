@@ -9,13 +9,15 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from apps.core.admin_search import AdminSearchView
-from apps.core.admin_views import AuditLogListView
+from apps.core.admin_views import AuditLogListView, TaxCountryAdminViewSet, TaxSettingsView
 from apps.core.redirects import RedirectAdminViewSet
 
 router = SimpleRouter()
 router.register("redirects", RedirectAdminViewSet, basename="admin-redirect")
+router.register("tax/countries", TaxCountryAdminViewSet, basename="admin-tax-country")
 
 urlpatterns = [
     path("audit/", AuditLogListView.as_view(), name="admin-audit-list"),
     path("search/", AdminSearchView.as_view(), name="admin-search"),
+    path("tax/settings/", TaxSettingsView.as_view(), name="admin-tax-settings"),
 ] + router.urls

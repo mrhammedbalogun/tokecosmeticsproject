@@ -65,6 +65,7 @@ def invoice_context(order) -> dict:
         "discount_total": money(order.discount_total) if order.discount_total else "",
         "shipping_total": money(order.shipping_total),
         "tax_total": money(order.tax_total) if order.tax_total else "",
+        "tax_label": order.country.tax_label,
         "grand_total": money(grand_total),
         "refunded": money(refunded) if refunded else "",
         "net_paid": money(grand_total - refunded) if refunded else "",

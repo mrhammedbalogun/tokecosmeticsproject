@@ -191,3 +191,24 @@ def test_order_without_a_referral_code_accrues_nothing(django_user_model):
     buyer = customer(django_user_model, "buyer@x.com")
     order = make_order(user=buyer, referral_code="")
     assert accrue_for_order(order) is None
+
+
+@pytest.mark.django_db
+def test_commission_base_subtracts_item_tax_only_when_delivery_is_taxed(django_user_model):
+    """Plan-37 lets a market tax its delivery fee, which lands inside `tax_total`.
+    The delivery slice was never part of the goods, so subtracting the WHOLE tax
+    would shortchange the referrer by exactly that slice."""
+    buyer = customer(django_user_model, "buyer@x.com")
+
+    gb_country = gb()
+    gb_country.prices_include_tax = True
+    gb_country.tax_applies_to_delivery = True
+    gb_country.save(update_fields=["prices_include_tax", "tax_applies_to_delivery"])
+    order = make_order(
+        user=buyer, country=gb_country,
+        # VAT inside the £120 goods = £20; inside the £6 delivery = £1. tax_total
+        # carries both, delivery_tax_total names the delivery slice.
+        subtotal="120.00", discount="0.00", tax="21.00", delivery_tax="1.00",
+        shipping="6.00",
+    )
+    assert commission_base(order) == Decimal("100.00")  # 120 - 20, NOT 120 - 21

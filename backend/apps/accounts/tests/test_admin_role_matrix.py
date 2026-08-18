@@ -138,6 +138,9 @@ MATRIX: list[Row] = [
     # where the money lands.
     Row("BankAccountAdminViewSet", "get", "/api/v1/admin/bank-accounts/", _OWNER),
     Row("CountryPaymentGatewayAdminViewSet", "get", "/api/v1/admin/payment-gateways/", _OWNER),
+    # Tax settings (Plan-37) sit with the money config: they change what customers pay.
+    Row("TaxSettingsView", "get", "/api/v1/admin/tax/settings/", _OWNER),
+    Row("TaxCountryAdminViewSet", "get", "/api/v1/admin/tax/countries/", _OWNER),
     Row("CouponAdminViewSet", "get", "/api/v1/admin/coupons/", _MANAGERS),
     Row("DeliveryOptionAdminViewSet", "get", "/api/v1/admin/delivery-options/", _MANAGERS),
     Row("RegionAdminViewSet", "get", "/api/v1/admin/regions/?country_code=NG", _MANAGERS),

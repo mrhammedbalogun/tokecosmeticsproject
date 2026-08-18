@@ -82,6 +82,7 @@ def _context(order: Order) -> dict:
         "discount_total": money(order.discount_total) if order.discount_total else "",
         "shipping_total": money(order.shipping_total),
         "tax_total": money(order.tax_total) if order.tax_total else "",
+        "tax_label": order.country.tax_label,
         "grand_total": money(order.grand_total),
         "delivery_option_name": order.delivery_option_name,
         "shipping_address": order.shipping_address,
@@ -94,7 +95,9 @@ def _context(order: Order) -> dict:
 
 
 def _send(order_pk: int, template: str, **extra) -> None:
-    order = Order.objects.select_related("currency").prefetch_related("items").get(pk=order_pk)
+    order = (
+        Order.objects.select_related("currency", "country").prefetch_related("items").get(pk=order_pk)
+    )
     send_email_task.delay(template, order.email, {**_context(order), **extra})
 
 

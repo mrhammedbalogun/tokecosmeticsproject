@@ -39,6 +39,9 @@ def quote(cart, country, *, user=None, coupon_code="", delivery_amount=Decimal("
             "discount": str(totals.discount),
             "delivery": str(totals.delivery),
             "tax": str(totals.tax),
+            # What the tax line is CALLED in this market ("VAT", "Sales Tax", ...).
+            # Rides with the numbers so the storefront never joins against /meta.
+            "tax_label": country.tax_label,
             "grand_total": str(totals.grand_total),
             "currency": totals.currency,
         },
