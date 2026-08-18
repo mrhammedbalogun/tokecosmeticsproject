@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { Footer } from "@/components/layout/Footer";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 
 describe("Footer (large upgrade)", () => {
   it("preserves the Plan-12 policy links that are still CMS pages", () => {
@@ -55,11 +56,29 @@ describe("Footer (large upgrade)", () => {
     expect(screen.queryByText("bank transfer")).toBeNull();
   });
 
-  it("exposes social profiles with accessible labels", () => {
+  it("exposes every social profile with an accessible label", () => {
     render(<Footer />);
-    expect(screen.getByRole("link", { name: "Instagram" })).toHaveAttribute(
-      "href",
-      "https://www.instagram.com/tokecosmetics",
-    );
+
+    // Asserted against `SOCIAL_LINKS` rather than against hardcoded URLs, so an account
+    // added there cannot ship with no icon and no test noticing. The previous version of
+    // this test pinned one literal Instagram URL — and passed for months while that URL
+    // pointed at the wrong account.
+    for (const { label, href } of SOCIAL_LINKS) {
+      expect(screen.getByRole("link", { name: label })).toHaveAttribute("href", href);
+    }
+  });
+
+  it("draws an icon for every account", () => {
+    // The failure this catches is silent: an account added to `SOCIAL_LINKS` with no
+    // matching entry in the footer's ICONS map renders an empty <svg> — a link that is
+    // still keyboard-reachable and screen-reader-labelled, so nothing else fails, but
+    // invisible to anyone looking at the page.
+    const { container } = render(<Footer />);
+
+    for (const { label } of SOCIAL_LINKS) {
+      const svg = screen.getByRole("link", { name: label }).querySelector("svg");
+      expect(svg?.childElementCount ?? 0).toBeGreaterThan(0);
+    }
+    expect(container.querySelectorAll("svg").length).toBeGreaterThanOrEqual(SOCIAL_LINKS.length);
   });
 });

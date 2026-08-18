@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { NewsletterForm } from "@/components/layout/NewsletterForm";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 
 /** Section 15: the large premium footer. Four link columns + a newsletter block,
  * social icons, payment logos and a legal strip. Server Component (no client JS
@@ -51,29 +52,26 @@ const COLUMNS: { heading: string; links: readonly (readonly [string, string])[] 
   },
 ];
 
-const SOCIALS: { label: string; href: string; icon: ReactNode }[] = [
-  {
-    label: "Instagram",
-    href: "https://www.instagram.com/tokecosmetics",
-    icon: (
-      <>
-        <rect x="3" y="3" width="18" height="18" rx="5" />
-        <circle cx="12" cy="12" r="4" />
-        <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" />
-      </>
-    ),
-  },
-  {
-    label: "Facebook",
-    href: "https://www.facebook.com/tokecosmetics",
-    icon: <path d="M15 8h2V5h-2a4 4 0 0 0-4 4v2H9v3h2v6h3v-6h2.5l.5-3H14V9a1 1 0 0 1 1-1Z" />,
-  },
-  {
-    label: "TikTok",
-    href: "https://www.tiktok.com/@tokecosmetics",
-    icon: <path d="M14 4c.4 2.3 1.9 3.8 4 4v3c-1.5 0-2.9-.5-4-1.3V15a5 5 0 1 1-5-5c.3 0 .7 0 1 .1v3.1A2 2 0 1 0 11 15V4h3Z" />,
-  },
-];
+/** Icon per account, keyed by the label in `SOCIAL_LINKS`. The hrefs deliberately do NOT
+ *  live here — see `lib/social-links.ts` for why they moved out. Every glyph is drawn in
+ *  the same outline language (fill none, currentColor stroke) so the row reads as one set. */
+const ICONS: Record<string, ReactNode> = {
+  Instagram: (
+    <>
+      <rect x="3" y="3" width="18" height="18" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" />
+    </>
+  ),
+  TikTok: <path d="M14 4c.4 2.3 1.9 3.8 4 4v3c-1.5 0-2.9-.5-4-1.3V15a5 5 0 1 1-5-5c.3 0 .7 0 1 .1v3.1A2 2 0 1 0 11 15V4h3Z" />,
+  Facebook: <path d="M15 8h2V5h-2a4 4 0 0 0-4 4v2H9v3h2v6h3v-6h2.5l.5-3H14V9a1 1 0 0 1 1-1Z" />,
+  YouTube: (
+    <>
+      <rect x="2.5" y="5.5" width="19" height="13" rx="4" />
+      <path d="M10.2 9.6 15 12l-4.8 2.4Z" />
+    </>
+  ),
+};
 
 export function Footer() {
   return (
@@ -99,7 +97,7 @@ export function Footer() {
               </div>
             </div>
             <ul className="mt-6 flex items-center gap-3">
-              {SOCIALS.map((s) => (
+              {SOCIAL_LINKS.map((s) => (
                 <li key={s.label}>
                   <a
                     href={s.href}
@@ -118,7 +116,7 @@ export function Footer() {
                       strokeLinejoin="round"
                       className="h-4 w-4"
                     >
-                      {s.icon}
+                      {ICONS[s.label]}
                     </svg>
                   </a>
                 </li>

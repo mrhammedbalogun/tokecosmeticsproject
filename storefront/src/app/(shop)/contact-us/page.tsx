@@ -20,7 +20,7 @@ export default function Page() {
   return (
     <PagePlaceholder
       title="Contact Us"
-      intro="Our phone, email and WhatsApp lines are being published here shortly. In the meantime the fastest reply is a direct message on Instagram, Facebook or TikTok — every link is in the footer below."
+      intro="Our phone, email and WhatsApp lines are being published here shortly. In the meantime the fastest reply is a direct message on Instagram, TikTok or Facebook — every link is in the footer below."
       ctaHref="/account/orders"
       ctaLabel="Track an order"
     />

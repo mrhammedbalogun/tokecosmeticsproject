@@ -12,7 +12,7 @@ export const metadata: Metadata = pageMetadata({
   // the brand here would render "Follow Us — Toke Cosmetics | Toke Cosmetics".
   title: "Follow Us",
   description:
-    "Follow Toke Cosmetics on Instagram, Facebook and TikTok, and join our mailing list.",
+    "Follow Toke Cosmetics on Instagram, TikTok, Facebook and YouTube, and join our mailing list.",
   path: "/follow-us",
 });
 
@@ -20,7 +20,7 @@ export default function Page() {
   return (
     <PagePlaceholder
       title="Follow Us"
-      intro="Everywhere you can find Toke Cosmetics — Instagram, Facebook, TikTok and our mailing list — gathered in one place. Until this page is filled in, every link lives in the footer below."
+      intro="Everywhere you can find Toke Cosmetics — Instagram, TikTok, Facebook, YouTube and our mailing list — gathered in one place. Until this page is filled in, every link lives in the footer below."
     />
   );
 }

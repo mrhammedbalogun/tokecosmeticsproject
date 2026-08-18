@@ -4,6 +4,7 @@
 import type { Metadata } from "next";
 import { mediaUrl } from "@/lib/media";
 import type { ProductDetail } from "@/lib/catalog";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 
 export const SITE_NAME = "Toke Cosmetics";
 export const TITLE_TEMPLATE = `%s | ${SITE_NAME}`;
@@ -76,11 +77,10 @@ export function organizationJsonLd(): Record<string, any> {
     name: SITE_NAME,
     url: siteUrl(),
     logo: absoluteUrl("/logos/toke-logo.png"),
-    sameAs: [
-      "https://www.instagram.com/tokecosmetics",
-      "https://www.facebook.com/tokecosmetics",
-      "https://www.tiktok.com/@tokecosmetics",
-    ],
+    // Derived, never re-typed. This list is read by search engines rather than people, so
+    // a stale entry here is the kind that stays wrong for months — which is exactly what
+    // happened to the Instagram handle. See `lib/social-links.ts`.
+    sameAs: SOCIAL_LINKS.map((s) => s.href),
   };
 }
 
