@@ -38,7 +38,11 @@ from apps.notifications.admin_serializers import (
     TestSendSerializer,
     event_catalog,
 )
-from apps.notifications.confirm import inherit_confirmation, send_confirmation
+from apps.notifications.confirm import (
+    confirm as confirm_address,
+    inherit_confirmation,
+    send_confirmation,
+)
 from apps.notifications.events import EVENTS_BY_CODE
 from apps.notifications.models import NotificationRecipient
 from apps.notifications.preview import preview_context
@@ -103,7 +107,7 @@ class NotificationRecipientAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         to be believed. `recipient_id` is the entire content of this decision, and the
         address behind it is in that recipient's own `create` row.
         """
-        if getattr(self, "action", None) == "test_send":
+        if getattr(self, "action", None) in ("test_send", "mark_confirmed"):
             return ("recipient_id",)
         return super().resolve_allowlist()
 
@@ -159,6 +163,48 @@ class NotificationRecipientAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
 
         transaction.on_commit(partial(send_confirmation, row))
         return Response({"sent_to": row.email})
+
+    @action(detail=False, methods=["post"], url_path="mark-confirmed")
+    def mark_confirmed(self, request):
+        """`POST …/mark-confirmed/` {"recipient_id": n} — the Owner vouches for an
+        address instead of waiting for its click.
+
+        WHAT IS TRADED AWAY, DELIBERATELY. The click proves two things nothing else can:
+        the address is deliverable, and a human there agreed. This override discards both
+        and substitutes the Owner's word — which is acceptable exactly because the act is
+        Owner-only and audited, so "who vouched, for what, when" is on the record where
+        the address's own consent would have been. It exists for the address the Owner
+        personally controls, where the email round-trip is ceremony.
+
+        GOES THROUGH `confirm()`, THE SAME DOOR THE CLICK USES. Confirmation is a
+        property of the ADDRESS, not the row, and an override that only touched one row
+        would quietly create a second, weaker kind of confirmed — every other pending row
+        for the address still dark, `inherit_confirmation` not firing for later adds.
+        One path means one meaning.
+
+        No throttle: unlike resend-confirmation this sends no mail, so there is nothing
+        for a caller to amplify.
+        """
+        body = TestSendSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+
+        row = NotificationRecipient.objects.filter(
+            pk=body.validated_data["recipient_id"]
+        ).first()
+        if row is None:
+            return Response({"detail": "That recipient no longer exists."},
+                            status=status.HTTP_404_NOT_FOUND)
+        if row.user_id is not None:
+            return Response(
+                {"detail": "Staff accounts do not need to confirm."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if row.confirmed_at is not None:
+            return Response({"detail": "That address is already confirmed."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        confirm_address(row)
+        return Response({"confirmed": row.email})
 
     @action(detail=False, methods=["post"], url_path="test-send")
     def test_send(self, request):

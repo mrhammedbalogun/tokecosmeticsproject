@@ -14,6 +14,7 @@ import {
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 import {
   addRecipientAction,
+  markConfirmedAction,
   removeRecipientAction,
   resendConfirmationAction,
   testSendAction,
@@ -105,6 +106,7 @@ export default async function NotificationsPage() {
               removeAction={removeRecipientAction}
               testAction={testSendAction}
               resendAction={resendConfirmationAction}
+              markConfirmedAction={markConfirmedAction}
             />
           ))}
           <OrphanedRecipients
@@ -116,7 +118,10 @@ export default async function NotificationsPage() {
             Removing a staff account from the admin stops their notifications
             automatically. An email address you add is sent a confirmation link first and
             receives nothing until someone there clicks it — which is what catches a
-            mistyped address, since a wrong one otherwise just fails in silence.
+            mistyped address, since a wrong one otherwise just fails in silence. If you
+            are certain an address is right, “Mark confirmed” skips the click. Either
+            way, an address confirms once: adding it to other notifications later needs
+            no new confirmation.
           </p>
         </div>
       )}

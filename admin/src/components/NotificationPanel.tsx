@@ -109,6 +109,7 @@ export function NotificationSection({
   removeAction,
   testAction,
   resendAction,
+  markConfirmedAction,
   initialAddState = {},
 }: {
   event: NotificationEvent;
@@ -118,6 +119,7 @@ export function NotificationSection({
   removeAction: (prev: RowState, fd: FormData) => Promise<RowState>;
   testAction: (prev: RowState, fd: FormData) => Promise<RowState>;
   resendAction: (prev: RowState, fd: FormData) => Promise<RowState>;
+  markConfirmedAction: (prev: RowState, fd: FormData) => Promise<RowState>;
   initialAddState?: AddState;
 }) {
   const [addState, addFormAction] = useActionState<AddState, FormData>(
@@ -196,13 +198,27 @@ export function NotificationSection({
                     agreed to receive any — the exact delivery the confirmation gate
                     exists to withhold. The backend refuses it too. */}
                 {isPending(row) ? (
-                  <RowForm
-                    action={resendAction}
-                    recipientId={row.id}
-                    label="Resend confirmation"
-                    pendingLabel="Sending…"
-                    title={`Resend the confirmation link to ${labelFor(row)}`}
-                  />
+                  <>
+                    <RowForm
+                      action={resendAction}
+                      recipientId={row.id}
+                      label="Resend confirmation"
+                      pendingLabel="Sending…"
+                      title={`Resend the confirmation link to ${labelFor(row)}`}
+                    />
+                    {/* The Owner's override: vouch for the address instead of waiting
+                        for its click. Skipping the click also skips the delivery proof —
+                        a typo marked confirmed fails silently forever — so the title
+                        says who it is for. Confirming covers the address everywhere,
+                        now and for any list it is added to later. */}
+                    <RowForm
+                      action={markConfirmedAction}
+                      recipientId={row.id}
+                      label="Mark confirmed"
+                      pendingLabel="Confirming…"
+                      title={`Confirm ${labelFor(row)} without the email click. Only for an address you control or have verified yourself — a mistyped address confirmed this way fails silently.`}
+                    />
+                  </>
                 ) : (
                   <RowForm
                     action={testAction}

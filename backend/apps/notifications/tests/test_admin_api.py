@@ -312,6 +312,83 @@ def test_resend_mails_a_pending_address_again(owner, django_capture_on_commit_ca
     assert [m.to for m in mail.outbox] == [["pack@x.com"]]
 
 
+def test_mark_confirmed_makes_a_pending_address_live_without_mailing_it(owner):
+    """The Owner override: vouch for an address instead of waiting for its click. No
+    email is involved — the whole point is to skip the round-trip."""
+    from apps.notifications.models import resolve_recipients
+
+    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    response = client_for(owner).post(f"{BASE}mark-confirmed/",
+                                      {"recipient_id": row.pk}, format="json")
+
+    assert response.status_code == 200
+    assert response.data == {"confirmed": "pack@x.com"}
+    row.refresh_from_db()
+    assert row.confirmed_at is not None
+    assert resolve_recipients("order.paid") == ["pack@x.com"]
+    assert mail.outbox == []
+
+
+def test_mark_confirmed_covers_every_event_the_address_is_on(owner):
+    """The override goes through `confirm()`, the same door the click uses — so it is a
+    property of the ADDRESS. A pending row on another event goes live in the same act."""
+    a = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    b = NotificationRecipient.objects.create(event="inventory.low_stock",
+                                             email="pack@x.com")
+
+    client_for(owner).post(f"{BASE}mark-confirmed/", {"recipient_id": a.pk},
+                           format="json")
+
+    b.refresh_from_db()
+    assert b.confirmed_at is not None
+
+
+def test_an_overridden_address_joins_later_events_without_a_new_link(
+    owner, django_capture_on_commit_callbacks,
+):
+    """Once confirmed — by click or by override — an address is confirmed for good.
+    Adding it to another event inherits the standing and mails nothing."""
+    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    client_for(owner).post(f"{BASE}mark-confirmed/", {"recipient_id": row.pk},
+                           format="json")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        created = client_for(owner).post(
+            BASE, {"event": "inventory.low_stock", "email": "pack@x.com"}, format="json"
+        )
+
+    assert created.data["is_confirmed"] is True
+    assert mail.outbox == []
+
+
+def test_mark_confirmed_refuses_a_staff_row(owner):
+    row = NotificationRecipient.objects.create(event="order.paid", user=owner)
+    response = client_for(owner).post(f"{BASE}mark-confirmed/",
+                                      {"recipient_id": row.pk}, format="json")
+    assert response.status_code == 400
+
+
+def test_mark_confirmed_refuses_an_already_confirmed_address(owner):
+    row = confirmed()
+    response = client_for(owner).post(f"{BASE}mark-confirmed/",
+                                      {"recipient_id": row.pk}, format="json")
+    assert response.status_code == 400
+
+
+def test_a_manager_cannot_mark_confirmed():
+    """The override is the sharpest act on this screen — it waives the address's own
+    consent — so it carries exactly the scope the rest of the screen does."""
+    manager = in_role("manager@toke.test", "Manager")
+    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+
+    response = client_for(manager).post(f"{BASE}mark-confirmed/",
+                                        {"recipient_id": row.pk}, format="json")
+
+    assert response.status_code == 403
+    row.refresh_from_db()
+    assert row.confirmed_at is None
+
+
 def test_a_manager_cannot_send_a_test():
     manager = in_role("manager@toke.test", "Manager")
     row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
@@ -384,5 +461,26 @@ def test_a_test_send_never_logs_an_address_from_the_request(owner):
 
     entry = AuditLog.objects.latest("id")
     assert entry.action == "test_send"
+    assert entry.changes == {"recipient_id": row.pk}
+    assert "attacker@evil.test" not in str(entry.changes)
+
+
+def test_mark_confirmed_is_audited_without_request_junk(owner):
+    """The override waives the address's own consent, so the audit row IS the record of
+    who vouched — and it must carry only the id the action read, for the same reason
+    test-send must (a logged value the action ignored is evidence for something that did
+    not happen)."""
+    from apps.core.models import AuditLog
+
+    row = NotificationRecipient.objects.create(event="order.paid", email="pack@x.com")
+    client_for(owner).post(
+        f"{BASE}mark-confirmed/",
+        {"recipient_id": row.pk, "email": "attacker@evil.test"},
+        format="json",
+    )
+
+    entry = AuditLog.objects.latest("id")
+    assert entry.actor_email == "owner@toke.test"
+    assert entry.action == "mark_confirmed"
     assert entry.changes == {"recipient_id": row.pk}
     assert "attacker@evil.test" not in str(entry.changes)

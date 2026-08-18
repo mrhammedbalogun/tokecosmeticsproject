@@ -20,6 +20,7 @@ vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) 
 
 import {
   addRecipientAction,
+  markConfirmedAction,
   removeRecipientAction,
   resendConfirmationAction,
   testSendAction,
@@ -258,5 +259,60 @@ describe("resendConfirmationAction", () => {
     const state = await resendConfirmationAction({}, form({ recipient_id: "9" }));
 
     expect(state.error).toBe("That address is already confirmed.");
+  });
+});
+
+describe("markConfirmedAction", () => {
+  it("posts only the row id to the mark-confirmed endpoint", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ confirmed: "pack@x.com" }));
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const state = await markConfirmedAction({}, form({ recipient_id: "9" }));
+
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe(`${BASE}mark-confirmed/`);
+    expect(JSON.parse(init.body as string)).toEqual({ recipient_id: 9 });
+    expect(state.error).toBeUndefined();
+  });
+
+  it("revalidates — the row's state has genuinely changed, unlike a resend", async () => {
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ confirmed: "pack@x.com" }),
+    ) as unknown as typeof fetch;
+
+    await markConfirmedAction({}, form({ recipient_id: "9" }));
+
+    expect(revalidatePath).toHaveBeenCalledWith("/notifications");
+  });
+
+  it("names the Owner when someone else is refused", async () => {
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ detail: "forbidden" }, 403),
+    ) as unknown as typeof fetch;
+
+    const state = await markConfirmedAction({}, form({ recipient_id: "9" }));
+
+    expect(state.error).toBe("Only the Owner can do that.");
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the backend refusal for a staff row", async () => {
+    global.fetch = vi.fn(async () =>
+      jsonResponse({ detail: "Staff accounts do not need to confirm." }, 400),
+    ) as unknown as typeof fetch;
+
+    const state = await markConfirmedAction({}, form({ recipient_id: "9" }));
+
+    expect(state.error).toBe("Staff accounts do not need to confirm.");
+  });
+
+  it("refuses a non-numeric id without calling the backend", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const state = await markConfirmedAction({}, form({ recipient_id: "1e3" }));
+
+    expect(state.error).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

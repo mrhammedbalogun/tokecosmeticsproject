@@ -1,10 +1,10 @@
 "use server";
 
 /**
- * The three writes on the Email Notifications page: add a recipient, remove one, send a
- * test.
+ * The writes on the Email Notifications page: add a recipient, remove one, send a test,
+ * resend a confirmation link, or mark an address confirmed on the Owner's word.
  *
- * ALL THREE ARE SERVER FUNCTIONS, matching every other authenticated write in this app.
+ * ALL OF THEM ARE SERVER FUNCTIONS, matching every other authenticated write in this app.
  * They get Next's Origin/Host check for free and may persist a rotated token, which a
  * Server Component may not — so `fetchWithAuth` (the renewing fetcher) is correct here,
  * unlike on the page itself.
@@ -163,6 +163,31 @@ export async function resendConfirmationAction(
       ? `Confirmation re-sent to ${sentTo}.`
       : "Confirmation re-sent.",
   };
+}
+
+export async function markConfirmedAction(
+  _prevState: RowState,
+  formData: FormData,
+): Promise<RowState> {
+  const id = field(formData, "recipient_id");
+  if (!isId(id)) return { error: "That recipient could not be identified." };
+
+  try {
+    await fetchWithAuth(`${BASE}mark-confirmed/`, {
+      method: "POST",
+      body: { recipient_id: Number(id) },
+    });
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+    if (e.status === 403) return { error: "Only the Owner can do that." };
+    return { error: backendMessage(e.data) ?? "The address could not be confirmed." };
+  }
+
+  // DOES revalidate, unlike resend: the row's state has genuinely changed, and the
+  // "Awaiting confirmation" badge disappearing is the feedback. A success message would
+  // be lost anyway — the pending-row controls unmount when the badge does.
+  revalidatePath(PATH);
+  return {};
 }
 
 export async function testSendAction(

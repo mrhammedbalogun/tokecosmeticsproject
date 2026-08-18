@@ -65,7 +65,9 @@ So an external row starts with `confirmed_at = NULL` and `resolve_recipients()` 
 Adding one sends that address a signed link (`tokens.py`); clicking it is the proof, and
 it is proof of two different things at once — that the address exists and is deliverable,
 and that a human there agreed to receive a shop's order data. Nothing else in the system
-can establish either.
+can establish either. The Owner can also vouch for an address instead (`mark-confirmed`,
+in `admin_views.py`) — that trades both proofs for an audit row naming who vouched, and
+exists for the address the Owner personally controls.
 
 STAFF ROWS ARE CONFIRMED ON CREATION and are not sent a link. Their address is already
 proven: they accepted an emailed invite at it and they sign in with it. Making a
