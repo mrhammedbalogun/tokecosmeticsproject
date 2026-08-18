@@ -12,9 +12,54 @@ bundle) — its only fence is the website restriction. The server key never leav
 and is IP-locked. Never reuse one for the other's job.
 
 The featured homepage reviews themselves stay CURATED (share-link permalinks pasted into
-admin) — design ruling 2026-08-04, recorded on `cms.GoogleReview`: the API returns at
-most five "most relevant" reviews with no per-review permalink. The API pull only feeds
-the header numbers ("4.8", "300+").
+admin). The API pull only feeds the header numbers.
+
+### Why curated — re-examined 2026-08-17, ruling upheld on DIFFERENT grounds
+
+The original 2026-08-04 reason was "the API has no per-review permalink". **That is no
+longer true** — Places API (New) returns `googleMapsUri` on every review object. Do not
+take that as licence to build a sync; three things kill it, and the first is decisive.
+
+1. **Storing the reviews is off-terms.** Maps Platform Service Specific Terms §14.3, for
+   Places API, reads in full: *"Customer may temporarily cache latitude and longitude
+   values from the Places API for up to 30 consecutive calendar days, after which
+   Customer must delete the cached latitude and longitude values."* That is the entire
+   caching allowance; §A.3 adds Google IDs (`place_id`). Review text, author names and
+   avatars have **no** storage allowance — not 30 days, none. Refresh frequency does not
+   fix this: a `cms.GoogleReview` row holding API-pulled text is off-terms at any cadence.
+2. **The cost trap.** Requesting the `reviews` field promotes the whole call from *Place
+   Details Essentials* (10,000 free calls/month) to **Place Details Enterprise +
+   Atmosphere**, whose free allowance is **1,000 calls/month**. Hourly polling is ~730 —
+   nominally free, with no headroom for retries, staging or a manual re-sync, and
+   billing at the platform's most expensive SKU the moment it overflows.
+3. **It would be a marketing own-goal.** The API returns five relevance-picked reviews.
+   Four of Toke's five are two years old, so a synced homepage would read "2 years ago"
+   four times across the front door's social proof — and the policies require *"a clear
+   notice that describes how reviews are being ordered and filtered"*, so quietly hiding
+   the stale or low-starred ones is itself a disclosure obligation.
+
+### The sanctioned route to real automation
+
+**Google Business Profile API** — not the Places API. Places is a third-party *lookup*
+tool; Business Profile is the owner-authenticated API for a business's own listing.
+`accounts.locations.reviews.list` returns **all** reviews (Toke has 49 ratings, versus the
+five Places will ever hand back), it is **free** with no per-call billing, and it carries
+review-reply support. The catch is an access application: Google reviews the request in
+up to 14 days (commonly 3-10 business days), and an unapproved project sits at 0 QPM.
+
+**Step-by-step application guide, including the use-case wording that gets approved:
+`google-business-profile-api-access.md`.** Until it is approved, curation is both the
+compliant answer and the only one available.
+
+### Attribution obligations (they apply to anything Google-sourced)
+
+- Displaying Places content **without a Google map** requires the Google logo (the text
+  "Google Maps" is acceptable where space is tight). The homepage cards carry the real
+  four-colour Google mark for this reason — a hand-drawn letter "G" does not qualify.
+- Reviews must credit the author "using all available resources (avatar, name, and
+  profile link) when space allows", and end users must be able to reach the review on
+  Google via its `googleMapsUri`. The cards link to the permalink; that is the one that
+  matters most.
 
 ## 1. Project + billing (once)
 
@@ -23,9 +68,14 @@ the header numbers ("4.8", "300+").
 2. Top bar project picker → **New project** → name `tokecosmetics` → Create, and switch
    to it (every later step happens INSIDE this project).
 3. **Billing** (left menu) → link a billing account (card required). Pricing note: since
-   March 2025 Google Maps Platform gives **10,000 free calls per month per Essentials
-   SKU** (Autocomplete, Geocoding, Place Details are all Essentials). At Toke's traffic
-   the expected bill is ₦0; the caps in §4 make that a guarantee.
+   March 2025 Google Maps Platform gives **10,000 free calls/month per Essentials SKU**,
+   5,000 per Pro SKU and only **1,000 per Enterprise SKU**. Autocomplete and Geocoding
+   are Essentials. **Place Details is not one SKU** — the tier is set by the fields you
+   ask for, and the whole call is billed at the highest tier any requested field belongs
+   to. Our nightly reviews-header call asks for `rating` + `userRatingCount`, which are
+   *Enterprise* fields: ~30 calls/month against a 1,000 allowance, so still ₦0, but the
+   headroom is 1,000 and not 10,000. Adding `reviews` would drop it another tier again
+   (see "Why curated" below). The caps in §4 are what make ₦0 a guarantee.
 
 ## 2. Enable the four APIs
 

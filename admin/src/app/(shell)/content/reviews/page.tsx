@@ -44,7 +44,9 @@ export default async function GoogleReviewsPage() {
         <h1 className="mt-2 text-lg font-semibold tracking-tight">Google reviews</h1>
         <p className="mt-1 text-sm text-muted">
           The homepage&apos;s &ldquo;Loved on Google&rdquo; section. Each card links to the
-          exact review via its Google share-link, so pick the good ones.
+          exact review via its Google share-link. All 5 reviews Google publishes for the
+          shop are featured; the grid fits 4 or 5 across. The rating and review count
+          below are synced from Google nightly and overwrite anything typed into them.
         </p>
       </div>
       <div className="mt-6">

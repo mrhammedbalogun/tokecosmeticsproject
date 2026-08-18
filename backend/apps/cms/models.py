@@ -281,18 +281,39 @@ class MenuItem(TimeStampedModel):
 class GoogleReview(TimeStampedModel):
     """One CURATED Google review featured on the landing page.
 
-    Curated, not synced: the Places API returns at most five "most relevant" reviews
-    and no per-review permalink, so automation cannot satisfy "click goes to that
-    exact review" (design ruling, 2026-08-04). A human picks the review on Google
-    Maps, presses "Share review", and pastes the permalink here. That also keeps a
-    mediocre rotating review off the homepage.
+    ── WHY STILL CURATED (re-examined 2026-08-17, ruling UPHELD on new grounds) ──────
+    The 2026-08-04 ruling rested on two premises. One of them has since died:
+
+    * DEAD: "the Places API has no per-review permalink." Places API (New) now returns
+      `googleMapsUri` on every review object — verified against the live listing on
+      2026-08-17. Automation *could* satisfy "click goes to that exact review".
+    * ALIVE, and now load-bearing on its own: **Google forbids storing this content.**
+      Maps Platform Service Specific Terms §14.3 allows caching exactly one thing from
+      the Places API — "latitude and longitude values... for up to 30 consecutive
+      calendar days" — and §A.3 allows Google IDs. Review text, author names and
+      avatars have NO storage allowance at all. Persisting an API-pulled review in
+      this table would be off-terms no matter how often it is refreshed.
+    * ALIVE: five relevance-picked reviews is all the Places API ever returns. All
+      five are currently featured, in Google's own order — showing everything means
+      nothing is filtered, so the policies' "describe how reviews are ordered and
+      filtered" disclosure has nothing to disclose. Note four of the five are two
+      years old, which is why `reviewed_at_text` is left blank on them.
+
+    So these rows hold reviews a HUMAN chose and transcribed from the public listing,
+    testimonial-style, each linking back to its source — content this table is free to
+    keep. Do not "upgrade" this to a Places sync; that path was costed and rejected.
+    The sanctioned route to real automation is the **Google Business Profile API**
+    (owner OAuth, all reviews not five, free, no per-call billing), which needs an
+    access application. See `docs/runbooks/google-apis-setup.md`.
     """
 
     author = models.CharField(max_length=100)          # "Adaeze O." — as shown on Google
     location = models.CharField(max_length=100, blank=True)  # "Lagos"
     rating = models.PositiveSmallIntegerField(default=5)     # 1-5 stars
     text = models.TextField()                          # plain text; React escapes it
-    review_url = models.URLField()                     # the Google share-link permalink
+    # 500, not the 200 default: a review's googleMapsUri permalink is ~175 chars of
+    # base64 protobuf and Google documents no ceiling for it.
+    review_url = models.URLField(max_length=500)       # the review's own permalink
     reviewed_at_text = models.CharField(max_length=60, blank=True)  # "2 weeks ago", verbatim
     sort = models.PositiveSmallIntegerField(default=0)
     is_active = models.BooleanField(default=True)

@@ -2,10 +2,16 @@
 
 /** Curation surface for the homepage's Google reviews (landing redesign).
  *
- * Curated on purpose: the Places API has no per-review permalink, so "click goes
- * to that exact review" only works when a human copies the review's share-link
- * from Google Maps. The helper text walks that path. The header numbers (4.8,
- * "300+") are entered here too, until a Places fetch feeds them.
+ * Curated on purpose — but NOT for the reason first written here. The Places API
+ * does return a per-review permalink now; what it does not allow is KEEPING the
+ * review. Maps Platform Service Specific Terms §14.3 permits caching latitude and
+ * longitude from the Places API and nothing else, so an API-pulled review cannot
+ * live in our database. A human transcribes it instead. Full reasoning on the
+ * `cms.GoogleReview` model; sanctioned automation route (Google Business Profile
+ * API) in `docs/runbooks/google-apis-setup.md`.
+ *
+ * The header rating/count are NO LONGER hand-entered — a nightly Place Details
+ * call overwrites them, which is why those two fields are shown as synced.
  */
 import { startTransition, useState } from "react";
 import {
@@ -204,7 +210,9 @@ function ReviewForm({ review, onDone }: { review: ReviewRow | null; onDone: () =
       <h2 className="text-sm font-medium">{review ? "Edit review" : "Feature a review"}</h2>
       <p className="mt-1 text-xs text-muted">
         On Google Maps: find the review → ⋮ → Share review → Copy link. That link is what
-        makes the card open the exact review.
+        makes the card open the exact review. Type the review text out as it appears on
+        Google — quote it, don&apos;t paraphrase. The homepage grid fits 4 or 5 across;
+        6 or 7 will leave a short final row.
       </p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="text-xs">
