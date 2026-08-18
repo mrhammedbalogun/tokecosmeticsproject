@@ -83,7 +83,14 @@ def monitor_gig_wallet() -> dict:
         # interpolated it, so the rendered mail is unchanged.
         sent = notify_staff(
             "delivery.gig_wallet_low",
-            {"balance": str(balance), "threshold": threshold},
+            # THOUSAND-SEPARATED HERE, not in the template. `str(Decimal)` renders
+            # "12400.00", and the alert's whole job is to make a number legible at a
+            # glance in a subject line — "₦50000" and "₦500000" are one careless glance
+            # apart. Django has no comma filter without `contrib.humanize`, and adding an
+            # app to format one integer is more moving parts than formatting it here.
+            # The task's RETURN value keeps `str(balance)` — that is a machine-readable
+            # result other code and the tests assert on, not a display string.
+            {"balance": f"{balance:,.2f}", "threshold": f"{threshold:,}"},
         )
         # Same edge-trigger reasoning as the low-stock digest, and it matters more here.
         # Recording `state="low"` means "they have been told", and re-arming needs the

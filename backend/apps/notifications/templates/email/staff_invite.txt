@@ -10,4 +10,4 @@ It expires in {{ expires_hours }} hours and can only be used once:
 If you weren't expecting this, ignore this email and tell {{ invited_by }} —
 the link can be revoked.
 
-— Toke Cosmetics
+{% include "email/_footer_internal.txt" with footer_note="A Toke Cosmetics Admin invitation, sent because someone added this address as a staff user." %}

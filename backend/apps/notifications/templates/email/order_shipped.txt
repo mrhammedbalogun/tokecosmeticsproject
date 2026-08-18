@@ -17,4 +17,4 @@ photo ID when you collect.
 Track your order:
   {{ tracking_url }}
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}

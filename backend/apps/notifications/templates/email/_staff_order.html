@@ -6,18 +6,27 @@ arithmetic. Nothing here renders a street address, a phone number or a tracking 
 see `apps/orders/emails.py::_staff_context` for why.
 {% endcomment %}
 {% if is_preview %}
-<p style="margin:0 0 16px;padding:12px;border-radius:8px;background:#eef4ff;border:1px solid #c9d8f0;font-size:14px;">
-  <strong>This is a test.</strong> No such order exists — it was sent from the admin's
-  Email Notifications screen to check that this address receives mail.
-</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#eef4fb;border:1px solid #c9dcf0;border-radius:10px;">
+  <tr><td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;
+      line-height:1.6;color:#1a1a1a;">
+    <strong style="color:#1b4f80;">This is a test.</strong> No such order exists — it was sent
+    from the admin's Email Notifications screen to check that this address receives mail.
+  </td></tr>
+</table>
 {% endif %}
 {% if review_reason %}
-<p style="margin:0 0 16px;padding:12px;border-radius:8px;background:#fdf2f2;border:1px solid #f0c9c9;font-size:14px;">
-  <strong>Needs review:</strong> {{ review_reason }}
-</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#fdf3f2;border:1px solid #f0cfc9;border-radius:10px;">
+  <tr><td style="padding:14px 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;
+      line-height:1.6;color:#1a1a1a;">
+    <strong style="color:#8a1c1c;">Needs review:</strong> {{ review_reason }}
+  </td></tr>
+</table>
 {% endif %}
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;">
   {% comment %}
   Pictures here are for the PACKER: matching a jar on the bench to a line on a list is
   faster by sight than by reading a variant string, and it is the check that catches
@@ -32,57 +41,86 @@ see `apps/orders/emails.py::_staff_context` for why.
 
   Same email-client rules as `_order_items.html`; that file carries the full reasoning.
   {% endcomment %}
+  <tr>
+    <td colspan="3" style="padding:0 0 10px;font-size:11px;font-weight:bold;letter-spacing:1.2px;
+        text-transform:uppercase;color:#6b6862;border-bottom:2px solid #e7e2d8;">To pack</td>
+  </tr>
   {% for item in items %}
   <tr>
-    <td width="60" style="padding:8px 12px 8px 0;border-bottom:1px solid #eee;vertical-align:top;">
+    <td width="60" style="padding:10px 12px 10px 0;border-bottom:1px solid #efeae0;vertical-align:top;">
       {% if item.image %}
       <img src="{{ item.image }}" alt="{{ item.image_alt }}" width="52" height="52"
            style="display:block;width:52px;height:52px;border-radius:6px;
-                  border:1px solid #eee;object-fit:cover;">
+                  border:1px solid #e7e2d8;object-fit:cover;">
       {% else %}
-      <div style="width:52px;height:52px;border-radius:6px;background:#f2f2f0;">&nbsp;</div>
+      <div style="width:52px;height:52px;border-radius:6px;background:#f5f1e9;">&nbsp;</div>
       {% endif %}
     </td>
-    <td style="padding:8px 0;border-bottom:1px solid #eee;vertical-align:top;">
-      {{ item.quantity }} &times; {{ item.name }}{% if item.variant %}<br>
-      <span style="color:#777;font-size:12px;">{{ item.variant }}</span>{% endif %}
+    <td style="padding:10px 0;border-bottom:1px solid #efeae0;vertical-align:top;line-height:1.5;">
+      <strong>{{ item.quantity }} &times;</strong> {{ item.name }}{% if item.variant %}<br>
+      <span style="color:#6b6862;font-size:12px;">{{ item.variant }}</span>{% endif %}
     </td>
-    <td align="right" style="padding:8px 0;border-bottom:1px solid #eee;white-space:nowrap;vertical-align:top;">
-      {{ item.line_total }}
-    </td>
+    <td align="right" style="padding:10px 0;border-bottom:1px solid #efeae0;
+        white-space:nowrap;vertical-align:top;">{{ item.line_total }}</td>
   </tr>
   {% endfor %}
   <tr>
-    <td colspan="2" style="padding:8px 12px 8px 0;font-weight:600;">Total</td>
-    <td align="right" style="padding:8px 0;font-weight:600;white-space:nowrap;">{{ grand_total }}</td>
+    <td colspan="2" style="padding:12px 12px 0 0;font-size:16px;font-weight:bold;">Total</td>
+    <td align="right" style="padding:12px 0 0;font-size:16px;font-weight:bold;
+        white-space:nowrap;">{{ grand_total }}</td>
   </tr>
 </table>
 
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-       style="margin-top:20px;font-size:13px;color:#555;">
+{% comment %}
+THE ORDER'S FACTS, promoted out of the grey footnote they used to be. Customer, payment
+method and delivery method were the three things a packer had to open the admin for
+(owner, 2026-08-18) — two of them were not in the mail at all, and the third was set in
+13px grey under the totals where it read as a caption rather than an instruction.
+
+Every row is `{% if %}`d and the label column is fixed-width, so a missing value drops
+its row instead of printing "—" and the surviving rows stay aligned. `payment_method` is
+blank only for an order with no payment row at all; `customer_name` for a snapshot with
+no name in it (some WooCommerce-migrated orders).
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:22px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;
+              line-height:1.6;color:#1a1a1a;background-color:#faf7f2;border:1px solid #e7e2d8;
+              border-radius:10px;">
+  {% if customer_name %}
   <tr>
-    <td style="padding:3px 12px 3px 0;color:#888;">{% if is_pickup %}Collect from{% else %}Deliver to{% endif %}</td>
-    <td style="padding:3px 0;">{{ destination }}</td>
+    <td width="120" style="padding:14px 16px 4px;color:#8a857c;vertical-align:top;">Customer</td>
+    <td style="padding:14px 16px 4px 0;vertical-align:top;"><strong>{{ customer_name }}</strong></td>
   </tr>
+  {% endif %}
+  {% if payment_method %}
   <tr>
-    <td style="padding:3px 12px 3px 0;color:#888;">Method</td>
-    <td style="padding:3px 0;">{{ delivery_option_name|default:"—" }}</td>
+    <td width="120" style="padding:4px 16px;color:#8a857c;vertical-align:top;">Payment</td>
+    <td style="padding:4px 16px 4px 0;vertical-align:top;">{{ payment_method }}</td>
+  </tr>
+  {% endif %}
+  {% if delivery_option_name %}
+  <tr>
+    <td width="120" style="padding:4px 16px;color:#8a857c;vertical-align:top;">Delivery</td>
+    <td style="padding:4px 16px 4px 0;vertical-align:top;">{{ delivery_option_name }}</td>
+  </tr>
+  {% endif %}
+  <tr>
+    <td width="120" style="padding:4px 16px;color:#8a857c;vertical-align:top;">{% if is_pickup %}Collect from{% else %}Deliver to{% endif %}</td>
+    <td style="padding:4px 16px 4px 0;vertical-align:top;">{{ destination }}</td>
   </tr>
   {% if customer_note %}
   <tr>
-    <td style="padding:3px 12px 3px 0;color:#888;">Customer note</td>
-    <td style="padding:3px 0;">{{ customer_note }}</td>
+    <td width="120" style="padding:4px 16px 14px;color:#8a857c;vertical-align:top;">Customer note</td>
+    <td style="padding:4px 16px 14px 0;vertical-align:top;">{{ customer_note }}</td>
   </tr>
+  {% else %}
+  <tr><td colspan="2" style="height:10px;line-height:10px;font-size:10px;">&nbsp;</td></tr>
   {% endif %}
 </table>
 
-<p style="margin:24px 0 0;">
-  <a href="{{ admin_url }}"
-     style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
-            padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
-    Open in admin
-  </a>
-</p>
-<p style="margin:12px 0 0;color:#999;font-size:12px;">
+<div style="margin:26px 0 0;">
+  {% include "email/_button.html" with url=admin_url label="Open in admin" width=200 %}
+</div>
+<p style="margin:14px 0 0;color:#8a857c;font-size:12px;line-height:1.6;">
   The customer's address and phone number are on the admin page — sign in to see them.
 </p>

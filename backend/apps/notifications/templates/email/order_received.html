@@ -1,40 +1,60 @@
 {% extends "email/base.html" %}
+{% block preheader %}Transfer {{ grand_total }} quoting {{ number }} — we're holding your items for 24 hours.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Payment needed" title="We're holding your order" %}{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px;">Thanks for your order — we're holding it for you while we wait for your payment.</p>
-<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }}</p>
+<p style="margin:0 0 18px;">{% if first_name %}Hi {{ first_name }} — thanks{% else %}Thanks{% endif %} for your order — we're holding it for you while we wait
+  for your payment.</p>
 
-<table role="presentation" width="100%" style="background:#f6f6f4;border-radius:8px;margin:0 0 20px;">
-  <tr><td style="padding:16px;">
-    <div style="font-weight:600;margin-bottom:10px;">How to pay</div>
-    <table role="presentation" width="100%" style="font-size:14px;">
+{% comment %}
+The payment panel comes FIRST, above the line items. This mail has exactly one job — get
+the money moved with the right reference on it — and the order summary is reassurance,
+not instruction. On a phone the summary alone is more than a screen, so anything below it
+is something a share of readers never see.
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#faf7f2;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr><td style="padding:18px;">
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#6b6862;margin:0 0 12px;">How to pay</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="font-size:14px;line-height:1.6;">
       {% if bank_details %}{% for label, value in bank_details.items %}
-      <tr><td style="color:#777;padding:2px 12px 2px 0;">{{ label }}</td><td><strong>{{ value }}</strong></td></tr>
+      <tr><td style="color:#6b6862;padding:3px 14px 3px 0;vertical-align:top;white-space:nowrap;">{{ label }}</td>
+          <td style="padding:3px 0;"><strong>{{ value }}</strong></td></tr>
       {% endfor %}{% endif %}
-      <tr><td style="color:#777;padding:2px 12px 2px 0;">Amount</td><td><strong>{{ grand_total }}</strong></td></tr>
-      <tr><td style="color:#777;padding:2px 12px 2px 0;">Reference</td><td><strong>{{ number }}</strong></td></tr>
+      <tr><td style="color:#6b6862;padding:3px 14px 3px 0;vertical-align:top;">Amount</td>
+          <td style="padding:3px 0;"><strong style="font-size:17px;color:#1c7a3e;">{{ grand_total }}</strong></td></tr>
+      <tr><td style="color:#6b6862;padding:3px 14px 3px 0;vertical-align:top;">Reference</td>
+          <td style="padding:3px 0;"><strong>{{ number }}</strong></td></tr>
     </table>
-    <p style="margin:12px 0 0;font-size:13px;color:#b00020;">
-      Please use <strong>{{ number }}</strong> as the transfer reference — without it we may not be able to match your payment to this order.
-    </p>
-    {% if ask_our_charges %}
-    <p style="margin:12px 0 0;font-size:13px;color:#b00020;">
-      <strong>Important:</strong> please ask your bank to send this transfer with
-      <strong>&quot;OUR&quot; charges</strong> — meaning you pay all transfer charges.
-      Otherwise intermediary banks deduct their fees from the amount in transit, less
-      than the full total reaches us, and we cannot release your order until the
-      shortfall is resolved.
-    </p>
-    {% endif %}
-    <p style="margin:8px 0 0;font-size:13px;color:#777;">
-      Please transfer within <strong>24 hours</strong> — we're holding your items until then.
-    </p>
   </td></tr>
 </table>
 
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#fdf8ec;border:1px solid #ecdcb4;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;">
+    <div style="font-weight:bold;color:#7a5a10;margin:0 0 6px;">Use {{ number }} as the reference</div>
+    Without it we may not be able to match your payment to this order.
+    {% if ask_our_charges %}
+    <p style="margin:12px 0 0;"><strong>Also:</strong> please ask your bank to send this
+      transfer with <strong>&quot;OUR&quot; charges</strong> — meaning you pay all transfer
+      charges. Otherwise intermediary banks deduct their fees from the amount in transit,
+      less than the full total reaches us, and we cannot release your order until the
+      shortfall is resolved.</p>
+    {% endif %}
+    <p style="margin:12px 0 0;color:#6b6862;">Please transfer within <strong>24 hours</strong>
+      — we're holding your items until then.</p>
+  </td></tr>
+</table>
+
+<p style="margin:0;font-size:13px;color:#6b6862;">Order
+  <strong style="color:#1a1a1a;">{{ number }}</strong>
+  <span style="color:#cfc7b8;">&nbsp;&middot;&nbsp;</span>placed {{ placed_at }}</p>
+
 {% include "email/_order_items.html" %}
 
-<p style="margin:24px 0 0;color:#777;font-size:13px;">Once your transfer lands we'll confirm your order by email.</p>
-<p style="margin:12px 0 0;">
-  <a href="{{ tracking_url }}" style="color:#1a1a1a;font-size:13px;">Track your order</a>
-</p>
+<p style="margin:24px 0 18px;color:#6b6862;font-size:13px;">Once your transfer lands we'll
+  confirm your order by email.</p>
+
+{% include "email/_button.html" with url=tracking_url label="Track your order" variant="ghost" only %}
 {% endblock %}

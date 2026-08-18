@@ -1,41 +1,46 @@
 {% extends "email/base.html" %}
+{% block preheader %}Order {{ number }} has left us{% if tracking_number %} — {{ tracking_carrier }} {{ tracking_number }}{% endif %}.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="On its way" title="Your order is on its way" %}{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px;">Good news — your order is on its way.</p>
-<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong></p>
+<p style="margin:0 0 18px;">Good news — your order is on its way.</p>
+
+<p style="margin:0;font-size:13px;color:#6b6862;">Order
+  <strong style="color:#1a1a1a;">{{ number }}</strong></p>
 
 {% if tracking_number %}
-<table role="presentation" width="100%" style="background:#f6f6f4;border-radius:8px;margin:0 0 20px;">
-  <tr><td style="padding:14px 16px;">
-    <span style="color:#777;font-size:12px;">Tracking</span><br>
-    <strong>{{ tracking_carrier }}</strong> — {{ tracking_number }}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:18px 0 0;background-color:#f2f8f3;border:1px solid #cfe3d5;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.5;">
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#6b6862;margin:0 0 6px;">Tracking</div>
+    <strong>{{ tracking_carrier }}</strong><br>
+    <span style="font-family:Consolas,Menlo,monospace;font-size:15px;">{{ tracking_number }}</span>
   </td></tr>
 </table>
 {% endif %}
 
 {% include "email/_order_items.html" %}
 
-{% if pickup_centre %}
-<p style="margin:24px 0 4px;font-weight:600;">Collect from</p>
-<p style="margin:0;color:#555;">
-  {{ pickup_centre.name }}<br>
-  {{ pickup_centre.address }}
-</p>
-<p style="margin:8px 0 0;color:#555;">
-  We&rsquo;ll let you know when it&rsquo;s ready — bring your order number
-  (<strong>{{ number }}</strong>) and a photo ID when you collect.
-</p>
-{% else %}
-<p style="margin:24px 0 4px;font-weight:600;">Delivering to</p>
-<p style="margin:0;color:#555;">
-  {% include "email/_address.html" with address=shipping_address %}
-</p>
-{% endif %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:24px 0 0;background-color:#faf7f2;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;">
+    {% if pickup_centre %}
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#6b6862;margin:0 0 8px;">Collect from</div>
+    {{ pickup_centre.name }}<br>
+    <span style="color:#6b6862;">{{ pickup_centre.address }}</span>
+    <p style="margin:10px 0 0;color:#6b6862;">We&rsquo;ll let you know when it&rsquo;s ready —
+      bring your order number (<strong style="color:#1a1a1a;">{{ number }}</strong>) and a
+      photo ID when you collect.</p>
+    {% else %}
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#6b6862;margin:0 0 8px;">Delivering to</div>
+    {% include "email/_address.html" with address=shipping_address %}
+    {% endif %}
+  </td></tr>
+</table>
 
-<p style="margin:24px 0 0;">
-  <a href="{{ tracking_url }}"
-     style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
-            padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
-    Track your order
-  </a>
-</p>
+<div style="margin:28px 0 0;">
+  {% include "email/_button.html" with url=tracking_url label="Track your order" only %}
+</div>
 {% endblock %}

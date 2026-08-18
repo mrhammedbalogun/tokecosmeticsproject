@@ -1,18 +1,27 @@
 {% extends "email/base.html" %}
+{% block preheader %}Your affiliate payout of {{ amount }} has been sent.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Payout sent" title="Your payout is on its way" %}{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px;">Hi{% if first_name %} {{ first_name }}{% endif %},</p>
+<p style="margin:0 0 6px;">Hi{% if first_name %} {{ first_name }}{% endif %}, we've sent
+  your affiliate payout of</p>
+<p style="margin:0 0 22px;font-family:Georgia,'Times New Roman',serif;font-size:34px;
+   line-height:1.1;color:#1c7a3e;">{{ amount }}</p>
 
-<p style="margin:0 0 8px;">We've sent your affiliate payout of</p>
-<p style="margin:0 0 20px;font-size:28px;font-weight:600;color:#145f30;">{{ amount }}</p>
-
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:#f6f6f4;border-radius:8px;padding:16px;width:100%;">
-  <tr><td style="font-size:14px;line-height:1.7;color:#555;">
-    To: {{ bank_name }} <span style="font-family:monospace;">{{ account_masked }}</span><br>
-    Reference: <span style="font-family:monospace;">{{ reference }}</span>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#faf7f2;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.7;color:#1a1a1a;">
+    <span style="color:#6b6862;">To</span> {{ bank_name }}
+    <span style="font-family:Consolas,Menlo,monospace;">{{ account_masked }}</span><br>
+    <span style="color:#6b6862;">Reference</span>
+    <span style="font-family:Consolas,Menlo,monospace;">{{ reference }}</span>
   </td></tr>
 </table>
 
-<p style="margin:0 0 16px;color:#555;">Depending on your bank it can take a few working days to land.</p>
+<p style="margin:0 0 22px;color:#6b6862;">Depending on your bank it can take a few working
+  days to land.</p>
 
-<p style="margin:24px 0 0;color:#777;font-size:13px;">Thank you for sharing Toke Cosmetics.</p>
+{% include "email/_button.html" with url=referrals_url label="View your referrals" variant="ghost" only %}
+
+<p style="margin:24px 0 0;color:#6b6862;font-size:13px;">Thank you for sharing Toke Cosmetics.</p>
 {% endblock %}
+{% block footer_note %}You are receiving this because you are a Toke Cosmetics affiliate.{% endblock %}

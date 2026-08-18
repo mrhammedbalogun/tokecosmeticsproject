@@ -1,0 +1,21 @@
+{% comment %}
+The sign-off on every CUSTOMER-facing text part. Included rather than typed out fifteen
+times so the social accounts have one home (`apps/notifications/branding.py`) and adding
+a platform reaches the text and HTML parts together.
+
+THE TEXT PART IS NOT A FORMALITY. Every message here is multipart/alternative, and the
+plain part is what Outlook's reading pane shows on a "plain text" account, what a
+screen reader may read, and what spam filters score when the HTML part looks thin. A
+message whose text part is a stub scores worse than one with none at all.
+
+The contact address is here as well as in the HTML footer, and it is the SAME one
+`send_email` sets as Reply-To — a plain-text reader who cannot click the mailto still has
+somewhere to write to, and it is the inbox the reply button reaches anyway.
+
+`ljust` pads the labels into a column so the URLs line up in a monospaced reader.
+{% endcomment %}--
+{{ brand_name }}
+{{ shop_url }}{% if support_email %}
+{{ support_email }}{% endif %}
+{% for s in socials %}
+{{ s.label|ljust:"10" }} {{ s.url }}{% endfor %}

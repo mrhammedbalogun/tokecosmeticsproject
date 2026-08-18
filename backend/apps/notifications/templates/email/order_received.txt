@@ -23,4 +23,4 @@ Once your transfer lands we'll confirm your order by email.
 Track your order:
   {{ tracking_url }}
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}

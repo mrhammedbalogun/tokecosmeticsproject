@@ -1,17 +1,21 @@
 {% extends "email/base.html" %}
+{% block preheader %}{{ invited_by }} has invited you to the Toke Cosmetics admin as {{ role }}.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Invitation" title="You've been invited to the admin" %}{% endblock %}
 {% block content %}
-  <p>Hi,</p>
-  <p>{{ invited_by }} has invited you to the Toke Cosmetics admin as <strong>{{ role }}</strong>.</p>
-  <p>
-    <a href="{{ invite_url }}"
-       style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
-              padding:12px 20px;border-radius:8px;">Set your password</a>
-  </p>
-  <p style="color:#666;font-size:13px;">
-    This link expires in {{ expires_hours }} hours and can only be used once.
-  </p>
-  <p style="color:#666;font-size:13px;">
-    If you weren't expecting this, ignore this email and tell {{ invited_by }} — the
-    link can be revoked.
-  </p>
+<p style="margin:0 0 22px;">{{ invited_by }} has invited you to the Toke Cosmetics admin
+  as <strong>{{ role }}</strong>.</p>
+
+<div style="margin:0 0 22px;">
+  {% include "email/_button.html" with url=invite_url label="Set your password" width=220 only %}
+</div>
+
+<p style="margin:0 0 10px;color:#6b6862;font-size:13px;">This link expires in
+  {{ expires_hours }} hours and can only be used once.</p>
+<p style="margin:0;color:#6b6862;font-size:13px;">If you weren't expecting this, ignore
+  this email and tell {{ invited_by }} — the link can be revoked.</p>
 {% endblock %}
+{% block socials %}{% endblock %}
+{% block footer_links %}<a href="{{ admin_home_url }}"
+   style="color:#145f30;text-decoration:none;">Open the admin</a>{% endblock %}
+{% block footer_note %}A Toke Cosmetics Admin invitation, sent because {{ invited_by }}
+added this address as a staff user.{% endblock %}

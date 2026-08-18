@@ -5,4 +5,4 @@ Order {{ number }}
 {% include "email/_order_items.txt" %}
 If anything isn't right, just reply to this email and we'll sort it out.
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}

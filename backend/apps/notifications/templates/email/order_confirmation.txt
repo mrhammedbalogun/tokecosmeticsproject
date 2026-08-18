@@ -16,4 +16,4 @@ Track your order:
 
 We'll email you again as soon as it's on its way.
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}

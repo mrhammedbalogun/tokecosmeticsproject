@@ -1,0 +1,29 @@
+{% comment %}
+The social row. Rendered by `_footer.html`; a template suppresses it with an empty
+`{% block socials %}{% endblock %}` (every staff/ops alert does — see base.html).
+
+Accounts and their order come from `apps/notifications/branding.py`, so adding a
+platform is one line there and reaches every mail at once.
+
+ALT TEXT IS THE PLATFORM NAME, and that is load-bearing rather than an accessibility
+footnote. Most clients block remote images until the reader asks for them, so for a
+large share of readers this row IS four words — and because each <img> sits inside its
+<a>, those four words are still four working links to the accounts. "Icon" or
+"social media icon" as alt would have thrown that away.
+
+One <td> per icon rather than one <td> holding four inline images: Word's engine
+collapses horizontal margins between inline images, which would butt the four circles
+against each other in Outlook. Cell padding is the spacing primitive that works.
+{% endcomment %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
+  <tr>
+    {% for s in socials %}
+    <td style="padding:0 5px;">
+      <a href="{{ s.url }}" style="text-decoration:none;">
+        <img src="{{ s.icon }}" alt="{{ s.label }}" width="30" height="30"
+             style="display:block;width:30px;height:30px;border:0;outline:none;">
+      </a>
+    </td>
+    {% endfor %}
+  </tr>
+</table>

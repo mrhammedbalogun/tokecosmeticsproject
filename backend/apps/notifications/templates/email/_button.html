@@ -1,0 +1,50 @@
+{% comment %}
+The one call-to-action button.
+
+    {% include "email/_button.html" with url=tracking_url label="Track your order" %}
+
+Optional: `width` (VML only — see below, default 260) and `variant="ghost"` for a
+secondary action.
+
+WHY THE MSO CONDITIONAL. Word's engine ignores `border-radius` AND collapses the padding
+on an inline <a>, so the plain markup below renders in Outlook as a bare underlined link
+with no green at all. `<v:roundrect>` is VML — Word's own vector language — and is the
+only way to get a filled, rounded, clickable shape there. It needs a FIXED pixel width
+because VML has no shrink-to-fit, hence the `width` parameter; 260 clears the longest
+label these templates use ("Choose a new password") at 15px bold with room to spare.
+
+`<w:anchorlock/>` stops Word turning the centred text into a second, separately-styled
+hyperlink on top of the shape.
+
+The whole thing is wrapped so exactly ONE version renders anywhere: `[if mso]` for Word,
+`[if !mso]><!` for everything else. Without the second guard Outlook paints both and the
+reader gets a button with a stray link under it.
+{% endcomment %}
+{% if variant == "ghost" %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0;">
+  <tr>
+    <td align="center" style="border-radius:8px;border:1px solid #d5cfc3;background-color:#ffffff;">
+      <a href="{{ url }}" style="display:inline-block;padding:12px 22px;
+         font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:bold;
+         color:#1a1a1a;text-decoration:none;">{{ label }}</a>
+    </td>
+  </tr>
+</table>
+{% else %}
+<div>
+  <!--[if mso]>
+  <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word"
+               href="{{ url }}" arcsize="16%" stroke="f" fillcolor="#1c7a3e"
+               style="height:46px;v-text-anchor:middle;width:{{ width|default:260 }}px;">
+    <w:anchorlock/>
+    <center style="color:#ffffff;font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;">{{ label }}</center>
+  </v:roundrect>
+  <![endif]-->
+  <!--[if !mso]><!-- -->
+  <a href="{{ url }}" style="display:inline-block;background-color:#1c7a3e;color:#ffffff;
+     text-decoration:none;padding:14px 28px;border-radius:8px;
+     font-family:Arial,Helvetica,sans-serif;font-size:15px;font-weight:bold;
+     line-height:1;mso-hide:all;">{{ label }}</a>
+  <!--<![endif]-->
+</div>
+{% endif %}

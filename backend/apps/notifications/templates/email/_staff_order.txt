@@ -7,8 +7,10 @@ Notifications screen to check that this address receives mail. ***
 {% for item in items %}  {{ item.quantity }} x {{ item.name }}{% if item.variant %} ({{ item.variant }}){% endif %} — {{ item.line_total }}
 {% endfor %}  Total: {{ grand_total }}
 
-{% if is_pickup %}Collect from{% else %}Deliver to{% endif %}: {{ destination }}
-Method: {{ delivery_option_name|default:"—" }}{% if customer_note %}
+{% if customer_name %}Customer: {{ customer_name }}
+{% endif %}{% if payment_method %}Payment: {{ payment_method }}
+{% endif %}{% if delivery_option_name %}Delivery: {{ delivery_option_name }}
+{% endif %}{% if is_pickup %}Collect from{% else %}Deliver to{% endif %}: {{ destination }}{% if customer_note %}
 Customer note: {{ customer_note }}{% endif %}
 
 Open in admin:

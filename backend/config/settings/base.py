@@ -572,6 +572,26 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Toke Cosmetics <hello@mg
 ANYMAIL = {
     "RESEND_API_KEY": env("RESEND_API_KEY", default=""),
 }
+# Reply-To for every outgoing mail, and the contact address printed in the footer.
+#
+# DEFAULT_FROM_EMAIL sits on the Resend SENDING subdomain (mg.tokecosmetics.com), which
+# has no inbox — so without this the "just reply to this email" that five customer
+# templates promise reaches nobody, silently. `send_email` sets Reply-To on every message.
+#
+# DEFAULTED IN CODE rather than left to the environment: it is a published brand fact, not
+# a secret and not per-environment, and a blank value here is a broken promise in a
+# customer's inbox rather than a loud failure. The env var still overrides — point a
+# staging deploy somewhere else with it.
+#
+# A Reply-To on a different domain from the From address is normal and does not touch
+# SPF/DKIM/DMARC, which authenticate the envelope sender and the From header only.
+EMAIL_REPLY_TO = env("EMAIL_REPLY_TO", default="sales@tokecosmetics.com")
+
+# Origin the email templates load the logo and social icons from. Those files live in
+# `storefront/public/email/` and are served by the storefront's CDN, so the storefront
+# must be deployed BEFORE mail that references them goes out. Override only if the
+# assets move (a bucket, a separate CDN) — see apps/notifications/branding.py.
+EMAIL_ASSET_BASE_URL = env("EMAIL_ASSET_BASE_URL", default="")
 
 # --- Brand ---
 # Shown on gateway-HOSTED checkout pages (Flutterwave/PayPal render these server-side, so

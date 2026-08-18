@@ -1,0 +1,36 @@
+{% comment %}
+The eyebrow + headline pair that opens most mails.
+
+    {% include "email/_heading.html" with eyebrow="Order confirmed" title="Thanks — we're packing it now" %}
+
+Both are optional; pass only what a given mail needs. `eyebrow` is the small green caps
+line that says WHAT KIND of mail this is at a glance, `title` the serif sentence that
+says what happened. Kept in one partial rather than written per template so the type
+scale, the colours and the gold rule cannot drift across twenty files.
+
+`white-space:nowrap` on the eyebrow, because the table it sits in shrink-wraps to its
+content and a two-word label ("Admin sign-in") was breaking mid-hyphen into "ADMIN SIGN-"
+/ "IN" at 11px caps — which reads as a typo, not a label. Keep eyebrows to two short
+words so the nowrap cannot push the card sideways on a narrow phone.
+
+The gold hairline under the eyebrow is a <td> with a background colour and a fixed
+height, not a `border-bottom` on the text: Word's engine collapses a 1px border on an
+inline element to nothing at some zoom levels, and this renders identically everywhere.
+{% endcomment %}
+{% if eyebrow %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 14px;">
+  <tr>
+    <td style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;
+               letter-spacing:1.5px;text-transform:uppercase;color:#1c7a3e;
+               white-space:nowrap;padding:0 0 8px;">{{ eyebrow }}</td>
+  </tr>
+  <tr>
+    <td height="2" style="height:2px;line-height:2px;font-size:2px;width:34px;
+               background-color:#c9a227;">&nbsp;</td>
+  </tr>
+</table>
+{% endif %}
+{% if title %}
+<h1 class="sm-title" style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;
+    font-size:28px;line-height:1.25;font-weight:normal;color:#1a1a1a;">{{ title }}</h1>
+{% endif %}

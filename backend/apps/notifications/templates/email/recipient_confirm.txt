@@ -16,4 +16,4 @@ The link expires in 7 days. If it has, ask whoever added you to send another.
 Not expecting this? Ignore this email and nothing will be sent. Without a confirmation
 the address stays inactive.
 
-— Toke Cosmetics
+{% include "email/_footer_internal.txt" with footer_note="Sent once, to check this address wants Toke Cosmetics order alerts. Ignore it and nothing further is sent." %}

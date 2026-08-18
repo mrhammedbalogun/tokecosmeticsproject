@@ -9,4 +9,4 @@ It expires in {{ expires_minutes }} minutes and can be used once.
 If you didn't just try to sign in to the admin, someone else has your password.
 Change it now and tell the site owner.
 
-— Toke Cosmetics
+{% include "email/_footer_internal.txt" with footer_note="A Toke Cosmetics Admin security email. Codes like this one cannot be switched off." %}

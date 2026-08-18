@@ -1,13 +1,40 @@
-{% if is_preview %}<p style="padding:12px;border-radius:8px;background:#eef4ff;border:1px solid #c9d8f0;">
-<strong>This is a test.</strong> The numbers below are made up — it was sent from the
-admin's Email Notifications screen to check that this address receives mail.</p>
-{% endif %}{% if newly_low and not is_first %}<h2>{{ newly_low|length }} newly low</h2>
-<ul>
-{% for r in newly_low %}<li><strong>{{ r.sku }}</strong> @ {{ r.warehouse }} — {{ r.available }} available</li>
-{% endfor %}</ul>
+{% extends "email/base.html" %}
+{% comment %}
+NOW EXTENDS THE SHELL. This template and `gig_wallet_low` used to be bare fragments — no
+<html>, no <body>, no branding — because they predate the notifications app and were only
+ever sent to an address with no inbox (see events.py). A raw fragment is at the mercy of
+whatever the client wraps it in, and it is the one shape spam filters most reliably score
+against, which matters for an alert whose entire value is arriving.
+{% endcomment %}
+{% block preheader %}{% if newly_low and not is_first %}{{ newly_low|length }} newly low · {% endif %}{{ rows|length }} item{{ rows|length|pluralize }} below threshold.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Stock alert" title="Items need restocking" %}{% endblock %}
+{% block content %}
+{% if is_preview %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#eef4fb;border:1px solid #c9dcf0;border-radius:10px;">
+  <tr><td style="padding:14px 16px;font-size:14px;line-height:1.6;">
+    <strong style="color:#1b4f80;">This is a test.</strong> The numbers below are made up —
+    it was sent from the admin's Email Notifications screen to check that this address
+    receives mail.
+  </td></tr>
+</table>
 {% endif %}
-<h2>{% if is_first %}Low stock{% else %}Everything currently low{% endif %}</h2>
-<ul>
-{% for r in rows %}<li><strong>{{ r.sku }}</strong> @ {{ r.warehouse }} — {{ r.available }} available</li>
-{% endfor %}</ul>
-<p style="color:#777;font-size:13px;">You are only sent this when the list changes — no news means no message.</p>
+
+{% if newly_low and not is_first %}
+<div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+            color:#8a1c1c;margin:0 0 10px;">{{ newly_low|length }} newly low</div>
+{% include "email/_stock_rows.html" with stock_rows=newly_low %}
+{% endif %}
+
+<div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+            color:#6b6862;margin:26px 0 10px;">{% if is_first %}Low stock{% else %}Everything currently low{% endif %}</div>
+{% include "email/_stock_rows.html" with stock_rows=rows %}
+
+<p style="margin:26px 0 0;color:#6b6862;font-size:13px;">You are only sent this when the
+  list changes — no news means no message.</p>
+{% endblock %}
+{% block socials %}{% endblock %}
+{% block footer_links %}<a href="{{ admin_home_url }}"
+   style="color:#145f30;text-decoration:none;">Open the admin</a>{% endblock %}
+{% block footer_note %}An internal Toke Cosmetics alert. This address is subscribed to
+<strong>Low stock</strong> on the admin's Email Notifications screen.{% endblock %}

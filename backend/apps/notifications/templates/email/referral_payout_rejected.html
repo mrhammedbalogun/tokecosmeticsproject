@@ -1,22 +1,32 @@
 {% extends "email/base.html" %}
+{% block preheader %}We couldn't process your {{ amount }} payout — your balance is untouched.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Payout request" title="We couldn't send this one" %}{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px;">Hi{% if first_name %} {{ first_name }}{% endif %},</p>
+<p style="margin:0 0 18px;">Hi{% if first_name %} {{ first_name }}{% endif %}, we could not
+  process your payout request of <strong>{{ amount }}</strong> this time.</p>
 
-<p style="margin:0 0 16px;">We could not process your payout request of
-  <strong>{{ amount }}</strong> this time.</p>
-
-<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;background:#f6f6f4;border-radius:8px;padding:16px;width:100%;">
-  <tr><td style="font-size:14px;line-height:1.7;color:#555;">{{ customer_message }}</td></tr>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#faf7f2;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;color:#1a1a1a;">{{ customer_message }}</td></tr>
 </table>
 
-<p style="margin:0 0 16px;">Your balance has <strong>not</strong> been lost. The
-  {{ amount }} is back in your available {{ currency }} balance, and you can request it
-  again once this is sorted out.</p>
+{% comment %}
+"Your money is still there" is the sentence this mail exists to deliver, so it gets the
+green panel rather than a line of body copy. A rejected payout reads as a lost balance,
+and a reader who believes that opens a support ticket at best.
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 22px;background-color:#f2f8f3;border:1px solid #cfe3d5;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;">
+    <div style="font-weight:bold;color:#145f30;margin:0 0 4px;">Nothing has been lost</div>
+    The {{ amount }} is back in your available {{ currency }} balance, and you can request
+    it again once this is sorted out.
+  </td></tr>
+</table>
 
-<p style="margin:0 0 20px;">
-  <a href="{{ referrals_url }}" style="color:#145f30;">View your referrals</a>
-</p>
+{% include "email/_button.html" with url=referrals_url label="View your referrals" variant="ghost" only %}
 
-<p style="margin:24px 0 0;color:#777;font-size:13px;">If that message does not make sense,
-  reply to this email and a person will look.</p>
+<p style="margin:24px 0 0;color:#6b6862;font-size:13px;">If that message does not make
+  sense, reply to this email and a person will look.</p>
 {% endblock %}
+{% block footer_note %}You are receiving this because you are a Toke Cosmetics affiliate.{% endblock %}

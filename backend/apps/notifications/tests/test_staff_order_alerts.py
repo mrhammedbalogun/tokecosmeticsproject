@@ -16,6 +16,7 @@ from apps.notifications.models import NotificationRecipient
 from apps.orders.factories import OrderFactory
 from apps.orders.models import OrderItem
 from apps.orders.state import transition_by_id
+from apps.payments.models import Payment
 
 pytestmark = pytest.mark.django_db
 
@@ -40,7 +41,8 @@ def _order(number="TC-900001", status="pending_payment", **kw):
         # latter and passed while the production code, which had guessed the same wrong
         # names, would have printed nothing but the country for every real order. The
         # same mistake is recorded at the top of `templates/email/_address.txt`.
-        shipping_address={"line1": "1 Awolowo Rd", "area": "Ikoyi",
+        shipping_address={"first_name": "Adaeze", "last_name": "Okonkwo",
+                          "line1": "1 Awolowo Rd", "area": "Ikoyi",
                           "state": "Lagos", "country_code": "NG"},
         **kw,
     )
@@ -135,7 +137,9 @@ def test_the_staff_email_carries_no_street_address_or_phone(
     body = staff_mail.body + "".join(a[0] for a in staff_mail.alternatives)
     assert "1 Awolowo Rd" not in body
     assert "+2348012345678" not in body
-    # But it must say enough to be useful.
+    # But it must say enough to be useful. The NAME is in, deliberately (owner, 2026-08-18)
+    # — it is what is written on the parcel — while the street line and phone stay out.
+    assert "Adaeze Okonkwo" in body
     assert "Ikoyi" in body
     assert "https://admin.example.com/orders/TC-900001" in body
 
@@ -521,7 +525,11 @@ def test_a_line_with_no_picture_still_renders(django_capture_on_commit_callbacks
     staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
     html = "".join(a[0] for a in staff_mail.alternatives)
     assert "Shea Butter" in html
-    assert "<img" not in html
+    # No PRODUCT picture — checked by the thumbnail's own dimensions rather than by
+    # "<img" being absent from the document, which it no longer is: the branded shell
+    # (`templates/email/base.html`) carries the Toke logo and the social icons on every
+    # mail. `52x52` is the line-item thumbnail and nothing else in the mail uses it.
+    assert 'width="52" height="52"' not in html
 
 
 def test_an_old_order_without_a_snapshot_resolves_its_picture_live(
@@ -540,3 +548,103 @@ def test_an_old_order_without_a_snapshot_resolves_its_picture_live(
 
     staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
     assert picture.thumbnail.name in "".join(a[0] for a in staff_mail.alternatives)
+
+
+# ── WHAT THE PACKER NEEDS AT A GLANCE (owner, 2026-08-18) ───────────────────────────
+# Customer, payment method and delivery method were the three facts that sent whoever
+# reads this alert into the admin. Two were absent from the mail entirely.
+
+
+def test_the_alert_names_the_customer_the_payment_and_the_delivery_method(
+    django_capture_on_commit_callbacks,
+):
+    _subscribe()
+    order = _order()
+    Payment.objects.create(
+        order=order, gateway="paystack", amount="25000.00", currency=order.currency,
+        status="succeeded", idempotency_key="idem-name-1",
+    )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    html = "".join(a[0] for a in staff_mail.alternatives)
+    for body in (html, staff_mail.body):
+        assert "Adaeze Okonkwo" in body
+        # The LABEL, not the gateway code — the same words the customer saw at checkout.
+        assert "Card / Paystack" in body
+        assert "paystack" not in body
+        assert "Lagos Island Same-Day" in body
+
+
+def test_a_settled_payment_beats_a_newer_failed_one(django_capture_on_commit_callbacks):
+    """An order can carry a failed card attempt and a transfer that worked, or a retry
+    through a second gateway. "Most recent" would name the gateway that did NOT take the
+    money — which is the one answer that sends somebody hunting the wrong bank feed."""
+    _subscribe()
+    order = _order()
+    Payment.objects.create(
+        order=order, gateway="bank_transfer", amount="25000.00", currency=order.currency,
+        status="succeeded", idempotency_key="idem-settled",
+    )
+    Payment.objects.create(
+        order=order, gateway="paystack", amount="25000.00", currency=order.currency,
+        status="failed", idempotency_key="idem-failed-later",
+    )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    html = "".join(a[0] for a in staff_mail.alternatives)
+    assert "Bank transfer" in html
+    assert "Paystack" not in html
+
+
+def test_a_freight_payment_never_answers_how_the_order_was_paid(
+    django_capture_on_commit_callbacks,
+):
+    """`purpose="freight"` is a separate charge for shipping. Naming its gateway here
+    would answer the question with the wrong payment entirely."""
+    _subscribe()
+    order = _order()
+    Payment.objects.create(
+        order=order, gateway="bank_transfer", amount="25000.00", currency=order.currency,
+        status="succeeded", purpose="goods", idempotency_key="idem-goods",
+    )
+    Payment.objects.create(
+        order=order, gateway="paystack", amount="3000.00", currency=order.currency,
+        status="succeeded", purpose="freight", idempotency_key="idem-freight",
+    )
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    html = "".join(a[0] for a in staff_mail.alternatives)
+    assert "Bank transfer" in html
+    assert "Paystack" not in html
+
+
+def test_an_order_with_no_name_in_its_snapshot_drops_the_row(
+    django_capture_on_commit_callbacks,
+):
+    """Migrated WooCommerce orders can carry a snapshot with no name. The row has to
+    disappear rather than print a blank or an email address."""
+    _subscribe()
+    order = _order()
+    # `_order` pins a snapshot WITH a name, so strip it here rather than fight the
+    # factory's kwargs — what matters is the state at the moment the alert renders.
+    order.shipping_address = {"line1": "1 Awolowo Rd", "area": "Ikoyi",
+                              "state": "Lagos", "country_code": "NG"}
+    order.billing_address = {}
+    order.save(update_fields=["shipping_address", "billing_address"])
+
+    with django_capture_on_commit_callbacks(execute=True):
+        transition_by_id(order.pk, "processing")
+
+    staff_mail = next(m for m in mail.outbox if m.to == ["packing@x.com"])
+    html = "".join(a[0] for a in staff_mail.alternatives)
+    assert ">Customer</td>" not in html
+    assert "buyer@x.com" not in html

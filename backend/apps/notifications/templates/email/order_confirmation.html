@@ -1,33 +1,49 @@
 {% extends "email/base.html" %}
+{% block preheader %}Order {{ number }} is confirmed — we're packing it now.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Order confirmed" title="Your order is confirmed" %}{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px;">Thanks for your order — we've received your payment and we're getting it ready.</p>
-<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }}</p>
+{% comment %}
+The HEADLINE stays constant and the GREETING carries the name, rather than the other way
+round. `first_name` comes off the shipping-address snapshot and is legitimately blank for
+guest orders typed without one, and a headline that reads "Thanks, — your order is
+confirmed" on those is worse than one that never tried. Inside a sentence the same
+absence closes up cleanly.
+{% endcomment %}
+<p style="margin:0 0 18px;">{% if first_name %}Hi {{ first_name }} — thanks{% else %}Thanks{% endif %} for your order — we've received your payment and we're
+  getting it ready.</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px;">
+  <tr>
+    <td style="font-size:13px;color:#6b6862;">Order
+      <strong style="color:#1a1a1a;">{{ number }}</strong>
+      <span style="color:#cfc7b8;">&nbsp;&middot;&nbsp;</span>placed {{ placed_at }}</td>
+  </tr>
+</table>
 
 {% include "email/_order_items.html" %}
 
-{% if pickup_centre %}
-<p style="margin:24px 0 4px;font-weight:600;">Collect from</p>
-<p style="margin:0;color:#555;">
-  {{ pickup_centre.name }}<br>
-  {{ pickup_centre.address }}
-</p>
-<p style="margin:8px 0 0;color:#555;">
-  Bring your order number (<strong>{{ number }}</strong>) and a photo ID when you collect.
-</p>
-{% else %}
-<p style="margin:24px 0 4px;font-weight:600;">Delivering to</p>
-<p style="margin:0;color:#555;">
-  {% include "email/_address.html" with address=shipping_address %}
-</p>
-{% endif %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:24px 0 0;background-color:#faf7f2;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;">
+    {% if pickup_centre %}
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#6b6862;margin:0 0 8px;">Collect from</div>
+    {{ pickup_centre.name }}<br>
+    <span style="color:#6b6862;">{{ pickup_centre.address }}</span>
+    <p style="margin:10px 0 0;color:#6b6862;">Bring your order number
+      (<strong style="color:#1a1a1a;">{{ number }}</strong>) and a photo ID when you collect.</p>
+    {% else %}
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#6b6862;margin:0 0 8px;">Delivering to</div>
+    {% include "email/_address.html" with address=shipping_address %}
+    {% endif %}
+  </td></tr>
+</table>
 
-<p style="margin:24px 0 0;">
-  <a href="{{ tracking_url }}"
-     style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
-            padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
-    Track your order
-  </a>
-</p>
+<div style="margin:28px 0 0;">
+  {% include "email/_button.html" with url=tracking_url label="Track your order" only %}
+</div>
 
-<p style="margin:20px 0 0;color:#777;font-size:13px;">We'll email you again as soon as it's on its way.</p>
+<p style="margin:18px 0 0;color:#6b6862;font-size:13px;">We'll email you again as soon as
+  it's on its way.</p>
 {% endblock %}

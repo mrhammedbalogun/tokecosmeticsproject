@@ -9,4 +9,4 @@ confirmed by then, the stock is released and the customer is told the order laps
 even if their money has already left their account. ***
 
 {% include "email/_staff_order.txt" %}
-— Toke Cosmetics admin
+{% include "email/_footer_internal.txt" with footer_note="This address is subscribed to the Order awaiting bank transfer alert on the admin Email Notifications screen." %}

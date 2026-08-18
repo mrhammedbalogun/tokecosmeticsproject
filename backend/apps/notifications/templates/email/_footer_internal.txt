@@ -1,0 +1,8 @@
+{% comment %}
+The sign-off for STAFF and OPS text parts. Deliberately not `_footer.txt`: "follow us on
+TikTok" under a low-stock alert is noise for the person it is addressed to, and the line
+that matters to them instead is which subscription produced the mail and where to turn it
+off. Takes `footer_note` from the template.
+{% endcomment %}--
+{{ brand_name }} admin
+{{ footer_note|default:"An internal alert. Manage who receives it on the admin's Email Notifications screen." }}

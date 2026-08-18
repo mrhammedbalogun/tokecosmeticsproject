@@ -34,39 +34,51 @@ Sizing: `src` is the 256px square thumbnail (~20KB), never the catalogue origina
 says and nothing resizes it in between, so pointing this at the original would cost the
 reader ~1.6MB to paint three 64px squares — on every order, for every recipient.
 {% endcomment %}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;">
+{% comment %}
+A label above the table, because the block below opens with a photograph and a price and
+nothing says what it is until you have read three rows of it.
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:22px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;">
+  <tr>
+    <td colspan="3" style="padding:0 0 10px;font-size:11px;font-weight:bold;letter-spacing:1.2px;
+        text-transform:uppercase;color:#6b6862;border-bottom:2px solid #e7e2d8;">Your order</td>
+  </tr>
   {% for item in items %}
   <tr>
-    <td width="72" style="padding:10px 12px 10px 0;border-bottom:1px solid #eee;vertical-align:top;">
+    <td width="72" style="padding:12px 12px 12px 0;border-bottom:1px solid #efeae0;vertical-align:top;">
       {% if item.image %}
       <img src="{{ item.image }}" alt="{{ item.image_alt }}" width="64" height="64"
            style="display:block;width:64px;height:64px;border-radius:8px;
-                  border:1px solid #eee;object-fit:cover;">
+                  border:1px solid #e7e2d8;object-fit:cover;">
       {% else %}
-      <div style="width:64px;height:64px;border-radius:8px;background:#f2f2f0;">&nbsp;</div>
+      <div style="width:64px;height:64px;border-radius:8px;background:#f5f1e9;">&nbsp;</div>
       {% endif %}
     </td>
-    <td style="padding:10px 0;border-bottom:1px solid #eee;vertical-align:top;">
-      {{ item.quantity }} &times; {{ item.name }}{% if item.variant %}<br>
-      <span style="color:#777;font-size:12px;">{{ item.variant }}</span>{% endif %}
+    <td style="padding:12px 0;border-bottom:1px solid #efeae0;vertical-align:top;line-height:1.5;">
+      <span style="color:#1a1a1a;">{{ item.name }}</span>{% if item.variant %}<br>
+      <span style="color:#6b6862;font-size:12px;">{{ item.variant }}</span>{% endif %}<br>
+      <span style="color:#6b6862;font-size:12px;">Qty {{ item.quantity }}</span>
     </td>
-    <td align="right" style="padding:10px 0;border-bottom:1px solid #eee;white-space:nowrap;vertical-align:top;">
-      {{ item.line_total }}
-    </td>
+    <td align="right" style="padding:12px 0;border-bottom:1px solid #efeae0;white-space:nowrap;
+        vertical-align:top;">{{ item.line_total }}</td>
   </tr>
   {% endfor %}
-  <tr><td colspan="2" style="padding:8px 12px 8px 0;">Subtotal</td>
-      <td align="right" style="padding:8px 0;white-space:nowrap;">{{ subtotal }}</td></tr>
+  <tr><td colspan="2" style="padding:12px 12px 3px 0;color:#6b6862;">Subtotal</td>
+      <td align="right" style="padding:12px 0 3px;white-space:nowrap;">{{ subtotal }}</td></tr>
   {% if discount_total %}
-  <tr><td colspan="2" style="padding:2px 12px 2px 0;">Discount</td>
-      <td align="right" style="padding:2px 0;white-space:nowrap;">-{{ discount_total }}</td></tr>
+  <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Discount</td>
+      <td align="right" style="padding:3px 0;white-space:nowrap;color:#1c7a3e;">&minus;&nbsp;{{ discount_total }}</td></tr>
   {% endif %}
-  <tr><td colspan="2" style="padding:2px 12px 2px 0;">Delivery <span style="color:#777;">({{ delivery_option_name }})</span></td>
-      <td align="right" style="padding:2px 0;white-space:nowrap;">{{ shipping_total }}</td></tr>
+  <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Delivery
+        <span style="color:#8a857c;">({{ delivery_option_name }})</span></td>
+      <td align="right" style="padding:3px 0;white-space:nowrap;">{{ shipping_total }}</td></tr>
   {% if tax_total %}
-  <tr><td colspan="2" style="padding:2px 12px 2px 0;">Tax</td>
-      <td align="right" style="padding:2px 0;white-space:nowrap;">{{ tax_total }}</td></tr>
+  <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Tax</td>
+      <td align="right" style="padding:3px 0;white-space:nowrap;">{{ tax_total }}</td></tr>
   {% endif %}
-  <tr><td colspan="2" style="padding:8px 12px 8px 0;font-weight:600;border-top:2px solid #1a1a1a;">Total</td>
-      <td align="right" style="padding:8px 0;font-weight:600;white-space:nowrap;border-top:2px solid #1a1a1a;">{{ grand_total }}</td></tr>
+  <tr><td colspan="2" style="padding:12px 12px 0 0;font-size:16px;font-weight:bold;
+        border-top:2px solid #1a1a1a;">Total</td>
+      <td align="right" style="padding:12px 0 0;font-size:16px;font-weight:bold;
+        white-space:nowrap;border-top:2px solid #1a1a1a;">{{ grand_total }}</td></tr>
 </table>

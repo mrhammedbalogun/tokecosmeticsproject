@@ -90,6 +90,11 @@ def enqueue_payout_paid(request_pk: int) -> None:
             # money went) and an email is not the place for it.
             "account_masked": f"•••• {account[-4:]}" if len(account) > 4 else account,
             "reference": req.reference,
+            # Same reasoning as the rejection mail's: built from settings so dev, staging
+            # and production each send people to their own storefront. The paid mail is
+            # the one an affiliate is most likely to act on ("what's my balance now?"),
+            # so it carries the link too.
+            "referrals_url": f"{settings.FRONTEND_URL.rstrip('/')}/account/referrals",
         },
     )
 

@@ -10,3 +10,5 @@ paid, the parcel is packed, and the create-waybill button will refuse.
 Fund the wallet with GIG, then this alert re-arms automatically once the balance is back
 above the threshold. You are only sent this when the balance CROSSES into low — no
 repeat while it stays low.
+
+{% include "email/_footer_internal.txt" with footer_note="This address is subscribed to the GIG wallet low alert on the admin Email Notifications screen." %}

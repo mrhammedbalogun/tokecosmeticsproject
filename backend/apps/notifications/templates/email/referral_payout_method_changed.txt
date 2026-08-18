@@ -12,5 +12,5 @@ If it wasn't, someone may have access to your account. Change your password
 straight away at {{ security_url }} and reply to
 this email so we can put your payouts on hold.
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}
 {% endautoescape %}

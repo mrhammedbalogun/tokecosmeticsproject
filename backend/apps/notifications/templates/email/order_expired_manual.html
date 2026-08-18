@@ -1,24 +1,39 @@
 {% extends "email/base.html" %}
+{% block preheader %}The hold on order {{ number }} has lapsed. Already paid? Reply and we'll honour it.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Order expired" title="We had to release your items" %}{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px;">We were holding the items on your order while we waited for your bank transfer. That hold has now lapsed and the items have gone back into stock.</p>
-<p style="margin:0 0 16px;color:#777;font-size:13px;">Order <strong style="color:#1a1a1a;">{{ number }}</strong> · placed {{ placed_at }}</p>
+<p style="margin:0 0 18px;">We were holding the items on your order while we waited for
+  your bank transfer. That hold has now lapsed and the items have gone back into stock.</p>
 
-<table role="presentation" width="100%" style="background:#fff4f4;border-radius:8px;margin:0 0 20px;">
-  <tr><td style="padding:16px;">
-    <div style="font-weight:600;margin-bottom:10px;color:#b00020;">Already sent the money?</div>
-    <p style="margin:0 0 10px;font-size:14px;">
-      Please <strong>reply to this email and quote {{ number }}</strong>. Your transfer may already have reached us and simply not been matched to this order yet.
-      <strong>We will honour your order</strong> — or refund you in full if we can no longer supply it.
-    </p>
-    <p style="margin:0;font-size:13px;color:#555;">Please don't send the transfer again.</p>
+<p style="margin:0 0 20px;font-size:13px;color:#6b6862;">Order
+  <strong style="color:#1a1a1a;">{{ number }}</strong>
+  <span style="color:#cfc7b8;">&nbsp;&middot;&nbsp;</span>placed {{ placed_at }}</p>
+
+{% comment %}
+This panel is the whole point of the mail and it is red on purpose. The expensive case is
+the customer whose money HAS left their account and who reads "expired" as "cancelled" —
+they either send it twice or write it off and never shop here again. It therefore sits
+above every other word of explanation.
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#fdf3f2;border:1px solid #f0cfc9;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;">
+    <div style="font-weight:bold;color:#8a1c1c;margin:0 0 8px;">Already sent the money?</div>
+    <p style="margin:0 0 10px;">Please <strong>reply to this email and quote {{ number }}</strong>.
+      Your transfer may already have reached us and simply not been matched to this order
+      yet. <strong>We will honour your order</strong> — or refund you in full if we can no
+      longer supply it.</p>
+    <p style="margin:0;color:#6b6862;">Please don't send the transfer again.</p>
   </td></tr>
 </table>
 
-<p style="margin:0 0 20px;color:#555;">If you haven't paid, there's nothing to do: nothing was charged, and no payment will be taken. You're welcome to place the order again at any time.</p>
+<p style="margin:0 0 4px;color:#6b6862;">If you haven't paid, there's nothing to do:
+  nothing was charged, and no payment will be taken. You're welcome to place the order
+  again at any time.</p>
 
 {% include "email/_order_items.html" %}
 
-<p style="margin:24px 0 0;">
-  <a href="{{ tracking_url }}" style="color:#1a1a1a;font-size:13px;">View your order</a>
-</p>
+<div style="margin:28px 0 0;">
+  {% include "email/_button.html" with url=tracking_url label="View your order" variant="ghost" only %}
+</div>
 {% endblock %}

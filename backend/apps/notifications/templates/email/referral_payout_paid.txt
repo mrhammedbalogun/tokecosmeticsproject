@@ -9,5 +9,5 @@ Depending on your bank it can take a few working days to land.
 
 Thank you for sharing Toke Cosmetics.
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}
 {% endautoescape %}

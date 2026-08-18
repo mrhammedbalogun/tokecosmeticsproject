@@ -8,4 +8,4 @@ Order {{ number }} — placed {{ placed_at }}
 {% include "email/_order_items.txt" %}
 If you have any questions, just reply to this email.
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}

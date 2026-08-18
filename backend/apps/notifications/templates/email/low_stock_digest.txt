@@ -9,3 +9,5 @@ Email Notifications screen to check that this address receives mail. ***
 {% for r in rows %}- {{ r.sku }} @ {{ r.warehouse }}: {{ r.available }} available
 {% endfor %}
 You are only sent this when the list changes — no news means no message.
+
+{% include "email/_footer_internal.txt" with footer_note="This address is subscribed to the Low stock alert on the admin Email Notifications screen." %}

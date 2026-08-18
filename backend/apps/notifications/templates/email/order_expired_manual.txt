@@ -15,4 +15,4 @@ taken. You're welcome to place the order again at any time.
 Your order:
   {{ tracking_url }}
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}

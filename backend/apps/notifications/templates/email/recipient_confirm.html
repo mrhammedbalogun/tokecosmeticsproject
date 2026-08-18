@@ -1,27 +1,30 @@
 {% extends "email/base.html" %}
+{% block preheader %}Confirm {{ address }} to start receiving {{ event_label }} alerts. Nothing is sent until you do.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Confirm this address" title="Do you want these alerts?" %}{% endblock %}
 {% block content %}
-<p style="margin:0 0 16px;font-size:17px;font-weight:600;">Confirm this address</p>
-<p style="margin:0 0 16px;">
-  Someone at Toke Cosmetics added <strong>{{ address }}</strong> to receive
-  <strong>{{ event_label }}</strong> notifications.
-</p>
-<p style="margin:0 0 20px;color:#555;">{{ event_description }}</p>
-<p style="margin:0 0 20px;">
-  These emails contain order details — what was bought, the total, and the town it is
-  going to. They will only start once you confirm.
-</p>
-<p style="margin:0 0 24px;">
-  <a href="{{ confirm_url }}"
-     style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
-            padding:12px 20px;border-radius:8px;font-weight:600;font-size:14px;">
-    Yes, send me these
-  </a>
-</p>
-<p style="margin:0 0 8px;color:#777;font-size:13px;">
-  The link expires in 7 days. If it has, ask whoever added you to send another.
-</p>
-<p style="margin:0;color:#777;font-size:13px;">
-  <strong>Not expecting this?</strong> Ignore this email and nothing will be sent. Without
-  a confirmation the address stays inactive.
-</p>
+<p style="margin:0 0 18px;">Someone at Toke Cosmetics added <strong>{{ address }}</strong>
+  to receive <strong>{{ event_label }}</strong> notifications.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#faf7f2;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;color:#6b6862;">{{ event_description }}</td></tr>
+</table>
+
+<p style="margin:0 0 22px;">These emails contain order details — what was bought, the
+  total, and the town it is going to. They will only start once you confirm.</p>
+
+<div style="margin:0 0 22px;">
+  {% include "email/_button.html" with url=confirm_url label="Yes, send me these" width=220 only %}
+</div>
+
+<p style="margin:0 0 10px;color:#6b6862;font-size:13px;">The link expires in 7 days. If it
+  has, ask whoever added you to send another.</p>
+<p style="margin:0;color:#6b6862;font-size:13px;"><strong style="color:#1a1a1a;">Not
+  expecting this?</strong> Ignore this email and nothing will be sent. Without a
+  confirmation the address stays inactive.</p>
 {% endblock %}
+{% block socials %}{% endblock %}
+{% block footer_links %}<a href="{{ admin_home_url }}"
+   style="color:#145f30;text-decoration:none;">Open the admin</a>{% endblock %}
+{% block footer_note %}Sent once, to check this address wants Toke Cosmetics order alerts.
+Ignore it and nothing further is sent.{% endblock %}

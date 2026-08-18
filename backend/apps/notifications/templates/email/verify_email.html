@@ -1,13 +1,18 @@
 {% extends "email/base.html" %}
+{% block preheader %}Confirm your email address to activate your Toke Cosmetics account.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Welcome" title="Confirm your email address" %}{% endblock %}
 {% block content %}
-  <p>Hi {{ first_name|default:"there" }},</p>
-  <p>Thanks for creating a Toke Cosmetics account. Please confirm your email address to activate it.</p>
-  <p>
-    <a href="{{ verify_url }}"
-       style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;
-              padding:12px 20px;border-radius:8px;">Confirm my email</a>
-  </p>
-  <p style="color:#666;font-size:13px;">Confirming also links any past orders placed with this
-    address to your new account. This link expires in 7 days.</p>
-  <p style="color:#666;font-size:13px;">If you didn't create this account, you can safely ignore this email.</p>
+<p style="margin:0 0 18px;">Hi {{ first_name|default:"there" }}, thanks for creating a
+  Toke Cosmetics account. One tap and it's active.</p>
+
+<div style="margin:0 0 22px;">
+  {% include "email/_button.html" with url=verify_url label="Confirm my email" only %}
+</div>
+
+<p style="margin:0 0 10px;color:#6b6862;font-size:13px;">Confirming also links any past
+  orders placed with this address to your new account. This link expires in 7 days.</p>
+<p style="margin:0;color:#6b6862;font-size:13px;">If you didn't create this account, you
+  can safely ignore this email.</p>
 {% endblock %}
+{% block footer_note %}You are receiving this because this address was used to create an
+account at <a href="{{ shop_url }}" style="color:#8a857c;">tokecosmetics.com</a>.{% endblock %}

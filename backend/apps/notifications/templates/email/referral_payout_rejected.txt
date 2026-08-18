@@ -11,5 +11,5 @@ available balance and you can request it again once this is sorted out.
 
 If that message does not make sense, reply to this email and a person will look.
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}
 {% endautoescape %}

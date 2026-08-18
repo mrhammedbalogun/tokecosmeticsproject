@@ -41,6 +41,10 @@ _ORDER = {
     "currency": "NGN",
     "country": "Nigeria",
     "delivery_option_name": "Sample delivery option",
+    # Obviously-fake, like everything else here: a test send lands next to real alerts and
+    # a plausible name is one somebody eventually packs a box for.
+    "customer_name": "Sample Customer",
+    "payment_method": "Bank transfer",
     "destination": "Ikeja, Lagos, Nigeria",
     "is_pickup": False,
     "customer_note": "This is a test — no such order exists.",
@@ -65,8 +69,8 @@ _PREVIEWS: dict[str, dict] = {
         "is_preview": True,
         # A string, matching what `monitor_gig_wallet` now sends — the real context
         # crosses Celery's JSON serializer and cannot carry a Decimal.
-        "balance": "1000.00",
-        "threshold": 50000,
+        "balance": "1,000.00",
+        "threshold": "50,000",
     },
 }
 

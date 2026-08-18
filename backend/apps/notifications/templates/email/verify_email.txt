@@ -10,4 +10,4 @@ new account.
 
 If you didn't create this account, you can safely ignore this email.
 
-— Toke Cosmetics
+{% include "email/_footer.txt" %}

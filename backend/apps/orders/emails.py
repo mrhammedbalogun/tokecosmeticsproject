@@ -21,6 +21,7 @@ from apps.notifications.staff import notify_staff
 from apps.notifications.tasks import send_email_task
 from apps.orders.models import Order
 from apps.orders.tokens import make_tracking_token
+from apps.payments.labels import gateway_label
 from apps.payments.money import format_money
 
 logger = logging.getLogger(__name__)
@@ -71,6 +72,11 @@ def _context(order: Order) -> dict:
             f"?token={make_tracking_token(order.number)}"
         ),
         "placed_at": order.placed_at.strftime("%d %b %Y"),
+        # Greeting only. Off the shipping-address SNAPSHOT rather than the account, so a
+        # guest checkout still gets a name and a later account rename cannot retroactively
+        # change what an old email said. Legitimately "" — the templates use it inside a
+        # sentence that closes up when it is missing, never in a headline.
+        "first_name": (order.shipping_address or {}).get("first_name") or "",
         "items": _items(order),
         "subtotal": money(order.subtotal),
         "discount_total": money(order.discount_total) if order.discount_total else "",
@@ -163,10 +169,17 @@ def enqueue_refund_processed(order_pk: int, amount: str = "") -> None:
 #    one attribute away from any future edit to this function.
 #
 # So the staff context is built from scratch and carries the LEAST that answers "is
-# there something for me to do?": what was ordered, what it is worth, how it is being
-# delivered, and the town. A staff member who needs the doorstep address logs in — the
-# link is right there in the mail. That keeps a compromised bookkeeper's inbox worth a
-# list of order numbers rather than a customer address book.
+# there something for me to do?": who it is for, what was ordered, what it is worth, how
+# it was paid, how it is being delivered, and the town. A staff member who needs the
+# doorstep address logs in — the link is right there in the mail. That keeps a
+# compromised bookkeeper's inbox worth a list of order numbers and names rather than a
+# customer address book.
+#
+# THE NAME WAS ADDED DELIBERATELY (2026-08-18, owner's request) and is the one place the
+# line moved. It is written on the parcel and said aloud on the phone; a packer who has
+# to open the admin to learn whose box this is has lost the trip the alert exists to
+# save. `_customer_name` explains why it never falls back to the email address, which
+# would have widened this without a decision.
 
 def _staff_local(when) -> str:
     """A timestamp as the person reading it experiences it, or "" for None.
@@ -213,6 +226,18 @@ def _staff_context(order: Order) -> dict:
         "currency": order.currency_id,
         "country": order.country.name,
         "delivery_option_name": order.delivery_option_name,
+        # WHO IT IS FOR. Asked for by the owner (2026-08-18) and a deliberate widening of
+        # the line drawn in the note above: a name is not an address. It is what is
+        # written on the parcel, it is what a customer says on the phone when they chase
+        # an order, and without it staff had to open the admin to answer "whose is this?"
+        # — which is exactly the trip this alert exists to save. The street line, the
+        # phone number and the tracking token stay out.
+        "customer_name": _customer_name(order),
+        # HOW THEY PAID. `bank_transfer` reads very differently from `paystack` on a new
+        # order: one means the money has cleared, the other means somebody must still
+        # match a transfer. Staff were inferring it from which of the two alerts arrived,
+        # which stops working the moment a third payment route exists.
+        "payment_method": _payment_method(order),
         # Town and region only — see the note above on why the street line is absent.
         "destination": _destination_line(order, centre),
         "is_pickup": bool(centre),
@@ -224,6 +249,54 @@ def _staff_context(order: Order) -> dict:
         # single most important thing the mail can say.
         "review_reason": order.review_reason,
     }
+
+
+def _customer_name(order: Order) -> str:
+    """The buyer's name from the address SNAPSHOT, or "" when nobody gave one.
+
+    The snapshot rather than `order.user`: a guest checkout has no user at all, and for
+    one that does, a later account rename would retroactively change who an old alert
+    said the parcel was for. The snapshot is what was written on the box.
+
+    Shipping first, then billing — a "ship to someone else" order should name the person
+    receiving the parcel, which is who the packer and the courier deal with.
+
+    NEVER falls back to `order.email`. An email address is a contact identifier and it is
+    not in this mail today; quietly substituting one for a missing name would widen what
+    a subscribed address holds without anyone deciding to. "" is honest, and the template
+    drops the row.
+    """
+    for snapshot in (order.shipping_address, order.billing_address):
+        parts = (snapshot or {}).get("first_name", ""), (snapshot or {}).get("last_name", "")
+        name = " ".join(part for part in parts if part).strip()
+        if name:
+            return name
+    return ""
+
+
+def _payment_method(order: Order) -> str:
+    """How this order was paid, as a label, or "" when no payment exists yet.
+
+    A SETTLED payment wins over a newer unsettled one. An order can carry several rows —
+    a card attempt that failed and a bank transfer that worked, or a retry through a
+    second gateway (`checkout.py::retry_payment`) — and "most recent" would then name the
+    gateway that did NOT take the money. The succeeded row is the one that answers "how
+    did this money arrive?"; the latest row answers it only while none has succeeded,
+    which is precisely the awaiting-transfer case.
+
+    FREIGHT ROWS ARE EXCLUDED. `purpose="freight"` is a separate charge for shipping
+    (`shipping/services.py::record_freight_receipt`) and naming its gateway here would
+    answer a question nobody asked with the wrong payment entirely.
+
+    Filters in PYTHON, not the ORM: `payments` is prefetched by `_staff_order`, and a
+    `.filter()` on the manager would discard that cache and re-query per alert.
+    """
+    goods = [p for p in order.payments.all() if p.purpose == "goods"]
+    if not goods:
+        return ""
+    settled = [p for p in goods if p.status in ("succeeded", "refunded", "partially_refunded")]
+    chosen = max(settled or goods, key=lambda p: p.created_at)
+    return gateway_label(chosen.gateway)
 
 
 def _destination_line(order: Order, centre) -> str:
@@ -322,6 +395,9 @@ def _staff_order(order_pk: int) -> Order:
     not render, on every one of five emails."""
     return (
         Order.objects.select_related("currency", "country")
-        .prefetch_related("items")
+        # `payments` as well as `items`: the alert names the payment method, and without
+        # the prefetch that is one extra query per alert inside `_notify_safely`'s
+        # try/except — where a slow query is invisible rather than merely slow.
+        .prefetch_related("items", "payments")
         .get(pk=order_pk)
     )

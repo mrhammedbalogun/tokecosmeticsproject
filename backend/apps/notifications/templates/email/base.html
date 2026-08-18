@@ -1,24 +1,201 @@
-<!doctype html>
-<html>
+{% comment %}
+The shell every Toke Cosmetics email renders inside.
+
+── THE BRAND, IN THE TERMS EMAIL CAN ACTUALLY EXPRESS ──────────────────────────────
+Tokens are the storefront's (`storefront/src/app/globals.css`), used literally so an
+order confirmation and the page it was ordered from look like one company:
+
+    beige   #f1eae0   the page behind the card
+    surface #ffffff   the card
+    line    #e7e2d8   hairlines
+    ink     #1a1a1a   body text
+    ink-soft#6b6862   captions, footer
+    accent  #1c7a3e   Toke forest green — the top rule, buttons, links
+    gold    #c9a227   the eyebrow rule (used sparingly, as on the site)
+
+The site's display face is Playfair Display and its body face Inter. NEITHER is used
+here: a webfont needs an @font-face fetch that Outlook, Gmail's web client and Yahoo all
+refuse, so half the recipients would get the fallback anyway and the mail would look like
+two different designs depending on the inbox. Georgia (the closest ubiquitous serif to
+Playfair) and Arial stand in, and every reader gets the same thing.
+
+── WHY THE MARKUP LOOKS LIKE 2003 ──────────────────────────────────────────────────
+Nested tables, inline styles, fixed widths. Outlook 2016+ renders with Word's engine: no
+flexbox, no grid, no float, no `max-width`, no `border-radius`, no `background-image`,
+and it drops most of a <style> block. Everything structural is therefore an inline style
+on a <td>, and the <style> block below carries ONLY the mobile overrides — things that
+degrade to the desktop layout when ignored rather than breaking it.
+
+`_order_items.html` carries the full reasoning for the image rules; the same ones apply
+to the logo and the social icons here (explicit width AND height attributes, matching
+values in `style`, `display:block`, real alt text).
+
+── DARK MODE ───────────────────────────────────────────────────────────────────────
+Declared `light` rather than left to the client, because the logo cannot survive an
+inversion: in the source artwork the "Toké" wordmark is KNOCKED OUT of the green oval
+rather than painted white, so on a dark backdrop the letters take the backdrop's colour
+and the mark reads as a solid blob. `storefront/public/email/logo.png` is flattened onto
+white for the clients that force dark anyway (they invert backgrounds but never repaint
+images), which is why the logo sits inside the white card and not on the beige.
+
+── BLOCKS ──────────────────────────────────────────────────────────────────────────
+  preheader  the grey line the inbox shows after the subject. WRITE ONE IN EVERY
+             TEMPLATE — left empty the client scrapes the first words of the body, which
+             for most of these is a greeting and tells the reader nothing.
+  heading    the eyebrow + serif headline, via
+             `{% include "email/_heading.html" with eyebrow="..." title="..." %}`.
+             Optional — an alert that is all body copy can skip it.
+  content    the body.
+  footer_extra / footer_note  see `_footer.html`.
+  socials       override with an EMPTY block on internal/ops mail — "follow us on
+                TikTok" under a low-stock alert is noise for the person it is addressed to.
+  footer_links  same: the default row is shop navigation (Shop / Your account /
+                Affiliates), which under a staff alert points the reader at the wrong
+                application entirely. Internal mail overrides it with the admin link.
+{% endcomment %}<!doctype html>
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="x-apple-disable-message-reformatting">
+    <meta name="format-detection" content="telephone=no,address=no,email=no,date=no">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <!--[if mso]>
+    <xml><o:OfficeDocumentSettings>
+      <o:AllowPNG/><o:PixelsPerInch>96</o:PixelsPerInch>
+    </o:OfficeDocumentSettings></xml>
+    <![endif]-->
+    <title>{{ brand_name }}</title>
+    <style>
+      :root { color-scheme: light; supported-color-schemes: light; }
+      /* Mobile only. Every rule here is a REFINEMENT — a client that drops the whole
+         block (Outlook desktop, some Gmail configurations) still gets the 600px desktop
+         layout, which is why nothing structural lives in here. */
+      @media only screen and (max-width: 620px) {
+        .sm-w-full { width: 100% !important; max-width: 100% !important; }
+        .sm-pad { padding-left: 20px !important; padding-right: 20px !important; }
+        .sm-title { font-size: 24px !important; line-height: 1.25 !important; }
+        .sm-hide { display: none !important; }
+      }
+    </style>
   </head>
-  <body style="margin:0;background:#f6f6f4;font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+  <body style="margin:0;padding:0;width:100%;background-color:#f1eae0;
+               -webkit-font-smoothing:antialiased;-webkit-text-size-adjust:100%;
+               font-family:Arial,Helvetica,sans-serif;color:#1a1a1a;">
+
+    {% comment %}
+    Preview text. Hidden in the body, read by the inbox list. The run of zero-width
+    joiners after it is the standard padding trick: without it the client keeps
+    scraping real content to fill its preview line and appends the header's alt text.
+    {% endcomment %}
+    <div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;
+                opacity:0;overflow:hidden;mso-hide:all;">
+      {% block preheader %}{% endblock %}
+      &#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;
+    </div>
+
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+           style="background-color:#f1eae0;">
       <tr>
-        <td align="center" style="padding:32px 16px;">
-          {% comment %}
-          560, not 480: the line-item tables gained a 64px picture column and the product
-          name needs room to sit beside it rather than wrapping on every line. Still
-          inside the ~600px that every mail client renders without horizontal scrolling,
-          and inside Outlook's fixed reading pane.
-          {% endcomment %}
-          <table role="presentation" width="560" cellpadding="0" cellspacing="0"
-                 style="background:#ffffff;border-radius:12px;padding:32px;">
-            <tr><td style="font-size:20px;font-weight:600;padding-bottom:16px;">Toke Cosmetics</td></tr>
-            <tr><td style="font-size:15px;line-height:1.6;">{% block content %}{% endblock %}</td></tr>
+        <td align="center" style="padding:32px 12px;">
+
+          <!--[if mso]><table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"><tr><td><![endif]-->
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+                 class="sm-w-full" style="width:600px;max-width:600px;">
+
+            <!-- ── card ─────────────────────────────────────────────────────── -->
+            <tr>
+              <td style="background-color:#ffffff;border:1px solid #e7e2d8;border-radius:14px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+                  {% comment %}
+                  The brand rule. A 4px band of Toke green across the top of the card,
+                  rendered as a <td> with a background COLOUR (not an image, not a
+                  gradient — Outlook drops both) so it survives everywhere. Outlook
+                  ignores the border-radius and squares it off, which is fine: it reads
+                  as a rule either way.
+                  {% endcomment %}
+                  <tr>
+                    <td height="4" style="height:4px;line-height:4px;font-size:4px;
+                        background-color:#1c7a3e;border-radius:13px 13px 0 0;">&nbsp;</td>
+                  </tr>
+
+                  <tr>
+                    <td align="center" class="sm-pad" style="padding:28px 32px 4px;">
+                      <a href="{{ shop_url }}" style="text-decoration:none;">
+                        <img src="{{ logo_url }}" alt="{{ brand_name }}" width="150" height="92"
+                             style="display:block;width:150px;height:92px;border:0;outline:none;">
+                      </a>
+                    </td>
+                  </tr>
+
+                  <tr>
+                    <td class="sm-pad" style="padding:8px 32px 32px;font-family:Arial,Helvetica,sans-serif;
+                        font-size:15px;line-height:1.65;color:#1a1a1a;">
+
+                      {% block heading %}{% endblock %}
+                      {% block content %}{% endblock %}
+
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            {% comment %}
+            Everything below the white card: the social row, the shop links, and the line that tells
+            the reader why this landed in their inbox.
+
+            It sits on the beige page background rather than inside the card on purpose — the card is
+            the message, this is the letterhead's reverse. Text is `ink-soft` (#6b6862) at 12–13px so
+            it reads as secondary without dropping below the ~11px where phones start to render it
+            unreadably small.
+
+            Two hooks for the templates:
+              footer_note   overrides "why you got this". The default is written for a CUSTOMER;
+                            staff and ops alerts say something else entirely, and a wrong line here
+                            is how somebody concludes an internal alert is marketing and unsubscribes
+                            from an order feed.
+              socials       set to an empty block to drop the social row (all staff/ops mail does).
+
+            NO UNSUBSCRIBE LINK, deliberately: every template in this directory is transactional —
+            an order, a payout, a security notice, a sign-in code. There is no marketing mail in this
+            system yet. The day one is added it needs its own base template with a real one-click
+            unsubscribe (List-Unsubscribe header included), not a link bolted on here that would
+            silently offer to switch off order confirmations.
+            {% endcomment %}
+            <tr>
+              <td style="padding:26px 24px 8px;" align="center">
+                {% block socials %}{% include "email/_socials.html" %}{% endblock %}
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:14px 24px 0;font-family:Arial,Helvetica,sans-serif;
+                  font-size:13px;line-height:1.9;color:#6b6862;">
+                {% block footer_links %}{% for link in footer_links %}<a href="{{ link.url }}"
+                   style="color:#145f30;text-decoration:none;white-space:nowrap;">{{ link.label }}</a>{% if not forloop.last %}
+                  <span style="color:#cfc7b8;">&nbsp;&middot;&nbsp;</span>{% endif %}{% endfor %}{% endblock %}
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:16px 24px 0;font-family:Arial,Helvetica,sans-serif;
+                  font-size:12px;line-height:1.7;color:#8a857c;">
+                {% block footer_note %}You are receiving this because you placed an order or created an
+                account at <a href="{{ shop_url }}" style="color:#8a857c;">tokecosmetics.com</a>.{% endblock %}
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding:10px 24px 0;font-family:Arial,Helvetica,sans-serif;
+                  font-size:12px;line-height:1.7;color:#8a857c;">
+                &copy; {% now "Y" %} {{ brand_name }}{% if support_email %} &middot; <a href="mailto:{{ support_email }}"
+                   style="color:#8a857c;">{{ support_email }}</a>{% endif %}
+              </td>
+            </tr>
+
           </table>
+          <!--[if mso]></td></tr></table><![endif]-->
+
         </td>
       </tr>
     </table>

@@ -1,10 +1,38 @@
 {% extends "email/base.html" %}
+{% block preheader %}{{ code }} is your admin sign-in code. It expires in {{ expires_minutes }} minutes.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Admin sign-in" title="Your sign-in code" %}{% endblock %}
 {% block content %}
-  <p>Hi {{ first_name|default:"there" }},</p>
-  <p>Your Toke Cosmetics Admin sign-in code is:</p>
-  <p style="font-size:32px;font-weight:700;letter-spacing:8px;font-family:Consolas,Menlo,monospace;
-            background:#f6f6f4;border-radius:8px;padding:16px 20px;text-align:center;">{{ code }}</p>
-  <p style="color:#666;font-size:13px;">It expires in {{ expires_minutes }} minutes and can be used once.</p>
-  <p style="color:#666;font-size:13px;">If you didn't just try to sign in to the admin, someone else has
-    your password. Change it now and tell the site owner.</p>
+<p style="margin:0 0 20px;">Hi {{ first_name|default:"there" }}, here is your Toke
+  Cosmetics Admin sign-in code.</p>
+
+{% comment %}
+The code is a <td> background, not a styled <div>: Word's engine ignores width and
+padding on a block element, so the tinted plate around the digits would vanish in Outlook
+and leave the code floating. Letter-spacing on the last character adds a trailing gap
+that visually decentres the whole thing, which is what the compensating right padding is
+for.
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#faf7f2;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr>
+    <td align="center" style="padding:22px 20px 22px 28px;font-family:Consolas,Menlo,monospace;
+        font-size:34px;font-weight:bold;letter-spacing:8px;color:#1a1a1a;">{{ code }}</td>
+  </tr>
+</table>
+
+<p style="margin:0 0 10px;color:#6b6862;font-size:13px;">It expires in
+  {{ expires_minutes }} minutes and can be used once.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:16px 0 0;background-color:#fdf3f2;border:1px solid #f0cfc9;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;">
+    <div style="font-weight:bold;color:#8a1c1c;margin:0 0 4px;">Didn't just try to sign in?</div>
+    Then someone else has your password. Change it now and tell the site owner.
+  </td></tr>
+</table>
 {% endblock %}
+{% block socials %}{% endblock %}
+{% block footer_links %}<a href="{{ admin_home_url }}"
+   style="color:#145f30;text-decoration:none;">Open the admin</a>{% endblock %}
+{% block footer_note %}A Toke Cosmetics Admin security email. Codes like this one cannot
+be switched off.{% endblock %}

@@ -1,0 +1,28 @@
+{% comment %}
+One low-stock table, used twice by the digest (the newly-low list and the full list).
+Takes `stock_rows`.
+
+A table rather than the <ul> this used to be: the three facts on each line are a SKU, a
+warehouse and a number, and in a bulleted sentence the numbers land at a different
+horizontal position on every row, so "which of these is worst" cannot be read at a glance.
+Right-aligning the count in its own column is the whole reason to bother.
+
+Zero is coloured red and not merely bold. "0 available" is a different situation from
+"2 available" — it is a product the shop is currently refusing orders for — and it is the
+one row in the list that should be findable without reading.
+{% endcomment %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;">
+  {% for r in stock_rows %}
+  <tr>
+    <td style="padding:9px 12px 9px 0;border-bottom:1px solid #efeae0;vertical-align:top;">
+      <strong>{{ r.sku }}</strong><br>
+      <span style="color:#6b6862;font-size:12px;">{{ r.warehouse }}</span>
+    </td>
+    <td align="right" style="padding:9px 0;border-bottom:1px solid #efeae0;white-space:nowrap;
+        vertical-align:top;font-weight:bold;{% if not r.available %}color:#8a1c1c;{% endif %}">
+      {{ r.available }} <span style="font-weight:normal;color:#6b6862;font-size:12px;">available</span>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
