@@ -229,6 +229,30 @@ export function SignInStep() {
     return <p className="text-sm text-muted">Checking your account…</p>;
   }
 
+  /** The guest-checkout offer card, shown under BOTH the login and register forms.
+   * A visible tinted panel with a real button (Hammed, 2026-08-19 — the original
+   * inline text link was too easy to scroll past, defeating the point of Plan-38).
+   * Outline button, not bg-accent: Sign in / Create account stays the primary
+   * action on the form it belongs to. Same emphasis idiom as AddressStep's
+   * "Complete this address" panel. */
+  const guestOffer = (
+    <div className="border-t border-line pt-4">
+      <div className="rounded-[var(--radius-card)] border border-accent/40 bg-accent/5 p-4">
+        <p className="text-sm font-medium">In a hurry? No account needed.</p>
+        <p className="mt-1 text-sm text-muted">
+          Check out as a guest with just your email and phone number.
+        </p>
+        <button
+          type="button"
+          onClick={() => switchPhase("guest")}
+          className="mt-3 w-full rounded-[var(--radius-card)] border border-accent px-4 py-2.5 text-sm font-medium text-accent transition-colors hover:bg-accent/10"
+        >
+          Continue as guest
+        </button>
+      </div>
+    </div>
+  );
+
   if (phase === "guest") {
     return (
       <form onSubmit={submitGuest} className="space-y-4" noValidate>
@@ -377,17 +401,7 @@ export function SignInStep() {
             Forgot password?
           </Link>
         </p>
-        <p className="border-t border-line pt-3 text-sm text-muted">
-          In a hurry?{" "}
-          <button
-            type="button"
-            onClick={() => switchPhase("guest")}
-            className="font-medium text-accent underline hover:text-accent-strong"
-          >
-            Continue as guest
-          </button>
-          {" "}— just an email and phone number.
-        </p>
+        {guestOffer}
       </form>
     );
   }
@@ -508,6 +522,7 @@ export function SignInStep() {
           Sign in
         </button>
       </p>
+      {guestOffer}
     </form>
   );
 }
