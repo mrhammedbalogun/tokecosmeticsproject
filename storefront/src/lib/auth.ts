@@ -23,6 +23,17 @@ export const REFRESH_MAX_AGE = 60 * 60 * 24 * 14; // 14 days, well under the 30-
 // carts on return, so the only hard limit on cart recall is this cookie's lifetime.
 export const CART_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 
+// The guest-order token (Plan-38) IS a credential: it opens the FULL order view and
+// payment verify for the one order it names. It exists only in this httpOnly cookie —
+// minted on the guest's own checkout 201, stripped from the browser response, never in
+// a gateway return URL (Paystack's dashboard-callback fallback drops our query string,
+// so a URL-borne token would fail exactly the customer who just paid). One cookie, not
+// one per order: a guest placing a second order overwrites it, and the older order is
+// still reachable through its emailed tracking link. 7 days matches the backend
+// GUEST_ORDER_MAX_AGE (orders/tokens.py).
+export const GUEST_ORDER_COOKIE = "guest_order";
+export const GUEST_ORDER_MAX_AGE = 60 * 60 * 24 * 7; // 7 days, matches the token TTL
+
 export interface CookieOptions {
   httpOnly: boolean;
   sameSite: "lax";

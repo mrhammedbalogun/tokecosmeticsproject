@@ -61,12 +61,36 @@ def _address_snapshot(addr: Address) -> dict:
     }
 
 
-def place_order(*, user, country, key: str, cart_id, address_id, delivery_option_id,
-                payment_gateway: str, billing_address_id=None, coupon_code: str = "",
+def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_option_id=None,
+                payment_gateway: str = "", billing_address_id=None, coupon_code: str = "",
                 notes: str = "", expected_total=None, gig_centre_id=None,
-                referral_code: str = "") -> CheckoutResult:
-    # Durable backstop: a payment already exists for this key.
-    existing = Payment.objects.filter(idempotency_key=key, order__user=user).select_related("order").first()
+                referral_code: str = "", guest_email: str = "", guest_phone: str = "",
+                guest_address=None) -> CheckoutResult:
+    """Place an order for an authenticated customer OR a guest (Plan-38).
+
+    Guest path: ``user=None`` with ``guest_email``/``guest_phone`` (validated +
+    E.164-normalised by GuestCheckoutSerializer) and ``guest_address`` — an UNSAVED
+    Address instance; the quoting engine and ``_address_snapshot`` only read fields
+    and forward FKs off it, so no address row is ever written. Billing = shipping
+    for guests, deliberately (v1 ruling, plan-38).
+
+    ``key`` on the guest path is NOT the client's raw Idempotency-Key: the view hands
+    in sha256("guest:{cart_id}:{client_key}"). The durable backstop below matches on
+    the stored key alone for guests — with user=None a filter on ``order__user`` would
+    render ``user IS NULL``, i.e. "any guest order ever placed", letting one guest
+    replay another's key and read back their payment envelope (bank details included).
+    The cart-UUID-namespaced hash is what scopes the lookup instead; the cart UUID is
+    already the guest's whole identity (carts/services.py), so knowing it IS being
+    that guest.
+    """
+    if user is not None:
+        # Durable backstop: a payment already exists for this key, for THIS user.
+        existing = (
+            Payment.objects.filter(idempotency_key=key, order__user=user)
+            .select_related("order").first()
+        )
+    else:
+        existing = Payment.objects.filter(idempotency_key=key).select_related("order").first()
     if existing:
         # If a prior attempt created the order but the gateway initiate failed (5xx), the
         # payment has no SDK material yet (raw_response is set only after a successful
@@ -78,6 +102,8 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         return CheckoutResult(order=existing.order, payment=existing)
 
     with transaction.atomic():
+        # For a guest (user=None) this filter renders `user IS NULL` — exactly the
+        # guest-cart ownership rule (the UUID is the identity, carts/services.py).
         cart = Cart.objects.select_for_update().filter(pk=cart_id, user=user).first()
         if cart is None or cart.status != "active":
             raise CheckoutError("cart_not_active", "Cart is not active.")
@@ -85,12 +111,19 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         if not lines:
             raise CheckoutError("cart_empty", "Cart is empty.")
 
-        address = Address.objects.filter(pk=address_id, user=user).first()
-        if address is None:
-            raise CheckoutError("address_invalid", "Address not found.", http=400)
-        billing = address
-        if billing_address_id:
-            billing = Address.objects.filter(pk=billing_address_id, user=user).first() or address
+        if user is not None:
+            address = Address.objects.filter(pk=address_id, user=user).first()
+            if address is None:
+                raise CheckoutError("address_invalid", "Address not found.", http=400)
+            billing = address
+            if billing_address_id:
+                billing = Address.objects.filter(pk=billing_address_id, user=user).first() or address
+        else:
+            # Guest: the validated, UNSAVED Address instance. Billing = shipping.
+            address = guest_address
+            if address is None:
+                raise CheckoutError("address_invalid", "Address not found.", http=400)
+            billing = address
 
         # Re-validate every line against live catalog + pricing.
         for variant, qty in lines:
@@ -130,8 +163,11 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
         coupon = None
         if coupon_code:
             product_ids = {v.product_id for v, _ in lines}
+            # Guests validate against their submitted email — coupons.py already
+            # falls back to email__iexact for per-user limits when user is None.
+            coupon_email = user.email if user is not None else guest_email
             result = validate_coupon(coupon_code, subtotal_preview, country, user=user,
-                                     email=user.email, item_product_ids=product_ids)
+                                     email=coupon_email, item_product_ids=product_ids)
             if not result.ok:
                 raise CheckoutError(f"coupon_{result.error_code}", "Coupon not valid.", http=400)
             coupon = result.coupon
@@ -164,7 +200,9 @@ def place_order(*, user, country, key: str, cart_id, address_id, delivery_option
             raise CheckoutError("insufficient_stock", str(exc)) from exc
 
         order = Order.objects.create(
-            number=number, user=user, email=user.email, phone=user.phone,
+            number=number, user=user,
+            email=user.email if user is not None else guest_email,
+            phone=user.phone if user is not None else guest_phone,
             country=country, currency=country.currency, status="pending_payment",
             subtotal=totals.subtotal, discount_total=totals.discount,
             shipping_total=totals.delivery, tax_total=totals.tax,
@@ -246,7 +284,8 @@ def _gateway_offered(payment_gateway: str, country):
     return gateway
 
 
-def retry_payment(*, user, order_number: str, payment_gateway: str, key: str) -> CheckoutResult:
+def retry_payment(*, user, order_number: str, payment_gateway: str, key: str,
+                  guest: bool = False) -> CheckoutResult:
     """Open a NEW payment attempt for an order that is still awaiting payment, possibly on
     a different gateway.
 
@@ -266,10 +305,21 @@ def retry_payment(*, user, order_number: str, payment_gateway: str, key: str) ->
     row here would only make our records disagree with the gateway's.
     """
     # Durable backstop, same shape as place_order: a payment already exists for this key.
-    existing = (
-        Payment.objects.filter(idempotency_key=key, order__user=user)
-        .select_related("order").first()
-    )
+    # Guest path (Plan-38): `guest=True` means the caller has ALREADY proven access to
+    # this order via the signed guest-order token, and `key` arrives namespaced as
+    # sha256("guest-pay:{order_number}:{client_key}") — so the backstop matches on the
+    # key scoped to the order's own number. Filtering `order__user=None` here instead
+    # would be the cross-guest replay hole plan-38's dissent review flagged.
+    if guest:
+        existing = (
+            Payment.objects.filter(idempotency_key=key, order__number=order_number)
+            .select_related("order").first()
+        )
+    else:
+        existing = (
+            Payment.objects.filter(idempotency_key=key, order__user=user)
+            .select_related("order").first()
+        )
     if existing:
         # raw_response, not gateway_reference: the reference is persisted before the
         # gateway call, so only the SDK material proves initiate finished (same marker
@@ -278,8 +328,15 @@ def retry_payment(*, user, order_number: str, payment_gateway: str, key: str) ->
             _initiate_payment(existing, existing.order)
         return CheckoutResult(order=existing.order, payment=existing)
 
+    # Guest lookup is by number alone — the token is the credential, and it must keep
+    # working even after the order is claimed by a verifying account (the person
+    # holding the checkout-session cookie and the person who owns that account are
+    # the same customer mid-payment).
+    order_filter = (
+        {"number": order_number} if guest else {"number": order_number, "user": user}
+    )
     order = (
-        Order.objects.filter(number=order_number, user=user)
+        Order.objects.filter(**order_filter)
         .select_related("country", "currency").first()
     )
     if order is None:

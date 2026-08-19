@@ -4,8 +4,18 @@ import { createContext, useCallback, useContext, useMemo, useState, type ReactNo
 /** Steps are numbered 1..5: 1 SignIn, 2 Address, 3 Delivery, 4 Payment, 5 Review. */
 export const TOTAL_STEPS = 5;
 
+/** The inline guest address exactly as the backend's GuestAddressSerializer wants it
+ * (Plan-38) — POSTed to the guest delivery/quote/checkout endpoints, never saved. */
+export type GuestAddressPayload = Record<string, unknown>;
+
 export interface CheckoutSelections {
   userEmail?: string;
+  /** Set when the shopper chose "Continue as guest" in step 1 (Plan-38). Its
+   * presence IS the guest-mode flag every later step branches on. */
+  guest?: { email: string; phone: string };
+  /** The guest's validated inline address payload — the guest twin of `addressId`.
+   * Validated server-side by the guest delivery-options call in AddressStep. */
+  guestAddress?: GuestAddressPayload;
   addressId?: number;
   /** Short "line1, city" display string for the step-2 summary line — set via
    * `complete(2, { addressDisplay })`'s patch, never via `setAddress` (which only
@@ -38,6 +48,9 @@ interface CheckoutContextValue {
   /** Address changed: set it, and since a new address invalidates any already-picked
    * delivery option, clear it and un-complete step 3 (Delivery) so the shopper re-picks. */
   setAddress: (addressId: number) => void;
+  /** Guest twin of setAddress (Plan-38): same delivery-invalidation rule, but the
+   * address is the inline payload rather than a saved-address id. */
+  setGuestAddress: (address: GuestAddressPayload) => void;
 }
 
 const CheckoutContext = createContext<CheckoutContextValue | null>(null);
@@ -89,9 +102,25 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const setGuestAddress = useCallback((address: GuestAddressPayload) => {
+    // Same rule as setAddress: a new address invalidates delivery + centre.
+    setSelections((prev) => ({
+      ...prev, guestAddress: address, deliveryOptionId: undefined, gigCentreId: undefined,
+    }));
+    setCompleted((prev) => {
+      if (!prev.has(3)) return prev;
+      const next = new Set(prev);
+      next.delete(3);
+      return next;
+    });
+  }, []);
+
   const value = useMemo<CheckoutContextValue>(
-    () => ({ currentStep, completed, selections, open, complete, setSelection, setAddress }),
-    [currentStep, completed, selections, open, complete, setSelection, setAddress]
+    () => ({
+      currentStep, completed, selections, open, complete, setSelection,
+      setAddress, setGuestAddress,
+    }),
+    [currentStep, completed, selections, open, complete, setSelection, setAddress, setGuestAddress]
   );
 
   return <CheckoutContext.Provider value={value}>{children}</CheckoutContext.Provider>;

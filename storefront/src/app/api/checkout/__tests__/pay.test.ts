@@ -72,13 +72,39 @@ describe("re-pay BFF", () => {
     expect(JSON.parse((init as RequestInit).body as string)).toEqual({ payment_gateway: "paystack" });
   });
 
-  it("401 without a session, no upstream call", async () => {
+  it("401 without a session OR guest cookie, no upstream call", async () => {
     store.delete("access");
     store.delete("refresh");
+    store.delete("guest_order");
     const f = upstream(200, OK);
     const res = await POST(req({ order_number: "TC-300", payment_gateway: "paystack" }));
     expect(res.status).toBe(401);
     expect(f).not.toHaveBeenCalled();
+  });
+
+  it("guest re-pay forwards the httpOnly cookie's token in the body (Plan-38)", async () => {
+    store.delete("access");
+    store.delete("refresh");
+    store.set("guest_order", "signed-token");
+    const f = upstream(200, OK);
+    const res = await POST(req({ order_number: "TC-300", payment_gateway: "paystack" }));
+    expect(res.status).toBe(200);
+    const [, init] = f.mock.calls[0];
+    expect(new Headers((init as RequestInit).headers).get("Authorization")).toBeNull();
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+      payment_gateway: "paystack",
+      guest_token: "signed-token",
+    });
+    store.delete("guest_order");
+  });
+
+  it("an authed session wins over a stale guest cookie — no token in the body", async () => {
+    store.set("guest_order", "stale-token");
+    const f = upstream(200, OK);
+    await POST(req({ order_number: "TC-300", payment_gateway: "paystack" }));
+    const [, init] = f.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string)).toEqual({ payment_gateway: "paystack" });
+    store.delete("guest_order");
   });
 
   it("400 when the order number or gateway is missing, no upstream call", async () => {

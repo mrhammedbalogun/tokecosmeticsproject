@@ -92,7 +92,30 @@ class LoginView(TokenObtainPairView):
         # JWT flows never fire user_logged_in, so the success line lives here.
         if response.status_code == 200:
             security_logger.info("login succeeded for %s", _submitted_email(request))
+            self._claim_guest_orders(request)
         return response
+
+    @staticmethod
+    def _claim_guest_orders(request) -> None:
+        """Plan-38: attach user-less guest orders on a proven login into a VERIFIED
+        account. Email-verify and password-reset were the only claim points before
+        guest checkout existed, and both are one-shot ceremonies — an EXISTING
+        customer who guest-checks-out logged-out would otherwise never see that order
+        in their account. A login proves the password of an account whose inbox was
+        already verified, the same trust level as the reset path that has always
+        claimed. Never claim on an UNVERIFIED account (registering a victim's address
+        must not collect their guest orders), and never at placement (the guest email
+        is unproven there — order-history injection)."""
+        from apps.accounts.claims import claim_legacy_orders
+
+        data = getattr(request, "data", None)
+        email = data.get("email") if hasattr(data, "get") else None
+        if not isinstance(email, str) or not email.strip():
+            return
+        # The 200 above proves these credentials; this lookup only re-finds the row.
+        user = User.objects.filter(email__iexact=email.strip()).first()
+        if user is not None and user.email_verified_at is not None:
+            claim_legacy_orders(user)
 
 
 def _submitted_email(request) -> str:

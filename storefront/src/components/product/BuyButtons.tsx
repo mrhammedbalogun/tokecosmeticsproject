@@ -8,8 +8,10 @@ import { usePdp } from "@/components/product/PdpContext";
 import { BUYNOW_INTENT_KEY } from "@/lib/buynow-intent";
 
 /** Amazon-pattern pair (Decision 14): Buy Now = primary (straight to checkout),
- * Add to Cart = secondary (opens the drawer). Guest Buy Now stashes intent and
- * routes to /login — the resume-into-checkout path is Plan-14 (D6). */
+ * Add to Cart = secondary (opens the drawer). Guest Buy Now goes straight to
+ * checkout too since Plan-38 (guest checkout) — the BFF adds to the guest cart, no
+ * login detour. The 401→stash-intent→/login branch below is kept as a fallback for
+ * an authed session that expires mid-click, not the guest path any more. */
 export function BuyButtons() {
   const { variant, qty } = usePdp();
   const { addItem } = useCart();

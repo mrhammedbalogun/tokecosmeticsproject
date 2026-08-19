@@ -25,6 +25,8 @@ function Harness() {
     <div>
       <p data-testid="completed">{[...completed].sort().join(",")}</p>
       <p data-testid="userEmail">{selections.userEmail ?? ""}</p>
+      <p data-testid="guestEmail">{selections.guest?.email ?? ""}</p>
+      <p data-testid="guestPhone">{selections.guest?.phone ?? ""}</p>
       <SignInStep />
     </div>
   );
@@ -418,5 +420,48 @@ describe("SignInStep — turnstile", () => {
     const call = f.mock.calls.find(([u]) => u === "/api/auth/register") as unknown as
       [string, RequestInit];
     expect(JSON.parse(String(call[1].body))).not.toHaveProperty("turnstile_token");
+  });
+});
+
+// --- guest checkout (Plan-38) --------------------------------------------------
+
+describe("SignInStep — continue as guest", () => {
+  async function openGuestForm() {
+    await waitFor(() => screen.getByRole("button", { name: /continue as guest/i }));
+    fireEvent.click(screen.getByRole("button", { name: /continue as guest/i }));
+    await waitFor(() => screen.getByLabelText(/confirm email/i));
+  }
+
+  it("completes step 1 with the guest contact — no network call, lowercased email", async () => {
+    const f = mockFetch({ "/api/auth/me": { status: 401, body: {} } });
+    renderHarness();
+    await openGuestForm();
+
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "Guest@Example.COM" } });
+    fireEvent.change(screen.getByLabelText(/confirm email/i), { target: { value: "guest@example.com" } });
+    fillPhone();
+    fireEvent.click(screen.getByRole("button", { name: /^continue as guest$/i }));
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("1"));
+    expect(screen.getByTestId("guestEmail")).toHaveTextContent("guest@example.com");
+    expect(screen.getByTestId("guestPhone")).toHaveTextContent(TEST_PHONE);
+    expect(screen.getByTestId("userEmail")).toHaveTextContent("guest@example.com");
+    // The only fetch was the mount me-check — going guest talks to no endpoint.
+    expect(f.mock.calls.every(([u]) => u === "/api/auth/me")).toBe(true);
+  });
+
+  it("refuses mismatched emails with an inline error, step stays open", async () => {
+    mockFetch({ "/api/auth/me": { status: 401, body: {} } });
+    renderHarness();
+    await openGuestForm();
+
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "guest@example.com" } });
+    fireEvent.change(screen.getByLabelText(/confirm email/i), { target: { value: "gvest@example.com" } });
+    fillPhone();
+    fireEvent.click(screen.getByRole("button", { name: /^continue as guest$/i }));
+
+    await waitFor(() => screen.getByRole("alert"));
+    expect(screen.getByRole("alert")).toHaveTextContent(/don't match/i);
+    expect(screen.getByTestId("completed")).toHaveTextContent("");
   });
 });

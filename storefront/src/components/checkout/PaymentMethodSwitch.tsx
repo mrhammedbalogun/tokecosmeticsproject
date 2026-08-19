@@ -11,6 +11,15 @@ interface Props {
   onRelaunch: (launch: LaunchInfo) => void;
   /** A bank-transfer switch: instructions to hand off to the confirmation page. */
   onBankDetails: (orderNumber: string, data: Record<string, unknown>) => void;
+  /** Default true (the mid-checkout switcher: the method that just failed is not
+   * worth offering back). PayAgain passes false — reached from an order page later,
+   * retrying the SAME method is a perfectly good first choice. */
+  excludeCurrent?: boolean;
+  /** The ORDER's market, when the caller knows it (order pages do). Without it the
+   * methods list follows the browsing-country cookie, which can drift from the
+   * order's market if the shopper switched countries since placing — the backend
+   * would refuse the mismatched gateway anyway, but listing it is a dead button. */
+  country?: string;
 }
 
 interface FetchResult {
@@ -21,7 +30,10 @@ interface FetchResult {
 /** Offered when an online payment fails: pick a different method for an order that has
  * ALREADY been placed. The order keeps its lines, totals and stock — only the money leg
  * is re-opened (`POST /api/checkout/pay`), so nothing here re-prices anything. */
-export function PaymentMethodSwitch({ orderNumber, currentGateway, onRelaunch, onBankDetails }: Props) {
+export function PaymentMethodSwitch({
+  orderNumber, currentGateway, onRelaunch, onBankDetails,
+  excludeCurrent = true, country,
+}: Props) {
   const [result, setResult] = useState<FetchResult | null>(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -30,7 +42,11 @@ export function PaymentMethodSwitch({ orderNumber, currentGateway, onRelaunch, o
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/checkout/payment-methods");
+        const res = await fetch(
+          country
+            ? `/api/checkout/payment-methods?country=${encodeURIComponent(country)}`
+            : "/api/checkout/payment-methods"
+        );
         const data = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !Array.isArray(data)) {
@@ -47,7 +63,7 @@ export function PaymentMethodSwitch({ orderNumber, currentGateway, onRelaunch, o
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [country]);
 
   async function choose(gateway: string) {
     if (busy) return;
@@ -88,8 +104,11 @@ export function PaymentMethodSwitch({ orderNumber, currentGateway, onRelaunch, o
 
   if (result === null) return <p className="text-sm text-muted">Loading payment methods…</p>;
 
-  // The method that just failed is not worth offering back as an alternative.
-  const others = result.methods.filter((m) => m.gateway !== currentGateway);
+  // Mid-checkout, the method that just failed is not worth offering back as an
+  // alternative; from an order page (excludeCurrent=false) every active method stands.
+  const others = excludeCurrent
+    ? result.methods.filter((m) => m.gateway !== currentGateway)
+    : result.methods;
 
   return (
     <div className="space-y-3">

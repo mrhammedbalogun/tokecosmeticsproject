@@ -23,7 +23,7 @@ const isPickup = (o: DeliveryOption) =>
  *   are still selectable here, just labelled "Quoted after checkout".
  */
 interface FetchResult {
-  addressId: number;
+  addressKey: string;
   cartId: string;
   options: DeliveryOption[];
   error: string | null;
@@ -33,73 +33,92 @@ export function DeliveryStep() {
   const { selections, complete } = useCheckout();
   const { cart } = useCart();
   const addressId = selections.addressId;
+  // Guest checkout (Plan-38): no saved address — the inline payload from AddressStep
+  // is POSTed to the guest twins of the two endpoints below.
+  const guestAddress = selections.guest ? selections.guestAddress : undefined;
   const cartId = cart.id;
+  // One staleness key for both modes: the saved-address id, or the guest payload's
+  // own JSON (stable — AddressStep replaces the object only on re-submit).
+  const addressKey = guestAddress ? JSON.stringify(guestAddress) : addressId ? String(addressId) : "";
 
-  // Keyed by the (addressId, cartId) it was fetched for — never reset synchronously
+  // Keyed by the (addressKey, cartId) it was fetched for — never reset synchronously
   // on a dependency change (that would call setState directly in the effect body).
   // Instead, staleness is derived at render time below: if the last result doesn't
-  // match the current addressId/cartId, treat it as "still loading". This also
+  // match the current addressKey/cartId, treat it as "still loading". This also
   // doubles as the guard against a slow, now-superseded response landing after a
   // fast address change — combined with the `cancelled` flag, which stops that
   // response from calling setState at all.
   const [result, setResult] = useState<FetchResult | null>(null);
 
   // The centre picker (32b slice 4): opened by clicking the pickup option, fed by
-  // /api/checkout/gig-centres. Keyed by addressId with the same staleness pattern.
+  // /api/checkout/gig-centres (or its guest twin). Keyed by addressKey with the same
+  // staleness pattern.
   const [pickerOptionId, setPickerOptionId] = useState<number | null>(null);
   const [centres, setCentres] = useState<{
-    addressId: number; list: GigCentreOption[]; error: string | null;
+    addressKey: string; list: GigCentreOption[]; error: string | null;
   } | null>(null);
 
   useEffect(() => {
-    if (!addressId || pickerOptionId === null) return;
+    if (!addressKey || pickerOptionId === null) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/api/checkout/gig-centres?address_id=${addressId}`);
+        const res = guestAddress
+          ? await fetch("/api/checkout/guest-gig-centres", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ cart_id: cartId, address: guestAddress }),
+            })
+          : await fetch(`/api/checkout/gig-centres?address_id=${addressId}`);
         const data = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !Array.isArray(data)) {
-          setCentres({ addressId, list: [], error: "Couldn't load pickup centres — please try again." });
+          setCentres({ addressKey, list: [], error: "Couldn't load pickup centres — please try again." });
           return;
         }
-        setCentres({ addressId, list: data as GigCentreOption[], error: null });
+        setCentres({ addressKey, list: data as GigCentreOption[], error: null });
       } catch {
         if (cancelled) return;
-        setCentres({ addressId, list: [], error: "Couldn't load pickup centres — please try again." });
+        setCentres({ addressKey, list: [], error: "Couldn't load pickup centres — please try again." });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [addressId, pickerOptionId]);
+  }, [addressKey, addressId, guestAddress, cartId, pickerOptionId]);
 
   useEffect(() => {
-    if (!addressId || !cartId) return;
+    if (!addressKey || !cartId) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(
-          `/api/checkout/delivery-options?address_id=${addressId}&cart_id=${encodeURIComponent(cartId)}`
-        );
+        const res = guestAddress
+          ? await fetch("/api/checkout/guest-delivery-options", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ cart_id: cartId, address: guestAddress }),
+            })
+          : await fetch(
+              `/api/checkout/delivery-options?address_id=${addressId}&cart_id=${encodeURIComponent(cartId)}`
+            );
         const data = await res.json().catch(() => null);
         if (cancelled) return;
         if (!res.ok || !Array.isArray(data)) {
-          setResult({ addressId, cartId, options: [], error: "Couldn't load delivery options — please try again." });
+          setResult({ addressKey, cartId, options: [], error: "Couldn't load delivery options — please try again." });
           return;
         }
-        setResult({ addressId, cartId, options: data as DeliveryOption[], error: null });
+        setResult({ addressKey, cartId, options: data as DeliveryOption[], error: null });
       } catch {
         if (cancelled) return;
-        setResult({ addressId, cartId, options: [], error: "Couldn't load delivery options — please try again." });
+        setResult({ addressKey, cartId, options: [], error: "Couldn't load delivery options — please try again." });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [addressId, cartId]);
+  }, [addressKey, addressId, guestAddress, cartId]);
 
-  const stale = !result || result.addressId !== addressId || result.cartId !== cartId;
+  const stale = !result || result.addressKey !== addressKey || result.cartId !== cartId;
   const options = stale ? null : result.options;
   const error = stale ? null : result.error;
 
@@ -128,7 +147,7 @@ export function DeliveryStep() {
     });
   }
 
-  if (!addressId) {
+  if (!addressKey) {
     return <p className="text-sm text-muted">Choose a delivery address first.</p>;
   }
 
@@ -166,7 +185,7 @@ export function DeliveryStep() {
               option.min_days === option.max_days
                 ? `${option.min_days} days`
                 : `${option.min_days}–${option.max_days} days`;
-            const centreList = centres && centres.addressId === addressId ? centres : null;
+            const centreList = centres && centres.addressKey === addressKey ? centres : null;
             return (
               <div key={option.id}>
                 <button

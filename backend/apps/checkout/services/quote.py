@@ -12,8 +12,12 @@ def _lines(cart):
     return [(i.variant, i.quantity) for i in cart.items.select_related("variant").all()]
 
 
-def quote(cart, country, *, user=None, coupon_code="", delivery_amount=Decimal("0.00")):
-    """Return {"totals": {...string money...}, "coupon": {"ok": bool, "error_code"?: str}}."""
+def quote(cart, country, *, user=None, email="", coupon_code="", delivery_amount=Decimal("0.00")):
+    """Return {"totals": {...string money...}, "coupon": {"ok": bool, "error_code"?: str}}.
+
+    ``email`` (Plan-38): the guest's submitted email, so the per-email coupon limits
+    the preview checks are the ones place_order will enforce. Ignored when a user is
+    present — the user's own email wins, exactly as in place_order."""
     lines = _lines(cart)
     # Subtotal first — validate_coupon's min-spend (min_not_met) check needs it.
     base = compute_totals(lines, country)  # no coupon, no delivery
@@ -24,7 +28,7 @@ def quote(cart, country, *, user=None, coupon_code="", delivery_amount=Decimal("
         # (item_product_ids from the cart lines, email from the user) so a quote and
         # the real checkout never disagree about whether a coupon applies.
         product_ids = {v.product_id for v, _ in lines}
-        email = user.email if user is not None else ""
+        email = user.email if user is not None else email
         v = validate_coupon(
             coupon_code, base.subtotal, country, user=user, email=email, item_product_ids=product_ids
         )

@@ -39,6 +39,28 @@ describe("CheckoutReturn", () => {
     expect(replace).not.toHaveBeenCalled();
     // A definitive failure is terminal — no point burning the remaining polls.
     expect(verifyPayment).toHaveBeenCalledTimes(1);
+    // NEVER back to /checkout — placement converted the cart, so that page shows
+    // "Your cart is empty" to someone holding a real unpaid order (the Plan-38 gap).
+    // The order's confirmation page carries the pay-again surface, guest or authed.
+    expect(screen.getByRole("link", { name: /try another payment method/i })).toHaveAttribute(
+      "href",
+      "/checkout/confirmation/TC-88"
+    );
+  });
+
+  it("falls back to the checkout link when a failed verify carries no order number", async () => {
+    verifyPayment.mockResolvedValue({
+      ok: true,
+      orderNumber: null,
+      paymentStatus: "failed",
+      orderStatus: null,
+    });
+    render(<CheckoutReturn reference="TC-ref-88" pollDelayMs={0} />);
+    await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
+    expect(screen.getByRole("link", { name: /back to checkout/i })).toHaveAttribute(
+      "href",
+      "/checkout"
+    );
   });
 
   it("keeps polling while pending and routes as soon as it clears", async () => {

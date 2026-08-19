@@ -19,7 +19,7 @@ interface ApiErrorBody {
   whatsapp?: string[];
 }
 
-type Phase = "checking" | "register" | "login";
+type Phase = "checking" | "register" | "login" | "guest";
 
 /** Step 1 of checkout: guarantee a logged-in user before the shopper can reach
  * Review (the backend forces auth on order placement — see Plan-14 design D3).
@@ -51,6 +51,10 @@ export function SignInStep() {
   const [phone, setPhone] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [password, setPassword] = useState("");
+  // Guest checkout (Plan-38): the confirm-email double entry is the typo net — a
+  // guest with a mistyped email is unreachable (no account, no order history, and
+  // for a bank transfer the payment details go to nobody).
+  const [emailConfirm, setEmailConfirm] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<ApiErrorBody>({});
@@ -207,8 +211,106 @@ export function SignInStep() {
     }
   }
 
+  /** Guest checkout (Plan-38): no backend call — the contact just rides checkout
+   * state into the later steps; the server validates it at quote/place time. */
+  function submitGuest(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+    const a = email.trim().toLowerCase();
+    const b = emailConfirm.trim().toLowerCase();
+    if (a !== b) {
+      setFormError("The two email addresses don't match — please check them.");
+      return;
+    }
+    complete(1, { userEmail: a, guest: { email: a, phone } });
+  }
+
   if (phase === "checking") {
     return <p className="text-sm text-muted">Checking your account…</p>;
+  }
+
+  if (phase === "guest") {
+    return (
+      <form onSubmit={submitGuest} className="space-y-4" noValidate>
+        <p className="text-sm text-muted">
+          No account needed — we just need a way to reach you about your order.
+        </p>
+        <div aria-live="polite">
+          {formError && (
+            <p role="alert" className="text-sm text-red-700">
+              {formError}
+            </p>
+          )}
+        </div>
+        <div>
+          <label htmlFor="guest-email" className="mb-1 block text-sm font-medium">
+            Email
+          </label>
+          <input
+            id="guest-email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+          />
+          <p className="mt-1 text-xs text-muted">
+            Your order confirmation and tracking link go here — please double-check it.
+          </p>
+        </div>
+        <div>
+          <label htmlFor="guest-email-confirm" className="mb-1 block text-sm font-medium">
+            Confirm email
+          </label>
+          <input
+            id="guest-email-confirm"
+            type="email"
+            value={emailConfirm}
+            onChange={(e) => setEmailConfirm(e.target.value)}
+            required
+            autoComplete="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          {/* `phone` holds E.164 ("" while invalid) — gates the submit button, same
+              as the register form above. */}
+          <PhoneField
+            id="guest-phone"
+            name="phone"
+            label="Phone number"
+            defaultCountry={cart.country}
+            required
+            onValueChange={setPhone}
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={!email || !emailConfirm || !phone}
+          className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Continue as guest
+        </button>
+        <p className="text-sm text-muted">
+          Have an account?{" "}
+          <button
+            type="button"
+            onClick={() => switchPhase("login")}
+            className="underline hover:text-foreground"
+          >
+            Sign in
+          </button>
+          {" "}— your saved addresses and order history come with it.
+        </p>
+      </form>
+    );
   }
 
   if (phase === "login") {
@@ -274,6 +376,17 @@ export function SignInStep() {
           <Link href="/forgot-password" className="underline hover:text-foreground">
             Forgot password?
           </Link>
+        </p>
+        <p className="border-t border-line pt-3 text-sm text-muted">
+          In a hurry?{" "}
+          <button
+            type="button"
+            onClick={() => switchPhase("guest")}
+            className="font-medium text-accent underline hover:text-accent-strong"
+          >
+            Continue as guest
+          </button>
+          {" "}— just an email and phone number.
         </p>
       </form>
     );

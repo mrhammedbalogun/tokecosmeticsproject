@@ -323,6 +323,15 @@ REST_FRAMEWORK = {
         # shared path. See the caveat on _IPKeyedThrottle.
         "register_ip": "60/hour",
         "register_email": "3/hour",
+        # Guest order placement (Plan-38). Email-keyed: every guest order mails the
+        # SUBMITTED address (order-received + bank details for a transfer), so this is
+        # an inbox-protection cap like register_email — 6/hour not 3 because a real
+        # customer retrying a flaky gateway re-POSTs the same address and every attempt
+        # counts (throttles run before the idempotency replay can answer). IP-keyed:
+        # volume cap for the direct-to-API path only, same shared-egress caveat as
+        # register_ip. Turnstile on the endpoint is the actual bot gate.
+        "guest_checkout_email": "6/hour",
+        "guest_checkout_ip": "60/hour",
         "password_reset_email": "5/hour",
         "password_reset_ip": "60/hour",
     },

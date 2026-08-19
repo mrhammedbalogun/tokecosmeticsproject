@@ -13,7 +13,7 @@ from decimal import Decimal, InvalidOperation
 
 from django.shortcuts import get_object_or_404
 from rest_framework import serializers
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -42,16 +42,42 @@ logger = logging.getLogger(__name__)
 
 class PaymentStatusView(APIView):
     """POST /api/v1/payments/{reference}/verify/ — re-verify with the gateway and return
-    the current order + payment state. Scoped to the requesting user's own orders."""
+    the current order + payment state. Scoped to the requesting user's own orders, OR
+    (Plan-38) to the single order a signed guest-order token names: without that path a
+    guest returning from Paystack/Flutterwave literally could not verify the payment
+    they just made. The token names the order and the reference is looked up WITHIN it
+    — a guessed reference reaches nobody else's payment, same property as the authed
+    scope. No user filter on the token path on purpose: a mid-payment claim (the
+    account verifying its email while the guest tab polls) must not 404 the customer's
+    own confirmation."""
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
 
     def post(self, request, reference: str):
-        payment = get_object_or_404(
-            Payment.objects.select_related("order"),
-            gateway_reference=reference,
-            order__user=request.user,
-        )
+        if request.user.is_authenticated:
+            payment = get_object_or_404(
+                Payment.objects.select_related("order"),
+                gateway_reference=reference,
+                order__user=request.user,
+            )
+        else:
+            from apps.orders.tokens import TrackingTokenError, read_guest_order_token
+
+            data = request.data
+            token = data.get("guest_token") if hasattr(data, "get") else None
+            if not isinstance(token, str) or not token:
+                return Response({"error": "authentication_required"}, status=403)
+            try:
+                number = read_guest_order_token(token)
+            except TrackingTokenError:
+                # Indistinguishable from "no such payment" — an expired token must not
+                # confirm that a probed reference exists.
+                return Response({"error": "not_found"}, status=404)
+            payment = get_object_or_404(
+                Payment.objects.select_related("order"),
+                gateway_reference=reference,
+                order__number=number,
+            )
         # A manual gateway has no machine to ask — skip straight to reporting state.
         # Branching on `confirmation` rather than relying on ManualVerificationOnly being
         # caught below makes the intent explicit; the except stays as belt-and-braces.

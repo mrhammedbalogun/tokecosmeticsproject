@@ -23,11 +23,47 @@ describe("place-order BFF", () => {
     const [, init] = f.mock.calls[0];
     expect(new Headers((init as RequestInit).headers).get("Idempotency-Key")).toBeTruthy();
   });
-  it("401 without a session, no upstream call", async () => {
+  // --- guest checkout (Plan-38) ---------------------------------------------------
+
+  it("no session + authed-shaped body (address_id, no guest contact) is a 400, no upstream call", async () => {
     store.delete("access"); store.delete("refresh");
     const f = upstream(201, {});
     const res = await POST(req({ cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer" }));
-    expect(res.status).toBe(401); expect(f).not.toHaveBeenCalled();
+    expect(res.status).toBe(400); expect(f).not.toHaveBeenCalled();
+  });
+
+  it("guest placement forwards contact+address anonymously, moves guest_order_token into an httpOnly cookie and strips it", async () => {
+    store.delete("access"); store.delete("refresh");
+    const f = upstream(201, {
+      order_number: "TC-9", guest_order_token: "signed-token",
+      payment: { gateway: "bank_transfer", action: "bank_details", data: {} },
+    });
+    const res = await POST(req({
+      cart_id: "c1", delivery_option_id: 2, payment_gateway: "bank_transfer",
+      guest_email: "g@example.com", guest_phone: "+2348012345678",
+      address: { line1: "1 Guest Close", country_code: "NG" },
+      turnstile_token: "ts-tok",
+    }));
+    expect(res.status).toBe(201);
+    const [, init] = f.mock.calls[0];
+    // Anonymous: no Bearer header on the upstream call.
+    expect(new Headers((init as RequestInit).headers).get("Authorization")).toBeNull();
+    const sentBody = JSON.parse((init as RequestInit).body as string);
+    expect(sentBody.guest_email).toBe("g@example.com");
+    expect(sentBody.turnstile_token).toBe("ts-tok");
+    // The token became a cookie and left the browser payload — page JS must never
+    // be able to read the guest's order credential.
+    expect(store.get("guest_order")).toBe("signed-token");
+    const body = await res.json();
+    expect(body.guest_order_token).toBeUndefined();
+    expect(body.order_number).toBe("TC-9");
+  });
+
+  it("guest placement without contact or address is a 400, no upstream call", async () => {
+    store.delete("access"); store.delete("refresh");
+    const f = upstream(201, {});
+    const res = await POST(req({ cart_id: "c1", delivery_option_id: 2, payment_gateway: "bank_transfer" }));
+    expect(res.status).toBe(400); expect(f).not.toHaveBeenCalled();
   });
   it("passes a CheckoutError status/body straight through", async () => {
     upstream(409, { error: "idempotency_in_progress" });

@@ -24,10 +24,17 @@ describe("quote BFF", () => {
     expect(url).toBe("http://backend:8000/api/v1/checkout/quote/");
     expect(new Headers((init as RequestInit).headers).get("Authorization")).toBe("Bearer TOK");
   });
-  it("401 without a session", async () => {
+  it("routes a session-less request to the guest quote twin, anonymously (Plan-38)", async () => {
     store.delete("access"); store.delete("refresh");
-    const f = upstream(200, {});
-    const res = await POST(req({ cart_id: "c1" }));
-    expect(res.status).toBe(401); expect(f).not.toHaveBeenCalled();
+    const f = upstream(200, { totals: { grand_total: "100.00" }, coupon: { ok: true } });
+    const res = await POST(req({
+      cart_id: "c1", address: { line1: "1 Guest Close", country_code: "NG" },
+      guest_email: "g@example.com", delivery_option_id: 2,
+    }));
+    expect(res.status).toBe(200);
+    const [url, init] = f.mock.calls[0];
+    expect(url).toBe("http://backend:8000/api/v1/checkout/guest/quote/");
+    expect(new Headers((init as RequestInit).headers).get("Authorization")).toBeNull();
+    expect(JSON.parse((init as RequestInit).body as string).guest_email).toBe("g@example.com");
   });
 });

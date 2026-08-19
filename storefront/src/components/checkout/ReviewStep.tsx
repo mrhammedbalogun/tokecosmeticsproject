@@ -12,6 +12,7 @@ import { paymentLabel } from "@/lib/payment-labels";
 import { stashBankHandoff } from "@/lib/bank-handoff";
 import { COUPON_STORAGE_KEY } from "@/lib/coupon-storage";
 import { PaymentLauncher, type LaunchInfo } from "@/components/checkout/PaymentLauncher";
+import { TurnstileWidget, turnstileToken } from "@/components/auth/TurnstileWidget";
 import type { Totals } from "@/lib/checkout";
 
 
@@ -63,7 +64,7 @@ function mapPlaceOrderError(data: { error?: string; detail?: string } | null): {
 
 interface QuoteFetchResult {
   cartId: string;
-  addressId: number;
+  addressKey: string;
   deliveryOptionId: number;
   gigCentreId?: number;
   couponCode: string;
@@ -96,9 +97,18 @@ export function ReviewStep() {
   const router = useRouter();
 
   const addressId = selections.addressId;
+  // Guest checkout (Plan-38): the inline address payload replaces addressId, the
+  // contact rides the placement body, and the Place-order button is Turnstile-gated.
+  const guest = selections.guest;
+  const guestAddress = guest ? selections.guestAddress : undefined;
   const deliveryOptionId = selections.deliveryOptionId;
   const gigCentreId = selections.gigCentreId;
   const cartId = cart.id;
+  const addressKey = guestAddress ? JSON.stringify(guestAddress) : addressId ? String(addressId) : "";
+  // Counts completed place attempts — the Turnstile reset signal (tokens are
+  // single-use, so every finished attempt must hand the guest a fresh one; the
+  // backend answers a true same-key replay from its store without re-checking).
+  const [attempts, setAttempts] = useState(0);
 
   // Lazy useState initializer — computed exactly once on mount, stable for the
   // component's lifetime (nothing ever calls the setter again). Deliberately NOT a
@@ -123,7 +133,7 @@ export function ReviewStep() {
   const [result, setResult] = useState<QuoteFetchResult | null>(null);
 
   useEffect(() => {
-    if (!cartId || !addressId || !deliveryOptionId) return;
+    if (!cartId || !addressKey || !deliveryOptionId) return;
     let cancelled = false;
     (async () => {
       try {
@@ -132,7 +142,12 @@ export function ReviewStep() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             cart_id: cartId,
-            address_id: addressId,
+            // Saved-address id for the authed flow; inline payload + contact email
+            // for guests (the BFF routes to the guest quote endpoint, which threads
+            // the email into the per-email coupon checks).
+            ...(guestAddress
+              ? { address: guestAddress, guest_email: guest?.email ?? "" }
+              : { address_id: addressId }),
             delivery_option_id: deliveryOptionId,
             gig_centre_id: gigCentreId,
             coupon_code: appliedCoupon,
@@ -142,7 +157,7 @@ export function ReviewStep() {
         if (cancelled) return;
         if (!res.ok || !data?.totals) {
           setResult({
-            cartId, addressId, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
+            cartId, addressKey, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
             totals: null, couponError: null,
             error: "Couldn't load your order total — please try again.",
           });
@@ -150,13 +165,13 @@ export function ReviewStep() {
         }
         const couponError = appliedCoupon && !data.coupon?.ok ? data.coupon?.error_code ?? "" : null;
         setResult({
-          cartId, addressId, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
+          cartId, addressKey, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
           totals: data.totals as Totals, couponError, error: null,
         });
       } catch {
         if (cancelled) return;
         setResult({
-          cartId, addressId, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
+          cartId, addressKey, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
           totals: null, couponError: null,
           error: "Couldn't load your order total — please try again.",
         });
@@ -165,12 +180,12 @@ export function ReviewStep() {
     return () => {
       cancelled = true;
     };
-  }, [cartId, addressId, deliveryOptionId, gigCentreId, appliedCoupon]);
+  }, [cartId, addressKey, addressId, guestAddress, guest, deliveryOptionId, gigCentreId, appliedCoupon]);
 
   const stale =
     !result ||
     result.cartId !== cartId ||
-    result.addressId !== addressId ||
+    result.addressKey !== addressKey ||
     result.deliveryOptionId !== deliveryOptionId ||
     result.gigCentreId !== gigCentreId ||
     result.couponCode !== appliedCoupon;
@@ -189,16 +204,27 @@ export function ReviewStep() {
   }
 
   async function handlePlaceOrder() {
-    if (!totals || !cartId || !addressId || !deliveryOptionId || !selections.paymentGateway || placing) return;
+    if (!totals || !cartId || !addressKey || !deliveryOptionId || !selections.paymentGateway || placing) return;
     setPlacing(true);
     setPlaceError(null);
     try {
+      // The widget token is read at CLICK time, not render time — a shopper who
+      // dwells on Review past the ~5-minute token validity gets whatever the
+      // widget currently holds (it refreshes itself).
+      const tsToken = guest ? turnstileToken() : undefined;
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           cart_id: cartId,
-          address_id: addressId,
+          ...(guestAddress
+            ? {
+                address: guestAddress,
+                guest_email: guest?.email ?? "",
+                guest_phone: guest?.phone ?? "",
+                ...(tsToken ? { turnstile_token: tsToken } : {}),
+              }
+            : { address_id: addressId }),
           delivery_option_id: deliveryOptionId,
           gig_centre_id: gigCentreId,
           payment_gateway: selections.paymentGateway,
@@ -236,10 +262,13 @@ export function ReviewStep() {
       setPlaceError({ message: "Something went wrong placing your order — please try again.", cartLink: false });
     } finally {
       setPlacing(false);
+      // Every completed attempt spends the widget token — reset for a fresh one so
+      // a retry (gateway down, stock change) is not refused as a duplicate solve.
+      setAttempts((a) => a + 1);
     }
   }
 
-  if (!addressId || !deliveryOptionId || !selections.paymentGateway) {
+  if (!addressKey || !deliveryOptionId || !selections.paymentGateway) {
     return <p className="text-sm text-muted">Complete the previous steps first.</p>;
   }
 
@@ -365,6 +394,11 @@ export function ReviewStep() {
           )}
         </p>
       )}
+
+      {/* Guests are bot-gated at the one write that reserves stock and sends mail.
+          Renders nothing while the gate is off (no NEXT_PUBLIC_TURNSTILE_SITE_KEY),
+          matching every other Turnstile surface. */}
+      {guest && <TurnstileWidget resetSignal={attempts} />}
 
       <button
         type="button"

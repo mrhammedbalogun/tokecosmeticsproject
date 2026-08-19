@@ -61,14 +61,23 @@ const EMPTY_FORM: FormValues = {
  *   switcher, not here.
  */
 export function AddressStep() {
-  const { selections, setAddress, complete } = useCheckout();
+  const { selections, setAddress, setGuestAddress, complete } = useCheckout();
   const { cart } = useCart();
   const country = cart.country;
+  // Guest checkout (Plan-38): no address book — the form is the whole step, nothing
+  // is saved, and the payload is validated by the guest delivery-options call (which
+  // runs the same AddressSerializer rules the save path does).
+  const isGuest = Boolean(selections.guest);
 
-  const [addresses, setAddresses] = useState<Address[] | null>(null);
+  const [addresses, setAddresses] = useState<Address[] | null>(isGuest ? [] : null);
   const [selectedId, setSelectedId] = useState<number | undefined>(selections.addressId);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<FormValues>(EMPTY_FORM);
+  const [showForm, setShowForm] = useState(isGuest);
+  const [form, setForm] = useState<FormValues>(() => ({
+    ...EMPTY_FORM,
+    // The guest already typed their phone in step 1 — start the address phone there
+    // (they can still change it; the delivery phone may be someone else's).
+    phone: selections.guest?.phone ?? "",
+  }));
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<AddressFieldErrors>({});
@@ -93,9 +102,10 @@ export function AddressStep() {
 
   // One-shot mount load, mirroring SignInStep's checkedRef guard. All setState calls
   // below happen after the awaited fetch, not synchronously in the effect body.
+  // Guests skip it entirely — there is no address book to load.
   const loadedRef = useRef(false);
   useEffect(() => {
-    if (loadedRef.current) return;
+    if (loadedRef.current || isGuest) return;
     loadedRef.current = true;
     (async () => {
       try {
@@ -113,7 +123,7 @@ export function AddressStep() {
         setShowForm(true);
       }
     })();
-  }, []);
+  }, [isGuest]);
 
   // A saved address from before its country grew a region tree (GB/US/CA since the
   // Countries_breakdown work) has no state_region — which means only country-wide
@@ -209,6 +219,38 @@ export function AddressStep() {
     if (pin) {
       payload.latitude = pin.lat.toFixed(6);
       payload.longitude = pin.lng.toFixed(6);
+    }
+
+    // Guest path (Plan-38): nothing is saved. The guest delivery-options call IS the
+    // validation pass — it runs the same AddressSerializer rules the save path does,
+    // so field errors land on this form exactly as they would for a saved address.
+    if (isGuest) {
+      try {
+        const res = await fetch("/api/checkout/guest-delivery-options", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cart_id: cart.id, address: payload }),
+        });
+        if (res.ok) {
+          const city = typeof payload.city_text === "string" ? payload.city_text.trim() : "";
+          setGuestAddress(payload);
+          complete(2, { addressDisplay: city ? `${payload.line1}, ${city}` : String(payload.line1) });
+          return;
+        }
+        const body: { address?: AddressFieldErrors; detail?: string } =
+          await res.json().catch(() => ({}));
+        const fieldBody: AddressFieldErrors = body.address ?? {};
+        setFieldErrors(fieldBody);
+        if (body.detail) setFormError(body.detail);
+        else if (Object.keys(fieldBody).length === 0) {
+          setFormError("We couldn't check this address — please try again.");
+        }
+      } catch {
+        setFormError("We couldn't check this address — please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
     }
 
     try {
@@ -583,7 +625,9 @@ export function AddressStep() {
               disabled={submitting || !form.line1 || !form.first_name || !form.phone}
               className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {submitting ? "Saving…" : "Save address"}
+              {submitting
+                ? isGuest ? "Checking…" : "Saving…"
+                : isGuest ? "Deliver to this address" : "Save address"}
             </button>
             {addresses.length > 0 && (
               <button

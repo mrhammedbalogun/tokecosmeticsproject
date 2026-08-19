@@ -24,11 +24,30 @@ describe("verify BFF", () => {
     const [url] = f.mock.calls[0];
     expect(String(url)).toContain("/payments/TC-ref-1/verify/");
   });
-  it("401 without a session, no upstream call", async () => {
-    store.delete("access"); store.delete("refresh");
+  it("401 without a session OR guest cookie, no upstream call", async () => {
+    store.delete("access"); store.delete("refresh"); store.delete("guest_order");
     const f = upstream(200, {});
     const res = await POST(req({ reference: "TC-ref-1" }));
     expect(res.status).toBe(401); expect(f).not.toHaveBeenCalled();
+  });
+  it("guest verify forwards the httpOnly cookie's token in the body (Plan-38)", async () => {
+    store.delete("access"); store.delete("refresh");
+    store.set("guest_order", "signed-token");
+    const f = upstream(200, { order_number: "TC-9", order_status: "pending_payment", payment_status: "initiated" });
+    const res = await POST(req({ reference: "TC-ref-9" }));
+    expect(res.status).toBe(200);
+    const [, init] = f.mock.calls[0];
+    expect(new Headers((init as RequestInit).headers).get("Authorization")).toBeNull();
+    expect(JSON.parse((init as RequestInit).body as string).guest_token).toBe("signed-token");
+  });
+  it("an authed session wins over a stale guest cookie — no token in the body", async () => {
+    store.set("guest_order", "stale-token");
+    const f = upstream(200, { order_number: "TC-1", order_status: "processing", payment_status: "succeeded" });
+    const res = await POST(req({ reference: "TC-ref-1" }));
+    expect(res.status).toBe(200);
+    const [, init] = f.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string).guest_token).toBeUndefined();
+    store.delete("guest_order");
   });
   it("400 when reference is missing, no upstream call", async () => {
     const f = upstream(200, {});

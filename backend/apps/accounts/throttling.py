@@ -494,6 +494,25 @@ class RegisterEmailThrottle(_EmailKeyedThrottle):
     scope = "register_email"
 
 
+# --- guest checkout (Plan-38) --------------------------------------------------
+# Guest order placement sends branded mail to the SUBMITTED address (order-received
+# with bank details for a transfer, plus a staff awaiting-transfer alert) — the same
+# "spam cannon pointed at strangers" shape registration has, hence the same two-key
+# treatment: the email key protects one inbox, the IP key caps direct-to-API volume.
+# Turnstile on the endpoint is the real bot gate; these are the volume backstops.
+# Applied ONLY to unauthenticated requests (CheckoutView.get_throttles) — an authed
+# checkout keeps its unforgeable per-user key and needs neither.
+
+
+class GuestCheckoutIPThrottle(_IPKeyedThrottle):
+    scope = "guest_checkout_ip"
+
+
+class GuestCheckoutEmailThrottle(_EmailKeyedThrottle):
+    email_field = "guest_email"
+    scope = "guest_checkout_email"
+
+
 # --- referral code lookup -----------------------------------------------------
 # The public "is this code real, and whose?" endpoint. A junk-volume cap rather than a
 # guess cap: a guessed code credits a stranger with commission, which costs nobody

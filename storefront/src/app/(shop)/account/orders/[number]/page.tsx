@@ -5,6 +5,7 @@ import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { formatOrderDate, getOrderOrNotFound } from "@/lib/orders";
 import { confirmationCopy } from "@/lib/confirmation-copy";
 import { ConfirmationBankDetails } from "@/components/checkout/ConfirmationBankDetails";
+import { PayAgain } from "@/components/checkout/PayAgain";
 import { AddressSummary } from "@/components/orders/AddressBlock";
 import { OrderItems } from "@/components/orders/OrderItems";
 import { StatusChip } from "@/components/orders/StatusChip";
@@ -110,6 +111,28 @@ export default async function OrderDetailPage({
             number={order.number}
             amount={order.grand_total}
             currency={order.currency}
+          />
+        </div>
+      )}
+
+      {order.status === "pending_payment" && (
+        // The pay-again surface (Plan-38 gap fix / FW-cert open item): a declined
+        // card, an abandoned redirect, or a transfer customer who'd rather pay by
+        // card now all land here from order history with no way to hand over money
+        // until this existed. Same status gate as the bank block above, for the same
+        // reason — "pay now" on a delivered or cancelled order invites a duplicate.
+        <div className="mt-8 border-t border-line pt-6">
+          <PayAgain
+            orderNumber={order.number}
+            currentGateway={order.payment_gateway}
+            country={order.country}
+            {...(showBankDetails
+              ? {
+                  title: "Prefer to pay another way?",
+                  intro:
+                    "You can also pay this order online — card payments confirm instantly, no transfer matching needed.",
+                }
+              : {})}
           />
         </div>
       )}

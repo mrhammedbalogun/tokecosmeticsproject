@@ -11,7 +11,8 @@ class Order(TimeStampedModel):
     number = models.CharField(max_length=20, unique=True)  # "TC-100001" or a legacy number
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="orders"
-    )  # null ONLY for migrated guest orders / deleted accounts (Decision 7)
+    )  # null for guest orders (Plan-38 reversed Decision 7), migrated guest rows,
+    # and deleted accounts. Claimed onto an account on verified-email match — claims.py.
     email = models.EmailField()
     phone = models.CharField(max_length=32, blank=True)
     country = models.ForeignKey("core.Country", on_delete=models.PROTECT)

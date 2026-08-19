@@ -39,7 +39,11 @@ from apps.orders.state import (
     resolve_review,
     transition_by_id,
 )
-from apps.orders.tokens import TrackingTokenError, read_tracking_token
+from apps.orders.tokens import (
+    TrackingTokenError,
+    read_guest_order_token,
+    read_tracking_token,
+)
 
 _ORDER_QS = Order.objects.select_related("currency", "country").prefetch_related("items")
 
@@ -59,11 +63,29 @@ class OrderDetailView(APIView):
 
     Token holders get the REDACTED serializer. Deliberately open to anonymous callers,
     but only with a valid token for the order named in the URL.
+
+    `guest_token` (Plan-38) is the OTHER salt and the OTHER serializer: the guest-order
+    token gets the FULL owner view. Justified by its provenance — it is minted only on
+    the guest's own checkout 201 and lives in an httpOnly BFF cookie for 7 days, never
+    in email — so the holder is the person who typed the address in the first place.
+    The emailed 90-day tracking token stays redacted; the salts cannot be exchanged.
     """
 
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, number: str):
+        guest_token = request.query_params.get("guest_token")
+        if guest_token:
+            try:
+                signed_number = read_guest_order_token(guest_token)
+            except TrackingTokenError:
+                return Response({"error": "invalid_token"}, status=status.HTTP_404_NOT_FOUND)
+            # The token names the order; the URL does not get a vote.
+            if signed_number != number:
+                return Response({"error": "invalid_token"}, status=status.HTTP_404_NOT_FOUND)
+            order = get_object_or_404(_ORDER_QS, number=number)
+            return Response(OrderSerializer(order).data)
+
         token = request.query_params.get("token")
         if token:
             try:

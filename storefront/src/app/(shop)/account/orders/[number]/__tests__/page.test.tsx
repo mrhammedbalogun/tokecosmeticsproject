@@ -20,6 +20,10 @@ class NotFound extends Error {
 vi.mock("next/navigation", () => ({
   redirect: (to: string) => { throw new Redirected(to); },
   notFound: () => { throw new NotFound(); },
+  // PayAgain (rendered for pending_payment orders since the Plan-38 gap fix) reads
+  // useRouter for its bank-details handoff; the picker itself only mounts on click,
+  // so inert stubs are all these render tests need.
+  useRouter: () => ({ replace: () => {}, refresh: () => {} }),
 }));
 
 import OrderDetailPage, { generateMetadata } from "../page";
@@ -27,7 +31,8 @@ import OrderDetailPage, { generateMetadata } from "../page";
 function order(overrides: Partial<OrderDetail> = {}): OrderDetail {
   return {
     number: "TC-100038", status: "pending_payment", placed_at: "2026-07-24T23:30:00Z",
-    currency: "NGN", subtotal: "40000.00", discount_total: "0.00",
+    currency: "NGN", country: "NG", email: "ada@example.com", phone: "+2348012345678",
+    subtotal: "40000.00", discount_total: "0.00",
     shipping_total: "2000.00", tax_total: "0.00", tax_label: "VAT", grand_total: "42000.00",
     grand_total_display: "₦42,000.00", delivery_option_name: "Lagos same-day",
     shipping_address: { first_name: "Ada", last_name: "Obi", line1: "12 Marina", city_text: "Lagos" },

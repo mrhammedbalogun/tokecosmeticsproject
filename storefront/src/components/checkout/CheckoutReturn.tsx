@@ -27,6 +27,11 @@ export function CheckoutReturn({
   // Derived at mount, never set from inside the effect for the missing case — a bare
   // return URL is knowable at render time (react-hooks/set-state-in-effect).
   const [state, setState] = useState<State>(reference ? "polling" : "missing");
+  // Captured on a FAILED verify so the retry link can name the order. Placement
+  // converted the cart, so "Back to checkout" met an empty cart (the Plan-38 gap);
+  // the confirmation page now carries the pay-again surface for authed and guest
+  // customers alike.
+  const [failedOrder, setFailedOrder] = useState<string | null>(null);
   const started = useRef(false);
 
   useEffect(() => {
@@ -43,6 +48,7 @@ export function CheckoutReturn({
           return;
         }
         if (out.ok && (out.paymentStatus === "failed" || out.paymentStatus === "cancelled")) {
+          setFailedOrder(out.orderNumber);
           setState("failed");
           return;
         }
@@ -72,9 +78,21 @@ export function CheckoutReturn({
         <p role="alert" className="text-sm text-red-700">
           Your payment didn&apos;t go through. You can try again or choose another method.
         </p>
-        <Link href="/checkout" className="text-sm underline">
-          Back to checkout
-        </Link>
+        {/* Never back to /checkout: placement converted the cart, so that page says
+            "Your cart is empty" to someone holding a real unpaid order. The order's
+            own confirmation page carries the pay-again surface. */}
+        {failedOrder ? (
+          <Link
+            href={`/checkout/confirmation/${encodeURIComponent(failedOrder)}`}
+            className="text-sm underline"
+          >
+            View your order &amp; try another payment method
+          </Link>
+        ) : (
+          <Link href="/checkout" className="text-sm underline">
+            Back to checkout
+          </Link>
+        )}
       </div>
     );
   }

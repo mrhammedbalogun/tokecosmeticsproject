@@ -2,7 +2,13 @@ import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
-import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth";
+import {
+  ACCESS_COOKIE,
+  GUEST_ORDER_COOKIE,
+  GUEST_ORDER_MAX_AGE,
+  REFRESH_COOKIE,
+  cookieOptions,
+} from "@/lib/auth";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { REFERRAL_COOKIE, normalizeReferralCode } from "@/lib/referral";
 
@@ -12,15 +18,27 @@ function json(data: unknown, status = 200) {
   });
 }
 
-/** Place order (Plan-14). Authed; generates the Idempotency-Key server-side so a
- * double-click can't double-charge. Bank-transfer details ride back in payment.data. */
+/** Place order (Plan-14; guests since Plan-38). Generates the Idempotency-Key
+ * server-side when the client didn't. Bank-transfer details ride back in
+ * payment.data.
+ *
+ * Guest requests (no session cookies) carry guest_email/guest_phone + an inline
+ * address + turnstile_token; the backend validates all of it. On the guest 201 the
+ * `guest_order_token` is moved into an httpOnly cookie and STRIPPED from the browser
+ * response — it is the guest's only credential for the confirmation page and payment
+ * verify, and page JS must never be able to read it (XSS). */
 export async function POST(req: Request) {
   const jar = await cookies();
-  if (!jar.get(ACCESS_COOKIE)?.value && !jar.get(REFRESH_COOKIE)?.value) {
-    return json({ detail: "Not authenticated." }, 401);
-  }
+  const isGuest = !jar.get(ACCESS_COOKIE)?.value && !jar.get(REFRESH_COOKIE)?.value;
   const body = await req.json().catch(() => ({}));
-  if (!body.cart_id || !body.address_id || !body.delivery_option_id || !body.payment_gateway) {
+  if (!body.cart_id || !body.delivery_option_id || !body.payment_gateway) {
+    return json({ detail: "Missing checkout fields." }, 400);
+  }
+  if (isGuest) {
+    if (!body.guest_email || !body.guest_phone || !body.address) {
+      return json({ detail: "Missing guest checkout fields." }, 400);
+    }
+  } else if (!body.address_id) {
     return json({ detail: "Missing checkout fields." }, 400);
   }
   const country = jar.get(COUNTRY_COOKIE)?.value ?? DEFAULT_COUNTRY;
@@ -44,11 +62,19 @@ export async function POST(req: Request) {
   // format change (or a hand-edited dev jar) should be dropped, not forwarded.
   const referralCode = normalizeReferralCode(jar.get(REFERRAL_COOKIE)?.value);
   try {
-    const out = await fetchWithAuth("/checkout/", {
+    const out = await fetchWithAuth<Record<string, unknown>>("/checkout/", {
       method: "POST", country,
       body: { ...upstreamBody, referral_code: referralCode },
       headers: { "Idempotency-Key": idempotencyKey },
     });
+    // Guest 201: the token becomes an httpOnly cookie and leaves the payload (see
+    // the route docstring). A same-key replay re-delivers it, so a guest whose
+    // first response was lost to a network blip still ends up holding the cookie.
+    if (isGuest && out && typeof out.guest_order_token === "string") {
+      jar.set(GUEST_ORDER_COOKIE, out.guest_order_token,
+              cookieOptions({ maxAge: GUEST_ORDER_MAX_AGE }));
+      delete out.guest_order_token;
+    }
     return json(out, 201);
   } catch (e) {
     if (e instanceof ApiError) return json(e.data ?? { detail: "Upstream error." }, e.status);

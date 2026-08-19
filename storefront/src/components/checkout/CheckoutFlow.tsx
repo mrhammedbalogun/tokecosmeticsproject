@@ -18,7 +18,9 @@ function CheckoutSteps() {
   const { currentStep, completed, open, selections } = useCheckout();
 
   const summaries: Record<number, string> = {
-    1: `Signed in as ${selections.userEmail ?? ""}`,
+    1: selections.guest
+      ? `Guest checkout — ${selections.guest.email}`
+      : `Signed in as ${selections.userEmail ?? ""}`,
     2: selections.addressDisplay ?? "Address selected",
     3: selections.deliveryDisplay ?? "Delivery selected",
     4: selections.paymentGateway ? paymentLabel(selections.paymentGateway).name : "Payment method selected",

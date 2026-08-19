@@ -102,10 +102,16 @@ class OrderSerializer(_BaseOrderSerializer):
     payment_gateway = serializers.SerializerMethodField()
     gig_tracking = serializers.SerializerMethodField()
     pickup_centre = serializers.SerializerMethodField()
+    # The order's market ("NG"), same shape as `currency` above. The pay-again UI
+    # (Plan-38 gap fix) lists gateways for the ORDER's market, not the browsing
+    # cookie's — a shopper who switched countries since placing would otherwise be
+    # offered methods the backend must refuse.
+    country = serializers.CharField(source="country_id", read_only=True)
 
     class Meta:
         model = Order
         fields = ("number", "status", "placed_at", "email", "phone", "currency",
+                  "country",
                   "subtotal", "discount_total", "shipping_total", "tax_total",
                   "tax_label", "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",

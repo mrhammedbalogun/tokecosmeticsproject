@@ -44,12 +44,18 @@ describe("buy-now BFF", () => {
     expect((await res.json()).kind).toBe("standard");
   });
 
-  it("401 without a session, no upstream call (guest flow is client-side, D6)", async () => {
+  it("guest Buy Now forwards anonymously with X-Cart-Id and persists the minted cart id (Plan-38)", async () => {
     store.delete("access"); store.delete("refresh");
-    const f = upstream(200, {});
+    store.set("cart_id", "old-cart");
+    const f = upstream(200, { id: "new-cart", kind: "standard", items: [{ variant_id: 5 }] });
     const res = await POST(req({ variant_id: 5, quantity: 1 }));
-    expect(res.status).toBe(401);
-    expect(f).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    const [, init] = f.mock.calls[0];
+    const h = new Headers((init as RequestInit).headers);
+    expect(h.get("Authorization")).toBeNull();
+    expect(h.get("X-Cart-Id")).toBe("old-cart");
+    // The backend's answer is authoritative — same persistence rule as the cart proxy.
+    expect(store.get("cart_id")).toBe("new-cart");
   });
 
   it("rejects a missing variant_id with 400", async () => {

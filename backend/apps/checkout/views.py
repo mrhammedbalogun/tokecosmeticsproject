@@ -1,18 +1,37 @@
+import hashlib
 from decimal import Decimal
 
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, status
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import Address
+from apps.accounts.throttling import (
+    GuestCheckoutEmailThrottle,
+    GuestCheckoutIPThrottle,
+    ScopedRateThrottle,
+)
+from apps.accounts.turnstile import require_turnstile
 from apps.carts.models import Cart
 from apps.carts.serializers import serialize_cart
 from apps.carts.services import add_item_reporting, get_or_create_cart
 from apps.catalog.models import ProductVariant
-from apps.checkout.serializers import QuoteRequestSerializer
+from apps.checkout.serializers import (
+    GuestCheckoutSerializer,
+    GuestDeliveryOptionsSerializer,
+    GuestGigCentresSerializer,
+    GuestQuoteRequestSerializer,
+    QuoteRequestSerializer,
+    build_unsaved_address,
+)
 from apps.checkout.services.checkout import CheckoutError, place_order, retry_payment
+from apps.orders.tokens import (
+    TrackingTokenError,
+    make_guest_order_token,
+    read_guest_order_token,
+)
 from apps.checkout.services.idempotency import (
     IdempotencyConflict,
     IdempotencyKeyReused,
@@ -120,13 +139,135 @@ class QuoteView(APIView):
         ))
 
 
+# --- guest checkout (Plan-38) -------------------------------------------------
+#
+# SEPARATE views rather than AllowAny branches inside the authed ones, deliberately:
+# the authed quoting paths run a live store and stay byte-identical. All three are
+# POST (inline address = PII, GETs land in access logs) and all three demand a
+# non-empty ACTIVE guest cart — the plausibility gate that stops naked anonymous
+# requests driving the live GIG quote engine through cache-busting sweeps (the
+# IP throttles here are store-wide shared buckets and cannot be tightened; see
+# _IPKeyedThrottle's caveat).
+
+
+def _guest_cart_or_404(cart_id):
+    cart = get_object_or_404(Cart, pk=cart_id, user=None, status="active")
+    return cart
+
+
+class GuestDeliveryOptionsView(APIView):
+    """POST /api/v1/checkout/guest/delivery-options/ — DeliveryOptionsView's guest
+    twin: {cart_id, address:{...}}. Validating through GuestAddressSerializer here is
+    also the guest address form's REAL validation pass — field errors surface on the
+    form before the shopper ever reaches delivery."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        data = GuestDeliveryOptionsSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        cart = _guest_cart_or_404(v["cart_id"])
+        lines = _cart_lines(cart)
+        if not lines:
+            raise ValidationError("Cart is empty.")
+        address = build_unsaved_address(v["address"])
+        totals = compute_totals(lines, request.country)
+        return Response(priced_options_for_address(address, lines, totals.subtotal, request.country))
+
+
+class GuestGigCentresView(APIView):
+    """POST /api/v1/checkout/guest/gig-centres/ — GigCentresView's guest twin:
+    {cart_id, address:{...}} → nearest active GIG centres for the inline address."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        from apps.delivery.gig.centres import nearest_centres
+        from apps.delivery.gig.quotes import coverage_region, receiver_point
+
+        data = GuestGigCentresSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        cart = _guest_cart_or_404(v["cart_id"])
+        if not cart.items.exists():
+            raise ValidationError("Cart is empty.")
+        address = build_unsaved_address(v["address"])
+        region = coverage_region(address, home_delivery=False)
+        if region is None:
+            return Response([])
+        lat, lng = receiver_point(address, region)
+        return Response(nearest_centres(lat, lng, limit=6))
+
+
+class GuestQuoteView(APIView):
+    """POST /api/v1/checkout/guest/quote/ — QuoteView's guest twin. guest_email rides
+    along so the coupon preview enforces the same per-email limits place_order will
+    (quote.py threads it into validate_coupon). Same non-authoritative posture as
+    QuoteView: a stale option id just leaves delivery at 0.00."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        data = GuestQuoteRequestSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        cart = _guest_cart_or_404(v["cart_id"])
+        delivery_amount = Decimal("0.00")
+        if v.get("address") and v.get("delivery_option_id"):
+            address = build_unsaved_address(v["address"])
+            lines = _cart_lines(cart)
+            totals = compute_totals(lines, request.country)
+            centre = None
+            if v.get("gig_centre_id") is not None:
+                from apps.delivery.models import GigCentre
+
+                centre = GigCentre.objects.filter(
+                    gig_centre_id=v["gig_centre_id"], is_active=True
+                ).first()
+            opts = priced_options_for_address(
+                address, lines, totals.subtotal, request.country, pickup_centre=centre
+            )
+            chosen = next((o for o in opts if o["id"] == v["delivery_option_id"] and o["price"] is not None), None)
+            if chosen:
+                delivery_amount = Decimal(chosen["price"])
+        return Response(quote_service(
+            cart, request.country, user=None, email=v.get("guest_email", ""),
+            coupon_code=v.get("coupon_code", ""), delivery_amount=delivery_amount,
+        ))
+
+
 class CheckoutView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    """POST /api/v1/checkout/ — place an order. Authenticated customers, or guests
+    (Plan-38): a guest request carries guest_email/guest_phone + an inline address
+    and a Turnstile token.
+
+    GUEST ORDERING IS DELIBERATE AND LOAD-BEARING: serializer validation (no
+    idempotency state touched on a 400) → begin() → replay? answer the stored 201
+    WITHOUT a Turnstile check (Turnstile tokens are single-use, and both documented
+    same-key retry paths — the gateway-502 resume and the lost-201 replay — arrive
+    carrying an already-consumed token; a replay does no work, so waving it through
+    is safe) → require_turnstile → place_order. A Turnstile failure clears the
+    inflight marker so the same key retries immediately with a fresh token.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get_throttles(self):
+        # The defaults (anon/user) plus, for guests only, the two plan-38 caps: the
+        # email key stops one address being mail-bombed with order confirmations,
+        # the IP key caps direct-to-API volume (shared-egress caveat as everywhere).
+        throttles = super().get_throttles()
+        user = getattr(self.request, "user", None)
+        if not (user and user.is_authenticated):
+            throttles += [GuestCheckoutIPThrottle(), GuestCheckoutEmailThrottle()]
+        return throttles
 
     def post(self, request):
         key = request.headers.get("Idempotency-Key")
         if not key:
             return Response({"error": "idempotency_key_required"}, status=status.HTTP_400_BAD_REQUEST)
+        is_guest = not request.user.is_authenticated
 
         payload = {
             "cart_id": str(request.data.get("cart_id")),
@@ -137,6 +278,20 @@ class CheckoutView(APIView):
             "payment_gateway": request.data.get("payment_gateway"),
             "gig_centre_id": request.data.get("gig_centre_id"),
         }
+        guest = None
+        if is_guest:
+            gs = GuestCheckoutSerializer(data=request.data)
+            gs.is_valid(raise_exception=True)
+            guest = gs.validated_data
+            # The guest's contact + RAW address ride the request hash: same key with a
+            # different address/email is a genuinely different order (422), while a
+            # byte-identical retry replays. The RAW dict (not validated_data) because
+            # validated_data holds Region instances, and a legitimate retry resends
+            # the same bytes anyway. turnstile_token stays OUT for the same reason
+            # referral_code does below: it is volatile by design (single-use).
+            payload["guest_email"] = guest["guest_email"]
+            payload["guest_phone"] = guest["guest_phone"]
+            payload["guest_address"] = request.data.get("address")
         # `referral_code` is DELIBERATELY ABSENT from the hashed payload above, having
         # briefly been in it. The hash exists to catch "same key, genuinely different
         # order" and answer 422; the attribution cookie is not part of what the customer
@@ -147,8 +302,24 @@ class CheckoutView(APIView):
         # attribution simply wins, which is both the safer failure and the fairer answer.
         referral_code = request.data.get("referral_code", "")
         request_hash = hash_payload(payload)
+
+        # Idempotency identity. Authed: the user id (unforgeable). Guest: the cart
+        # UUID — already the guest's whole identity in carts/services.py. The DURABLE
+        # key is additionally rewritten to sha256("guest:{cart_id}:{key}") because the
+        # Payment-row backstop cannot scope on `order__user` for user=None (that
+        # renders `user IS NULL` = every guest order ever — the plan-38 dissent
+        # blocker). 64 hex chars = exactly the column width.
+        if is_guest:
+            namespace = f"guest:{payload['cart_id']}"
+            durable_key = hashlib.sha256(
+                f"guest:{payload['cart_id']}:{key}".encode()
+            ).hexdigest()
+        else:
+            namespace = request.user.id
+            durable_key = key
+
         try:
-            replay = begin(request.user.id, key, request_hash)
+            replay = begin(namespace, key, request_hash)
         except IdempotencyKeyReused:
             return Response({"error": "idempotency_key_reused"}, status=422)
         except IdempotencyConflict:
@@ -156,9 +327,20 @@ class CheckoutView(APIView):
         if replay is not None:
             return Response(replay[1], status=replay[0])
 
+        if is_guest:
+            # AFTER the replay check (see class docstring), BEFORE any work. A failed
+            # check must release the inflight marker or the same key is locked out for
+            # the full INFLIGHT_TTL while the customer holds a fresh token.
+            try:
+                require_turnstile(request)
+            except PermissionDenied:
+                clear(namespace, key)
+                raise
+
         try:
             result = place_order(
-                user=request.user, country=request.country, key=key,
+                user=request.user if not is_guest else None,
+                country=request.country, key=durable_key,
                 cart_id=payload["cart_id"], address_id=payload["address_id"],
                 billing_address_id=payload["billing_address_id"],
                 delivery_option_id=payload["delivery_option_id"],
@@ -168,12 +350,15 @@ class CheckoutView(APIView):
                 expected_total=request.data.get("expected_total"),
                 gig_centre_id=payload["gig_centre_id"],
                 referral_code=referral_code,
+                guest_email=guest["guest_email"] if guest else "",
+                guest_phone=guest["guest_phone"] if guest else "",
+                guest_address=build_unsaved_address(guest["address"]) if guest else None,
             )
         except CheckoutError as exc:
             body = {"error": exc.code, "detail": exc.detail, **exc.extra}
             return Response(body, status=exc.http)
         except GatewayNotConfigured:
-            clear(request.user.id, key)
+            clear(namespace, key)
             return Response({"error": "gateway_not_configured",
                              "detail": "Payment method is not available right now."}, status=503)
         except GatewayError:
@@ -181,21 +366,31 @@ class CheckoutView(APIView):
             # marker lets the customer retry with the SAME Idempotency-Key (resumes it).
             # NOTE: distinct from the 400 "gateway_unavailable" above, which means the
             # method isn't offered in this country. This one means the provider is down.
-            clear(request.user.id, key)
+            # (A guest retry re-runs Turnstile with a fresh widget token — the
+            # storefront resets the widget after every completed attempt.)
+            clear(namespace, key)
             return Response({"error": "gateway_error",
                              "detail": "Payment provider is temporarily unavailable. Please retry."},
                             status=502)
 
-        body = _payment_envelope(result)
-        finish(request.user.id, key, request_hash, status.HTTP_201_CREATED, body)
+        # The guest-order token rides the 201 (and its stored replay): the BFF moves it
+        # into an httpOnly cookie and STRIPS it from the browser response — it is the
+        # guest's only credential for the confirmation page and payment verify, and it
+        # must never travel in a gateway return URL (Paystack's dashboard-callback
+        # fallback drops our query string) or be readable by page JS.
+        body = _payment_envelope(
+            result,
+            guest_token=make_guest_order_token(result.order.number) if is_guest else None,
+        )
+        finish(namespace, key, request_hash, status.HTTP_201_CREATED, body)
         return Response(body, status=status.HTTP_201_CREATED)
 
 
-def _payment_envelope(result) -> dict:
+def _payment_envelope(result, guest_token: str | None = None) -> dict:
     """The payment block the storefront drives its launcher from. Shared by place_order
     and retry so the client has exactly one shape to understand."""
     init = getattr(result.order, "_initiate", None)
-    return {
+    body = {
         "order_number": result.order.number,
         "payment": {
             "gateway": result.payment.gateway,
@@ -204,6 +399,9 @@ def _payment_envelope(result) -> dict:
             "data": init.data if init else {},
         },
     }
+    if guest_token:
+        body["guest_order_token"] = guest_token
+    return body
 
 
 class OrderPayView(APIView):
@@ -214,19 +412,43 @@ class OrderPayView(APIView):
     Not idempotency-tracked through begin()/finish() like CheckoutView: there is no cart
     to convert and no order to duplicate here, so the Payment row's unique idempotency_key
     is protection enough — a repeated key replays the same attempt (see retry_payment).
+
+    Guests (Plan-38): a `guest_token` in the body — the signed guest-order token the
+    checkout BFF holds in an httpOnly cookie — stands in for auth, scoped to the one
+    order it names. The token names the order; the URL is checked AGAINST it. The
+    durable key is namespaced sha256("guest-pay:{number}:{key}") for the same
+    cross-guest-replay reason as CheckoutView. No Turnstile here: minting an attempt
+    requires the token, which only ever exists after a Turnstile-gated placement.
     """
 
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request, number: str):
         key = request.headers.get("Idempotency-Key")
         if not key:
             return Response({"error": "idempotency_key_required"},
                             status=status.HTTP_400_BAD_REQUEST)
+        is_guest = not request.user.is_authenticated
+        if is_guest:
+            raw = request.data.get("guest_token")
+            token = raw if isinstance(raw, str) else ""
+            if not token:
+                return Response({"error": "authentication_required"},
+                                status=status.HTTP_403_FORBIDDEN)
+            try:
+                signed_number = read_guest_order_token(token)
+            except TrackingTokenError:
+                # Same code as "no such order": an invalid token must not become an
+                # oracle for which order numbers exist.
+                return Response({"error": "order_not_found"}, status=404)
+            if signed_number != number:
+                return Response({"error": "order_not_found"}, status=404)
+            key = hashlib.sha256(f"guest-pay:{number}:{key}".encode()).hexdigest()
         try:
             result = retry_payment(
-                user=request.user, order_number=number,
+                user=None if is_guest else request.user, order_number=number,
                 payment_gateway=request.data.get("payment_gateway"), key=key,
+                guest=is_guest,
             )
         except CheckoutError as exc:
             return Response({"error": exc.code, "detail": exc.detail, **exc.extra},
@@ -249,9 +471,16 @@ class BuyNowView(APIView):
     the shopper's bag, and clearing it here would silently destroy it. (Originally a
     separate `kind="express"` cart per Plan-08 D14, retired 2026-07-28: nothing ever
     read an express cart, so Buy Now produced an empty checkout. The Cart.kind field
-    stays for the inert historical rows.)"""
+    stays for the inert historical rows.)
 
-    permission_classes = [permissions.IsAuthenticated]
+    AllowAny since Plan-38: guests shop the same cart machinery (get_or_create_cart
+    already resolves the X-Cart-Id guest cart), so guest Buy Now is just an
+    anonymous add-to-cart — the same operation the AllowAny cart endpoints have
+    always offered — followed by the client navigating to checkout."""
+
+    permission_classes = [permissions.AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "cart"
 
     def post(self, request):
         variant = get_object_or_404(ProductVariant, pk=request.data.get("variant_id"), is_active=True)

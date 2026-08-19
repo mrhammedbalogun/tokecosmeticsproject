@@ -20,6 +20,12 @@ export interface OrderItem {
 }
 export interface OrderDetail {
   number: string; status: string; placed_at: string; currency: string;
+  /** The order's market code ("NG") — the pay-again UI lists gateways for the
+   * ORDER's market, not the browsing cookie's. Full serializer only. */
+  country: string;
+  /** The contact the order was placed with (the account's at placement, or the
+   * guest-typed one). On the FULL serializer only — absent from OrderTracking. */
+  email: string; phone: string;
   subtotal: string; discount_total: string; shipping_total: string; tax_total: string;
   /** The market's name for the tax line ("VAT", "Sales Tax"); serializer default keeps
    * it present on every order. */
@@ -163,6 +169,21 @@ export async function getOrderOrNotFound(
  * indistinguishable from a number that never existed. The caller maps it; do NOT map it
  * to notFound() here (the page renders a friendly stale-link state instead).
  */
+/**
+ * The FULL order view for a guest-checkout order (Plan-38), unlocked by the
+ * guest-order token the checkout BFF holds in the httpOnly `guest_order` cookie.
+ * PLAIN `apiFetch` for the same reason as `getTrackedOrder`: the caller (the
+ * confirmation page serving a guest) has no session, and an auth fetcher would
+ * bounce the guest to login over a page their cookie already opens. The backend
+ * reads the number OUT of the token, so a tampered URL 404s.
+ */
+export async function getGuestOrder(number: string, guestToken: string) {
+  return apiFetch<OrderDetail>(
+    `/orders/${encodeURIComponent(number)}/?guest_token=${encodeURIComponent(guestToken)}`,
+    { cache: "no-store" },
+  );
+}
+
 export async function getTrackedOrder(number: string, token: string) {
   // Both halves encoded. The number for the same reason as `getOrder`. The token needs
   // nothing escaped TODAY — `django.core.signing` emits URL-safe base64 with ":"
