@@ -15,7 +15,7 @@ import type { PublicRateCard, PublicRateZone } from "@/lib/partners";
 import { formatNaira } from "@/lib/partners";
 
 function matches(zone: PublicRateZone, needle: string): boolean {
-  return [zone.lga, zone.lcda_name, zone.areas_covered, zone.dispatch_zone]
+  return [zone.state, zone.lga, zone.lcda_name, zone.areas_covered, zone.dispatch_zone]
     .some((field) => field.toLowerCase().includes(needle));
 }
 
@@ -57,7 +57,7 @@ export function PublicRatesList({ cards }: { cards: PublicRateCard[] }) {
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search LGA, LCDA or area — e.g. Ikorodu, Gbagada…"
+          placeholder="Search state, LGA, LCDA or area — e.g. Lagos, Ikorodu, Gbagada…"
           aria-label="Search delivery areas"
           className="w-full max-w-md rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
         />
@@ -88,10 +88,10 @@ export function PublicRatesList({ cards }: { cards: PublicRateCard[] }) {
             </span>
           </h2>
           <div className="mt-2 space-y-2">
-            {groupByLga(card.zones).map(([lgaName, rows]) => (
-              <div key={lgaName}>
+            {groupByStateAndLga(card.zones).map(([groupName, rows]) => (
+              <div key={groupName}>
                 <h3 className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted">
-                  {lgaName}
+                  {groupName}
                 </h3>
                 <div className="mt-1 space-y-2">
                   {rows.map((zone) => (
@@ -119,12 +119,15 @@ export function PublicRatesList({ cards }: { cards: PublicRateCard[] }) {
   );
 }
 
-function groupByLga(zones: PublicRateZone[]): Array<[string, PublicRateZone[]]> {
-  const byLga = new Map<string, PublicRateZone[]>();
+/** "State · LGA" group headings, states first then LGAs, both alphabetical — a
+ * marketer quoting Ibadan must not have to scan through 20 Lagos LGAs to get there. */
+function groupByStateAndLga(zones: PublicRateZone[]): Array<[string, PublicRateZone[]]> {
+  const byGroup = new Map<string, PublicRateZone[]>();
   for (const zone of zones) {
-    const list = byLga.get(zone.lga) ?? [];
+    const key = zone.state ? `${zone.state} · ${zone.lga}` : zone.lga;
+    const list = byGroup.get(key) ?? [];
     list.push(zone);
-    byLga.set(zone.lga, list);
+    byGroup.set(key, list);
   }
-  return [...byLga.entries()].sort(([a], [b]) => a.localeCompare(b));
+  return [...byGroup.entries()].sort(([a], [b]) => a.localeCompare(b));
 }

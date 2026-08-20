@@ -232,9 +232,92 @@ def test_a_zero_price_is_refused(portal):
 
 
 def test_the_lga_dropdown_serves_the_20_lagos_lgas(portal):
+    """No `state` param — the pre-cascade portal build — still means Lagos."""
     response = portal.get("/api/v1/partner/lgas/")
     assert response.status_code == 200
     assert len(response.data) == 20
+
+
+# --- the multi-state expansion (BrandnPack's 2026-08 request) ----------------------
+
+
+def _lga(state_name, lga_name):
+    state = Region.objects.get(country_code="NG", level="state", name=state_name)
+    return Region.objects.get(country_code="NG", level="area", parent=state, name=lga_name)
+
+
+def test_the_state_dropdown_serves_every_seeded_state(portal):
+    response = portal.get("/api/v1/partner/states/")
+    assert response.status_code == 200
+    names = [row["name"] for row in response.data]
+    assert len(names) == 37 and names == sorted(names)
+    assert APIClient().get("/api/v1/partner/states/").status_code == 401  # partner-only
+
+
+def test_the_lga_dropdown_follows_the_chosen_state(portal):
+    oyo = Region.objects.get(country_code="NG", level="state", name="Oyo")
+    response = portal.get(f"/api/v1/partner/lgas/?state={oyo.id}")
+    assert response.status_code == 200
+    expected = Region.objects.filter(parent=oyo, level="area").count()
+    assert expected > 0 and len(response.data) == expected
+    assert all(Region.objects.get(pk=row["id"]).parent_id == oyo.id for row in response.data)
+
+
+def test_a_bogus_state_param_is_refused(portal):
+    assert portal.get("/api/v1/partner/lgas/?state=abc").status_code == 400
+    assert portal.get("/api/v1/partner/lgas/?state=999999").status_code == 400
+
+
+def test_a_zone_outside_lagos_is_created_and_offered_at_checkout(portal):
+    """The whole point of the expansion: an Oyo row created through the portal is
+    offered to an Oyo address by checkout, with the partner's own day estimate."""
+    ng = _ng()
+    ibadan = _lga("Oyo", "Ibadan North")
+    created = portal.post("/api/v1/partner/zones/", {
+        "lga_region": ibadan.id, "lcda_name": "Ibadan North Central",
+        "areas_covered": "Bodija, UI, Agbowo", "price": "9000",
+        "min_days": 3, "max_days": 7,
+    }, format="json")
+    assert created.status_code == 201, created.data
+    assert created.data["state_name"] == "Oyo"
+    assert created.data["state_id"] == ibadan.parent_id
+
+    addr = FakeAddress("NG", state_region=ibadan.parent, area_region=ibadan)
+    rows = _partner_rows(options_for_address(addr, [], Decimal("0"), ng))
+    assert [r["name"] for r in rows] == ["Door Delivery - Ibadan North Central (BrandnPack)"]
+    assert (rows[0]["min_days"], rows[0]["max_days"]) == (3, 7)
+
+
+def test_delivery_days_must_be_a_sane_range(portal):
+    ibadan = _lga("Oyo", "Ibadan North")
+    response = portal.post("/api/v1/partner/zones/", {
+        "lga_region": ibadan.id, "lcda_name": "Backwards Days",
+        "areas_covered": "Anywhere", "min_days": 7, "max_days": 3,
+    }, format="json")
+    assert response.status_code == 400
+    assert "max_days" in response.data
+
+
+def test_a_partial_edit_still_checks_the_day_range(portal):
+    """PATCH sends a subset — raising min_days above the row's standing max_days must
+    fail even though max_days is absent from the payload."""
+    zone = PartnerZone.objects.first()  # seeded rows carry the 1–3 default
+    response = portal.patch(
+        f"/api/v1/partner/zones/{zone.pk}/", {"min_days": 10}, format="json"
+    )
+    assert response.status_code == 400
+
+
+def test_a_duplicate_lcda_row_is_refused(portal):
+    """774 LGAs on offer makes a double entry an easy slip; the guard is
+    case-insensitive so 'IKORODU CENTRAL' cannot sneak past 'Ikorodu Central'."""
+    zone = PartnerZone.objects.select_related("lga_region").first()
+    response = portal.post("/api/v1/partner/zones/", {
+        "lga_region": zone.lga_region_id, "lcda_name": zone.lcda_name.upper(),
+        "areas_covered": "Anywhere",
+    }, format="json")
+    assert response.status_code == 400
+    assert "lcda_name" in response.data
 
 
 # --- the public rates list (marketers' view) ---------------------------------------
@@ -249,9 +332,10 @@ def test_anyone_can_read_the_live_rate_card():
     assert len(card["zones"]) == 47  # live rows only — the 8 unpriced stay hidden
     first = card["zones"][0]
     assert set(first) == {
-        "id", "lga", "lcda_name", "areas_covered", "dispatch_zone",
+        "id", "state", "lga", "lcda_name", "areas_covered", "dispatch_zone",
         "price", "min_days", "max_days",
     }
+    assert first["state"] == "Lagos"  # the seeded card is all-Lagos
     assert first["price"] not in (None, "")  # a quotable row always carries a price
 
 

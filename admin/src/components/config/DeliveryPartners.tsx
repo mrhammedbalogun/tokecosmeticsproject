@@ -154,6 +154,7 @@ function ZoneRow({ zone }: { zone: AdminPartnerZoneRow }) {
 
   return (
     <tr className="border-t border-line text-sm">
+      <td className="px-3 py-2 text-muted">{zone.state_name}</td>
       <td className="px-3 py-2">{zone.lga_name}</td>
       <td className="px-3 py-2 font-medium">{zone.lcda_name}</td>
       <td className="max-w-64 truncate px-3 py-2 text-muted" title={zone.areas_covered}>
@@ -249,7 +250,7 @@ export function DeliveryPartners({
         <h2 className="text-sm font-semibold tracking-tight">Rate card</h2>
         <p className="text-sm text-muted">
           The partner maintains this in their portal; edits here are for emergencies —
-          fixing a typo'd rate or hiding a row the moment a complaint lands.
+          fixing a typo&apos;d rate or hiding a row the moment a complaint lands.
         </p>
         {zonesError ? (
           <Note tone="warn">{zonesError}</Note>
@@ -257,9 +258,10 @@ export function DeliveryPartners({
           <Note tone="ok">No rate-card rows yet.</Note>
         ) : (
           <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line">
-            <table className="w-full min-w-[860px] text-left">
+            <table className="w-full min-w-[940px] text-left">
               <thead className="bg-surface text-xs uppercase tracking-wide text-muted">
                 <tr>
+                  <th className="px-3 py-2 font-medium">State</th>
                   <th className="px-3 py-2 font-medium">LGA</th>
                   <th className="px-3 py-2 font-medium">LCDA</th>
                   <th className="px-3 py-2 font-medium">Areas covered</th>

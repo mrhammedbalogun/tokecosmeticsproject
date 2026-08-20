@@ -205,6 +205,8 @@ class PartnerZoneAdminSerializer(serializers.ModelSerializer):
         queryset=Region.objects.filter(country_code="NG", level="area")
     )
     lga_name = serializers.CharField(source="lga_region.name", read_only=True)
+    state_id = serializers.IntegerField(source="lga_region.parent_id", read_only=True)
+    state_name = serializers.SerializerMethodField()
     partner_name = serializers.CharField(source="partner.name", read_only=True)
     # Same ₦1 floor as the portal serializer: null = "not priced yet" is legitimate,
     # zero would sell free delivery.
@@ -217,10 +219,18 @@ class PartnerZoneAdminSerializer(serializers.ModelSerializer):
 
         model = PartnerZone
         fields = [
-            "id", "partner", "partner_name", "lga_region", "lga_name", "lcda_name",
-            "areas_covered", "dispatch_zone", "price", "is_active", "updated_at",
+            "id", "partner", "partner_name", "lga_region", "lga_name", "state_id",
+            "state_name", "lcda_name", "areas_covered", "dispatch_zone", "price",
+            "min_days", "max_days", "is_active", "updated_at",
         ]
-        read_only_fields = ["id", "updated_at"]
+        # Delivery-day estimates stay the partner's to author (their portal has the
+        # form for it); staff read them here so the oversight table tells the whole
+        # story, but the emergency-edit surface stays price + visibility.
+        read_only_fields = ["id", "state_id", "state_name", "min_days", "max_days", "updated_at"]
+
+    def get_state_name(self, obj) -> str:
+        parent = obj.lga_region.parent
+        return parent.name if parent else ""
 
 
 class RegionAdminSerializer(serializers.ModelSerializer):

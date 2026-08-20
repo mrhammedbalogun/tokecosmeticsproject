@@ -6,11 +6,17 @@ export interface PartnerZoneRow {
   id: number;
   lga_region: number;
   lga_name: string;
+  /** The LGA's parent state — read-only, for grouping and for preselecting the
+   * state half of the state → LGA cascade when editing. */
+  state_id: number;
+  state_name: string;
   lcda_name: string;
   areas_covered: string;
   dispatch_zone: string;
   /** null = "the partner has not set a price yet" — the row never reaches checkout. */
   price: string | null;
+  min_days: number;
+  max_days: number;
   is_active: boolean;
   updated_at: string;
 }
@@ -21,10 +27,15 @@ export interface AdminPartnerZoneRow extends PartnerZoneRow {
   partner_name: string;
 }
 
-export interface PartnerLgaOption {
+/** One entry of either half of the state → LGA cascade — both endpoints answer
+ * with the same `{id, name}` shape. */
+export interface PartnerRegionOption {
   id: number;
   name: string;
 }
+
+/** @deprecated older name for {@link PartnerRegionOption}, kept for existing imports. */
+export type PartnerLgaOption = PartnerRegionOption;
 
 export interface PartnerMe {
   name: string;
@@ -50,6 +61,7 @@ export interface DeliveryPartnerRow {
  * checkout would actually offer appear here, so `price` is never null. */
 export interface PublicRateZone {
   id: number;
+  state: string;
   lga: string;
   lcda_name: string;
   areas_covered: string;

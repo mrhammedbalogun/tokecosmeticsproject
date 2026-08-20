@@ -125,23 +125,53 @@ class PartnerMeView(APIView):
         })
 
 
-class PartnerLgaListView(APIView):
-    """GET /api/v1/partner/lgas/ — the LGA dropdown for the rate-card form.
+class PartnerStateListView(APIView):
+    """GET /api/v1/partner/states/ — the STATE dropdown for the rate-card form.
 
-    Lagos only for now: BrandnPack's coverage is Lagos by their own doc, and offering
-    all 774 Nigerian LGAs would make the dropdown a data-entry hazard. Widening this
-    when a partner expands is a one-line filter change; the SERIALIZER's rule stays
-    the looser "any NG area-level region" so no data migration is needed that day.
+    BrandnPack's 2026-08 request: coverage beyond Lagos. The form is now a
+    state → LGA cascade, and this endpoint feeds its first half — all 37 seeded
+    Nigerian states, so a partner can open any of them the day they start serving it.
     """
 
     authentication_classes = [PartnerJWTAuthentication]
     permission_classes = [IsDeliveryPartner]
 
     def get(self, request):
-        lagos = Region.objects.filter(country_code="NG", level="state", name="Lagos").first()
+        states = Region.objects.filter(country_code="NG", level="state").order_by("name")
+        return Response([{"id": r.id, "name": r.name} for r in states])
+
+
+class PartnerLgaListView(APIView):
+    """GET /api/v1/partner/lgas/?state=<id> — the LGA dropdown for the rate-card form.
+
+    One state's LGAs at a time (the cascade keeps the dropdown from being a 774-row
+    data-entry hazard). `state` must name a seeded NG state; with no param the
+    original Lagos-only behaviour stands, so a portal build from before the cascade
+    keeps working during a deploy window.
+    """
+
+    authentication_classes = [PartnerJWTAuthentication]
+    permission_classes = [IsDeliveryPartner]
+
+    def get(self, request):
+        raw = request.query_params.get("state")
+        if raw is None:
+            state = Region.objects.filter(
+                country_code="NG", level="state", name="Lagos"
+            ).first()
+        else:
+            try:
+                state_id = int(raw)
+            except (TypeError, ValueError):
+                return Response({"detail": "state must be a region id."}, status=400)
+            state = Region.objects.filter(
+                country_code="NG", level="state", pk=state_id
+            ).first()
+            if state is None:
+                return Response({"detail": "Unknown state."}, status=400)
         regions = (
-            Region.objects.filter(parent=lagos, level="area").order_by("name")
-            if lagos else Region.objects.none()
+            Region.objects.filter(parent=state, level="area").order_by("name")
+            if state else Region.objects.none()
         )
         return Response([{"id": r.id, "name": r.name} for r in regions])
 
@@ -215,6 +245,7 @@ class PublicRatesView(APIView):
             card["zones"].append({
                 # The pk is already public — checkout labels this row "pz:{id}".
                 "id": z.id,
+                "state": z.lga_region.parent.name if z.lga_region.parent else "",
                 "lga": z.lga_region.name,
                 "lcda_name": z.lcda_name,
                 "areas_covered": z.areas_covered,
@@ -229,32 +260,74 @@ class PublicRatesView(APIView):
 
 
 class PartnerZoneSerializer(serializers.ModelSerializer):
-    """The five doc fields Hammed ruled the partner manages — LGA, LCDA, Major
-    Locations & Landmarks, Dispatch Zone, Rate — plus the visibility switch.
+    """The doc fields Hammed ruled the partner manages — LGA, LCDA, Major
+    Locations & Landmarks, Dispatch Zone, Rate — plus the visibility switch and,
+    since the multi-state expansion, the delivery-day estimate the customer sees.
 
     `price` floor of ₦1: with no approval step (edits go live immediately), a zero
     price would render as free delivery at checkout; a NULL price is the legitimate
     "not priced yet" state and stays allowed. The obvious remaining typo (₦400 for
     ₦4,000) is accepted risk under the same ruling — the storefront shows exactly
     what this table says.
+
+    `min_days`/`max_days` surfaced for the same reason states were: the model's 1–3
+    default was written for Lagos and would show interstate customers a promise the
+    partner cannot keep. Capped at 30 — anything longer is a data-entry mistake, not
+    a delivery plan.
     """
 
     lga_region = serializers.PrimaryKeyRelatedField(
         queryset=Region.objects.filter(country_code="NG", level="area")
     )
     lga_name = serializers.CharField(source="lga_region.name", read_only=True)
+    state_id = serializers.IntegerField(source="lga_region.parent_id", read_only=True)
+    state_name = serializers.SerializerMethodField()
     price = serializers.DecimalField(
         max_digits=12, decimal_places=2, min_value=1, required=False, allow_null=True,
     )
+    min_days = serializers.IntegerField(min_value=1, max_value=30, required=False)
+    max_days = serializers.IntegerField(min_value=1, max_value=30, required=False)
 
     class Meta:
         model = PartnerZone
         fields = [
-            "id", "lga_region", "lga_name", "lcda_name", "areas_covered",
-            "dispatch_zone", "price", "is_active", "updated_at",
+            "id", "lga_region", "lga_name", "state_id", "state_name", "lcda_name",
+            "areas_covered", "dispatch_zone", "price", "min_days", "max_days",
+            "is_active", "updated_at",
         ]
-        read_only_fields = ["id", "lga_name", "updated_at"]
+        read_only_fields = ["id", "lga_name", "state_id", "state_name", "updated_at"]
         extra_kwargs = {"dispatch_zone": {"required": False, "allow_blank": True}}
+
+    def get_state_name(self, obj) -> str:
+        parent = obj.lga_region.parent
+        return parent.name if parent else ""
+
+    def validate(self, attrs):
+        # PATCH sends a subset, so cross-field checks compare against the row's
+        # current values wherever the payload is silent.
+        min_days = attrs.get("min_days", getattr(self.instance, "min_days", 1))
+        max_days = attrs.get("max_days", getattr(self.instance, "max_days", 3))
+        if min_days > max_days:
+            raise serializers.ValidationError(
+                {"max_days": "The longest delivery time cannot be shorter than the quickest."}
+            )
+        # One row per (LGA, LCDA) per partner. Harmless while everything was Lagos;
+        # with 774 LGAs on offer, a double entry becomes an easy mistake that would
+        # show the customer the same option twice — possibly at two prices.
+        lga = attrs.get("lga_region", getattr(self.instance, "lga_region", None))
+        lcda = attrs.get("lcda_name", getattr(self.instance, "lcda_name", "")).strip()
+        partner = getattr(self.context["request"].user, "delivery_partner", None)
+        if lga is not None and lcda and partner is not None:
+            duplicates = PartnerZone.objects.filter(
+                partner=partner, lga_region=lga, lcda_name__iexact=lcda,
+            )
+            if self.instance is not None:
+                duplicates = duplicates.exclude(pk=self.instance.pk)
+            if duplicates.exists():
+                raise serializers.ValidationError(
+                    {"lcda_name": "You already have a row for this LCDA in this LGA — edit that row instead."}
+                )
+        return attrs
 
 
 class PartnerZoneViewSet(viewsets.ModelViewSet):
@@ -269,7 +342,7 @@ class PartnerZoneViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             PartnerZone.objects.filter(partner=self.request.user.delivery_partner)
-            .select_related("lga_region")
+            .select_related("lga_region", "lga_region__parent")
         )
 
     def perform_create(self, serializer):

@@ -311,9 +311,9 @@ class PartnerZoneAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     def get_queryset(self):
         from apps.delivery.models import PartnerZone
 
-        return PartnerZone.objects.select_related("partner", "lga_region").order_by(
-            "lga_region__name", "lcda_name"
-        )
+        return PartnerZone.objects.select_related(
+            "partner", "lga_region", "lga_region__parent"
+        ).order_by("lga_region__parent__name", "lga_region__name", "lcda_name")
 
     def destroy(self, request, *args, **kwargs):
         self._deleted_zone = PartnerZoneAdminSerializer(self.get_object()).data

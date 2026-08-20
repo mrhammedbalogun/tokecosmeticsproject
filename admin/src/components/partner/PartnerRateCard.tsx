@@ -1,41 +1,49 @@
 "use client";
 
 /**
- * The partner's rate card (Plan-39): every zone row, grouped by LGA, with inline
- * add / edit / delete. All traffic goes through the partner BFF proxy
+ * The partner's rate card (Plan-39): every zone row, grouped by state then LGA, with
+ * inline add / edit / delete. All traffic goes through the partner BFF proxy
  * (`/api/partner/...`), which attaches the httpOnly partner cookies server-side;
  * a 401 from it means the session died — the only correct move is back to the login.
  *
- * The form mirrors the five doc columns the partner manages (Hammed's ruling): LGA,
- * LCDA, Major Locations & Landmarks, Dispatch Zone, Rate. A row without a rate is
- * badged "needs a price" and is never offered at checkout, so leaving the rate empty
- * is a safe way to stage a new area.
+ * The form mirrors the doc columns the partner manages (Hammed's ruling): LGA,
+ * LCDA, Major Locations & Landmarks, Dispatch Zone, Rate — widened 2026-08 at
+ * BrandnPack's request into a state → LGA cascade so coverage outside Lagos can be
+ * added, plus the delivery-day estimate customers see (the old hidden 1–3 default
+ * was a Lagos number). A row without a rate is badged "needs a price" and is never
+ * offered at checkout, so leaving the rate empty is a safe way to stage a new area.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { PartnerLgaOption, PartnerMe, PartnerZoneRow } from "@/lib/partners";
+import type { PartnerMe, PartnerRegionOption, PartnerZoneRow } from "@/lib/partners";
 import { formatNaira } from "@/lib/partners";
 
 interface ZoneDraft {
+  state: string; // select value; "" = unchosen — never sent, it only scopes the LGA list
   lga_region: string; // select value; "" = unchosen
   lcda_name: string;
   areas_covered: string;
   dispatch_zone: string;
   price: string; // "" = no price yet
+  min_days: string;
+  max_days: string;
   is_active: boolean;
 }
 
 const EMPTY_DRAFT: ZoneDraft = {
-  lga_region: "", lcda_name: "", areas_covered: "", dispatch_zone: "",
-  price: "", is_active: true,
+  state: "", lga_region: "", lcda_name: "", areas_covered: "", dispatch_zone: "",
+  price: "", min_days: "1", max_days: "3", is_active: true,
 };
 
 function draftFrom(row: PartnerZoneRow): ZoneDraft {
   return {
+    state: String(row.state_id),
     lga_region: String(row.lga_region),
     lcda_name: row.lcda_name,
     areas_covered: row.areas_covered,
     dispatch_zone: row.dispatch_zone,
     price: row.price === null ? "" : String(Number(row.price)),
+    min_days: String(row.min_days),
+    max_days: String(row.max_days),
     is_active: row.is_active,
   };
 }
@@ -47,8 +55,16 @@ function bodyFrom(draft: ZoneDraft): Record<string, unknown> {
     areas_covered: draft.areas_covered.trim(),
     dispatch_zone: draft.dispatch_zone.trim(),
     price: draft.price.trim() === "" ? null : draft.price.trim(),
+    min_days: Number(draft.min_days),
+    max_days: Number(draft.max_days),
     is_active: draft.is_active,
   };
+}
+
+/** A whole positive day count, or null — "2.5" and "0" both fail. */
+function dayValue(raw: string): number | null {
+  const n = Number(raw.trim());
+  return Number.isInteger(n) && n >= 1 ? n : null;
 }
 
 async function api(path: string, init?: RequestInit): Promise<Response> {
@@ -76,9 +92,11 @@ function firstError(data: unknown): string {
 
 export function PartnerRateCard() {
   const [me, setMe] = useState<PartnerMe | null>(null);
-  const [lgas, setLgas] = useState<PartnerLgaOption[]>([]);
+  const [states, setStates] = useState<PartnerRegionOption[]>([]);
   const [zones, setZones] = useState<PartnerZoneRow[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // LGA lists arrive per state as the partner picks one; fetched once each, kept.
+  const [lgasByState, setLgasByState] = useState<Record<string, PartnerRegionOption[]>>({});
 
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -88,15 +106,15 @@ export function PartnerRateCard() {
 
   const reload = useCallback(async () => {
     try {
-      const [meRes, lgaRes, zoneRes] = await Promise.all([
-        api("/api/partner/me"), api("/api/partner/lgas"), api("/api/partner/zones"),
+      const [meRes, stateRes, zoneRes] = await Promise.all([
+        api("/api/partner/me"), api("/api/partner/states"), api("/api/partner/zones"),
       ]);
-      if (!meRes.ok || !lgaRes.ok || !zoneRes.ok) {
+      if (!meRes.ok || !stateRes.ok || !zoneRes.ok) {
         setLoadError("Your rate card could not be loaded — please refresh.");
         return;
       }
       setMe(await meRes.json());
-      setLgas(await lgaRes.json());
+      setStates(await stateRes.json());
       setZones(await zoneRes.json());
       setLoadError(null);
     } catch (e) {
@@ -109,14 +127,34 @@ export function PartnerRateCard() {
     void reload();
   }, [reload]);
 
+  const loadLgas = useCallback(async (stateId: string) => {
+    if (!stateId) return;
+    try {
+      const res = await api(`/api/partner/lgas?state=${encodeURIComponent(stateId)}`);
+      if (!res.ok) return; // the LGA select stays in its "loading" state; re-picking retries
+      const options: PartnerRegionOption[] = await res.json();
+      setLgasByState((m) => (m[stateId] ? m : { ...m, [stateId]: options }));
+    } catch {
+      /* a dropped fetch leaves the cache empty — picking the state again retries */
+    }
+  }, []);
+
+  // state → LGA groups → rows, states and LGAs both alphabetical.
   const grouped = useMemo(() => {
-    const byLga = new Map<string, PartnerZoneRow[]>();
+    const byState = new Map<string, Map<string, PartnerZoneRow[]>>();
     for (const z of zones ?? []) {
+      const byLga = byState.get(z.state_name) ?? new Map<string, PartnerZoneRow[]>();
       const list = byLga.get(z.lga_name) ?? [];
       list.push(z);
       byLga.set(z.lga_name, list);
+      byState.set(z.state_name, byLga);
     }
-    return [...byLga.entries()].sort(([a], [b]) => a.localeCompare(b));
+    return [...byState.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([stateName, byLga]) => [
+        stateName,
+        [...byLga.entries()].sort(([a], [b]) => a.localeCompare(b)),
+      ] as const);
   }, [zones]);
 
   function startAdd() {
@@ -131,6 +169,7 @@ export function PartnerRateCard() {
     setAdding(false);
     setDraft(draftFrom(row));
     setFormError(null);
+    void loadLgas(String(row.state_id));
   }
 
   function cancelForm() {
@@ -139,13 +178,29 @@ export function PartnerRateCard() {
     setFormError(null);
   }
 
+  function pickState(stateId: string) {
+    // Changing state invalidates the LGA choice — the old one belongs elsewhere.
+    setDraft((d) => ({ ...d, state: stateId, lga_region: "" }));
+    void loadLgas(stateId);
+  }
+
   async function submitDraft() {
+    if (!draft.state) {
+      setFormError("Choose the state this area is in.");
+      return;
+    }
     if (!draft.lga_region) {
       setFormError("Choose the LGA this area belongs to.");
       return;
     }
     if (!draft.lcda_name.trim() || !draft.areas_covered.trim()) {
       setFormError("The LCDA name and the locations covered are both required.");
+      return;
+    }
+    const minDays = dayValue(draft.min_days);
+    const maxDays = dayValue(draft.max_days);
+    if (minDays === null || maxDays === null || minDays > maxDays) {
+      setFormError("Delivery days must be whole numbers of at least 1, quickest first.");
       return;
     }
     setBusy(true);
@@ -173,7 +228,7 @@ export function PartnerRateCard() {
 
   async function removeRow(row: PartnerZoneRow) {
     const ok = window.confirm(
-      `Delete ${row.lcda_name} (${row.lga_name})? Customers will stop being offered it immediately.`,
+      `Delete ${row.lcda_name} (${row.lga_name}, ${row.state_name})? Customers will stop being offered it immediately.`,
     );
     if (!ok) return;
     try {
@@ -195,6 +250,8 @@ export function PartnerRateCard() {
     return <p className="text-sm text-muted">Loading your rate card…</p>;
   }
 
+  const lgaOptions = draft.state ? lgasByState[draft.state] : undefined;
+
   const form = (
     <div className="rounded-[var(--radius-card)] border border-accent/40 bg-accent/5 p-4">
       <p className="text-sm font-semibold">
@@ -207,19 +264,39 @@ export function PartnerRateCard() {
       )}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block text-sm">
-          <span className="font-medium">LGA</span>
+          <span className="font-medium">State</span>
           <select
-            value={draft.lga_region}
-            onChange={(e) => setDraft({ ...draft, lga_region: e.target.value })}
+            value={draft.state}
+            onChange={(e) => pickState(e.target.value)}
             className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
           >
-            <option value="">Choose an LGA…</option>
-            {lgas.map((l) => (
-              <option key={l.id} value={l.id}>{l.name}</option>
+            <option value="">Choose a state…</option>
+            {states.map((s) => (
+              <option key={s.id} value={s.id}>{s.name}</option>
             ))}
           </select>
         </label>
         <label className="block text-sm">
+          <span className="font-medium">LGA</span>
+          <select
+            value={draft.lga_region}
+            onChange={(e) => setDraft({ ...draft, lga_region: e.target.value })}
+            disabled={!draft.state}
+            className="mt-1 w-full rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent disabled:opacity-60"
+          >
+            <option value="">
+              {!draft.state
+                ? "Choose a state first…"
+                : lgaOptions === undefined
+                  ? "Loading LGAs…"
+                  : "Choose an LGA…"}
+            </option>
+            {(lgaOptions ?? []).map((l) => (
+              <option key={l.id} value={l.id}>{l.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-sm sm:col-span-2">
           <span className="font-medium">LCDA</span>
           <input
             value={draft.lcda_name}
@@ -264,6 +341,33 @@ export function PartnerRateCard() {
             Leave empty to keep the area hidden until you have a price.
           </span>
         </label>
+        <div className="block text-sm sm:col-span-2">
+          <span className="font-medium">Delivery time (days)</span>
+          <div className="mt-1 flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={draft.min_days}
+              onChange={(e) => setDraft({ ...draft, min_days: e.target.value })}
+              aria-label="Quickest delivery, in days"
+              className="w-20 rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            <span className="text-muted">to</span>
+            <input
+              type="number"
+              min={1}
+              max={30}
+              value={draft.max_days}
+              onChange={(e) => setDraft({ ...draft, max_days: e.target.value })}
+              aria-label="Longest delivery, in days"
+              className="w-20 rounded-md border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+          </div>
+          <span className="mt-1 block text-xs text-muted">
+            Shown to customers at checkout — set a realistic range for areas outside Lagos.
+          </span>
+        </div>
         <label className="flex items-center gap-2 text-sm sm:col-span-2">
           <input
             type="checkbox"
@@ -314,51 +418,61 @@ export function PartnerRateCard() {
 
       {adding && form}
 
-      {grouped.map(([lgaName, rows]) => (
-        <section key={lgaName}>
-          <h2 className="text-sm font-semibold tracking-tight">{lgaName}</h2>
-          <div className="mt-2 space-y-2">
-            {rows.map((row) =>
-              editingId === row.id ? (
-                <div key={row.id}>{form}</div>
-              ) : (
-                <div
-                  key={row.id}
-                  className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-3 text-sm"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium">
-                      {row.lcda_name}
-                      {(!row.is_active || row.price === null) && (
-                        <span className="ml-2 rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-xs text-warn">
-                          {row.price === null ? "needs a price" : "hidden"}
-                        </span>
-                      )}
-                    </p>
-                    <p className="mt-0.5 truncate text-muted">{row.areas_covered}</p>
-                  </div>
-                  <span className="text-muted">{row.dispatch_zone}</span>
-                  <span className="w-20 text-right font-semibold">{formatNaira(row.price)}</span>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => startEdit(row)}
-                      className="rounded-md border border-line px-2.5 py-1 text-xs transition-colors hover:border-accent/60"
+      {grouped.map(([stateName, lgaGroups]) => (
+        <section key={stateName}>
+          <h2 className="text-base font-semibold tracking-tight">{stateName}</h2>
+          {lgaGroups.map(([lgaName, rows]) => (
+            <div key={lgaName} className="mt-3">
+              <h3 className="text-sm font-semibold tracking-tight text-muted">{lgaName}</h3>
+              <div className="mt-2 space-y-2">
+                {rows.map((row) =>
+                  editingId === row.id ? (
+                    <div key={row.id}>{form}</div>
+                  ) : (
+                    <div
+                      key={row.id}
+                      className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-[var(--radius-card)] border border-line bg-surface px-4 py-3 text-sm"
                     >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeRow(row)}
-                      className="rounded-md border border-danger/30 px-2.5 py-1 text-xs text-danger transition-colors hover:bg-danger/5"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              ),
-            )}
-          </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium">
+                          {row.lcda_name}
+                          {(!row.is_active || row.price === null) && (
+                            <span className="ml-2 rounded-full border border-warn/40 bg-warn/10 px-2 py-0.5 text-xs text-warn">
+                              {row.price === null ? "needs a price" : "hidden"}
+                            </span>
+                          )}
+                        </p>
+                        <p className="mt-0.5 truncate text-muted">{row.areas_covered}</p>
+                      </div>
+                      <span className="text-muted">{row.dispatch_zone}</span>
+                      <span className="text-muted">
+                        {row.min_days === row.max_days
+                          ? `${row.min_days} day${row.min_days === 1 ? "" : "s"}`
+                          : `${row.min_days}–${row.max_days} days`}
+                      </span>
+                      <span className="w-20 text-right font-semibold">{formatNaira(row.price)}</span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startEdit(row)}
+                          className="rounded-md border border-line px-2.5 py-1 text-xs transition-colors hover:border-accent/60"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(row)}
+                          className="rounded-md border border-danger/30 px-2.5 py-1 text-xs text-danger transition-colors hover:bg-danger/5"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ),
+                )}
+              </div>
+            </div>
+          ))}
         </section>
       ))}
     </div>
