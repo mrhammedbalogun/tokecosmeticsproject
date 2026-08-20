@@ -36,6 +36,12 @@ const SECTIONS = [
     scopes: ["products.manage"],
   },
   {
+    href: "/settings/delivery-controls",
+    title: "Delivery controls",
+    blurb: "Block GIG or a partner in a country, state or LGA, and mask fees by a percentage.",
+    scopes: ["products.manage"],
+  },
+  {
     href: "/settings/taxes",
     title: "Taxes",
     blurb: "Whether tax is charged, and each market's rate, label and rules.",

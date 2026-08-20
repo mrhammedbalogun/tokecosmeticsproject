@@ -25,7 +25,12 @@ from apps.delivery.gig.quotes import (
     receiver_point,
 )
 from apps.delivery.models import DeliveryOption, GigCentre
-from apps.delivery.services import _total_weight_g, options_for_address
+from apps.delivery.services import (
+    _total_weight_g,
+    apply_fee_mask,
+    fee_mask_percents,
+    options_for_address,
+)
 
 
 def nearest_centre(address):
@@ -59,6 +64,10 @@ def priced_options_for_address(
         return options
 
     weight_g = _total_weight_g(lines)
+    # Plan-41 fee masks for the LIVE-priced rows only — services.py already masked
+    # every other kind. The mask touches what the CUSTOMER pays; the raw quote stays
+    # in the cache and in GigShipment.quote/cost, so reconciliation sees true cost.
+    masks = fee_mask_percents()
     priced: list[dict] = []
     for option in options:
         if option["kind"] != "carrier":
@@ -73,9 +82,10 @@ def priced_options_for_address(
             quote = quote_home_delivery(address, weight_g, declared_value=subtotal)
         if quote is None:
             continue
-        charged = quote.price
+        charged = apply_fee_mask(quote.price, masks.get(option["carrier_code"]))
         # free_over applies to what the CUSTOMER pays, never to what GIG costs us —
-        # the placement snapshot keeps both figures (spec ruling 2).
+        # the placement snapshot keeps both figures (spec ruling 2). It also outranks
+        # the mask: 10% of a free delivery is still free.
         row = DeliveryOption.objects.filter(pk=option["id"]).first()
         if row and row.free_over is not None and subtotal >= row.free_over:
             charged = Decimal("0.00")

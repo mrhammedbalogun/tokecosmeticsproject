@@ -4,12 +4,19 @@ display and by checkout's server-side re-check (never trust the client's option 
 """
 from __future__ import annotations
 
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.db.models import Q
 
 from apps.core.country_context import resolve_country
-from apps.delivery.models import DeliveryOption, PartnerZone, SenderLocation
+from apps.delivery.models import (
+    DeliveryBlock,
+    DeliveryFeeMask,
+    DeliveryOption,
+    DeliveryPartner,
+    PartnerZone,
+    SenderLocation,
+)
 
 TWO_DP = Decimal("0.01")
 
@@ -143,6 +150,79 @@ def _store_pickup_option(resolved_code: str, country, address) -> list[dict]:
     }]
 
 
+def service_code_for(option: dict) -> str:
+    """The stable code Plan-41 block/mask rules are keyed on. GIG's two rows (door +
+    centre pickup) share "gig" on purpose — the operator's mental model is the
+    courier, not the row — and each manual option is its own service ("option:{pk}")
+    because each one is its own courier arrangement."""
+    kind = option.get("kind", "manual")
+    if kind in ("carrier", "partner"):
+        return option.get("carrier_code") or f"option:{option['id']}"
+    if kind == "store":
+        return STORE_PICKUP_OPTION_ID
+    return f"option:{option['id']}"
+
+
+def known_delivery_services() -> list[dict]:
+    """Every service a block/mask rule can name — the admin picker's data and the
+    write-side validation set. Inactive partners and options are listed deliberately:
+    a rule outlives a kill-switch flip, and hiding the code would strand existing
+    rules unlabelled in the admin."""
+    services = [{"code": "gig", "name": "GIG Logistics", "kind": "carrier"}]
+    services += [
+        {"code": p.code, "name": p.name, "kind": "partner"}
+        for p in DeliveryPartner.objects.order_by("name")
+    ]
+    services.append({
+        "code": STORE_PICKUP_OPTION_ID,
+        "name": "Pickup at Toke Cosmetics Store",
+        "kind": "store",
+    })
+    services += [
+        {"code": f"option:{o.pk}", "name": o.name, "kind": "manual"}
+        for o in DeliveryOption.objects.filter(kind="manual").order_by("sort", "name")
+    ]
+    return services
+
+
+def blocked_service_codes(country_code: str, region_ids: set[int]) -> set[str]:
+    """The service codes DeliveryBlock rules remove at this address (Plan-41). A
+    rule's narrowest set level decides: area beats state beats whole-country.
+    Matching runs against the same ancestor-closure set the coverage matcher uses,
+    so "block Lagos" catches every Lagos LGA exactly as "cover Lagos" offers to
+    them — including an address that names the state but no LGA."""
+    codes: set[str] = set()
+    for rule in DeliveryBlock.objects.filter(is_active=True, country_code=country_code):
+        if rule.area_region_id is not None:
+            hit = rule.area_region_id in region_ids
+        elif rule.state_region_id is not None:
+            hit = rule.state_region_id in region_ids
+        else:
+            hit = True  # whole-country rule
+        if hit:
+            codes.add(rule.service_code)
+    return codes
+
+
+def fee_mask_percents() -> dict[str, Decimal]:
+    """service_code → active markup percent (Plan-41). Zero-percent rows are dropped
+    here so every caller can treat "no row" and "+0%" identically."""
+    return {
+        m.service_code: m.percent
+        for m in DeliveryFeeMask.objects.filter(is_active=True)
+        if m.percent
+    }
+
+
+def apply_fee_mask(price: Decimal, percent) -> Decimal:
+    """price plus percent% of price, kobo-exact (half-kobo rounds up). ₦0 stays ₦0 —
+    a free option masks to free, so free_over and store pickup are never disturbed."""
+    if not percent:
+        return price
+    factor = Decimal("1") + Decimal(percent) / Decimal("100")
+    return (price * factor).quantize(TWO_DP, rounding=ROUND_HALF_UP)
+
+
 def _coverage_q(country_code: str, region_ids: set[int]):
     """An option matches when it covers the address's resolved country OR any covered
     region (the address's own region or any ancestor). The region leg is constrained to
@@ -238,8 +318,27 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
         }
         for o in qs
     ]
-    return (
+    options = (
         rows
         + _partner_options(resolved.code, country, region_ids)
         + _store_pickup_option(resolved.code, country, address)
     )
+
+    # Plan-41 blocks: subtractive, after every source has contributed, so one rule
+    # reaches manual, carrier, partner and store options alike.
+    blocked = blocked_service_codes(resolved.code, region_ids)
+    if blocked:
+        options = [o for o in options if service_code_for(o) not in blocked]
+
+    # Plan-41 fee masks. Carrier rows are skipped: their price here is a placeholder
+    # that carriers.py replaces with the live quote — the mask is applied there, once,
+    # to the real number. quote_required rows carry no price to mask.
+    masks = fee_mask_percents()
+    if masks:
+        for o in options:
+            if o["kind"] == "carrier" or o["price"] is None:
+                continue
+            percent = masks.get(service_code_for(o))
+            if percent:
+                o["price"] = str(apply_fee_mask(Decimal(o["price"]), percent))
+    return options

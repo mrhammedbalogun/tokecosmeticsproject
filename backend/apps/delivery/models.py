@@ -292,6 +292,74 @@ class PartnerZone(TimeStampedModel):
         return f"{self.partner.code}: {self.lga_region.name} / {self.lcda_name} ({state})"
 
 
+class DeliveryBlock(TimeStampedModel):
+    """Plan-41: "do not offer this delivery service HERE." Coverage is additive and
+    this table is subtractive: a DeliveryOption covering all of Lagos cannot exclude
+    one LGA, and GIG's coverage is synced from GIG rather than chosen — a block is
+    the operator's veto over both. No rule = the service shows everywhere it already
+    serves; a rule removes it from checkout at the matching addresses only.
+
+    `service_code` is the Plan-41 service key (`services.service_code_for`): "gig",
+    a partner's slug, "store_pickup", or "option:{pk}" for a manual option. A string,
+    not an FK, because the services it can name live in three different tables.
+
+    Granularity is the NARROWEST set level: `area_region` set → that LGA only; else
+    `state_region` set → the whole state; else the whole `country_code`. Matching
+    runs against the same ancestor closure the coverage matcher uses, so "block
+    Lagos" catches every Lagos LGA exactly as "cover Lagos" offers to them.
+    """
+
+    service_code = models.CharField(max_length=40)
+    # The RESOLVED market code (may be "ZZ" = Rest of World) — compared against
+    # resolve_country() output, never the raw address ISO, so a DE address is caught
+    # by a ZZ rule the same way it is served by ZZ options.
+    country_code = models.CharField(max_length=2)
+    state_region = models.ForeignKey(
+        "core.Region", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="delivery_blocks_as_state", limit_choices_to={"level": "state"},
+    )
+    area_region = models.ForeignKey(
+        "core.Region", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="delivery_blocks_as_area", limit_choices_to={"level": "area"},
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "delivery block"
+        ordering = ["service_code", "country_code", "id"]
+
+    def __str__(self) -> str:
+        place = self.country_code
+        if self.state_region_id:
+            place += f"/{self.state_region.name}"
+        if self.area_region_id:
+            place += f"/{self.area_region.name}"
+        suffix = "" if self.is_active else " (off)"
+        return f"{self.service_code} blocked in {place}{suffix}"
+
+
+class DeliveryFeeMask(TimeStampedModel):
+    """Plan-41: a percentage added ON TOP of a service's real fee before the customer
+    ever sees it — ₦5,000 masked at 10% displays and charges ₦5,500. One row per
+    service, applied globally, kobo-exact.
+
+    The mask never touches what the service costs US: GIG's raw quote stays in the
+    quote cache and in `GigShipment.quote`/`cost`, so reconciliation still sees the
+    true numbers — `charged − cost` includes exactly this markup.
+    """
+
+    service_code = models.CharField(max_length=40, unique=True)
+    percent = models.DecimalField(max_digits=6, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "delivery fee mask"
+        ordering = ["service_code"]
+
+    def __str__(self) -> str:
+        return f"{self.service_code} +{self.percent}% ({'on' if self.is_active else 'off'})"
+
+
 class DeliveryOptionRate(models.Model):
     """Optional weight tiers. If an option has no rates, its flat `price` applies."""
 

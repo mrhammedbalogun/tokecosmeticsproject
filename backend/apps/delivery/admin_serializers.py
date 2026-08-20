@@ -253,6 +253,125 @@ class DeliveryCoverageSerializer(serializers.Serializer):
     region_ids = serializers.ListField(child=serializers.IntegerField(), required=False)
 
 
+class _ServiceNameMixin:
+    """Resolves `service_code` to its human label through the same canonical list the
+    picker endpoint serves — cached on the serializer instance, so a list render costs
+    one pass over the services, not one per row (many=True shares the child)."""
+
+    def _service_names(self) -> dict:
+        if not hasattr(self, "_service_name_cache"):
+            from apps.delivery.services import known_delivery_services
+
+            self._service_name_cache = {
+                s["code"]: s["name"] for s in known_delivery_services()
+            }
+        return self._service_name_cache
+
+    def get_service_name(self, obj) -> str:
+        # A code that no longer resolves (a deleted manual option) falls back to the
+        # raw code — the rule stays visible and deletable rather than unlabelled.
+        return self._service_names().get(obj.service_code, obj.service_code)
+
+    def validate_service_code(self, value):
+        if value not in self._service_names():
+            raise serializers.ValidationError(
+                "Unknown delivery service — pick one from the list."
+            )
+        return value
+
+
+class DeliveryBlockAdminSerializer(_ServiceNameMixin, serializers.ModelSerializer):
+    """One Plan-41 block rule. The three place fields cascade: country alone blocks
+    the whole country, + state narrows to the state, + LGA narrows to the LGA. The
+    write refuses geographically impossible combinations here — checkout would not
+    error on them, it would just silently never match, which is worse."""
+
+    audit_allowlist = (
+        "service_code", "country_code", "state_region", "area_region", "is_active",
+    )
+
+    service_name = serializers.SerializerMethodField()
+    state_region = serializers.PrimaryKeyRelatedField(
+        queryset=Region.objects.filter(level="state"), required=False, allow_null=True
+    )
+    area_region = serializers.PrimaryKeyRelatedField(
+        queryset=Region.objects.filter(level="area"), required=False, allow_null=True
+    )
+    state_name = serializers.SerializerMethodField()
+    area_name = serializers.SerializerMethodField()
+
+    class Meta:
+        from apps.delivery.models import DeliveryBlock
+
+        model = DeliveryBlock
+        fields = [
+            "id", "service_code", "service_name", "country_code",
+            "state_region", "state_name", "area_region", "area_name",
+            "is_active", "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]
+
+    def get_state_name(self, obj):
+        return obj.state_region.name if obj.state_region_id else None
+
+    def get_area_name(self, obj):
+        return obj.area_region.name if obj.area_region_id else None
+
+    def validate_country_code(self, value):
+        value = (value or "").upper()
+        if not Country.objects.filter(code=value).exists():
+            raise serializers.ValidationError(
+                "Unknown country — use a market code from the country list."
+            )
+        return value
+
+    def validate(self, attrs):
+        country = attrs.get(
+            "country_code", getattr(self.instance, "country_code", "")
+        ).upper()
+        state = attrs.get("state_region", getattr(self.instance, "state_region", None))
+        area = attrs.get("area_region", getattr(self.instance, "area_region", None))
+
+        errors: dict[str, str] = {}
+        if state is not None and state.country_code.upper() != country:
+            errors["state_region"] = "That state is not in the chosen country."
+        if area is not None:
+            if state is None:
+                errors["area_region"] = "Pick the state first — an LGA block needs its state."
+            else:
+                node, inside = area.parent, False
+                while node is not None:
+                    if node.id == state.id:
+                        inside = True
+                        break
+                    node = node.parent
+                if not inside:
+                    errors["area_region"] = "That LGA is not in the chosen state."
+        if errors:
+            raise serializers.ValidationError(errors)
+        return attrs
+
+
+class DeliveryFeeMaskAdminSerializer(_ServiceNameMixin, serializers.ModelSerializer):
+    """One Plan-41 fee mask: service + the percentage added on top of its real fee.
+    The 400% ceiling is a typo guard (\"110\" for \"10\"), not a policy position."""
+
+    audit_allowlist = ("service_code", "percent", "is_active")
+
+    service_name = serializers.SerializerMethodField()
+    percent = serializers.DecimalField(
+        max_digits=6, decimal_places=2,
+        min_value=Decimal("0"), max_value=Decimal("400"),
+    )
+
+    class Meta:
+        from apps.delivery.models import DeliveryFeeMask
+
+        model = DeliveryFeeMask
+        fields = ["id", "service_code", "service_name", "percent", "is_active", "updated_at"]
+        read_only_fields = ["id", "updated_at"]
+
+
 class GigShipmentRowSerializer(serializers.ModelSerializer):
     """One row of the deliveries table (Plan-35) — READ ONLY, composed entirely from
     snapshots the shipment and its order already hold, so a page of rows costs one

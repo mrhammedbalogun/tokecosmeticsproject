@@ -18,7 +18,9 @@ from django.shortcuts import get_object_or_404
 
 from apps.core.models import Country, Region
 from apps.delivery.admin_serializers import (
+    DeliveryBlockAdminSerializer,
     DeliveryCoverageSerializer,
+    DeliveryFeeMaskAdminSerializer,
     DeliveryOptionAdminSerializer,
     DeliveryPartnerAdminSerializer,
     GigShipmentRowSerializer,
@@ -321,6 +323,81 @@ class PartnerZoneAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         changes = super()._changes(response)
         if self.request.method.upper() == "DELETE" and hasattr(self, "_deleted_zone"):
             changes["deleted"] = self._deleted_zone
+        return changes
+
+
+class DeliveryServiceListView(APIView):
+    """GET /admin/delivery-services/ — the picker behind Plan-41's block and mask
+    forms: every service a rule can name, with its human label. Read-only reference
+    data (no PII, no audit), `products.manage` like the rules it feeds."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
+
+    def get(self, request):
+        from apps.delivery.services import known_delivery_services
+
+        return Response(known_delivery_services())
+
+
+class DeliveryBlockAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """Plan-41 block rules — full CRUD. `products.manage` by the coverage doctrine:
+    "where is this service offered" is the same operational question the coverage
+    editor answers, just subtractive. Delete is referentially safe the same way
+    option delete is: checkout re-reads the rules at every quote and at placement,
+    where a deleted rule simply stops removing anything."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
+    serializer_class = DeliveryBlockAdminSerializer
+    audit_serializers = (DeliveryBlockAdminSerializer,)
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["service_code", "country_code", "is_active"]
+    pagination_class = None  # operator-scale rows, same reasoning as delivery options
+
+    def get_queryset(self):
+        from apps.delivery.models import DeliveryBlock
+
+        return DeliveryBlock.objects.select_related("state_region", "area_region").order_by(
+            "service_code", "country_code", "id"
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        self._deleted_block = DeliveryBlockAdminSerializer(self.get_object()).data
+        return super().destroy(request, *args, **kwargs)
+
+    def _changes(self, response) -> dict:
+        changes = super()._changes(response)
+        if self.request.method.upper() == "DELETE" and hasattr(self, "_deleted_block"):
+            changes["deleted"] = self._deleted_block
+        return changes
+
+
+class DeliveryFeeMaskAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """Plan-41 fee masks — full CRUD, one row per service (the model's unique
+    constraint). `products.manage`: a mask changes the customer's delivery price,
+    which this file has always ruled an operational number — the raw carrier cost
+    is untouched and stays visible to reconciliation."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
+    serializer_class = DeliveryFeeMaskAdminSerializer
+    audit_serializers = (DeliveryFeeMaskAdminSerializer,)
+    pagination_class = None
+
+    def get_queryset(self):
+        from apps.delivery.models import DeliveryFeeMask
+
+        return DeliveryFeeMask.objects.order_by("service_code")
+
+    def destroy(self, request, *args, **kwargs):
+        self._deleted_mask = DeliveryFeeMaskAdminSerializer(self.get_object()).data
+        return super().destroy(request, *args, **kwargs)
+
+    def _changes(self, response) -> dict:
+        changes = super()._changes(response)
+        if self.request.method.upper() == "DELETE" and hasattr(self, "_deleted_mask"):
+            changes["deleted"] = self._deleted_mask
         return changes
 
 

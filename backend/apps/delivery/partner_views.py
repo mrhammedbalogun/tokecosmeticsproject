@@ -157,22 +157,56 @@ class PublicRatesView(APIView):
     the marketer 20 probes. Nothing about any person, ever.
 
     The filter is checkout's, exactly (`services.options_for_address`): active
-    partner AND active zone AND a non-null price. A row this endpoint shows is a row
-    a customer can buy right now — a marketer must never quote from a stale or
-    staged rate, so the two surfaces must not be allowed to drift apart.
+    partner AND active zone AND a non-null price — and, since Plan-41, minus any
+    zone a DeliveryBlock hides and with the partner's fee mask applied. A row this
+    endpoint shows is a row a customer can buy right now, at the price they would
+    pay — a marketer must never quote from a stale or staged rate, so the two
+    surfaces must not be allowed to drift apart.
     """
 
     permission_classes = [permissions.AllowAny]
     authentication_classes = []  # anonymous by definition — a stale token must not 401 it
 
+    @staticmethod
+    def _zone_blocked(zone, rules) -> bool:
+        """Mirror of checkout's block matching for ONE zone: a zone row is only ever
+        offered to addresses in its own LGA, so a rule hides the row exactly when it
+        would hide the option for those addresses — LGA match, ancestor-state match,
+        or a whole-country rule."""
+        ids = set()
+        node = zone.lga_region
+        while node is not None:
+            ids.add(node.id)
+            node = node.parent
+        for rule in rules:
+            if rule.service_code != zone.partner.code:
+                continue
+            if rule.area_region_id is not None:
+                if rule.area_region_id in ids:
+                    return True
+            elif rule.state_region_id is not None:
+                if rule.state_region_id in ids:
+                    return True
+            else:
+                return True
+        return False
+
     def get(self, request):
+        from apps.delivery.models import DeliveryBlock
+        from apps.delivery.services import apply_fee_mask, fee_mask_percents
+
+        # Partner zones are NG-only (services._partner_options gates on NG/NGN), so
+        # NG rules are the only ones that can touch this page.
+        rules = list(DeliveryBlock.objects.filter(is_active=True, country_code="NG"))
+        masks = fee_mask_percents()
         zones = (
             PartnerZone.objects.filter(
                 partner__is_active=True, is_active=True, price__isnull=False,
             )
-            .select_related("partner", "lga_region")
+            .select_related("partner", "lga_region", "lga_region__parent")
             .order_by("partner__name", "lga_region__name", "lcda_name")
         )
+        zones = [z for z in zones if not self._zone_blocked(z, rules)]
         cards: dict[int, dict] = {}
         for z in zones:
             card = cards.setdefault(z.partner_id, {
@@ -185,7 +219,9 @@ class PublicRatesView(APIView):
                 "lcda_name": z.lcda_name,
                 "areas_covered": z.areas_covered,
                 "dispatch_zone": z.dispatch_zone,
-                "price": str(z.price),
+                # The CUSTOMER'S price (Plan-41): the fee mask applied exactly as
+                # checkout applies it — a marketer quotes what the buyer will pay.
+                "price": str(apply_fee_mask(z.price, masks.get(z.partner.code))),
                 "min_days": z.min_days,
                 "max_days": z.max_days,
             })
