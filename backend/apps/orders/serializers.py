@@ -102,6 +102,7 @@ class OrderSerializer(_BaseOrderSerializer):
     payment_gateway = serializers.SerializerMethodField()
     gig_tracking = serializers.SerializerMethodField()
     pickup_centre = serializers.SerializerMethodField()
+    pickup_store = serializers.SerializerMethodField()
     # The order's market ("NG"), same shape as `currency` above. The pay-again UI
     # (Plan-38 gap fix) lists gateways for the ORDER's market, not the browsing
     # cookie's — a shopper who switched countries since placing would otherwise be
@@ -116,7 +117,12 @@ class OrderSerializer(_BaseOrderSerializer):
                   "tax_label", "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",
                   "tracking_carrier", "tracking_number", "payment_gateway",
-                  "gig_tracking", "pickup_centre", "items")
+                  "gig_tracking", "pickup_centre", "pickup_store", "items")
+
+    def get_pickup_store(self, order):
+        """The Toke store snapshot for store-pickup orders (Plan-40), or None so the
+        page can simply not render the block — same posture as pickup_centre."""
+        return order.pickup_store or None
 
     def get_pickup_centre(self, order):
         """The placement-time centre snapshot for pickup orders (32b ruling 4) —
@@ -218,16 +224,22 @@ class AdminOrderSerializer(_BaseOrderSerializer):
     user_email = serializers.CharField(source="user.email", read_only=True, default="")
     payments = AdminPaymentSerializer(many=True, read_only=True)
     allowed_transitions = serializers.SerializerMethodField()
+    pickup_store = serializers.SerializerMethodField()
 
     class Meta:
         model = Order
         fields = ("number", "status", "review_reason", "placed_at", "email", "phone",
                   "user_email", "country", "currency", "subtotal", "discount_total",
                   "shipping_total", "tax_total", "tax_label", "grand_total", "grand_total_display",
-                  "delivery_option_name", "shipping_address", "billing_address",
+                  "delivery_option_name", "pickup_store", "shipping_address", "billing_address",
                   "customer_note", "admin_note", "tracking_carrier", "tracking_number",
                   "source", "legacy_number", "items", "events",
                   "payments", "allowed_transitions")
+
+    def get_pickup_store(self, order):
+        """None (not {}) for non-pickup orders, so the UI branches on presence —
+        and so the ops panel can relabel the `shipped` button "Ready for pickup"."""
+        return order.pickup_store or None
 
     def get_allowed_transitions(self, order) -> list[dict]:
         """The moves a PERSON may make from here, each with the scope it needs.

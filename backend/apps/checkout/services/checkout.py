@@ -62,9 +62,20 @@ def _address_snapshot(addr: Address) -> dict:
     }
 
 
+def _store_snapshot(store) -> dict:
+    """Order.pickup_store's shape — the full address and the counter phone, because
+    this snapshot is what the ready-for-pickup email and the order page print."""
+    return {
+        "id": store.id, "name": store.name, "address": store.address,
+        "phone": store.phone,
+        "state": store.state_region.name if store.state_region else store.state,
+    }
+
+
 def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_option_id=None,
                 payment_gateway: str = "", billing_address_id=None, coupon_code: str = "",
                 notes: str = "", expected_total=None, gig_centre_id=None,
+                pickup_store_id=None,
                 referral_code: str = "", guest_email: str = "", guest_phone: str = "",
                 guest_address=None) -> CheckoutResult:
     """Place an order for an authenticated customer OR a guest (Plan-38).
@@ -155,6 +166,23 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
             # The picker is not optional for pickup: "which centre" is the address.
             raise CheckoutError("centre_required", "Choose a pickup centre for this delivery option.")
 
+        # Store pickup (Plan-40): same shape as the centre rules above — the store IS
+        # the destination, so it is not optional, and it is re-validated server-side
+        # against the ADDRESS'S state rather than trusted from the client. A store
+        # whose flag or state changed since the options render answers store_invalid.
+        store = None
+        if chosen.get("kind") == "store":
+            from apps.delivery.models import SenderLocation
+
+            if pickup_store_id is None:
+                raise CheckoutError("store_required", "Choose a store for this pickup option.")
+            store = SenderLocation.objects.filter(
+                pk=pickup_store_id, is_active=True, customer_pickup=True,
+                state_region_id=address.state_region_id,
+            ).select_related("state_region").first()
+            if store is None:
+                raise CheckoutError("store_invalid", "That pickup store is not available.")
+
         # Gateway must be active for the country, and a manual gateway needs a configured
         # account BEFORE we reserve stock: failing at initiate() (phase 2, post-commit)
         # would leave an order holding stock for the full 24h TTL and a converted cart,
@@ -210,6 +238,7 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
             shipping_total=totals.delivery, tax_total=totals.tax,
             delivery_tax_total=totals.delivery_tax, grand_total=totals.grand_total,
             coupon=coupon, delivery_option_name=chosen["name"],
+            pickup_store=_store_snapshot(store) if store else {},
             shipping_address=_address_snapshot(address), billing_address=_address_snapshot(billing),
             customer_note=notes, reservation_reference=number,
             referral_code=attributed_code,

@@ -286,6 +286,7 @@ class CheckoutView(APIView):
             "coupon_code": request.data.get("coupon_code", ""),
             "payment_gateway": request.data.get("payment_gateway"),
             "gig_centre_id": request.data.get("gig_centre_id"),
+            "pickup_store_id": request.data.get("pickup_store_id"),
         }
         guest = None
         if is_guest:
@@ -358,6 +359,7 @@ class CheckoutView(APIView):
                 notes=request.data.get("notes", ""),
                 expected_total=request.data.get("expected_total"),
                 gig_centre_id=payload["gig_centre_id"],
+                pickup_store_id=payload["pickup_store_id"],
                 referral_code=referral_code,
                 guest_email=guest["guest_email"] if guest else "",
                 guest_phone=guest["guest_phone"] if guest else "",

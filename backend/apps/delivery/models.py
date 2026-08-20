@@ -113,6 +113,13 @@ class SenderLocation(TimeStampedModel):
     The pin is load-bearing twice over: GIG prices from it (Ogudu vs Ikorodu
     measured +85%) and the rider drives to it. `phone` is who GIG calls to
     coordinate the pickup — it must reach THIS shop's counter.
+
+    Since Plan-40 a row can ALSO be a customer-facing pickup store
+    (`customer_pickup=True`): checkout offers "Pickup at Toke Cosmetics Store" at ₦0
+    to any NG/NGN address in the same `state_region`, and the chosen row is
+    snapshotted onto `Order.pickup_store` at placement. The two roles are
+    independent — an opted-in store still serves as a GIG origin, and a GIG-only
+    origin never shows to customers.
     """
 
     name = models.CharField(max_length=100)
@@ -122,11 +129,22 @@ class SenderLocation(TimeStampedModel):
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
     # DISPLAY ONLY (Plan-35): human filing for a table that will grow — nothing routes
-    # on these. The PIN is the only routing input (origins.select_origin is pure
-    # haversine); typing "Lagos" here must never move a quote, and the serializer help
-    # text and the admin form both say so.
+    # on these for GIG. The PIN is the only GIG routing input (origins.select_origin is
+    # pure haversine); typing "Lagos" here must never move a quote. Customer store
+    # pickup (Plan-40) routes on `state_region` below, never on this free text.
     state = models.CharField(max_length=100, blank=True)
     lga = models.CharField(max_length=100, blank=True)
+    # Customer store pickup (Plan-40). `customer_pickup` opts this location into the
+    # checkout "Pickup at Toke Cosmetics Store" card; GIG-only origins and warehouses
+    # keep it off. Matching is BY STATE, deliberately not by LGA: every opted-in Lagos
+    # location shows to every Lagos customer. `state_region` is the canonical
+    # core.Region (level="state") the match runs on — an FK, not the free-text `state`
+    # above, so a spelling can never hide a store from its own state.
+    customer_pickup = models.BooleanField(default=False)
+    state_region = models.ForeignKey(
+        "core.Region", null=True, blank=True, on_delete=models.PROTECT,
+        related_name="pickup_store_locations", limit_choices_to={"level": "state"},
+    )
     is_active = models.BooleanField(default=True)
 
     class Meta:

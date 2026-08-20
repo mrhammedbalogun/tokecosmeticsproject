@@ -33,15 +33,25 @@ const EMPTY: SenderLocationRow = {
   longitude: "",
   state: "",
   lga: "",
+  customer_pickup: false,
+  state_region: null,
   is_active: true,
 };
 
+/** The canonical NG states (core.Region pks) the State dropdown offers. */
+export interface StateOption {
+  id: number;
+  name: string;
+}
+
 function OriginForm({
   row,
+  states,
   isLastActive,
   onDone,
 }: {
   row: SenderLocationRow | null; // null = create
+  states: StateOption[];
   isLastActive: boolean;
   onDone: () => void;
 }) {
@@ -53,6 +63,14 @@ function OriginForm({
 
   const set = (key: keyof SenderLocationRow) => (value: string | boolean) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  // The dropdown writes BOTH columns: `state_region` is what customer store pickup
+  // matches on, `state` keeps the row's display label in step with it.
+  const setStateRegion = (raw: string) => {
+    const id = raw === "" ? null : Number(raw);
+    const name = states.find((s) => s.id === id)?.name ?? "";
+    setDraft((d) => ({ ...d, state_region: id, state: name }));
+  };
 
   async function save() {
     setSaving(true);
@@ -69,6 +87,8 @@ function OriginForm({
         longitude: draft.longitude,
         state: draft.state,
         lga: draft.lga,
+        customer_pickup: draft.customer_pickup,
+        state_region: draft.state_region,
         is_active: draft.is_active,
       });
       if (result.fieldErrors) setErrors(result.fieldErrors);
@@ -157,13 +177,20 @@ function OriginForm({
       </p>
       <div className="grid grid-cols-2 gap-3 sm:col-span-2">
         <label className="block text-sm">
-          <span className="text-muted">State (display only)</span>
-          <input
+          <span className="text-muted">State</span>
+          <select
             className={FIELD}
-            value={draft.state}
-            onChange={(e) => set("state")(e.target.value)}
-            placeholder="FCT"
-          />
+            value={draft.state_region === null ? "" : String(draft.state_region)}
+            onChange={(e) => setStateRegion(e.target.value)}
+          >
+            <option value="">— pick a state —</option>
+            {states.map((s) => (
+              <option key={s.id} value={String(s.id)}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+          {err("state_region")}
           {err("state")}
         </label>
         <label className="block text-sm">
@@ -178,9 +205,27 @@ function OriginForm({
         </label>
       </div>
       <p className="text-xs text-muted sm:col-span-2">
-        State and LGA are filing labels for this list only — routing follows the pin,
-        never these. Typing “Lagos” here moves no quote and sends no rider anywhere.
+        GIG routing still follows the pin, never these labels. The state DOES matter for
+        customer store pickup below — customers see this location when their delivery
+        address is in the same state, whatever their LGA.
       </p>
+      <label className="flex items-center gap-2 text-sm sm:col-span-2">
+        <input
+          type="checkbox"
+          checked={draft.customer_pickup}
+          onChange={(e) => set("customer_pickup")(e.target.checked)}
+        />
+        <span>
+          Customer pickup store — shows at checkout as &ldquo;Pickup at Toke Cosmetics
+          Store&rdquo; (free) for customers in this state
+        </span>
+      </label>
+      {draft.customer_pickup && draft.state_region === null && (
+        <p className="rounded border border-warn/30 bg-warn/5 p-2 text-xs text-warn sm:col-span-2">
+          Pick the store&rsquo;s state above — customers are matched by state, so without
+          one this store shows to nobody.
+        </p>
+      )}
       <label className="flex items-center gap-2 text-sm sm:col-span-2">
         <input
           type="checkbox"
@@ -220,9 +265,11 @@ function OriginForm({
 
 function OriginRow({
   row,
+  states,
   isLastActive,
 }: {
   row: SenderLocationRow;
+  states: StateOption[];
   isLastActive: boolean;
 }) {
   const router = useRouter();
@@ -247,6 +294,11 @@ function OriginRow({
         <div>
           <p className="text-sm font-medium">
             {row.name}
+            {row.customer_pickup && (
+              <span className="ml-2 rounded bg-accent/10 px-1.5 py-0.5 text-xs text-accent">
+                customer pickup
+              </span>
+            )}
             {!row.is_active && (
               <span className="ml-2 rounded bg-surface px-1.5 py-0.5 text-xs text-muted">
                 inactive
@@ -294,6 +346,7 @@ function OriginRow({
       <div className={expanded ? "" : "hidden"}>
         <OriginForm
           row={row}
+          states={states}
           isLastActive={isLastActive}
           onDone={() => setExpanded(false)}
         />
@@ -302,7 +355,13 @@ function OriginRow({
   );
 }
 
-export function SenderLocations({ rows }: { rows: SenderLocationRow[] }) {
+export function SenderLocations({
+  rows,
+  states,
+}: {
+  rows: SenderLocationRow[];
+  states: StateOption[];
+}) {
   const [adding, setAdding] = useState(false);
   const activeCount = rows.filter((r) => r.is_active).length;
 
@@ -327,13 +386,19 @@ export function SenderLocations({ rows }: { rows: SenderLocationRow[] }) {
         )}
       </div>
       {adding && (
-        <OriginForm row={null} isLastActive={false} onDone={() => setAdding(false)} />
+        <OriginForm
+          row={null}
+          states={states}
+          isLastActive={false}
+          onDone={() => setAdding(false)}
+        />
       )}
       <ul className="mt-3 space-y-2">
         {rows.map((row) => (
           <OriginRow
             key={row.id}
             row={row}
+            states={states}
             isLastActive={row.is_active && activeCount === 1}
           />
         ))}

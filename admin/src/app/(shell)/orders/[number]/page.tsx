@@ -171,12 +171,31 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
               <p className="text-xs text-muted">account: {order.user_email}</p>
             )}
 
-            <h3 className="mt-4 text-xs font-medium text-muted">Delivering to</h3>
-            <address className="mt-1 not-italic">
-              {addressLines(order.shipping_address).map((line, i) => (
-                <div key={i}>{line}</div>
-              ))}
-            </address>
+            {order.pickup_store ? (
+              <>
+                <h3 className="mt-4 text-xs font-medium text-muted">Customer pickup at</h3>
+                <p className="mt-1">
+                  {order.pickup_store.name}
+                  <br />
+                  <span className="text-muted">{order.pickup_store.address}</span>
+                  {order.pickup_store.phone && (
+                    <>
+                      <br />
+                      <span className="text-muted">{order.pickup_store.phone}</span>
+                    </>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="mt-4 text-xs font-medium text-muted">Delivering to</h3>
+                <address className="mt-1 not-italic">
+                  {addressLines(order.shipping_address).map((line, i) => (
+                    <div key={i}>{line}</div>
+                  ))}
+                </address>
+              </>
+            )}
             {order.delivery_option_name && (
               <p className="mt-2 text-xs text-muted">{order.delivery_option_name}</p>
             )}

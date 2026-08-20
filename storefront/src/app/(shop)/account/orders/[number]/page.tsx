@@ -60,7 +60,7 @@ export default async function OrderDetailPage({
       <h2 className="font-display text-2xl">Order {order.number}</h2>
       <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
         <span>Placed {formatOrderDate(order.placed_at)}</span>
-        <StatusChip status={order.status} />
+        <StatusChip status={order.status} pickup={Boolean(order.pickup_store)} />
       </p>
 
       <OrderItems items={order.items} />
@@ -82,6 +82,14 @@ export default async function OrderDetailPage({
               Collect from <span className="font-medium text-foreground">{order.pickup_centre.name}</span>
               {order.pickup_centre.address && <>, {order.pickup_centre.address}</>} — bring your
               order number and a photo ID.
+            </p>
+          )}
+          {order.pickup_store && (
+            <p className="mt-2 text-sm text-muted">
+              Collect from <span className="font-medium text-foreground">{order.pickup_store.name}</span>
+              {order.pickup_store.address && <>, {order.pickup_store.address}</>}
+              {order.pickup_store.phone && <> · {order.pickup_store.phone}</>} — we&rsquo;ll
+              email you when it&rsquo;s ready; bring your order number and a photo ID.
             </p>
           )}
         </div>

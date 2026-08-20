@@ -1,0 +1,17 @@
+Good news — your order is packed and ready for pickup.
+
+Order {{ number }}
+
+{% include "email/_order_items.txt" %}
+Collect from:
+  {{ pickup_store.name }}
+  {{ pickup_store.address }}{% if pickup_store.phone %}
+  Phone: {{ pickup_store.phone }}{% endif %}
+
+Bring your order number ({{ number }}) and a photo ID when you collect. If you
+have any questions, call the store or just reply to this email.
+
+Track your order:
+  {{ tracking_url }}
+
+{% include "email/_footer.txt" %}

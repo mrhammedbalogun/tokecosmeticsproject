@@ -31,6 +31,9 @@ export interface CheckoutSelections {
    * the selected delivery option is centre pickup; rides the quote and the
    * place-order payloads so the server prices the customer's actual centre. */
   gigCentreId?: number;
+  /** The chosen Toke pickup store (Plan-40) — SenderLocation pk, set only when the
+   * selected option is store pickup; rides place-order as `pickup_store_id`. */
+  pickupStoreId?: number;
   paymentGateway?: string;
   note: string;
 }
@@ -90,10 +93,12 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setAddress = useCallback((addressId: number) => {
-    // A new address invalidates the delivery choice AND the pickup centre — the
-    // centre list is sorted for (and priced from) the old address.
+    // A new address invalidates the delivery choice AND both pickup choices — the
+    // centre list is sorted for (and priced from) the old address, and the store
+    // list is the old address's STATE.
     setSelections((prev) => ({
-      ...prev, addressId, deliveryOptionId: undefined, gigCentreId: undefined,
+      ...prev, addressId, deliveryOptionId: undefined,
+      gigCentreId: undefined, pickupStoreId: undefined,
     }));
     setCompleted((prev) => {
       if (!prev.has(3)) return prev;
@@ -104,9 +109,10 @@ export function CheckoutProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setGuestAddress = useCallback((address: GuestAddressPayload) => {
-    // Same rule as setAddress: a new address invalidates delivery + centre.
+    // Same rule as setAddress: a new address invalidates delivery + centre + store.
     setSelections((prev) => ({
-      ...prev, guestAddress: address, deliveryOptionId: undefined, gigCentreId: undefined,
+      ...prev, guestAddress: address, deliveryOptionId: undefined,
+      gigCentreId: undefined, pickupStoreId: undefined,
     }));
     setCompleted((prev) => {
       if (!prev.has(3)) return prev;

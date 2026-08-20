@@ -9,9 +9,15 @@ from decimal import Decimal
 from django.db.models import Q
 
 from apps.core.country_context import resolve_country
-from apps.delivery.models import DeliveryOption, PartnerZone
+from apps.delivery.models import DeliveryOption, PartnerZone, SenderLocation
 
 TWO_DP = Decimal("0.01")
+
+# The store-pickup option's id in the mixed id space (int pks / "pz:{pk}" / this).
+# ONE option however many stores serve the state — the customer picks the store in
+# the checkout picker, exactly as GIG pickup picks a centre, and placement receives
+# the store as `pickup_store_id` beside this option id.
+STORE_PICKUP_OPTION_ID = "store_pickup"
 
 
 def option_id_matches(option_id, raw) -> bool:
@@ -63,6 +69,78 @@ def _partner_options(resolved_code: str, country, region_ids: set[int]) -> list[
         }
         for z in zones
     ]
+
+
+def pickup_stores_for_address(address) -> list[SenderLocation]:
+    """The active customer-pickup stores in the address's STATE (Plan-40), nearest
+    first when the address carries a pin (else the admin's alphabetical order).
+
+    By state and deliberately not by LGA — the ruling is that every opted-in Lagos
+    store shows to every Lagos customer. The match is FK-to-FK on `state_region`
+    (the address serializer already resolves states to core.Region rows), so the
+    free-text `SenderLocation.state` label can never hide a store from its state.
+    """
+    state_id = getattr(address, "state_region_id", None)
+    if not state_id:
+        return []
+    stores = list(
+        SenderLocation.objects.filter(
+            is_active=True, customer_pickup=True, state_region_id=state_id
+        ).order_by("name")
+    )
+    if stores and address.latitude is not None and address.longitude is not None:
+        # Lazy import: haversine lives beside the GIG sync client, and this module's
+        # contract is no-HTTP purity — pulling that module in at import time would
+        # couple every options read to it for one math function.
+        from apps.delivery.gig.centres import haversine_km
+
+        stores.sort(key=lambda s: haversine_km(
+            address.latitude, address.longitude, s.latitude, s.longitude
+        ))
+    return stores
+
+
+def _store_pickup_option(resolved_code: str, country, address) -> list[dict]:
+    """The zero-fee "Pickup at Toke Cosmetics Store" option (Plan-40), or [].
+
+    Same NG + NGN gate as `_partner_options` — the fee is ₦0 whatever the browsing
+    currency, but keeping one gate for every synthesised NG option means one rule to
+    reason about. The serving stores ride INSIDE the option dict (`stores`): the list
+    is a function of the address's state, computed exactly where the state match
+    already happened, so the storefront picker needs no second endpoint and can never
+    show a store the option itself would refuse.
+    """
+    if resolved_code != "NG" or country.currency_id != "NGN":
+        return []
+    stores = pickup_stores_for_address(address)
+    if not stores:
+        return []
+    lat = address.latitude
+    lng = address.longitude
+    rows = []
+    for s in stores:
+        row = {"id": s.id, "name": s.name, "address": s.address, "phone": s.phone}
+        if lat is not None and lng is not None:
+            from apps.delivery.gig.centres import haversine_km
+
+            row["distance_km"] = round(haversine_km(lat, lng, s.latitude, s.longitude), 1)
+        rows.append(row)
+    return [{
+        "id": STORE_PICKUP_OPTION_ID,
+        "name": "Pickup at Toke Cosmetics Store",
+        "kind": "store",
+        "carrier_code": "toke",
+        "carrier_service": "pickup",
+        "currency": "NGN",
+        # A REAL zero, not None: the customer collects, so there is genuinely
+        # nothing to pay — unlike quote_required's "unknown, never render as Free".
+        "price": "0.00",
+        "quote_required": False,
+        "disclaimer": "",
+        "min_days": 0,
+        "max_days": 1,
+        "stores": rows,
+    }]
 
 
 def _coverage_q(country_code: str, region_ids: set[int]):
@@ -160,4 +238,8 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
         }
         for o in qs
     ]
-    return rows + _partner_options(resolved.code, country, region_ids)
+    return (
+        rows
+        + _partner_options(resolved.code, country, region_ids)
+        + _store_pickup_option(resolved.code, country, address)
+    )

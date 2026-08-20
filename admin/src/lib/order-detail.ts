@@ -85,6 +85,10 @@ export interface OrderDetail {
   tracking_number: string;
   source: string;
   legacy_number: string;
+  /** Toke store-pickup snapshot from placement (Plan-40), or null. Presence relabels
+   * the `shipped`/`delivered` moves ("Ready for pickup" / "Picked up") — the machine
+   * is unchanged, only the words. */
+  pickup_store?: { id: number; name: string; address: string; phone: string; state?: string } | null;
   items: OrderItem[];
   events: OrderEvent[];
   payments: OrderPayment[];

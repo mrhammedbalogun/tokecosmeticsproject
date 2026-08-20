@@ -310,28 +310,63 @@ class SenderLocationAdminSerializer(serializers.ModelSerializer):
 
     audit_allowlist = (
         "name", "phone", "address", "locality", "latitude", "longitude",
-        "state", "lga", "is_active",
+        "state", "lga", "customer_pickup", "state_region", "is_active",
     )
 
     # DISPLAY ONLY (Plan-35): filing labels for the pickup-locations page. Nothing
-    # routes on them — the pin is the only routing input, and the help text is the
-    # contract the admin form repeats.
+    # routes on them for GIG — the pin is the only GIG routing input. Customer store
+    # pickup (Plan-40) routes on `state_region` below, never on this text.
     state = serializers.CharField(
         required=False, allow_blank=True, max_length=100,
-        help_text="Display only — routing follows the pin, never this label.",
+        help_text="Display label — GIG routing follows the pin, never this.",
     )
     lga = serializers.CharField(
         required=False, allow_blank=True, max_length=100,
-        help_text="Display only — routing follows the pin, never this label.",
+        help_text="Display label — GIG routing follows the pin, never this.",
+    )
+    # Plan-40: the canonical state this row shows under when it is a customer pickup
+    # store. Constrained to level="state" in the queryset, not just prose — an LGA id
+    # pasted here must 400, or a store silently matches nobody.
+    state_region = serializers.PrimaryKeyRelatedField(
+        queryset=Region.objects.filter(level="state"),
+        required=False, allow_null=True,
+        help_text="Canonical state — customer store pickup matches on this.",
+    )
+    customer_pickup = serializers.BooleanField(
+        required=False, default=False,
+        help_text="Offer this location to customers as a ₦0 pickup store.",
     )
 
     class Meta:
         model = SenderLocation
         fields = [
             "id", "name", "phone", "address", "locality",
-            "latitude", "longitude", "state", "lga", "is_active", "updated_at",
+            "latitude", "longitude", "state", "lga",
+            "customer_pickup", "state_region", "is_active", "updated_at",
         ]
         read_only_fields = ["id", "updated_at"]
+
+    def validate(self, attrs):
+        """A customer-facing store with no canonical state matches NO customer and
+        renders NOWHERE — refuse the save rather than let the flag silently do
+        nothing. Reads the instance for PATCHes that touch only one of the pair."""
+        customer_pickup = attrs.get(
+            "customer_pickup",
+            self.instance.customer_pickup if self.instance else False,
+        )
+        state_region = attrs.get(
+            "state_region",
+            self.instance.state_region if self.instance else None,
+        )
+        if customer_pickup and state_region is None:
+            raise serializers.ValidationError({
+                "state_region": "Pick the store's state — customers are matched by state.",
+            })
+        # Keep the display label in step with the canonical pick, so the list row and
+        # the storefront never disagree about what state a store is in.
+        if state_region is not None and not attrs.get("state"):
+            attrs["state"] = state_region.name
+        return attrs
 
     def validate_phone(self, value):
         from apps.core.phones import normalize_e164

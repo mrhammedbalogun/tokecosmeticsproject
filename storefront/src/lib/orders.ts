@@ -48,6 +48,9 @@ export interface OrderDetail {
   /** Centre-pickup snapshot from placement (32b slice 4), or null for door
    * delivery. Known before any waybill exists — render "collect from" on it. */
   pickup_centre?: { id: number; station_id?: number; name: string; address: string } | null;
+  /** Toke store-pickup snapshot from placement (Plan-40), or null. Carries the
+   * counter phone — "call the store" is the point of showing it. */
+  pickup_store?: { id: number; name: string; address: string; phone: string; state?: string } | null;
 }
 
 /**

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SenderLocations } from "@/components/config/SenderLocations";
 import type { SenderLocationRow } from "@/app/(shell)/deliveries/pickup-locations/actions";
 import { ApiError } from "@/lib/api";
+import type { RegionRow } from "@/lib/regions";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Pickup locations" };
@@ -20,12 +21,19 @@ export default async function PickupLocationsPage() {
 
   let rows: SenderLocationRow[] = [];
   let error: string | null = null;
+  let states: { id: number; name: string }[] = [];
   try {
-    const data = await fetchWithAuthOrBounce<SenderLocationRow[]>(
-      "/admin/sender-locations/",
-      PATH,
-    );
+    // Regions ride the same load: the form's State dropdown (Plan-40) is the
+    // canonical NG state list, and customer store pickup matches on it.
+    const [data, regionsResult] = await Promise.all([
+      fetchWithAuthOrBounce<SenderLocationRow[]>("/admin/sender-locations/", PATH),
+      fetchWithAuthOrBounce<RegionRow[]>("/admin/regions/", PATH).catch(() => []),
+    ]);
     rows = Array.isArray(data) ? data : [];
+    states = (Array.isArray(regionsResult) ? regionsResult : [])
+      .filter((r) => r.country_code === "NG" && r.level === "state")
+      .map((r) => ({ id: r.id, name: r.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   } catch (e) {
     if (!(e instanceof ApiError)) throw e;
     error =
@@ -42,7 +50,9 @@ export default async function PickupLocationsPage() {
       <h1 className="mt-2 text-lg font-semibold tracking-tight">Pickup locations</h1>
       <p className="mt-1 text-sm text-muted">
         The Toke shops carriers collect parcels from. Every order ships from the nearest
-        active location to the customer — the pin decides, and prices the quote.
+        active location to the customer — the pin decides, and prices the quote. A
+        location marked as a customer pickup store also appears at checkout as
+        &ldquo;Pickup at Toke Cosmetics Store&rdquo; (free) for customers in its state.
       </p>
 
       <div className="mt-6">
@@ -51,7 +61,7 @@ export default async function PickupLocationsPage() {
             {error}
           </p>
         ) : (
-          <SenderLocations rows={rows} />
+          <SenderLocations rows={rows} states={states} />
         )}
       </div>
     </div>

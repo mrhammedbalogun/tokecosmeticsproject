@@ -49,6 +49,13 @@ class Order(TimeStampedModel):
 
     coupon = models.ForeignKey("checkout.Coupon", null=True, blank=True, on_delete=models.SET_NULL)
     delivery_option_name = models.CharField(max_length=100, blank=True)
+    # Store pickup (Plan-40): the Toke store the customer collects from, snapshotted at
+    # placement — {"id", "name", "address", "phone", "state"} — for the same reason
+    # GigShipment.centre is a snapshot: stores move and close, and "where do I collect
+    # my order" must answer from the order forever. Empty dict for every other order.
+    # The pickup analogue of GigShipment lives HERE rather than on a shipment row
+    # because no courier is involved — there is nothing to quote, capture or track.
+    pickup_store = models.JSONField(default=dict, blank=True)
     shipping_address = models.JSONField(default=dict)  # snapshot, not FK
     billing_address = models.JSONField(default=dict)
     customer_note = models.TextField(blank=True)

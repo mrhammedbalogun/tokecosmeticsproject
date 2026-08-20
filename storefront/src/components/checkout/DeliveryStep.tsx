@@ -3,10 +3,14 @@ import { useEffect, useState } from "react";
 import { useCheckout } from "@/components/checkout/CheckoutContext";
 import { useCart } from "@/hooks/useCart";
 import { formatMoney } from "@/lib/country";
-import type { DeliveryOption, GigCentreOption } from "@/lib/checkout";
+import type { DeliveryOption, GigCentreOption, PickupStoreOption } from "@/lib/checkout";
 
 const isPickup = (o: DeliveryOption) =>
   o.carrier_code === "gig" && o.carrier_service === "pickup";
+
+/** The Toke store-pickup option (Plan-40). Its picker needs no fetch — the stores
+ * in the address's state ride the option itself (`option.stores`). */
+const isStorePickup = (o: DeliveryOption) => o.kind === "store";
 
 /** Step 3 of checkout: delivery options for the address chosen in step 2 (Plan-14
  * Task 8).
@@ -59,7 +63,9 @@ export function DeliveryStep() {
   } | null>(null);
 
   useEffect(() => {
-    if (!addressKey || pickerOptionId === null) return;
+    // Centres are only ever fetched for the GIG pickup option — the store picker
+    // (Plan-40, id "store_pickup") reads its list off the option itself.
+    if (!addressKey || pickerOptionId === null || pickerOptionId === "store_pickup") return;
     let cancelled = false;
     (async () => {
       try {
@@ -123,8 +129,8 @@ export function DeliveryStep() {
   const error = stale ? null : result.error;
 
   function handleSelect(option: DeliveryOption) {
-    if (isPickup(option)) {
-      // Pickup needs a centre before the step can complete — open the picker.
+    if (isPickup(option) || isStorePickup(option)) {
+      // Either pickup flavour needs its picker choice before the step can complete.
       setPickerOptionId(option.id);
       return;
     }
@@ -136,6 +142,7 @@ export function DeliveryStep() {
       deliveryOptionId: option.id,
       deliveryDisplay: `${option.name} — ${price}`,
       gigCentreId: undefined, // a door option never carries a centre
+      pickupStoreId: undefined, // …nor a store
     });
   }
 
@@ -143,7 +150,17 @@ export function DeliveryStep() {
     complete(3, {
       deliveryOptionId: option.id,
       gigCentreId: centre.id,
+      pickupStoreId: undefined,
       deliveryDisplay: `${option.name} · ${centre.name}`,
+    });
+  }
+
+  function handleStorePick(option: DeliveryOption, store: PickupStoreOption) {
+    complete(3, {
+      deliveryOptionId: option.id,
+      pickupStoreId: store.id,
+      gigCentreId: undefined,
+      deliveryDisplay: `${option.name} · ${store.name}`,
     });
   }
 
@@ -173,16 +190,20 @@ export function DeliveryStep() {
         <div role="radiogroup" aria-label="Delivery options" className="space-y-3">
           {options.map((option) => {
             const pickup = isPickup(option);
+            const storePickup = isStorePickup(option);
             const checked =
               selections.deliveryOptionId === option.id &&
-              (!pickup || selections.gigCentreId !== undefined);
-            const pickerOpen = pickup && (pickerOptionId === option.id || checked);
+              (!pickup || selections.gigCentreId !== undefined) &&
+              (!storePickup || selections.pickupStoreId !== undefined);
+            const pickerOpen =
+              (pickup || storePickup) && (pickerOptionId === option.id || checked);
             const quoted = option.quote_required || option.price === null;
             const priceLabel = quoted
               ? "Quoted after checkout"
               : formatMoney(option.price as string, cart.currency);
-            const etaLabel =
-              option.min_days === option.max_days
+            const etaLabel = storePickup
+              ? "Ready within 24 hours"
+              : option.min_days === option.max_days
                 ? `${option.min_days} days`
                 : `${option.min_days}–${option.max_days} days`;
             const centreList = centres && centres.addressKey === addressKey ? centres : null;
@@ -212,8 +233,58 @@ export function DeliveryStep() {
                       Select to see nearby pickup centres &rarr;
                     </span>
                   )}
+                  {storePickup && !pickerOpen && (
+                    <span className="mt-2 block font-medium text-accent">
+                      Select to see nearby store address &rarr;
+                    </span>
+                  )}
                 </button>
-                {pickerOpen && (
+                {pickerOpen && storePickup && (
+                  <div className="mt-2 ml-4 space-y-2">
+                    <p className="text-sm font-medium">Choose your store</p>
+                    {(option.stores ?? []).length === 0 && (
+                      <p className="text-sm text-muted">
+                        No stores serve this address — choose another option.
+                      </p>
+                    )}
+                    {(option.stores ?? []).length > 0 && (
+                      <div role="radiogroup" aria-label="Toke stores" className="space-y-2">
+                        {(option.stores ?? []).map((store) => {
+                          const storeChecked =
+                            checked && selections.pickupStoreId === store.id;
+                          return (
+                            <button
+                              key={store.id}
+                              type="button"
+                              role="radio"
+                              aria-checked={storeChecked}
+                              onClick={() => handleStorePick(option, store)}
+                              className={`block w-full rounded-[var(--radius-card)] border p-3 text-left text-sm transition-colors ${
+                                storeChecked
+                                  ? "border-accent bg-accent/5"
+                                  : "border-line hover:border-accent/60"
+                              }`}
+                            >
+                              <span className="flex items-center justify-between gap-2 font-medium">
+                                <span>{store.name}</span>
+                                {store.distance_km !== undefined && (
+                                  <span className="text-muted">{store.distance_km} km</span>
+                                )}
+                              </span>
+                              <span className="mt-1 block text-muted">{store.address}</span>
+                              <span className="mt-1 block text-muted">{store.phone}</span>
+                            </button>
+                          );
+                        })}
+                        <p className="text-xs text-muted">
+                          Pickup is free — we&rsquo;ll email you when your order is ready
+                          to collect.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {pickerOpen && pickup && (
                   <div className="mt-2 ml-4 space-y-2">
                     <p className="text-sm font-medium">Choose your pickup centre</p>
                     {centreList === null && <p className="text-sm text-muted">Loading centres…</p>}

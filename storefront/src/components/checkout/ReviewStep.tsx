@@ -50,6 +50,9 @@ function mapPlaceOrderError(data: { error?: string; detail?: string } | null): {
   if (code === "centre_required" || code === "centre_invalid") {
     return { message: "Please choose a pickup centre for this delivery option.", cartLink: false };
   }
+  if (code === "store_required" || code === "store_invalid") {
+    return { message: "Please choose a store for this pickup option.", cartLink: false };
+  }
   if (code === "address_invalid") {
     return { message: "That address is no longer valid — please choose or add another.", cartLink: false };
   }
@@ -227,6 +230,7 @@ export function ReviewStep() {
             : { address_id: addressId }),
           delivery_option_id: deliveryOptionId,
           gig_centre_id: gigCentreId,
+          pickup_store_id: selections.pickupStoreId,
           payment_gateway: selections.paymentGateway,
           coupon_code: appliedCoupon,
           notes: selections.note,

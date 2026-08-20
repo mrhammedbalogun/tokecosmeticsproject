@@ -25,9 +25,25 @@ export interface DeliveryOption {
    * centre-pickup option, which reveals the centre picker (32b slice 4). */
   carrier_code?: string;
   carrier_service?: string;
+  /** "store" marks the Toke store-pickup option (Plan-40) — DeliveryStep branches
+   * on it, so it rides the type even though DB rows also carry a kind. */
+  kind?: string;
   /** Partner options only (Plan-39): the landmarks this LCDA rate covers, rendered
    * as an "Areas covered: …" line so the customer can tell which card is theirs. */
   areas_covered?: string;
+  /** Store-pickup option only (Plan-40): the Toke stores in the address's state,
+   * embedded in the option so the picker needs no second fetch. */
+  stores?: PickupStoreOption[];
+}
+
+/** One Toke store on the store-pickup option (Plan-40) — `id` is the backend's
+ * SenderLocation pk, round-tripped as `pickup_store_id` at placement. */
+export interface PickupStoreOption {
+  id: number;
+  name: string;
+  address: string;
+  phone: string;
+  distance_km?: number;
 }
 
 /** One row of GET /api/checkout/gig-centres — `id` is GIG's centre id (not a PK). */

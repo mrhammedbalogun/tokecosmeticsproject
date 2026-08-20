@@ -3,7 +3,14 @@ Thanks for your order — we've received your payment and we're getting it ready
 Order {{ number }} — placed {{ placed_at }}
 
 {% include "email/_order_items.txt" %}
-{% if pickup_centre %}Collect from:
+{% if pickup_store %}Collect from:
+  {{ pickup_store.name }}
+  {{ pickup_store.address }}{% if pickup_store.phone %}
+  Phone: {{ pickup_store.phone }}{% endif %}
+
+We'll email you as soon as it's ready to collect — bring your order number
+({{ number }}) and a photo ID.
+{% elif pickup_centre %}Collect from:
   {{ pickup_centre.name }}
   {{ pickup_centre.address }}
 

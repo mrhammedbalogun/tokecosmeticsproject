@@ -89,6 +89,10 @@ def _context(order: Order) -> dict:
         # Centre pickup (32b ruling 6): the snapshot from placement, or None for
         # door delivery — templates switch "Delivering to" ↔ "Collect from" on it.
         "pickup_centre": getattr(getattr(order, "gig_shipment", None), "centre", None) or None,
+        # Store pickup (Plan-40): the Toke store snapshot from placement, or None.
+        # Same template switch as pickup_centre; carries the counter phone because
+        # "call the store" is the whole point of printing it.
+        "pickup_store": order.pickup_store or None,
         "tracking_carrier": order.tracking_carrier,
         "tracking_number": order.tracking_number,
     }
@@ -131,7 +135,15 @@ def enqueue_order_confirmation(order_pk: int) -> None:
 
 
 def enqueue_shipped(order_pk: int) -> None:
-    _send(order_pk, "order_shipped")
+    """The `shipped` move's customer mail — which for a store-pickup order (Plan-40)
+    is "ready for pickup", not "on its way". Branching HERE rather than adding a
+    status keeps the state machine untouched (Order.status's docstring calls a new
+    status the largest blast radius in the design): staff press the same button, the
+    machine makes the same move, and the customer reads the mail that is true."""
+    if Order.objects.filter(pk=order_pk).exclude(pickup_store={}).exists():
+        _send(order_pk, "order_ready_for_pickup")
+    else:
+        _send(order_pk, "order_shipped")
 
 
 def enqueue_delivered(order_pk: int) -> None:
@@ -243,7 +255,7 @@ def _staff_context(order: Order) -> dict:
         "payment_method": _payment_method(order),
         # Town and region only — see the note above on why the street line is absent.
         "destination": _destination_line(order, centre),
-        "is_pickup": bool(centre),
+        "is_pickup": bool(centre) or bool(order.pickup_store),
         # What the customer said at checkout. Staff act on this ("gift wrap", "call
         # before delivery"), so an alert that omitted it would send them to the admin
         # for the one field that changes what they do next.
@@ -319,6 +331,13 @@ def _destination_line(order: Order, centre) -> str:
         name = centre.get("name") or "Pickup centre"
         address = centre.get("address") or ""
         return f"{name} (pickup)" + (f" — {address}" if address else "")
+
+    # Store pickup (Plan-40): our OWN shop's address — public by definition, and the
+    # packer needs to know which counter this box must be waiting on.
+    if order.pickup_store:
+        name = order.pickup_store.get("name") or "Toke store"
+        address = order.pickup_store.get("address") or ""
+        return f"{name} (store pickup)" + (f" — {address}" if address else "")
 
     # TWO SNAPSHOT SHAPES EXIST IN THIS TABLE, and reading the wrong keys is a bug this
     # codebase has already shipped once — see the comment at the top of

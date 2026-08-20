@@ -34,8 +34,16 @@ const STATUSES: Record<string, { label: string; tone: Tone }> = {
   refunded: { label: "Refunded", tone: "neutral" },
 };
 
-export function StatusChip({ status }: { status: string }) {
+export function StatusChip({ status, pickup = false }: { status: string; pickup?: boolean }) {
   const known = STATUSES[status];
+  // Store pickup (Plan-40) reuses the shipped/delivered statuses — nothing "ships",
+  // so the pill tells the pickup truth while the machine stays untouched.
+  const label =
+    pickup && status === "shipped"
+      ? "Ready for pickup"
+      : pickup && status === "delivered"
+        ? "Picked up"
+        : known?.label ?? status;
   return (
     <span
       className={
@@ -43,7 +51,7 @@ export function StatusChip({ status }: { status: string }) {
         TONE_CLASSES[known?.tone ?? "neutral"]
       }
     >
-      {known?.label ?? status}
+      {label}
     </span>
   );
 }

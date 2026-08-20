@@ -286,3 +286,103 @@ describe("DeliveryStep centre pickup (32b slice 4)", () => {
     expect(screen.getByTestId("completed")).toHaveTextContent("");
   });
 });
+
+describe("DeliveryStep store pickup (Plan-40)", () => {
+  const OPTIONS = [
+    { id: 7, name: "Door Delivery (GIG)", price: "4175.20", min_days: 1, max_days: 3,
+      quote_required: false, carrier_code: "gig", carrier_service: "home" },
+    { id: "store_pickup", name: "Pickup at Toke Cosmetics Store", price: "0.00",
+      min_days: 0, max_days: 1, quote_required: false, kind: "store",
+      carrier_code: "toke", carrier_service: "pickup",
+      stores: [
+        { id: 3, name: "Ogudu Mall (Lagos)",
+          address: "Shop No 1, Ogudu Mall, Kosofe, Ogudu, Lagos",
+          phone: "+2347074800702", distance_km: 3.1 },
+        { id: 4, name: "Lekki Store",
+          address: "12 Admiralty Way, Lekki Phase 1, Lagos",
+          phone: "+2347000000000", distance_km: 14.9 },
+      ] },
+  ];
+
+  function StoreHarness({ addressId }: { addressId?: number }) {
+    const { completed, selections, setAddress } = useCheckout();
+    useEffect(() => {
+      if (addressId !== undefined) setAddress(addressId);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return (
+      <div>
+        <p data-testid="completed">{[...completed].sort().join(",")}</p>
+        <p data-testid="deliveryOptionId">{String(selections.deliveryOptionId ?? "")}</p>
+        <p data-testid="pickupStoreId">{String(selections.pickupStoreId ?? "")}</p>
+        <p data-testid="deliveryDisplay">{selections.deliveryDisplay ?? ""}</p>
+        <DeliveryStep />
+      </div>
+    );
+  }
+
+  it("renders the card with free pickup, the readiness line and the see-stores CTA", async () => {
+    mockCart = makeCart({ country: "NG", currency: "NGN" });
+    mockRoutedFetch({ "/api/checkout/delivery-options": OPTIONS });
+    render(
+      <CheckoutProvider>
+        <StoreHarness addressId={5} />
+      </CheckoutProvider>
+    );
+
+    const card = await screen.findByRole("radio", { name: /pickup at toke cosmetics store/i });
+    expect(within(card).getByText("₦0.00")).toBeInTheDocument();
+    expect(within(card).getByText(/ready within 24 hours/i)).toBeInTheDocument();
+    expect(within(card).getByText(/select to see nearby store address/i)).toBeInTheDocument();
+  });
+
+  it("clicking opens the embedded picker (no second fetch); picking a store completes with it", async () => {
+    mockCart = makeCart({ country: "NG", currency: "NGN" });
+    const f = mockRoutedFetch({ "/api/checkout/delivery-options": OPTIONS });
+    render(
+      <CheckoutProvider>
+        <StoreHarness addressId={5} />
+      </CheckoutProvider>
+    );
+
+    fireEvent.click(await screen.findByRole("radio", { name: /pickup at toke cosmetics store/i }));
+    // Not completed yet — store pickup without a store is not a delivery choice.
+    expect(screen.getByTestId("completed")).toHaveTextContent("");
+    expect(await screen.findByText(/choose your store/i)).toBeInTheDocument();
+
+    // The full address AND the counter phone are on the store card.
+    const store = await screen.findByRole("radio", { name: /ogudu mall/i });
+    expect(screen.getByText("Shop No 1, Ogudu Mall, Kosofe, Ogudu, Lagos")).toBeInTheDocument();
+    expect(screen.getByText("+2347074800702")).toBeInTheDocument();
+    fireEvent.click(store);
+
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("3"));
+    expect(screen.getByTestId("deliveryOptionId")).toHaveTextContent("store_pickup");
+    expect(screen.getByTestId("pickupStoreId")).toHaveTextContent("3");
+    expect(screen.getByTestId("deliveryDisplay")).toHaveTextContent(
+      "Pickup at Toke Cosmetics Store · Ogudu Mall (Lagos)"
+    );
+    // The stores ride the option itself — only the options endpoint is ever fetched.
+    for (const call of f.mock.calls) {
+      expect(String(call[0])).toContain("/api/checkout/delivery-options");
+    }
+  });
+
+  it("switching to a door option clears the store", async () => {
+    mockCart = makeCart({ country: "NG", currency: "NGN" });
+    mockRoutedFetch({ "/api/checkout/delivery-options": OPTIONS });
+    render(
+      <CheckoutProvider>
+        <StoreHarness addressId={5} />
+      </CheckoutProvider>
+    );
+
+    fireEvent.click(await screen.findByRole("radio", { name: /pickup at toke cosmetics store/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: /ogudu mall/i }));
+    await waitFor(() => expect(screen.getByTestId("pickupStoreId")).toHaveTextContent("3"));
+
+    fireEvent.click(screen.getByRole("radio", { name: /door delivery/i }));
+    await waitFor(() => expect(screen.getByTestId("deliveryOptionId")).toHaveTextContent("7"));
+    expect(screen.getByTestId("pickupStoreId")).toHaveTextContent("");
+  });
+});

@@ -90,6 +90,16 @@ export function OrderOpsPanel({
 
   const flags = reviewReasons(order);
 
+  // Store pickup (Plan-40) reuses the shipped/delivered machinery — the button words
+  // change so the operator presses what actually happens: "Ready for pickup" sends
+  // the come-and-collect email; "Picked up" closes the handover.
+  const transitionLabel = (status: string) =>
+    order.pickup_store && status === "shipped"
+      ? "Ready for pickup"
+      : order.pickup_store && status === "delivered"
+        ? "Picked up"
+        : statusLabel(status);
+
   return (
     <div className="space-y-4">
       {flags.length > 0 && (
@@ -158,7 +168,7 @@ export function OrderOpsPanel({
                     }
                     className={GHOST}
                   >
-                    {statusLabel(t.status)}
+                    {transitionLabel(t.status)}
                   </button>
                 );
               })}

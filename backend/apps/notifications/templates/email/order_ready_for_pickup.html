@@ -1,0 +1,32 @@
+{% extends "email/base.html" %}
+{% block preheader %}Order {{ number }} is ready for pickup at {{ pickup_store.name }}.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Ready for pickup" title="Your order is ready for pickup" %}{% endblock %}
+{% block content %}
+<p style="margin:0 0 18px;">Good news — your order is packed and ready for pickup.</p>
+
+<p style="margin:0;font-size:13px;color:#6b6862;">Order
+  <strong style="color:#1a1a1a;">{{ number }}</strong></p>
+
+{% include "email/_order_items.html" %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:24px 0 0;background-color:#f2f8f3;border:1px solid #cfe3d5;border-radius:10px;">
+  <tr><td style="padding:16px 18px;font-size:14px;line-height:1.6;">
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#6b6862;margin:0 0 8px;">Collect from</div>
+    <strong>{{ pickup_store.name }}</strong><br>
+    <span style="color:#6b6862;">{{ pickup_store.address }}</span>
+    {% if pickup_store.phone %}
+    <br><span style="color:#6b6862;">Phone:
+      <a href="tel:{{ pickup_store.phone }}" style="color:#1a1a1a;">{{ pickup_store.phone }}</a></span>
+    {% endif %}
+    <p style="margin:10px 0 0;color:#6b6862;">Bring your order number
+      (<strong style="color:#1a1a1a;">{{ number }}</strong>) and a photo ID when you
+      collect. Questions? Call the store or just reply to this email.</p>
+  </td></tr>
+</table>
+
+<div style="margin:28px 0 0;">
+  {% include "email/_button.html" with url=tracking_url label="View your order" only %}
+</div>
+{% endblock %}

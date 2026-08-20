@@ -25,9 +25,13 @@ export interface SenderLocationRow {
   locality: string;
   latitude: string;
   longitude: string;
-  /** Display-only filing labels (Plan-35) — routing follows the pin, never these. */
+  /** Display-only filing labels (Plan-35) — GIG routing follows the pin, never these. */
   state: string;
   lga: string;
+  /** Plan-40: offer this location to customers as a ₦0 pickup store… */
+  customer_pickup: boolean;
+  /** …matched to customers BY THIS canonical state (core.Region pk, level="state"). */
+  state_region: number | null;
   is_active: boolean;
 }
 
@@ -55,6 +59,8 @@ export async function saveSenderLocationAction(input: {
   longitude: string;
   state: string;
   lga: string;
+  customer_pickup: boolean;
+  state_region: number | null;
   is_active: boolean;
 }): Promise<SenderState> {
   if (!input.name.trim()) {
@@ -62,6 +68,10 @@ export async function saveSenderLocationAction(input: {
   }
   if (!input.address.trim()) {
     return { fieldErrors: { address: "The rider needs the street address." } };
+  }
+  if (input.customer_pickup && input.state_region === null) {
+    // Pre-check for a friendlier inline message; the serializer enforces it too.
+    return { fieldErrors: { state_region: "Pick the store's state — customers are matched by state." } };
   }
   const body = {
     name: input.name.trim(),
@@ -72,6 +82,8 @@ export async function saveSenderLocationAction(input: {
     longitude: input.longitude.trim(),
     state: input.state.trim(),
     lga: input.lga.trim(),
+    customer_pickup: input.customer_pickup,
+    state_region: input.state_region,
     is_active: input.is_active,
   };
   try {
