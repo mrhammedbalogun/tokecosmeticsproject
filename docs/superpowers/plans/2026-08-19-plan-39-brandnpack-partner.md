@@ -1,9 +1,18 @@
 # Plan 39 — BrandNPack delivery partner (per-LCDA Lagos rates + partner portal)
 
-**Date:** 2026-08-19 · **Status:** built + verified locally (full backend suite green,
-both frontends typecheck/test green, all flows exercised over live dev servers).
-NOT yet committed or deployed. Before sharing the portal link: set BrandnPack's real
-email + a password on /settings/partners (seed login is unusable on purpose).
+**Date:** 2026-08-19 · **Status:** DEPLOYED 2026-08-19 (b293945 → backend-v0.42.0 on
+the VPS + both Vercel apps Ready; live-verified — a prod Ikorodu guest probe returned
+the six BrandnPack LCDA cards with doc prices + areas beside live GIG quotes, the
+portal routes serve on admin.tokecosmetics.com, and the direct-API partner login is
+refused by the BFF-secret gate as designed). Deploy notes: the CI deploy job failed
+with `ssh: connect to 203.161.38.201 port 22: Connection timed out` from the GitHub
+runner (VPS reachable fine from WSL) — deployed via the documented manual fallback;
+watch whether the next tag's CI deploy also times out. `ci-backend` is red on ruff
+lint debt (27 pre-existing errors after this plan's one was fixed in 87b5da7) and was
+already red on backend-v0.41.0.
+
+**Before sharing the portal link:** set BrandnPack's real email + a password on
+/settings/partners (seed login is unusable on purpose; the page badges it).
 
 ## What
 
