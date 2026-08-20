@@ -299,6 +299,32 @@ def _case_sender_location_create(client, monkeypatch):
     ), 201
 
 
+def _case_partner_patch(client, monkeypatch):
+    # The seeded BrandnPack row (delivery/0017) — partners arrive by migration, never
+    # POST (create is closed with 405), so the exercised write is the kill-switch PATCH.
+    from apps.delivery.models import DeliveryPartner
+
+    partner = DeliveryPartner.objects.get(code="brandnpack")
+    return client.patch(
+        f"/api/v1/admin/partners/{partner.pk}/", {"is_active": False}, format="json",
+    ), 200
+
+
+def _case_partner_zone_create(client, monkeypatch):
+    from apps.core.models import Region
+    from apps.delivery.models import DeliveryPartner
+
+    partner = DeliveryPartner.objects.get(code="brandnpack")
+    lagos = Region.objects.get(country_code="NG", level="state", name="Lagos", parent=None)
+    ikeja = Region.objects.get(country_code="NG", level="area", parent=lagos, name="Ikeja")
+    return client.post(
+        "/api/v1/admin/partner-zones/",
+        {"partner": partner.pk, "lga_region": ikeja.pk, "lcda_name": "Ikeja Audit",
+         "areas_covered": "Allen, Opebi", "price": "3000.00"},
+        format="json",
+    ), 201
+
+
 def _case_banner_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/banners/",
@@ -769,6 +795,13 @@ WRITE_CASES: dict[str, tuple] = {
     "DeliveryOptionAdminViewSet": (_case_delivery_option_create, "create"),
     "RegionAdminViewSet": (_case_region_patch, "partial_update"),
     "SenderLocationAdminViewSet": (_case_sender_location_create, "create"),
+    # Plan-39. The partner viewset's create is closed (partners arrive by migration),
+    # so its exercised write is the kill-switch PATCH — `partial_update`, same
+    # reasoning as ProductImageAdminViewSet above. The `password/` action itself is
+    # driven in apps/delivery/tests/test_partner.py; its _changes override keeps the
+    # secret out of the row by construction ({"password_set": True}).
+    "DeliveryPartnerAdminViewSet": (_case_partner_patch, "partial_update"),
+    "PartnerZoneAdminViewSet": (_case_partner_zone_create, "create"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),

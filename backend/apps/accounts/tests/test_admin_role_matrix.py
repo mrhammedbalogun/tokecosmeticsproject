@@ -146,6 +146,13 @@ MATRIX: list[Row] = [
     Row("RegionAdminViewSet", "get", "/api/v1/admin/regions/?country_code=NG", _MANAGERS),
     # Pickup origins (Plan-34): same operational-address reasoning as the options.
     Row("SenderLocationAdminViewSet", "get", "/api/v1/admin/sender-locations/", _MANAGERS),
+    # Delivery partners (Plan-39): Owner alone — the `password/` action mints a
+    # credential for an external business whose edits land straight at checkout,
+    # which is staff.manage's "invites mint administrators" reasoning, not a price.
+    Row("DeliveryPartnerAdminViewSet", "get", "/api/v1/admin/partners/", _OWNER),
+    # Partner rate cards (Plan-39): an operational delivery price, same reasoning
+    # as DeliveryOptionAdminViewSet above.
+    Row("PartnerZoneAdminViewSet", "get", "/api/v1/admin/partner-zones/", _MANAGERS),
     # --- reports: Owner and Manager. Support works the desk and does not see the books.
     Row("ReportView", "get", "/api/v1/admin/reports/revenue/", _MANAGERS),
     Row("ReportExportView", "get", "/api/v1/admin/reports/revenue/export.csv", _MANAGERS),
