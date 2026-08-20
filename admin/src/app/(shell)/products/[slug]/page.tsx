@@ -32,7 +32,11 @@ import {
   finalizeVideoAction,
   requestVideoTicketAction,
 } from "@/app/(shell)/content/media/actions";
-import { createVariantAction, updateVariantAction } from "./variant-actions";
+import {
+  createVariantAction,
+  deleteVariantAction,
+  updateVariantAction,
+} from "./variant-actions";
 import { adjustStockAction } from "./stock-actions";
 import type { PriceRow, VariantRow } from "@/lib/product-prices";
 import type { StockRow } from "@/lib/product-stock";
@@ -245,6 +249,10 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
           variants={variants}
           createVariant={createVariantAction}
           updateVariant={updateVariantAction}
+          deleteVariant={deleteVariantAction}
+          // The same scope read as the product delete button above — an offer, not
+          // the gate; `ProductVariantAdminViewSet.destroy` re-checks the request.
+          canDeleteVariants={canDelete}
           stock={stock}
           initialPrices={prices}
           currencies={CURRENCIES}

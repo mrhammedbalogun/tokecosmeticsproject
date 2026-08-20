@@ -77,7 +77,10 @@ import {
   type Axis,
   type MatrixDiff,
 } from "@/lib/variant-matrix";
-import type { VariantCreateResult } from "@/app/(shell)/products/[slug]/variant-actions";
+import type {
+  VariantCreateResult,
+  VariantDeleteResult,
+} from "@/app/(shell)/products/[slug]/variant-actions";
 import { parseWeightInput } from "@/lib/variant-weight";
 import {
   isDirty,
@@ -160,6 +163,8 @@ export function ProductEditor({
   variants,
   createVariant,
   updateVariant,
+  deleteVariant,
+  canDeleteVariants,
   stock,
   initialPrices,
   currencies,
@@ -192,6 +197,10 @@ export function ProductEditor({
     name?: string;
     weightGrams?: number | null;
   }) => Promise<VariantCreateResult>;
+  deleteVariant: (input: { variantId: number }) => Promise<VariantDeleteResult>;
+  /** Whether to OFFER the delete buttons — read from the caller's scopes, never the
+   *  gate: `ProductVariantAdminViewSet.destroy` re-checks products.delete itself. */
+  canDeleteVariants: boolean;
   stock: StockRow[];
   initialPrices: PriceRow[];
   currencies: readonly string[];
@@ -394,12 +403,19 @@ export function ProductEditor({
   // Variants rewritten this session, keyed by id — so a rename shows on screen without a
   // reload and without mutating the server-rendered `variants` prop.
   const [updated, setUpdated] = useState<Record<number, VariantRow>>({});
+  // Variants deleted this session. A third set alongside `newVariants`/`updated`,
+  // for the same reason: the server prop never refreshes (no revalidatePath), so the
+  // deletion has to be subtracted here or the row would sit on screen looking alive.
+  const [removedIds, setRemovedIds] = useState<number[]>([]);
   const allVariants = useMemo(
     // mergeVariants, not a plain spread: once the revalidated page data lands, the
     // server prop contains the variants created this session too, and concatenating
     // showed every fresh row twice (and doubled the next Generate's arithmetic).
-    () => mergeVariants(variants, newVariants).map((v) => updated[v.id] ?? v),
-    [variants, newVariants, updated],
+    () =>
+      mergeVariants(variants, newVariants)
+        .map((v) => updated[v.id] ?? v)
+        .filter((v) => !removedIds.includes(v.id)),
+    [variants, newVariants, updated, removedIds],
   );
 
   // The preview is a SNAPSHOT, taken by Generate. Recomputing live on every keystroke
@@ -714,6 +730,39 @@ export function ProductEditor({
   const [priceErrors, setPriceErrors] = useState<Record<string, string>>({});
   const [busyCell, setBusyCell] = useState<string | null>(null);
 
+  // --- deleting a variant ----------------------------------------------------------
+  //
+  // Immediate, like every variant write — deletion is not part of the product's Save.
+  // The grid on the Prices tab derives from `allVariants`, so one removal drops the
+  // row from both tabs at once.
+  const [variantDeleteError, setVariantDeleteError] = useState<string | null>(null);
+  const [variantDeleteBusyId, setVariantDeleteBusyId] = useState<number | null>(null);
+
+  const onVariantDelete = (variantId: number) => {
+    setVariantDeleteError(null);
+    setVariantDeleteBusyId(variantId);
+    startImageTransition(async () => {
+      // The same load-bearing catch as every write in this file: a rejected request
+      // must become a message, not an unhandled rejection that unmounts the editor.
+      let res: VariantDeleteResult;
+      try {
+        res = await deleteVariant({ variantId });
+      } catch {
+        res = { ok: false, error: UNREACHABLE };
+      }
+      setVariantDeleteBusyId(null);
+      if (!res.ok) {
+        setVariantDeleteError(res.error);
+        return;
+      }
+      setRemovedIds((current) => [...current, variantId]);
+      // Its stock and price rows cascaded server-side; dropping them here keeps the
+      // adjust modal and the grid's draft bookkeeping from ever aiming at a ghost.
+      setStockRows((current) => current.filter((row) => row.variant !== variantId));
+      setPrices((current) => current.filter((price) => price.variant !== variantId));
+    });
+  };
+
   // `allVariants`, NOT the `variants` server prop. The prop only updates on a route
   // refresh, and nothing triggers one any more (the per-cell actions' revalidatePath
   // was what did, at ~13 API requests a call — removed 2026-08-10). Built from the
@@ -968,6 +1017,9 @@ export function ProductEditor({
               weightBusyId={weightBusyId}
               onWeightDraft={onWeightDraft}
               onWeightCommit={onWeightCommit}
+              onDelete={canDeleteVariants ? onVariantDelete : undefined}
+              deleteBusyId={variantDeleteBusyId}
+              deleteError={variantDeleteError}
             />
           </div>
         )}
@@ -980,6 +1032,9 @@ export function ProductEditor({
             busyKey={busyCell}
             onDraft={onPriceDraft}
             onCommit={onPriceCommit}
+            onDeleteVariant={canDeleteVariants ? onVariantDelete : undefined}
+            deleteBusyId={variantDeleteBusyId}
+            deleteError={variantDeleteError}
           />
         )}
         {tab === "content" && (

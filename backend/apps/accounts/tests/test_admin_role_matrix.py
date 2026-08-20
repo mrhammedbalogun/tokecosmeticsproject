@@ -242,6 +242,13 @@ DELETE_PRODUCT_ROW = Row("ProductAdminViewSet", "delete",
                          "/api/v1/admin/products/no-such-product/", _OWNER,
                          scope="products.delete")
 
+# Variant delete carries the same elevation as product delete, for the same reason: it
+# cascades price rows, stock rows and cart lines. The id does not exist on purpose —
+# an Owner proves admission with a 404, a Manager is stopped at 403 BEFORE the lookup.
+DELETE_VARIANT_ROW = Row("ProductVariantAdminViewSet", "delete",
+                         "/api/v1/admin/variants/999999/", _OWNER,
+                         scope="products.delete")
+
 
 @pytest.fixture
 def roles(django_user_model):
@@ -305,8 +312,8 @@ def _ids(rows):
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize(
     "row",
-    MATRIX + [CANCEL_ROW, DELETE_PRODUCT_ROW],
-    ids=_ids(MATRIX + [CANCEL_ROW, DELETE_PRODUCT_ROW]),
+    MATRIX + [CANCEL_ROW, DELETE_PRODUCT_ROW, DELETE_VARIANT_ROW],
+    ids=_ids(MATRIX + [CANCEL_ROW, DELETE_PRODUCT_ROW, DELETE_VARIANT_ROW]),
 )
 def test_role_against_endpoint(roles, row, role):
     response = _fire(_admin_client(roles[role]), row)
@@ -341,7 +348,7 @@ def test_the_matrix_agrees_with_the_scope_table():
     in. They are written separately so that a mistake in either shows up here rather
     than being absorbed silently.
     """
-    for row in MATRIX + [CANCEL_ROW, DELETE_PRODUCT_ROW]:
+    for row in MATRIX + [CANCEL_ROW, DELETE_PRODUCT_ROW, DELETE_VARIANT_ROW]:
         if row.scope is None:  # admin-me: staff-only, no scope
             assert row.allowed == ALL_ROLES, f"{row} gates on is_staff, so every role passes"
             continue

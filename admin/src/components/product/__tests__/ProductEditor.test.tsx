@@ -189,6 +189,8 @@ function setup(
     adjustStock: ReturnType<typeof vi.fn>;
     createVariant: ReturnType<typeof vi.fn>;
     updateVariant: ReturnType<typeof vi.fn>;
+    deleteVariant: ReturnType<typeof vi.fn>;
+    canDeleteVariants: boolean;
   }> = {},
 ) {
   const actions = {
@@ -227,6 +229,11 @@ function setup(
         ...(i.optionValues ? { option_values: i.optionValues } : {}),
       },
     }));
+  const deleteVariant =
+    catalogue.deleteVariant ??
+    vi.fn<(i: { variantId: number }) => Promise<{ ok: true } | { ok: false; error: string }>>(
+      async () => ({ ok: true }),
+    );
   const savePrice =
     catalogue.savePrice ??
     vi.fn(async (input: { priceId: number | null; variantId: number; currency: string; amount: string }) => ({
@@ -247,6 +254,8 @@ function setup(
       variants={catalogue.variants ?? []}
       createVariant={createVariant}
       updateVariant={updateVariant}
+      deleteVariant={deleteVariant}
+      canDeleteVariants={catalogue.canDeleteVariants ?? true}
       stock={catalogue.stock ?? []}
       initialPrices={catalogue.prices ?? []}
       currencies={CURRENCIES}
@@ -255,7 +264,7 @@ function setup(
       save={save}
     />,
   );
-  return { save, actions, savePrice, adjustStock, createVariant, updateVariant };
+  return { save, actions, savePrice, adjustStock, createVariant, updateVariant, deleteVariant };
 }
 
 const tab = (name: string) => screen.getByRole("tab", { name });
@@ -1732,5 +1741,97 @@ describe("ProductEditor", () => {
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/Renamed on 2/));
     expect(screen.queryByRole("button", { name: /^Rename on/ })).not.toBeInTheDocument();
+  });
+
+  // --- deleting a variant ------------------------------------------------------------
+  //
+  // Offered only to holders of products.delete (the server re-checks), and always with
+  // a second click: a variant delete cascades its prices, stock and live cart lines.
+
+  it("offers no variant delete without the products.delete scope", () => {
+    withCatalogue({
+      variants: [variantRow(1, "TC-1"), variantRow(2, "TC-2")],
+      canDeleteVariants: false,
+    });
+
+    fireEvent.click(tab("Variants"));
+    expect(screen.queryByRole("button", { name: "Delete variant TC-1" })).not.toBeInTheDocument();
+
+    fireEvent.click(tab("Prices"));
+    expect(screen.queryByRole("button", { name: "Delete variant TC-1" })).not.toBeInTheDocument();
+  });
+
+  it("asks twice before deleting a variant, then drops its row", async () => {
+    const deleteVariant = vi.fn().mockResolvedValue({ ok: true });
+    withCatalogue({
+      variants: [variantRow(1, "TC-1"), variantRow(2, "TC-2")],
+      deleteVariant,
+    });
+
+    fireEvent.click(tab("Variants"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete variant TC-1" }));
+    expect(deleteVariant).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Really delete" }));
+
+    await waitFor(() => expect(deleteVariant).toHaveBeenCalledWith({ variantId: 1 }));
+    await waitFor(() => expect(screen.queryByText("TC-1")).not.toBeInTheDocument());
+    expect(screen.getByText("TC-2")).toBeInTheDocument();
+  });
+
+  it("deletes from the Prices tab too, and the pricing row goes with it", async () => {
+    const deleteVariant = vi.fn().mockResolvedValue({ ok: true });
+    withCatalogue({
+      variants: [variantRow(1, "TC-1"), variantRow(2, "TC-2")],
+      prices: [priceRow(10, 1, "NGN", "5000.00"), priceRow(11, 2, "NGN", "8000.00")],
+      deleteVariant,
+    });
+
+    fireEvent.click(tab("Prices"));
+    expect(screen.getByText("TC-1")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete variant TC-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Really delete" }));
+
+    await waitFor(() => expect(deleteVariant).toHaveBeenCalledWith({ variantId: 1 }));
+    await waitFor(() => expect(screen.queryByText("TC-1")).not.toBeInTheDocument());
+    expect(screen.getByText("TC-2")).toBeInTheDocument();
+  });
+
+  it("keeps the row and says why when the delete is refused", async () => {
+    // The realistic refusal: the backend refuses to delete the last variant.
+    const deleteVariant = vi.fn().mockResolvedValue({
+      ok: false,
+      error: "This is the product's last variant.",
+    });
+    withCatalogue({ variants: [variantRow(1, "TC-1")], deleteVariant });
+
+    fireEvent.click(tab("Variants"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete variant TC-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Really delete" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("This is the product's last variant.")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("TC-1")).toBeInTheDocument();
+  });
+
+  it("A VARIANT DELETE THAT NEVER REACHES THE SERVER keeps the row and the other tabs", async () => {
+    // The same load-bearing catch as every write in the editor: a rejected request
+    // must become a message, not an unhandled rejection that unmounts the editor.
+    const deleteVariant = vi.fn().mockRejectedValue(new Error("network down"));
+    withCatalogue({ variants: [variantRow(1, "TC-1"), variantRow(2, "TC-2")], deleteVariant });
+
+    fireEvent.change(nameInput(), { target: { value: "Half-written name" } });
+    fireEvent.click(tab("Variants"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete variant TC-1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Really delete" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/did not reach the server/i)).toBeInTheDocument(),
+    );
+    expect(screen.getByText("TC-1")).toBeInTheDocument();
+    fireEvent.click(tab("Details"));
+    expect(screen.getByDisplayValue("Half-written name")).toBeInTheDocument();
   });
 });

@@ -19,9 +19,12 @@
  * none — this input is how those get fixed. Commit on blur, like the price grid; each
  * write lands immediately (no relation to the product form's Save).
  *
- * PRESENTATIONAL: no state of its own — drafts and errors live in `ProductEditor`,
- * because this panel unmounts on every tab switch.
+ * PRESENTATIONAL: no durable state of its own — drafts and errors live in
+ * `ProductEditor`, because this panel unmounts on every tab switch. The one exception
+ * is the delete confirmation, which is VIEW state: losing an armed "Really delete" to
+ * a tab switch is the safe direction to lose it in (same as ImagesPanel).
  */
+import { useState } from "react";
 import type { StockRow } from "@/lib/product-stock";
 import type { VariantRow } from "@/lib/product-prices";
 
@@ -35,6 +38,9 @@ export function VariantsPanel({
   weightBusyId,
   onWeightDraft,
   onWeightCommit,
+  onDelete,
+  deleteBusyId,
+  deleteError,
 }: {
   variants: VariantRow[];
   stock: StockRow[];
@@ -49,7 +55,12 @@ export function VariantsPanel({
   weightBusyId: number | null;
   onWeightDraft: (variantId: number, text: string) => void;
   onWeightCommit: (variantId: number) => void;
+  /** Absent = the caller does not hold products.delete, and no button is offered. */
+  onDelete?: (variantId: number) => void;
+  deleteBusyId?: number | null;
+  deleteError?: string | null;
 }) {
+  const [confirming, setConfirming] = useState<number | null>(null);
   if (!variants.length) {
     return (
       <p className="rounded-[var(--radius-card)] border border-dashed border-line p-6 text-center text-sm text-muted">
@@ -63,7 +74,13 @@ export function VariantsPanel({
     stock.find((s) => s.variant === variantId && s.warehouse === warehouseId);
 
   return (
-    <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line">
+    <div>
+      {deleteError && (
+        <p className="mb-3 rounded-[var(--radius-card)] border border-warn/30 bg-warn/5 p-3 text-sm text-warn">
+          {deleteError}
+        </p>
+      )}
+      <div className="overflow-x-auto rounded-[var(--radius-card)] border border-line">
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-line bg-surface text-left text-xs text-muted">
@@ -75,6 +92,11 @@ export function VariantsPanel({
                 {warehouse.name}
               </th>
             ))}
+            {onDelete && (
+              <th scope="col" className="p-3 font-medium">
+                <span className="sr-only">Delete</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -157,10 +179,50 @@ export function VariantsPanel({
                   </td>
                 );
               })}
+              {onDelete && (
+                <td className="p-3 text-right">
+                  {confirming === variant.id ? (
+                    <span className="flex items-center justify-end gap-1">
+                      {/* Two clicks, because this cascades: the variant's prices,
+                          stock records and any cart lines holding it go with it. */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setConfirming(null);
+                          onDelete(variant.id);
+                        }}
+                        disabled={deleteBusyId !== null}
+                        className="rounded border border-warn/40 bg-warn/10 px-2 py-1 text-xs text-warn"
+                      >
+                        Really delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirming(null)}
+                        className="rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-foreground"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirming(variant.id)}
+                      disabled={deleteBusyId !== null}
+                      aria-label={`Delete variant ${variant.sku}`}
+                      title="Deletes this variant with its prices and stock records — order history keeps its name"
+                      className="rounded border border-line px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn disabled:opacity-40"
+                    >
+                      {deleteBusyId === variant.id ? "Deleting…" : "Delete"}
+                    </button>
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

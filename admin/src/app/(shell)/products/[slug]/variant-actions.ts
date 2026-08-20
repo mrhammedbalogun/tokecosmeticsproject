@@ -11,9 +11,11 @@
  * when call seven collides on SKU — is handled by reporting per row rather than by
  * pretending it cannot happen.
  *
- * NOTHING IS EVER DELETED HERE. A variant carries price rows, stock rows and links from
+ * THE BUILDER NEVER DELETES. A variant carries price rows, stock rows and links from
  * historical order lines; the builder lists combinations that fall outside the matrix and
- * leaves them alone.
+ * leaves them alone. Deleting is `deleteVariantAction` below — a deliberate per-row act,
+ * Owner-only (`products.delete`, re-checked by the API), never something the matrix
+ * arithmetic does on its own.
  */
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
@@ -154,5 +156,46 @@ export async function updateVariantAction(input: {
     return { ok: true, variant };
   } catch (e) {
     return { ok: false, error: message(e) };
+  }
+}
+
+export type VariantDeleteResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Deleting one variant. The API cascades its price rows, stock rows and any live cart
+ * lines holding it (order history survives via its own snapshots), promotes a new
+ * default when the default is deleted, and refuses to delete a product's LAST variant —
+ * that refusal's `detail` sentence is surfaced verbatim below.
+ */
+export async function deleteVariantAction(input: {
+  variantId: number;
+}): Promise<VariantDeleteResult> {
+  if (!Number.isInteger(input.variantId) || input.variantId < 1) {
+    return { ok: false, error: "That variant could not be identified." };
+  }
+
+  try {
+    await fetchWithAuth(`/admin/variants/${input.variantId}/`, { method: "DELETE" });
+    return { ok: true };
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+    if (e.status === 401) {
+      return { ok: false, error: "Your session has expired — sign in again, then retry." };
+    }
+    if (e.status === 403) {
+      // Not the shared 403 sentence: the caller CAN manage products — deleting is the
+      // Owner elevation, and saying so tells them who to ask.
+      return { ok: false, error: "Only the Owner can delete a variant." };
+    }
+    if (e.status === 404) return { ok: false, error: "That variant no longer exists." };
+    const data = e.data as Record<string, unknown> | null;
+    if (data && typeof data === "object") {
+      // The realistic 400 is the last-variant refusal, whose `detail` names the fix.
+      for (const value of Object.values(data)) {
+        const first = Array.isArray(value) ? value[0] : value;
+        if (typeof first === "string") return { ok: false, error: first };
+      }
+    }
+    return { ok: false, error: "That variant could not be deleted." };
   }
 }

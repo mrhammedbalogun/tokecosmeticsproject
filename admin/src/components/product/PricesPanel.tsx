@@ -10,8 +10,10 @@
  * changes nothing a customer sees — see `lib/product-prices.ts` for the full argument.
  *
  * PRESENTATIONAL: the grid, the drafts and the busy state live in `ProductEditor`, because
- * this panel unmounts on every tab switch.
+ * this panel unmounts on every tab switch. The delete confirmation alone is local VIEW
+ * state — losing an armed "Really delete" to a tab switch is the safe way to lose it.
  */
+import { useState } from "react";
 import type { Cell, GridRow } from "@/lib/product-prices";
 
 const INPUT =
@@ -25,6 +27,12 @@ export interface PricesPanelProps {
   busyKey: string | null;
   onDraft: (key: string, value: string) => void;
   onCommit: (variantId: number, currency: string, cell: Cell) => void;
+  /** Absent = the caller does not hold products.delete, and no button is offered.
+   *  Same handler as the Variants tab's — deleting here removes the VARIANT, not
+   *  merely its prices (there is no "unprice" concept; blank the cell for that). */
+  onDeleteVariant?: (variantId: number) => void;
+  deleteBusyId?: number | null;
+  deleteError?: string | null;
 }
 
 export const cellKey = (variantId: number, currency: string) => `${variantId}:${currency}`;
@@ -37,7 +45,11 @@ export function PricesPanel({
   busyKey,
   onDraft,
   onCommit,
+  onDeleteVariant,
+  deleteBusyId,
+  deleteError,
 }: PricesPanelProps) {
+  const [confirming, setConfirming] = useState<number | null>(null);
   if (!grid.length) {
     return (
       <p className="rounded-[var(--radius-card)] border border-dashed border-line p-6 text-center text-sm text-muted">
@@ -51,6 +63,12 @@ export function PricesPanel({
       <p className="rounded-[var(--radius-card)] border border-accent/30 bg-accent/10 p-3 text-sm">
         Prices save <strong>as you leave each box</strong> — they are not part of Save.
       </p>
+
+      {deleteError && (
+        <p className="mt-3 rounded-[var(--radius-card)] border border-warn/30 bg-warn/5 p-3 text-sm text-warn">
+          {deleteError}
+        </p>
+      )}
 
       <div className="mt-4 overflow-x-auto rounded-[var(--radius-card)] border border-line">
         <table className="w-full border-collapse text-sm">
@@ -70,6 +88,42 @@ export function PricesPanel({
                 <td className="p-3">
                   <div>{row.variant.name}</div>
                   <div className="font-mono text-xs text-muted">{row.variant.sku}</div>
+                  {onDeleteVariant &&
+                    (confirming === row.variant.id ? (
+                      <span className="mt-1 flex items-center gap-1">
+                        {/* Two clicks, because this deletes the VARIANT — its prices,
+                            stock records and any cart lines holding it go with it. */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConfirming(null);
+                            onDeleteVariant(row.variant.id);
+                          }}
+                          disabled={deleteBusyId !== null}
+                          className="rounded border border-warn/40 bg-warn/10 px-2 py-1 text-xs text-warn"
+                        >
+                          Really delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirming(null)}
+                          className="rounded border border-line px-2 py-1 text-xs text-muted hover:border-accent hover:text-foreground"
+                        >
+                          Cancel
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirming(row.variant.id)}
+                        disabled={deleteBusyId !== null}
+                        aria-label={`Delete variant ${row.variant.sku}`}
+                        title="Deletes the whole variant, not just its prices"
+                        className="mt-1 rounded border border-line px-2 py-1 text-xs text-muted hover:border-warn hover:text-warn disabled:opacity-40"
+                      >
+                        {deleteBusyId === row.variant.id ? "Deleting…" : "Delete variant"}
+                      </button>
+                    ))}
                 </td>
 
                 {currencies.map((currency) => {
