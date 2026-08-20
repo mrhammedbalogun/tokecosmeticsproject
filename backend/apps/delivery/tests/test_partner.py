@@ -6,7 +6,7 @@ import pytest
 from rest_framework.test import APIClient
 
 from apps.catalog.tests.factories_admin import staff_user
-from apps.core.models import Country, Currency, Region
+from apps.core.models import Country, Region
 from apps.delivery.models import DeliveryPartner, PartnerZone
 from apps.delivery.services import option_id_matches, options_for_address
 
