@@ -1745,10 +1745,11 @@ describe("ProductEditor", () => {
 
   // --- deleting a variant ------------------------------------------------------------
   //
-  // Offered only to holders of products.delete (the server re-checks), and always with
-  // a second click: a variant delete cascades its prices, stock and live cart lines.
+  // Offered to products.manage holders (Owner + Manager since the 2026-08-20
+  // widening; the server re-checks), and always with a second click: a variant
+  // delete cascades its prices, stock and live cart lines.
 
-  it("offers no variant delete without the products.delete scope", () => {
+  it("offers no variant delete when the scope gate says no", () => {
     withCatalogue({
       variants: [variantRow(1, "TC-1"), variantRow(2, "TC-2")],
       canDeleteVariants: false,

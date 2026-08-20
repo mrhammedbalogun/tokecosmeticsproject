@@ -27,7 +27,7 @@ export interface PricesPanelProps {
   busyKey: string | null;
   onDraft: (key: string, value: string) => void;
   onCommit: (variantId: number, currency: string, cell: Cell) => void;
-  /** Absent = the caller does not hold products.delete, and no button is offered.
+  /** Absent = the caller may not delete variants (products.manage), so no button.
    *  Same handler as the Variants tab's — deleting here removes the VARIANT, not
    *  merely its prices (there is no "unprice" concept; blank the cell for that). */
   onDeleteVariant?: (variantId: number) => void;

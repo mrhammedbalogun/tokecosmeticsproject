@@ -565,6 +565,17 @@ def _case_staff_invite(client, monkeypatch):
     ), 201
 
 
+def _case_staff_remove(client, monkeypatch):
+    from django.contrib.auth import get_user_model
+    from django.contrib.auth.models import Group
+
+    member = get_user_model().objects.create_user(
+        email="remove-me@toke.test", password=None, is_staff=True
+    )
+    member.groups.add(Group.objects.get(name="Support"))
+    return client.post(f"/api/v1/admin/staff/{member.pk}/remove/", {}, format="json"), 200
+
+
 def _case_staff_invite_revoke(client, monkeypatch):
     from django.contrib.auth.models import Group
 
@@ -818,6 +829,8 @@ WRITE_CASES: dict[str, tuple] = {
     "FreightReceiptView": (_case_freight_receipt, "freight_receipt"),
     "StaffInviteListCreateView": (_case_staff_invite, "staff_invite"),
     "StaffInviteRevokeView": (_case_staff_invite_revoke, "staff_invite_revoke"),
+    # The un-invite. The row is the only durable record of who took whose access away.
+    "StaffRemoveView": (_case_staff_remove, "staff_remove"),
 }
 
 # Admin views that expose no writing method at all, so there is nothing to exercise.

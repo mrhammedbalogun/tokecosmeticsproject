@@ -201,6 +201,7 @@ MATRIX: list[Row] = [
     Row("StaffInviteListCreateView", "get", "/api/v1/admin/staff/invites/", _OWNER),
     Row("StaffInviteRevokeView", "post", "/api/v1/admin/staff/invites/999999/revoke/", _OWNER),
     Row("StaffListView", "get", "/api/v1/admin/staff/", _OWNER),
+    Row("StaffRemoveView", "post", "/api/v1/admin/staff/999999/remove/", _OWNER),
     # --- audit: Owner only. It records what every other role did, so a role that
     # could read it could also watch for whether anyone had noticed it yet ---------
     Row("AuditLogListView", "get", "/api/v1/admin/audit/", _OWNER),
@@ -242,12 +243,15 @@ DELETE_PRODUCT_ROW = Row("ProductAdminViewSet", "delete",
                          "/api/v1/admin/products/no-such-product/", _OWNER,
                          scope="products.delete")
 
-# Variant delete carries the same elevation as product delete, for the same reason: it
-# cascades price rows, stock rows and cart lines. The id does not exist on purpose —
-# an Owner proves admission with a 404, a Manager is stopped at 403 BEFORE the lookup.
+# Variant delete sits at the viewset's own floor (products.manage): it shipped
+# Owner-only in v0.44.0 and Hammed widened it to Managers the same day — pruning a
+# variant is catalogue day-work, and the damage guards (last-variant refusal, default
+# promotion) are role-independent. Listed apart from MATRIX because that is
+# one-row-per-view and the GET row above already represents this viewset; this row
+# exists to pin the WIDENING, so a future "tidy-up" back to Owner-only fails a test
+# instead of shipping silently.
 DELETE_VARIANT_ROW = Row("ProductVariantAdminViewSet", "delete",
-                         "/api/v1/admin/variants/999999/", _OWNER,
-                         scope="products.delete")
+                         "/api/v1/admin/variants/999999/", _MANAGERS)
 
 
 @pytest.fixture

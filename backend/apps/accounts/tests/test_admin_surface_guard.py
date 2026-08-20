@@ -312,6 +312,9 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # — and because the list of administrators together with their enrolment gaps is a
     # target list, not a staff directory. Nobody but the Owner needs it.
     "StaffListView": "staff.manage",
+    # Removing a staff member is the un-invite: same subject, same Owner-only scope.
+    # (Soft removal — deactivate + strip roles + kill sessions; see the view.)
+    "StaffRemoveView": "staff.manage",
     # --- search ------------------------------------------------------------------
     # `None`, and this is the one entry in the dict where that needs an argument rather
     # than a sentence. Every OTHER `None` here means "gates on is_staff and that is the

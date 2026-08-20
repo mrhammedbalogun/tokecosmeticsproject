@@ -1,7 +1,8 @@
 "use server";
 
 /**
- * The two writes on the staff page: invite somebody, and revoke an invite.
+ * The three writes on the staff page: invite somebody, revoke an invite, and remove
+ * a staff member.
  *
  * BOTH ARE SERVER FUNCTIONS, matching every other authenticated write in this app. They
  * get Next's Origin/Host check for free and they may persist a rotated token, which a
@@ -102,6 +103,35 @@ export async function revokeAction(
     if (e.status === 403) return { error: "Only the Owner can revoke invites." };
     if (e.status === 404) return { error: "That invite no longer exists." };
     return { error: backendMessage(e.data) ?? "The invite could not be revoked." };
+  }
+
+  revalidatePath(STAFF_PATH);
+  return {};
+}
+
+/**
+ * Removing a staff member — `POST /admin/staff/<pk>/remove/`. The API deactivates,
+ * de-roles and signs the account out everywhere (soft removal; the row and the audit
+ * attribution survive), refuses Owners and the caller's own account, and answers 404
+ * for anything that is not a staff account. A plain-argument action rather than a
+ * form action: the ProductEditor delete flows set that precedent, and the button's
+ * two-step confirm lives client-side where a form submit would fight it.
+ */
+export async function removeStaffAction(memberId: number): Promise<{ error?: string }> {
+  // Interpolated into a URL path, so the shape is checked before it gets there.
+  if (!Number.isInteger(memberId) || memberId < 1) {
+    return { error: "That staff member could not be identified." };
+  }
+
+  try {
+    await fetchWithAuth(`/admin/staff/${memberId}/remove/`, { method: "POST" });
+  } catch (e) {
+    if (!(e instanceof ApiError)) throw e;
+    if (e.status === 401) return { error: "Your session has expired — sign in again, then retry." };
+    if (e.status === 403) return { error: "Only the Owner can remove staff." };
+    if (e.status === 404) return { error: "That staff account no longer exists." };
+    // The refusals worth reading verbatim: "your own account", "Owners cannot be removed".
+    return { error: backendMessage(e.data) ?? "That staff member could not be removed." };
   }
 
   revalidatePath(STAFF_PATH);

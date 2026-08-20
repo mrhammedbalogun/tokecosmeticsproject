@@ -1125,6 +1125,95 @@ class StaffInviteRevokeView(AdminAuditMixin, APIView):
         return Response(StaffInviteSerializer(invite).data)
 
 
+class StaffRemoveView(AdminAuditMixin, APIView):
+    """`POST /admin/staff/<pk>/remove/` — take a staff member off the team.
+
+    NOT a row delete, deliberately. A hard `user.delete()` would cascade away any
+    referral ledger rows, reviews and notification subscriptions the person had,
+    raise PROTECT if they were also a delivery-partner login, and null the actor on
+    every audit row they ever wrote. `AccountDeletionView` set the soft-delete
+    precedent for exactly these reasons; this is the staff-shaped version of it:
+    strip `is_staff` and every group, set `is_active=False` (which ends live access
+    tokens on their next request — SimpleJWT checks it), revoke trusted devices and
+    second factors, and blacklist every outstanding refresh token. The account is off
+    the roster and locked out everywhere; history keeps its names.
+
+    OWNERS CANNOT BE REMOVED HERE — not even by another Owner, and superusers count
+    as Owners (`scopes_for_user` short-circuits them to every scope). The last-Owner
+    case would lock the shop out of its own admin, and distinguishing "last" from
+    "co-Owner" turns a kill switch into a policy engine; anyone actually demoting an
+    Owner is having a shell-access conversation, not clicking a button. Removing
+    YOURSELF is refused for the same lockout reason.
+
+    A POST action rather than `DELETE /admin/staff/<pk>/`, matching invite revoke:
+    the row is not deleted, and a verb that says so keeps the API honest.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("staff.manage")]
+    # No body at all, so no allowlist — the row records WHO removed WHOM and WHEN,
+    # which is the entire content of the event.
+    audit_action = "staff_remove"
+    audit_model_label = "accounts.user"
+
+    @extend_schema(request=None, responses={200: None})
+    def post(self, request, pk):
+        from django.shortcuts import get_object_or_404
+
+        from apps.accounts.devices import revoke_all_devices
+        from apps.accounts.models import (
+            StaffEmailSecondFactor,
+            StaffRecoveryCode,
+            StaffTOTP,
+        )
+
+        # `is_staff=True` in the lookup, not checked after: a customer account is not
+        # a staff member, and answering 400 instead of 404 for one would let this
+        # endpoint confirm which shopper emails exist.
+        member = get_object_or_404(get_user_model(), pk=pk, is_staff=True)
+
+        if member.pk == request.user.pk:
+            raise exceptions.ValidationError(
+                "You cannot remove your own account — that would lock you out mid-session."
+            )
+        if member.is_superuser or member.groups.filter(name="Owner").exists():
+            raise exceptions.ValidationError(
+                "Owners cannot be removed from the admin. Demote or remove Owner "
+                "accounts from the server shell instead."
+            )
+
+        member.is_staff = False
+        member.is_active = False
+        member.save(update_fields=["is_staff", "is_active"])
+        member.groups.clear()
+        # The same factor blast radius as `reset_staff_totp`: a trusted browser or an
+        # enrolled authenticator is a pre-verified copy of a credential being voided.
+        StaffTOTP.objects.filter(user=member).delete()
+        StaffEmailSecondFactor.objects.filter(user=member).delete()
+        StaffRecoveryCode.objects.filter(user=member).delete()
+        revoke_all_devices(member)
+        # Kill every outstanding refresh token so live sessions end now rather than at
+        # access-token expiry. Same shape (and same shrugs) as AccountDeletionView:
+        # an already-expired token failing to blacklist is the state we wanted anyway.
+        try:
+            from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+
+            for t in OutstandingToken.objects.filter(user=member):
+                try:
+                    RefreshToken(t.token).blacklist()
+                except Exception:  # noqa: BLE001 — already-expired tokens are fine
+                    pass
+        except Exception:  # noqa: BLE001 — blacklist app optional; deactivation already done
+            pass
+
+        security_logger.info(
+            "staff member %s removed by %s", scrub(member.email), scrub(request.user.email)
+        )
+        return Response(
+            {"detail": f"{member.email} has been removed and can no longer sign in."}
+        )
+
+
 # One message for three different failures. See `StaffInviteAcceptView`.
 _INVITE_REFUSED = "That invite link is not valid. Ask for a new one."
 _INVITE_EXPIRED = "That invite link has expired. Ask for a new one."

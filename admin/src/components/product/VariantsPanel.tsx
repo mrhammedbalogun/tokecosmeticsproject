@@ -55,7 +55,7 @@ export function VariantsPanel({
   weightBusyId: number | null;
   onWeightDraft: (variantId: number, text: string) => void;
   onWeightCommit: (variantId: number) => void;
-  /** Absent = the caller does not hold products.delete, and no button is offered. */
+  /** Absent = the caller may not delete variants (products.manage), so no button. */
   onDelete?: (variantId: number) => void;
   deleteBusyId?: number | null;
   deleteError?: string | null;

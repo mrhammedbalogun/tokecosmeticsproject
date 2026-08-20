@@ -198,8 +198,8 @@ export function ProductEditor({
     weightGrams?: number | null;
   }) => Promise<VariantCreateResult>;
   deleteVariant: (input: { variantId: number }) => Promise<VariantDeleteResult>;
-  /** Whether to OFFER the delete buttons — read from the caller's scopes, never the
-   *  gate: `ProductVariantAdminViewSet.destroy` re-checks products.delete itself. */
+  /** Whether to OFFER the delete buttons — read from the caller's scopes (products.
+   *  manage since the 2026-08-20 widening), never the gate: the API re-checks. */
   canDeleteVariants: boolean;
   stock: StockRow[];
   initialPrices: PriceRow[];

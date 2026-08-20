@@ -20,13 +20,14 @@ unable to look up one product.
 So the whole app is `.manage` until there is a read-only catalogue surface to design
 the split around (Plan-17/19). Over-restriction is the safe direction to be wrong in.
 
-TWO ELEVATIONS ABOVE THE FLOOR: deleting a product requires `products.delete` (Owner
+ONE ELEVATION ABOVE THE FLOOR: deleting a product requires `products.delete` (Owner
 only), checked inline in `ProductAdminViewSet.destroy` — the same shape as the
 order-cancel elevation in apps/orders/views.py, and for the same reason: an inline
 check keeps the declared `permission_classes` the truth the surface guard reads.
-Deleting a VARIANT carries the same elevation (`ProductVariantAdminViewSet.destroy`):
-it cascades price rows, stock rows and live cart lines, so it is the same kind of
-destruction at a smaller radius.
+Deleting a VARIANT deliberately does NOT elevate: it shipped Owner-only in v0.44.0
+and Hammed widened it to the floor the same day — pruning a variant is catalogue
+day-work, and the guards that prevent real damage (`ProductVariantAdminViewSet.
+perform_destroy`: last-variant refusal, default promotion) hold for every role.
 """
 from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
@@ -201,23 +202,12 @@ class ProductVariantAdminViewSet(AdminBaseViewSet):
     # every one of them into the RSC payload of a page showing a handful (Plan-16 Task 8).
     filterset_fields = ["product", "is_active"]
 
-    def destroy(self, request, *args, **kwargs):
-        """DELETE elevates to `products.delete` (Owner only) — the second of the two
-        elevations the module docstring names. A variant delete CASCADES its price
-        rows, stock rows (movements included) and any live cart lines holding it;
-        order history alone survives, via OrderItem's SET_NULL and its name/sku
-        snapshots. That blast radius is product-delete-sized, so it carries the
-        product-delete scope. Checked BEFORE the object lookup, so an unauthorised
-        caller gets a clean 403 rather than a 404 that says whether the id exists.
-        """
-        if "products.delete" not in scopes_for_user(request.user):
-            raise exceptions.PermissionDenied(
-                "Deleting a variant requires the products.delete scope, which only "
-                "the Owner holds. Mark it inactive instead if it should stop selling."
-            )
-        return super().destroy(request, *args, **kwargs)
-
     def perform_destroy(self, instance):
+        # DELETE stays at the viewset's products.manage floor — Owner AND Manager.
+        # It shipped Owner-only (v0.44.0) and was widened the same day; the module
+        # docstring records why. What a variant delete CASCADES: its price rows,
+        # stock rows (movements included) and any live cart lines holding it; order
+        # history survives via OrderItem's SET_NULL and its name/sku snapshots.
         remaining = instance.product.variants.exclude(pk=instance.pk)
         # A product with zero variants is unsellable and invisible in every market —
         # if the whole product should go, that is the product delete's job.

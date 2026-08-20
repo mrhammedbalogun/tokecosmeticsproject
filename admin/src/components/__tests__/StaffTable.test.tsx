@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { StaffTable } from "@/components/StaffTable";
 import type { StaffMember } from "@/lib/staff";
 
@@ -92,5 +92,82 @@ describe("StaffTable", () => {
 
     const row = screen.getByText("manager@toke.test").closest("tr")!;
     expect(within(row).getByText(/never/i)).toBeInTheDocument();
+  });
+
+  // --- removing a staff member ------------------------------------------------------
+  //
+  // Offered per row when a removeAction is wired (the /staff page is Owner-only via
+  // staff.manage, and the API re-checks); never on Owner rows, superusers, or the
+  // signed-in account itself. Two clicks, because there is no undo button — the
+  // account is deactivated and its sessions killed the moment the action lands.
+
+  it("offers no Remove at all when no action is wired", () => {
+    render(<StaffTable members={[MEMBER]} />);
+
+    expect(screen.queryByRole("button", { name: /remove/i })).not.toBeInTheDocument();
+  });
+
+  it("asks twice before removing, then calls the action with the member id", async () => {
+    const removeAction = vi.fn().mockResolvedValue({});
+    render(
+      <StaffTable members={[MEMBER]} removeAction={removeAction} selfEmail="owner@toke.test" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove manager@toke.test" }));
+    expect(removeAction).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Really remove" }));
+
+    await waitFor(() => expect(removeAction).toHaveBeenCalledWith(1));
+  });
+
+  it("offers no Remove for Owners, superusers, or yourself", () => {
+    const removeAction = vi.fn();
+    render(
+      <StaffTable
+        members={[
+          memberFor({ id: 1, email: "owner@toke.test", roles: ["Owner"] }),
+          memberFor({ id: 2, email: "root@toke.test", roles: [], is_superuser: true }),
+          memberFor({ id: 3, email: "me@toke.test", roles: ["Manager"] }),
+          memberFor({ id: 4, email: "support@toke.test", roles: ["Support"] }),
+        ]}
+        removeAction={removeAction}
+        selfEmail="me@toke.test"
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Remove owner@toke.test" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove root@toke.test" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove me@toke.test" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove support@toke.test" })).toBeInTheDocument();
+  });
+
+  it("shows a refusal against the row it refused", async () => {
+    const removeAction = vi.fn().mockResolvedValue({ error: "Only the Owner can remove staff." });
+    render(
+      <StaffTable members={[MEMBER]} removeAction={removeAction} selfEmail="owner@toke.test" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove manager@toke.test" }));
+    fireEvent.click(screen.getByRole("button", { name: "Really remove" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Only the Owner can remove staff.")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("manager@toke.test")).toBeInTheDocument();
+  });
+
+  it("a remove that never reaches the server becomes a message, not a crash", async () => {
+    const removeAction = vi.fn().mockRejectedValue(new Error("network down"));
+    render(
+      <StaffTable members={[MEMBER]} removeAction={removeAction} selfEmail="owner@toke.test" />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove manager@toke.test" }));
+    fireEvent.click(screen.getByRole("button", { name: "Really remove" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/did not reach the server/i)).toBeInTheDocument(),
+    );
   });
 });

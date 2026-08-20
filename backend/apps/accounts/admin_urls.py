@@ -18,6 +18,7 @@ from .views import (
     StaffInviteListCreateView,
     StaffInviteRevokeView,
     StaffListView,
+    StaffRemoveView,
 )
 
 router = SimpleRouter()
@@ -34,4 +35,5 @@ urlpatterns = [
         StaffInviteRevokeView.as_view(),
         name="admin-staff-invite-revoke",
     ),
+    path("staff/<int:pk>/remove/", StaffRemoveView.as_view(), name="admin-staff-remove"),
 ] + router.urls

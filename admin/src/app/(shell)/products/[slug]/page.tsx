@@ -114,7 +114,13 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
   // passing: read server-side, and never the gate — `ProductAdminViewSet.destroy`
   // re-checks products.delete on the request itself. `getAdminMeOrNull` failing
   // (null) simply hides the button, which fails in the safe direction.
-  const canDelete = (await getAdminMeOrNull())?.scopes.includes("products.delete") ?? false;
+  const me = await getAdminMeOrNull();
+  const canDelete = me?.scopes.includes("products.delete") ?? false;
+  // Variant delete was widened from products.delete to the products.manage floor on
+  // 2026-08-20 (Hammed's call): pruning a variant is catalogue day-work. Still read
+  // from the scopes rather than hardcoded true, so the offer stays honest if the
+  // grant table ever changes; the API re-checks regardless.
+  const canDeleteVariants = me?.scopes.includes("products.manage") ?? false;
 
   // Images are a SEPARATE fetch because `ProductAdminSerializer` does not nest them — only
   // the list's single `thumbnail`. Filtered by product, which is possible because Task 1
@@ -250,9 +256,7 @@ export default async function ProductEditorPage({ params }: { params: Params }) 
           createVariant={createVariantAction}
           updateVariant={updateVariantAction}
           deleteVariant={deleteVariantAction}
-          // The same scope read as the product delete button above — an offer, not
-          // the gate; `ProductVariantAdminViewSet.destroy` re-checks the request.
-          canDeleteVariants={canDelete}
+          canDeleteVariants={canDeleteVariants}
           stock={stock}
           initialPrices={prices}
           currencies={CURRENCIES}

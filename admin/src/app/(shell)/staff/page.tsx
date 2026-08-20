@@ -3,8 +3,9 @@ import { InviteForm, InviteList } from "@/components/InvitePanel";
 import { StaffTable } from "@/components/StaffTable";
 import { ApiError } from "@/lib/api";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
+import { getAdminMeOrNull } from "@/lib/admin-me";
 import { isOutstanding, type StaffInvite, type StaffMember } from "@/lib/staff";
-import { inviteAction, revokeAction } from "./actions";
+import { inviteAction, removeStaffAction, revokeAction } from "./actions";
 
 export const metadata: Metadata = { title: "Staff" };
 
@@ -48,6 +49,11 @@ export default async function StaffPage() {
   }
 
   const members = rosterResult.status === "fulfilled" ? rosterResult.value.results : null;
+
+  // Only to keep the signed-in account's own row from offering to remove itself —
+  // the API refuses that anyway, so a null here (fetch hiccup) costs nothing but a
+  // button that would earn a clear error message.
+  const selfEmail = (await getAdminMeOrNull())?.email;
   // The invite list has `pagination_class = None` — it comes back as a bare array, not a
   // paged envelope. Handled defensively so a future decision to paginate it degrades to
   // an empty list rather than a crash.
@@ -76,7 +82,7 @@ export default async function StaffPage() {
       ) : (
         <div className="mt-6 space-y-6">
           {members ? (
-            <StaffTable members={members} />
+            <StaffTable members={members} removeAction={removeStaffAction} selfEmail={selfEmail} />
           ) : (
             <p className="rounded-[var(--radius-card)] border border-warn/30 bg-warn/5 p-4 text-sm text-warn">
               The staff list could not be loaded.

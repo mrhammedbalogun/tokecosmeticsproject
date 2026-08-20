@@ -13,9 +13,9 @@
  *
  * THE BUILDER NEVER DELETES. A variant carries price rows, stock rows and links from
  * historical order lines; the builder lists combinations that fall outside the matrix and
- * leaves them alone. Deleting is `deleteVariantAction` below — a deliberate per-row act,
- * Owner-only (`products.delete`, re-checked by the API), never something the matrix
- * arithmetic does on its own.
+ * leaves them alone. Deleting is `deleteVariantAction` below — a deliberate per-row act
+ * (products.manage, Owner + Manager, re-checked by the API), never something the
+ * matrix arithmetic does on its own.
  */
 import { ApiError } from "@/lib/api";
 import { fetchWithAuth } from "@/lib/session";
@@ -182,11 +182,7 @@ export async function deleteVariantAction(input: {
     if (e.status === 401) {
       return { ok: false, error: "Your session has expired — sign in again, then retry." };
     }
-    if (e.status === 403) {
-      // Not the shared 403 sentence: the caller CAN manage products — deleting is the
-      // Owner elevation, and saying so tells them who to ask.
-      return { ok: false, error: "Only the Owner can delete a variant." };
-    }
+    if (e.status === 403) return { ok: false, error: "Your role does not include managing products." };
     if (e.status === 404) return { ok: false, error: "That variant no longer exists." };
     const data = e.data as Record<string, unknown> | null;
     if (data && typeof data === "object") {

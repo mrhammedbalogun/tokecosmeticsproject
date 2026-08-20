@@ -1,9 +1,11 @@
-"""Deleting a variant: the second `products.delete` elevation on the catalogue surface.
+"""Deleting a variant: `products.manage`, like the rest of the variant surface.
 
 A variant delete CASCADES its price rows, stock rows (and their movements), cart lines
 and wishlist entries — order history alone survives via SET_NULL and its name/sku
-snapshots. That blast radius is why the elevation mirrors product delete exactly:
-`products.manage` runs the catalogue, destroying rows is the Owner's call.
+snapshots. It shipped Owner-only in v0.44.0, and Hammed widened it to Managers the
+same day (2026-08-20): a Manager runs the catalogue day-to-day, and the guards that
+actually prevent damage — the last-variant refusal and the default promotion — are
+role-independent and stay. Deleting the whole PRODUCT remains the Owner elevation.
 """
 import pytest
 from rest_framework.test import APIClient
@@ -21,27 +23,26 @@ def _owner_client():
 
 
 @pytest.mark.django_db
-def test_manager_cannot_delete_a_variant():
-    """Same shape as test_manager_cannot_delete_a_product: the floor lets a Manager run
-    the catalogue, destroying a row is the Owner elevation. Asserted against a REAL
-    variant so it also proves the refusal happens before anything is touched — the
-    admission half (403 before lookup) lives in test_admin_role_matrix."""
+def test_manager_can_delete_a_variant_but_not_the_product():
+    """The line Hammed drew on 2026-08-20: a Manager may prune a variant (with the
+    same last-variant and default-promotion guards as the Owner), while deleting the
+    PRODUCT stays the products.delete elevation proved in test_admin_crud."""
     from apps.catalog.factories import ProductFactory, ProductVariantFactory
 
     p = ProductFactory(slug="keeper")
-    v = ProductVariantFactory(product=p, sku="KEEP-1")
+    v = ProductVariantFactory(product=p, sku="KEEP-1", is_default=False)
     ProductVariantFactory(product=p, sku="KEEP-2")
 
     c = APIClient()
     c.force_authenticate(user=staff_user(email="manager@toke.test", role="Manager"))
     r = c.delete(f"/api/v1/admin/variants/{v.id}/")
 
-    assert r.status_code == 403
-    assert ProductVariant.objects.filter(id=v.id).exists()
+    assert r.status_code == 204
+    assert not ProductVariant.objects.filter(id=v.id).exists()
 
-    # The floor is untouched: the same Manager may still edit that variant.
-    r = c.patch(f"/api/v1/admin/variants/{v.id}/", {"name": "renamed"}, format="json")
-    assert r.status_code == 200
+    # The product elevation is untouched: the same Manager still cannot delete keeper.
+    r = c.delete("/api/v1/admin/products/keeper/")
+    assert r.status_code == 403
 
 
 @pytest.mark.django_db
