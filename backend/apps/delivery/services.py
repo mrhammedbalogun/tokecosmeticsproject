@@ -9,9 +9,60 @@ from decimal import Decimal
 from django.db.models import Q
 
 from apps.core.country_context import resolve_country
-from apps.delivery.models import DeliveryOption
+from apps.delivery.models import DeliveryOption, PartnerZone
 
 TWO_DP = Decimal("0.01")
+
+
+def option_id_matches(option_id, raw) -> bool:
+    """True when a client-submitted delivery_option_id names this option. Compared as
+    STRINGS because the id space is mixed since Plan-39: DeliveryOption rows keep
+    their integer pks, partner zones ride as "pz:{pk}" — and the id arrives as an int
+    from older clients, a string from newer ones, or None. str() folds all of that
+    into one comparison; None becomes "None", which no id ever equals."""
+    return raw is not None and str(option_id) == str(raw)
+
+
+def _partner_options(resolved_code: str, country, region_ids: set[int]) -> list[dict]:
+    """Delivery-partner rate-card rows serving this address (Plan-39), as option
+    dicts. Appended AFTER the DeliveryOption list — 'extra option, customer picks'
+    was the ruling, so partner rows never displace or reorder the standing options.
+
+    Gated to NGN orders in Nigeria: PartnerZone prices are implicitly NGN (the model
+    docstring), and this is the same never-mix-currencies discipline
+    options_for_address applies to DeliveryOption rows. A null price or an inactive
+    row/partner never surfaces — null means "the partner has not priced this zone",
+    which must not be renderable as free.
+    """
+    if resolved_code != "NG" or country.currency_id != "NGN" or not region_ids:
+        return []
+    zones = (
+        PartnerZone.objects.filter(
+            is_active=True, partner__is_active=True, price__isnull=False,
+            lga_region_id__in=region_ids,
+        )
+        .select_related("partner")
+        .order_by("lcda_name", "id")
+    )
+    return [
+        {
+            "id": f"pz:{z.id}",
+            "name": f"Door Delivery - {z.lcda_name} ({z.partner.name})",
+            "kind": "partner",
+            "carrier_code": z.partner.code,
+            "carrier_service": "home",
+            "currency": "NGN",
+            "price": str(Decimal(z.price).quantize(TWO_DP)),
+            "quote_required": False,
+            "disclaimer": "",
+            "min_days": z.min_days,
+            "max_days": z.max_days,
+            # The doc's "Major Locations & Landmarks", rendered by the storefront as
+            # "Areas covered: …" — the customer's cue for whether this LCDA is theirs.
+            "areas_covered": z.areas_covered,
+        }
+        for z in zones
+    ]
 
 
 def _coverage_q(country_code: str, region_ids: set[int]):
@@ -92,7 +143,7 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
         .order_by("sort", "name")
     )
     weight_g = _total_weight_g(lines)
-    return [
+    rows = [
         {
             "id": o.id,
             "name": o.name,
@@ -109,3 +160,4 @@ def options_for_address(address, lines, subtotal: Decimal, country) -> list[dict
         }
         for o in qs
     ]
+    return rows + _partner_options(resolved.code, country, region_ids)

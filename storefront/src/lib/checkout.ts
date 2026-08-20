@@ -16,12 +16,18 @@ export interface DeliveryOption {
    * These were `eta_*_days` here, and the fixtures were written from this type rather
    * than from a real response — so the tests passed while every customer saw
    * "undefined days" on every delivery option. */
-  id: number; name: string; price: string | null;
+  /** number for DeliveryOption rows, string ("pz:{pk}") for partner zones (Plan-39).
+   * Opaque either way — it only ever round-trips back to the API. */
+  id: number | string;
+  name: string; price: string | null;
   min_days: number; max_days: number; quote_required: boolean;
   /** Present on carrier rows (delivery/services.py): "gig" + "pickup" marks the
    * centre-pickup option, which reveals the centre picker (32b slice 4). */
   carrier_code?: string;
   carrier_service?: string;
+  /** Partner options only (Plan-39): the landmarks this LCDA rate covers, rendered
+   * as an "Areas covered: …" line so the customer can tell which card is theirs. */
+  areas_covered?: string;
 }
 
 /** One row of GET /api/checkout/gig-centres — `id` is GIG's centre id (not a PK). */

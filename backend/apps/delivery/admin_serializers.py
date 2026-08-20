@@ -155,6 +155,74 @@ class DeliveryOptionAdminSerializer(serializers.ModelSerializer):
         return super().create(validated_data)
 
 
+class DeliveryPartnerAdminSerializer(serializers.ModelSerializer):
+    """Staff view of a partner (Plan-39): identity, the kill-switch, and the login
+    email. The PASSWORD is deliberately not a field — it travels only through the
+    dedicated `password/` action, which the audit allowlist here can never leak."""
+
+    audit_allowlist = ("name", "is_active", "email")
+
+    email = serializers.EmailField(source="user.email")
+    zone_count = serializers.IntegerField(read_only=True)
+    live_zone_count = serializers.IntegerField(read_only=True)
+    has_password = serializers.SerializerMethodField()
+
+    class Meta:
+        from apps.delivery.models import DeliveryPartner
+
+        model = DeliveryPartner
+        fields = [
+            "id", "name", "code", "email", "is_active",
+            "zone_count", "live_zone_count", "has_password", "updated_at",
+        ]
+        read_only_fields = ["id", "code", "updated_at"]
+
+    def get_has_password(self, obj) -> bool:
+        """False until staff set real credentials — the seed migration creates the
+        login with an UNUSABLE password, and the portal link is useless (and unsafe
+        to share) before this flips."""
+        return obj.user.has_usable_password()
+
+    def update(self, instance, validated_data):
+        user_data = validated_data.pop("user", None)
+        if user_data and "email" in user_data:
+            instance.user.email = user_data["email"].lower()
+            instance.user.save(update_fields=["email"])
+        return super().update(instance, validated_data)
+
+
+class PartnerZoneAdminSerializer(serializers.ModelSerializer):
+    """Staff CRUD over partner rate-card rows (Plan-39) — the oversight half of a
+    table the partner normally edits themselves: fix a typo'd rate, deactivate a row
+    the moment a complaint lands, without waiting on the partner."""
+
+    audit_allowlist = (
+        "partner", "lga_region", "lcda_name", "areas_covered", "dispatch_zone",
+        "price", "is_active",
+    )
+
+    lga_region = serializers.PrimaryKeyRelatedField(
+        queryset=Region.objects.filter(country_code="NG", level="area")
+    )
+    lga_name = serializers.CharField(source="lga_region.name", read_only=True)
+    partner_name = serializers.CharField(source="partner.name", read_only=True)
+    # Same ₦1 floor as the portal serializer: null = "not priced yet" is legitimate,
+    # zero would sell free delivery.
+    price = serializers.DecimalField(
+        max_digits=12, decimal_places=2, min_value=1, required=False, allow_null=True,
+    )
+
+    class Meta:
+        from apps.delivery.models import PartnerZone
+
+        model = PartnerZone
+        fields = [
+            "id", "partner", "partner_name", "lga_region", "lga_name", "lcda_name",
+            "areas_covered", "dispatch_zone", "price", "is_active", "updated_at",
+        ]
+        read_only_fields = ["id", "updated_at"]
+
+
 class RegionAdminSerializer(serializers.ModelSerializer):
     """A state or an area, flat. The TREE is assembled by the client from `parent` —
     811 rows for Nigeria is one small response, and shipping it whole beats 37 requests

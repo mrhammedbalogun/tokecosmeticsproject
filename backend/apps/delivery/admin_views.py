@@ -20,7 +20,9 @@ from apps.core.models import Country, Region
 from apps.delivery.admin_serializers import (
     DeliveryCoverageSerializer,
     DeliveryOptionAdminSerializer,
+    DeliveryPartnerAdminSerializer,
     GigShipmentRowSerializer,
+    PartnerZoneAdminSerializer,
     SenderLocationAdminSerializer,
     RegionAdminSerializer,
     currency_mismatches,
@@ -216,6 +218,109 @@ class SenderLocationAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         changes = super()._changes(response)
         if self.request.method.upper() == "DELETE" and hasattr(self, "_deleted_origin"):
             changes["deleted"] = self._deleted_origin
+        return changes
+
+
+class DeliveryPartnerAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """Delivery partners (Plan-39): the kill-switch, the login email, and the
+    `password/` action. `settings.manage` (Owner-only), NOT `products.manage` like the
+    rest of this file: setting a partner's password mints a credential for an external
+    business whose edits land straight at checkout — that is closer to staff.manage's
+    "invites mint administrators" reasoning than to editing a delivery price.
+
+    NO CREATE OR DELETE. A partner arrives via migration/shell (it needs a user row
+    and a portal onboarding conversation, not a form), and delete would orphan the
+    login and the zones — "the partnership ended" is `is_active=False`.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("settings.manage")]
+    serializer_class = DeliveryPartnerAdminSerializer
+    audit_serializers = (DeliveryPartnerAdminSerializer,)
+    pagination_class = None
+    http_method_names = ["get", "patch", "post", "head", "options"]
+
+    def get_queryset(self):
+        from django.db.models import Count, Q
+
+        from apps.delivery.models import DeliveryPartner
+
+        return (
+            DeliveryPartner.objects.select_related("user")
+            .annotate(
+                zone_count=Count("zones"),
+                live_zone_count=Count(
+                    "zones", filter=Q(zones__is_active=True, zones__price__isnull=False)
+                ),
+            )
+            .order_by("name")
+        )
+
+    def create(self, request, *args, **kwargs):
+        # http_method_names allows POST for the password action below; the router
+        # also maps a bare POST to create, which must stay closed.
+        return Response({"detail": "Partners are provisioned by migration, not API."},
+                        status=405)
+
+    @action(detail=True, methods=["post"])
+    def password(self, request, pk=None):
+        """POST /admin/partners/{id}/password/ {"password": "..."} — set the portal
+        login password. Validated through the project's AUTH_PASSWORD_VALIDATORS
+        (same bar as staff/customer passwords); the value itself never reaches the
+        audit row — the serializer allowlist has no password field, and this action
+        records only that the reset happened."""
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        partner = self.get_object()
+        password = request.data.get("password")
+        if not isinstance(password, str) or not password:
+            return Response({"password": ["A password is required."]}, status=400)
+        try:
+            validate_password(password, user=partner.user)
+        except DjangoValidationError as exc:
+            return Response({"password": exc.messages}, status=400)
+        partner.user.set_password(password)
+        partner.user.save(update_fields=["password"])
+        return Response({"ok": True})
+
+    def _changes(self, response) -> dict:
+        # The password action's request body must never reach the audit trail.
+        if getattr(self, "action", "") == "password":
+            return {"password_set": True}
+        return super()._changes(response)
+
+
+class PartnerZoneAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """Partner rate-card rows, staff side (Plan-39). `products.manage`, same reasoning
+    as delivery options: a delivery price is an operational number. Delete is
+    referentially safe for the same reason option delete is — orders snapshot only
+    the composed option name, and an in-flight checkout re-matches at place time,
+    where a deleted zone fails exactly like a deactivated one."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("products.manage")]
+    serializer_class = PartnerZoneAdminSerializer
+    audit_serializers = (PartnerZoneAdminSerializer,)
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["partner", "lga_region", "is_active"]
+    pagination_class = None  # one partner's card is ~55 rows; truncation would lie
+
+    def get_queryset(self):
+        from apps.delivery.models import PartnerZone
+
+        return PartnerZone.objects.select_related("partner", "lga_region").order_by(
+            "lga_region__name", "lcda_name"
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        self._deleted_zone = PartnerZoneAdminSerializer(self.get_object()).data
+        return super().destroy(request, *args, **kwargs)
+
+    def _changes(self, response) -> dict:
+        changes = super()._changes(response)
+        if self.request.method.upper() == "DELETE" and hasattr(self, "_deleted_zone"):
+            changes["deleted"] = self._deleted_zone
         return changes
 
 

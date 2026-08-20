@@ -53,7 +53,7 @@ export function DeliveryStep() {
   // The centre picker (32b slice 4): opened by clicking the pickup option, fed by
   // /api/checkout/gig-centres (or its guest twin). Keyed by addressKey with the same
   // staleness pattern.
-  const [pickerOptionId, setPickerOptionId] = useState<number | null>(null);
+  const [pickerOptionId, setPickerOptionId] = useState<number | string | null>(null);
   const [centres, setCentres] = useState<{
     addressKey: string; list: GigCentreOption[]; error: string | null;
   } | null>(null);
@@ -201,6 +201,11 @@ export function DeliveryStep() {
                     <span>{option.name}</span>
                     <span>{priceLabel}</span>
                   </span>
+                  {option.areas_covered && (
+                    <span className="mt-1 block text-muted">
+                      Areas covered: {option.areas_covered}
+                    </span>
+                  )}
                   <span className="mt-1 block text-muted">{etaLabel}</span>
                   {pickup && !pickerOpen && (
                     <span className="mt-2 block font-medium text-accent">

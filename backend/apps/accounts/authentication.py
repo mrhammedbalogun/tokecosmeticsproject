@@ -96,6 +96,19 @@ ADMIN_AUDIENCE = "toke-admin"
 # and the second one is where the hole grows.
 ADMIN_PREAUTH_AUDIENCE = "toke-admin-preauth"
 
+# THE DELIVERY-PARTNER AUDIENCE (Plan-39). Same claim, third value. A partner login —
+# an external courier maintaining their own rate card — mints tokens carrying this,
+# and `PartnerJWTAuthentication` is the only class that accepts it, so the credential
+# opens exactly the `/api/v1/partner/` surface: the equality checks on the other two
+# classes refuse it without needing to know it exists, same as preauth.
+#
+# No TOTP ceremony here, deliberately (Hammed's ruling, plan-39): the surface behind
+# it is one rate table belonging to the holder. The compensating controls are the
+# login throttles (partner_login_ip / partner_login_email), the DB-read
+# `IsDeliveryPartner` permission (revocation is immediate, like `is_staff`), and the
+# staff kill-switch on the DeliveryPartner row.
+PARTNER_AUDIENCE = "toke-partner"
+
 # Long enough to scan a QR code and type a six-digit code, short enough that a preauth
 # token left in a browser history or a proxy log is worthless by the time anyone finds
 # it. Not env-tunable: there is no operational reason to lengthen it, and the only
@@ -238,6 +251,36 @@ class AdminPreauthJWTAuthentication(_AudienceScopedJWTAuthentication):
         return token
 
 
+def mint_partner_token_pair(user) -> dict[str, str]:
+    """THE ONLY PLACE A PARTNER-AUDIENCE TOKEN IS CREATED (Plan-39). Called from
+    exactly one place — `apps.delivery.partner_views.PartnerLoginView`, after the
+    password has verified and the DeliveryPartner row has been checked active.
+
+    Same claim-on-the-REFRESH-token construction as `mint_admin_token_pair`, for the
+    same reason: SimpleJWT copies every non-denylisted claim onto renewed access
+    tokens, so the shared `/auth/token/refresh/` endpoint needs no partner-specific
+    code and a customer's refresh token can never grow the claim.
+    """
+    refresh = RefreshToken.for_user(user)
+    refresh[ADMIN_AUDIENCE_CLAIM] = PARTNER_AUDIENCE
+    return {"refresh": str(refresh), "access": str(refresh.access_token)}
+
+
+class PartnerJWTAuthentication(_AudienceScopedJWTAuthentication):
+    """Accepts only ACCESS tokens minted by `/partner/auth/login/` (Plan-39).
+
+    Mutual exclusion by construction, same as the other two subclasses: `toke_aud`
+    holds one value and every class compares for equality, so a partner token is
+    refused on the admin and ceremony surfaces and their tokens are refused here.
+    The permission layer (`IsDeliveryPartner`) still re-reads the DeliveryPartner
+    row's `is_active` from the database on every request — the claim answers "was
+    this token issued for the partner portal?", the DB read answers "is this
+    partner still welcome, right now?".
+    """
+
+    audience = PARTNER_AUDIENCE
+
+
 class CustomerJWTAuthentication(JWTAuthentication):
     """The project default. Stock behaviour, minus one thing: it refuses PREAUTH tokens.
 
@@ -264,11 +307,20 @@ class CustomerJWTAuthentication(JWTAuthentication):
     customer resources gains an attacker nothing. Refusing it would, however, break the
     ordinary things an administrator does with their own account, `/auth/logout/` first
     among them, and a sign-out that 401s is how sessions get left open.
+
+    THE PARTNER AUDIENCE *IS* REFUSED (Plan-39), on the preauth side of that line: a
+    delivery partner is an external business, not a person with a customer account,
+    and their credential's definition is "opens the partner rate table". The admin
+    exemption's argument does not transfer — a partner never needs `/auth/logout/`
+    (the portal BFF just clears its cookies) or any other customer endpoint, so the
+    refusal costs nothing and keeps the credential meaning what it says.
     """
+
+    _REFUSED_AUDIENCES = frozenset({ADMIN_PREAUTH_AUDIENCE, PARTNER_AUDIENCE})
 
     def get_validated_token(self, raw_token):
         token = super().get_validated_token(raw_token)
-        if token.get(ADMIN_AUDIENCE_CLAIM) == ADMIN_PREAUTH_AUDIENCE:
+        if token.get(ADMIN_AUDIENCE_CLAIM) in self._REFUSED_AUDIENCES:
             raise AuthenticationFailed(
                 _("Given token not valid for this endpoint"),
                 code="token_not_valid",
@@ -282,6 +334,14 @@ class CustomerJWTScheme(SimpleJWTScheme):
 
     target_class = "apps.accounts.authentication.CustomerJWTAuthentication"
     name = "jwtAuth"
+
+
+class PartnerJWTScheme(SimpleJWTScheme):
+    """Same job as AdminJWTScheme, for the partner audience (Plan-39): without it every
+    `/partner/` endpoint is documented as having no security requirement at all."""
+
+    target_class = "apps.accounts.authentication.PartnerJWTAuthentication"
+    name = "partnerJwtAuth"
 
 
 class AdminJWTScheme(SimpleJWTScheme):

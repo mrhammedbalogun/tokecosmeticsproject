@@ -7,6 +7,8 @@ from apps.delivery.admin_views import (
     AdminGigShipmentListView,
     AdminGigShipmentView,
     DeliveryOptionAdminViewSet,
+    DeliveryPartnerAdminViewSet,
+    PartnerZoneAdminViewSet,
     SenderLocationAdminViewSet,
     RegionAdminViewSet,
 )
@@ -16,6 +18,9 @@ router.register("delivery-options", DeliveryOptionAdminViewSet, basename="admin-
 router.register("regions", RegionAdminViewSet, basename="admin-region")
 router.register("sender-locations", SenderLocationAdminViewSet,
                 basename="admin-sender-location")
+# Plan-39: partner accounts (Owner) + their rate-card rows (Manager and above).
+router.register("partners", DeliveryPartnerAdminViewSet, basename="admin-partner")
+router.register("partner-zones", PartnerZoneAdminViewSet, basename="admin-partner-zone")
 
 urlpatterns = router.urls + [
     # The deliveries table (Plan-35): every shipment, filterable by origin — the

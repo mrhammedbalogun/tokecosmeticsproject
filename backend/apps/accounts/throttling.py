@@ -381,6 +381,29 @@ class AdminLoginEmailThrottle(_FailureCountingMixin, _EmailKeyedThrottle):
     scope = "admin_login_email"
 
 
+# --- delivery-partner portal login (Plan-39) ------------------------------------
+
+
+class PartnerLoginIPThrottle(_FailureCountingMixin, _IPKeyedThrottle):
+    """Spray cap on the partner-portal gate (`/partner/auth/login/`). Failure-counting
+    for the same shared-egress reason as the admin pair: the portal BFF calls this
+    endpoint server-side, so one bucket serves every legitimate login — and the
+    legitimate population is ONE business, which makes a request-counting bucket a
+    zero-cost lockout button. Listed first in the view so it records before the email
+    throttle touches request.data."""
+
+    scope = "partner_login_ip"
+
+
+class PartnerLoginEmailThrottle(_FailureCountingMixin, _EmailKeyedThrottle):
+    """Per-account cap on the partner-portal gate — the key an attacker cannot rotate
+    away from. Counts credential FAILURES only (see _FailureCountingMixin); with no
+    TOTP behind this login (plan-39 ruling), these buckets and the staff kill-switch
+    on the DeliveryPartner row are the brute-force story."""
+
+    scope = "partner_login_email"
+
+
 # --- staff invite acceptance ---------------------------------------------------
 
 

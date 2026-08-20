@@ -245,6 +245,13 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # Pickup origins (Plan-34): where GIG collects from — an operational address a
     # Manager maintains, same reasoning as the delivery options themselves.
     "SenderLocationAdminViewSet": "products.manage",
+    # Delivery partners (Plan-39). The ACCOUNT surface is Owner-only: its password
+    # action mints a login for an external business whose edits reach checkout with no
+    # approval step — nearer staff.manage's "invites mint administrators" than to a
+    # delivery price. The partner's rate-card ROWS are exactly a delivery price, so
+    # they sit with the other delivery numbers a Manager adjusts.
+    "DeliveryPartnerAdminViewSet": "settings.manage",
+    "PartnerZoneAdminViewSet": "products.manage",
     # --- reports (Plan-20a). The third scope this project declared before anything used
     # it, after cms.manage and settings.manage.
     "ReportView": "reports.view",

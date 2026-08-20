@@ -42,6 +42,14 @@ const SECTIONS = [
     scopes: ["settings.manage"],
   },
   {
+    href: "/settings/partners",
+    title: "Delivery partners",
+    blurb: "Couriers with their own portal — BrandnPack's login, kill-switch and rate card.",
+    // Any-of, like every card here: a Manager holds products.manage and can fix the
+    // rate card; the account half of the page degrades to a note for them.
+    scopes: ["settings.manage", "products.manage"],
+  },
+  {
     href: "/settings/audit",
     title: "Audit log",
     blurb: "Every write on the admin surface, and the reads that touch personal data.",

@@ -1,5 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { ACCESS_COOKIE, PREAUTH_COOKIE, REFRESH_COOKIE } from "@/lib/auth";
+import {
+  PARTNER_ACCESS_COOKIE,
+  PARTNER_HOME_PATH,
+  PARTNER_LOGIN_PATH,
+  PARTNER_REFRESH_COOKIE,
+} from "@/lib/partner-auth";
 
 // Next.js 16 renamed the `middleware` file convention to `proxy` (Node.js runtime only).
 // See node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md.
@@ -53,6 +59,25 @@ function redirectFor(
   // JSON. Checked FIRST, ahead of the anomaly, so the Route Handler is the thing that
   // clears the cookies and answers 401 — it can do both; this file can only redirect.
   if (isSegment(pathname, "/api")) return null;
+
+  // The delivery-partner portal (Plan-39): its own two-cookie mini-matrix, decided
+  // ENTIRELY on partner-cookie presence — the staff matrix below must never see these
+  // routes (a signed-out partner would be bounced to the STAFF login) and the partner
+  // cookies must never influence staff routing. Same presence-theatre caveat as
+  // everything in this file: the real fence is the backend's audience claim.
+  if (isSegment(pathname, "/partner")) {
+    const partnerSession = Boolean(
+      req.cookies.get(PARTNER_ACCESS_COOKIE) || req.cookies.get(PARTNER_REFRESH_COOKIE),
+    );
+    if (isSegment(pathname, PARTNER_LOGIN_PATH)) {
+      return partnerSession
+        ? NextResponse.redirect(new URL(PARTNER_HOME_PATH, req.nextUrl))
+        : null;
+    }
+    return partnerSession
+      ? null
+      : NextResponse.redirect(new URL(PARTNER_LOGIN_PATH, req.nextUrl));
+  }
 
   // Anomaly: the two credential sets are written mutually exclusively, so holding both is
   // a state nothing legitimate produces. Fail closed.

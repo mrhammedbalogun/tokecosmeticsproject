@@ -45,6 +45,10 @@ urlpatterns = [
     path("api/v1/", include("apps.payments.urls")),
     path("api/v1/", include("apps.orders.urls")),
     path("api/v1/cms/", include("apps.cms.urls")),
+    # The delivery-partner portal (Plan-39). Its own prefix, deliberately not under
+    # /admin/ (whose surface guard pins AdminJWTAuthentication exactly): partner
+    # tokens carry their own audience and open only this surface.
+    path("api/v1/partner/", include("apps.delivery.partner_urls")),
     path("api/v1/admin/", include("apps.accounts.admin_urls")),
     path("api/v1/admin/", include("apps.core.admin_urls")),
     path("api/v1/admin/", include("apps.catalog.admin_urls")),

@@ -45,6 +45,7 @@ from apps.payments.gateways.base import GatewayError, GatewayNotConfigured
 from apps.checkout.services.totals import compute_totals
 from apps.core.country_context import resolve_country
 from apps.delivery.carriers import priced_options_for_address
+from apps.delivery.services import option_id_matches
 from apps.payments.gateways.registry import active_gateways_for
 
 
@@ -126,7 +127,11 @@ class QuoteView(APIView):
             opts = priced_options_for_address(
                 address, lines, totals.subtotal, request.country, pickup_centre=centre
             )
-            chosen = next((o for o in opts if o["id"] == v["delivery_option_id"] and o["price"] is not None), None)
+            chosen = next(
+                (o for o in opts
+                 if option_id_matches(o["id"], v["delivery_option_id"]) and o["price"] is not None),
+                None,
+            )
             # Intentional silent fallback: an option id that doesn't match this address
             # (or is quote_required) just leaves delivery at 0.00 rather than erroring —
             # this is a non-authoritative preview, not a place_order. place_order does
@@ -228,7 +233,11 @@ class GuestQuoteView(APIView):
             opts = priced_options_for_address(
                 address, lines, totals.subtotal, request.country, pickup_centre=centre
             )
-            chosen = next((o for o in opts if o["id"] == v["delivery_option_id"] and o["price"] is not None), None)
+            chosen = next(
+                (o for o in opts
+                 if option_id_matches(o["id"], v["delivery_option_id"]) and o["price"] is not None),
+                None,
+            )
             if chosen:
                 delivery_amount = Decimal(chosen["price"])
         return Response(quote_service(

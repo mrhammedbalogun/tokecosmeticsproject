@@ -12,7 +12,11 @@ class QuoteRequestSerializer(serializers.Serializer):
     cart_id = serializers.UUIDField()
     coupon_code = serializers.CharField(required=False, allow_blank=True, default="")
     address_id = serializers.IntegerField(required=False)
-    delivery_option_id = serializers.IntegerField(required=False)
+    # CharField, not IntegerField, since Plan-39: the option id space is mixed —
+    # DeliveryOption pks stay integers, partner zones ride as "pz:{pk}". CharField
+    # str()-coerces an integer from an older client, and the views compare via
+    # services.option_id_matches, which str()s both sides.
+    delivery_option_id = serializers.CharField(required=False)
     # The chosen pickup centre (32b slice 4) — keeps the preview priced to the same
     # centre place_order will re-quote, so expected_total can't mismatch on pickup.
     gig_centre_id = serializers.IntegerField(required=False)
@@ -100,5 +104,6 @@ class GuestQuoteRequestSerializer(serializers.Serializer):
     coupon_code = serializers.CharField(required=False, allow_blank=True, default="")
     guest_email = serializers.EmailField(required=False, allow_blank=True, default="")
     address = GuestAddressSerializer(required=False)
-    delivery_option_id = serializers.IntegerField(required=False)
+    # CharField for the same mixed-id-space reason as QuoteRequestSerializer above.
+    delivery_option_id = serializers.CharField(required=False)
     gig_centre_id = serializers.IntegerField(required=False)

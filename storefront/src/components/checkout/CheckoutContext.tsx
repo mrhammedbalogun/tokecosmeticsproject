@@ -21,7 +21,8 @@ export interface CheckoutSelections {
    * `complete(2, { addressDisplay })`'s patch, never via `setAddress` (which only
    * knows the id). Purely cosmetic; place-order only needs `addressId`. */
   addressDisplay?: string;
-  deliveryOptionId?: number;
+  /** number for DeliveryOption rows, string ("pz:{pk}") for partner zones (Plan-39). */
+  deliveryOptionId?: number | string;
   /** Short "name — price" display string for the step-3 summary line — set via
    * `complete(3, { deliveryDisplay })`'s patch, mirroring `addressDisplay`. Purely
    * cosmetic; place-order only needs `deliveryOptionId`. */

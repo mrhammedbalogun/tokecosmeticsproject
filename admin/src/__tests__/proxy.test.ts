@@ -117,3 +117,38 @@ describe("the router mirrors the gate matrix", () => {
     );
   });
 });
+
+describe("the partner portal's own mini-matrix (Plan-39)", () => {
+  const PARTNER = { partner_access: "PA", partner_refresh: "PR" };
+
+  it("no partner cookies: portal pages go to the PARTNER login, never the staff one", () => {
+    expect(target(proxy(request("/partner")))).toBe("/partner/login");
+    expect(target(proxy(request("/partner/anything")))).toBe("/partner/login");
+  });
+
+  it("partner session: the portal renders and its login bounces home", () => {
+    expect(target(proxy(request("/partner", PARTNER)))).toBeNull();
+    expect(target(proxy(request("/partner/login", PARTNER)))).toBe("/partner");
+    // The refresh cookie alone still counts, same as the staff matrix.
+    expect(target(proxy(request("/partner", { partner_refresh: "PR" })))).toBeNull();
+  });
+
+  it("the two credential sets never cross: staff cookies do not open the portal, partner cookies do not open the admin", () => {
+    expect(target(proxy(request("/partner", PAIR)))).toBe("/partner/login");
+    expect(target(proxy(request("/orders", PARTNER)))).toBe(
+      `/login?next=${encodeURIComponent("/orders")}`,
+    );
+  });
+
+  it("a prefix collision is not the portal", () => {
+    expect(target(proxy(request("/partnership")))).toBe(
+      `/login?next=${encodeURIComponent("/partnership")}`,
+    );
+  });
+
+  it("portal responses are no-store like everything else here", () => {
+    expect(proxy(request("/partner", PARTNER)).headers.get("Cache-Control")).toContain(
+      "no-store",
+    );
+  });
+});

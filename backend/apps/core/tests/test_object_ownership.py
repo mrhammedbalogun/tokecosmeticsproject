@@ -62,6 +62,10 @@ OBJECT_ROUTES: dict[str, tuple[str, str]] = {
     "api/v1/cms/pages/<slug:slug>/": (PUBLIC, "published pages only; a draft 404s"),
     "api/v1/webhooks/<str:gateway>/": (
         PUBLIC, "the gateway NAME, not an object id — authenticated by signature"),
+    # --- the delivery-partner portal (Plan-39) ---
+    "api/v1/partner/^zones/(?P<pk>[^/.]+)/$": (
+        OWNED, "get_queryset() filters to request.user.delivery_partner — one partner "
+               "can neither read nor write another's rate card"),
 }
 
 _PARAM = re.compile(r"<[^>]+>")
@@ -231,3 +235,19 @@ def test_ANOTHER_CUSTOMERS_PAYMENT_CANNOT_BE_VERIFIED(two_customers, client_for,
     response = client_for(mine).post("/api/v1/payments/REF-VICTIM-1/verify/")
 
     assert response.status_code == 404
+
+
+def test_ANOTHER_PARTNERS_ZONE_IS_A_404_NOT_A_403(django_user_model, client_for):
+    """Plan-39: one delivery partner must never see — or price — another's rate card.
+    404 for the same oracle reason as addresses: zone pks are sequential integers."""
+    from apps.delivery.models import DeliveryPartner, PartnerZone
+
+    victim = PartnerZone.objects.first()  # BrandnPack's, seeded by delivery 0017
+    rival_user = django_user_model.objects.create_user(email="rival@courier.com", password="x")
+    DeliveryPartner.objects.create(name="Rival Riders", code="rival", user=rival_user)
+
+    client = client_for(rival_user)
+    assert client.get(f"/api/v1/partner/zones/{victim.pk}/").status_code == 404
+    assert client.patch(
+        f"/api/v1/partner/zones/{victim.pk}/", {"price": "1"}, format="json"
+    ).status_code == 404

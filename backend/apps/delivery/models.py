@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.db import models
 
 from apps.core.models import TimeStampedModel
@@ -197,6 +198,80 @@ class GigShipment(TimeStampedModel):
 
     def __str__(self) -> str:
         return f"{self.order_id}: {self.status}" + (f" ({self.waybill})" if self.waybill else "")
+
+
+class DeliveryPartner(TimeStampedModel):
+    """A small local courier with no API (Plan-39): flat per-zone rates the partner
+    maintains THEMSELVES through the partner portal (`partner_views.py`).
+
+    `user` is the portal login — an ordinary auth row with `is_staff=False` that
+    exists only to hold the email + password; it is never a customer and never staff.
+    Portal tokens carry the `toke-partner` audience (`accounts/authentication.py`),
+    so they open exactly the `/api/v1/partner/` surface and nothing else.
+
+    `is_active` is the staff kill-switch. `IsDeliveryPartner` re-reads it from the
+    database on every portal request (same reasoning as the admin `is_staff` check:
+    a claim outlives revocation, a DB read does not), and checkout skips every zone
+    of an inactive partner — one flip removes the partner from both surfaces at once.
+    """
+
+    name = models.CharField(max_length=100)  # customer-facing: "BrandnPack"
+    code = models.SlugField(max_length=20, unique=True)  # "brandnpack"
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="delivery_partner"
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "delivery partner"
+        ordering = ["name"]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({'active' if self.is_active else 'inactive'})"
+
+
+class PartnerZone(TimeStampedModel):
+    """One row of a partner's rate card (Plan-39): an LCDA inside an LGA, the areas it
+    covers, and a flat NGN price — weight- and origin-independent by the partner's own
+    pricing model, which is why there is no tier table here.
+
+    `price` is NULLABLE and null means "the partner has not set a price yet", not
+    "free" — the source doc arrived with 8 such rows (Badagry, Epe, and two
+    range-priced rows Hammed ruled to skip). services.py only ever offers rows with
+    `is_active=True` AND a non-null price, so a null-priced row is visible in the
+    portal (badged "needs a price") but can never render as ₦0 at checkout.
+
+    Rows are matched to an address through `lga_region` (a `core.Region` at
+    level="area"); the LCDA itself is deliberately NOT a Region — Hammed's ruling was
+    to leave the LGA address structure untouched and offer every matching LCDA row as
+    its own delivery option, labelled with `lcda_name`.
+
+    Orders snapshot only the composed option NAME (orders.Order.delivery_option_name),
+    so partner edits and deletes never touch a placed order.
+    """
+
+    partner = models.ForeignKey(DeliveryPartner, on_delete=models.CASCADE, related_name="zones")
+    lga_region = models.ForeignKey(
+        "core.Region", on_delete=models.PROTECT, related_name="partner_zones"
+    )
+    lcda_name = models.CharField(max_length=100)
+    # The doc's "Major Locations & Landmarks" — shown to the customer verbatim as
+    # "Areas covered: …" on the option card.
+    areas_covered = models.CharField(max_length=300)
+    dispatch_zone = models.CharField(max_length=100, blank=True)
+    # NGN, implicitly: partner options are only appended to NGN orders (services.py).
+    price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    min_days = models.PositiveSmallIntegerField(default=1)
+    max_days = models.PositiveSmallIntegerField(default=3)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        verbose_name = "partner zone"
+        ordering = ["lga_region__name", "lcda_name"]
+
+    def __str__(self) -> str:
+        state = "live" if self.is_active and self.price is not None else "hidden"
+        return f"{self.partner.code}: {self.lga_region.name} / {self.lcda_name} ({state})"
 
 
 class DeliveryOptionRate(models.Model):

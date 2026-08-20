@@ -65,7 +65,7 @@ function mapPlaceOrderError(data: { error?: string; detail?: string } | null): {
 interface QuoteFetchResult {
   cartId: string;
   addressKey: string;
-  deliveryOptionId: number;
+  deliveryOptionId: number | string;
   gigCentreId?: number;
   couponCode: string;
   totals: Totals | null;

@@ -305,6 +305,12 @@ REST_FRAMEWORK = {
         # one gate cannot deny logins on the other.
         "admin_login_ip": "5/min",
         "admin_login_email": "10/hour",
+        # Delivery-partner portal login (Plan-39). Same failure-counting design as the
+        # admin pair (see PartnerLoginIPThrottle); rates match the admin gate because
+        # the population is the same order of magnitude (one business) and there is no
+        # TOTP behind this door, so the buckets carry more of the weight, not less.
+        "partner_login_ip": "5/min",
+        "partner_login_email": "10/hour",
         # Staff invite acceptance. Counts INVALID tokens only — see
         # `StaffInviteAcceptThrottle`, which deliberately inverts the usual order so a
         # valid token never touches the bucket. 10/hour is a junk-volume cap, not a

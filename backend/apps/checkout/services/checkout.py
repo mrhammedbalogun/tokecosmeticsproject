@@ -20,6 +20,7 @@ from apps.catalog.services import sellable_in
 from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
 from apps.delivery.carriers import priced_options_for_address
+from apps.delivery.services import option_id_matches
 from apps.inventory.services import InsufficientStock, reserve
 from apps.orders.emails import enqueue_order_received, enqueue_staff_awaiting_transfer
 from apps.orders.models import Order, OrderItem
@@ -145,7 +146,8 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
         options = priced_options_for_address(
             address, lines, subtotal_preview, country, pickup_centre=centre
         )
-        chosen = next((o for o in options if o["id"] == delivery_option_id), None)
+        # str-compared via option_id_matches: ids are mixed int/"pz:{pk}" since Plan-39.
+        chosen = next((o for o in options if option_id_matches(o["id"], delivery_option_id)), None)
         if chosen is None:
             raise CheckoutError("delivery_option_invalid", "Delivery option not valid for this address.")
         is_pickup = chosen.get("carrier_service") == "pickup" and chosen.get("carrier_code") == "gig"
