@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DeliveryPartners } from "@/components/config/DeliveryPartners";
+import { MarketersLinkCard } from "@/components/config/MarketersLinkCard";
 import { ApiError } from "@/lib/api";
 import type { AdminPartnerZoneRow, DeliveryPartnerRow } from "@/lib/partners";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
@@ -51,6 +52,10 @@ export default async function DeliveryPartnersPage() {
         (<code className="text-xs">/partner</code> on this domain). Their prices reach
         checkout directly — the switch here removes a partner everywhere at once.
       </p>
+
+      <div className="mt-6">
+        <MarketersLinkCard />
+      </div>
 
       <div className="mt-6">
         <DeliveryPartners
