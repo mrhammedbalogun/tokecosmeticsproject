@@ -1,6 +1,7 @@
 # Plan 38 — Guest checkout
 
-**Date:** 2026-08-19. **Status:** BUILT + VERIFIED in dev; uncommitted, not deployed.
+**Date:** 2026-08-19. **Status:** DEPLOYED 2026-08-19 (f56c800 → backend-v0.41.0 on
+the VPS + both Vercel apps Ready; live-verified — see STATUS).
 
 ## Why
 
@@ -160,5 +161,13 @@ page renders the surface, order detail serves `country`.
   tests: PayAgain.test.tsx (3), pay.test.ts (+2 guest, 1 updated), CheckoutReturn
   (failed-link assertions +1), account order page mock gained useRouter,
   test_guest_checkout asserts the serializer's `country`.
-- NOT done (deliberately): commit/tag/deploy — on Hammed's word, as always. Deploy =
-  backend tag + BOTH Vercel apps. No admin-app changes were needed.
+- 2026-08-19 DEPLOYED on Hammed's word: commit f56c800 (feat(checkout), 47 files) →
+  push main (both Vercel apps auto-built, Ready in <1 min) + tag backend-v0.41.0 (CI
+  deploy, clean first try — repo at the tag, all containers up, healthz 200).
+  LIVE-VERIFIED on prod without placing an order: anonymous POST /checkout/ answers
+  400 idempotency_key_required (was 401), guest quote/delivery-options routes exist
+  and validate, anonymous verify answers 403 authentication_required; end-to-end
+  through the live storefront BFF, an anonymous cart (db3af532…) quoted real GIG
+  options for an Agege address (door ₦4,281.28 / pickup ₦4,205.03 / Toke door
+  ₦5,000). The probe cart was abandoned, which is a normal guest cart lifecycle.
+  No admin-app changes were needed.
