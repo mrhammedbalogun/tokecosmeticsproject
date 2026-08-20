@@ -120,6 +120,26 @@ the staff kill-switch.
 - **Admin app — staff page**: `/settings/partners` — partner on/off, set login
   email/password, zones table with deactivate/delete/edit.
 
+## Addendum 2026-08-20 — the marketers' public price list
+
+Marketers quoting on the go need to see BrandnPack's rates without a login. Hammed's
+rulings: **fully public** URL, the partner's **raw fee** (which is also the checkout
+fee — no markup exists), **partner zones only**, living in the **partner portal**
+area of the admin app.
+
+- `GET /api/v1/partner/rates/` — `AllowAny`, `authentication_classes=[]` (the
+  `ReferralTermsView` precedent): active partners' active, priced zones grouped per
+  partner. The filter is `services._partner_options`'s exactly, so the list can
+  never drift from what checkout offers. Discloses nothing checkout doesn't already
+  tell any guest per-LGA; zone `id` is included (already public as `pz:{id}`).
+- `admin.tokecosmetics.com/partner/rates` — public page (carve-out in `proxy.ts`'s
+  partner branch, like `/accept-invite`), RSC anonymous fetch + client-side search
+  over LGA/LCDA/landmarks, `formatNaira`, ETA per row, refresh button. Noindex like
+  the rest of the admin app.
+- Tests: public-list section in `test_partner.py` (47 live rows, checkout-mirror
+  rules, kill-switch) + the proxy matrix pins `/partner/rates` public while
+  `/partner/rates-editor` stays gated.
+
 ## Out of scope (v1)
 
 - Express Rate column (empty in the doc; schema has no field for it yet).

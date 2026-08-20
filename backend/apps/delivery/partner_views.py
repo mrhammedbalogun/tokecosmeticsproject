@@ -146,6 +146,52 @@ class PartnerLgaListView(APIView):
         return Response([{"id": r.id, "name": r.name} for r in regions])
 
 
+class PublicRatesView(APIView):
+    """GET /api/v1/partner/rates/ — every live rate card, for anybody.
+
+    Hammed's marketers sell on the go and need to quote a delivery fee without a
+    login; his ruling (2026-08-20) was a FULLY PUBLIC page showing the partner's raw
+    fees. `AllowAny` follows the `ReferralTermsView` precedent: everything here is
+    already disclosed to any guest by checkout itself (probe an LGA, read the
+    BrandnPack option cards), so this endpoint discloses nothing new — it only saves
+    the marketer 20 probes. Nothing about any person, ever.
+
+    The filter is checkout's, exactly (`services.options_for_address`): active
+    partner AND active zone AND a non-null price. A row this endpoint shows is a row
+    a customer can buy right now — a marketer must never quote from a stale or
+    staged rate, so the two surfaces must not be allowed to drift apart.
+    """
+
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = []  # anonymous by definition — a stale token must not 401 it
+
+    def get(self, request):
+        zones = (
+            PartnerZone.objects.filter(
+                partner__is_active=True, is_active=True, price__isnull=False,
+            )
+            .select_related("partner", "lga_region")
+            .order_by("partner__name", "lga_region__name", "lcda_name")
+        )
+        cards: dict[int, dict] = {}
+        for z in zones:
+            card = cards.setdefault(z.partner_id, {
+                "partner": z.partner.name, "code": z.partner.code, "zones": [],
+            })
+            card["zones"].append({
+                # The pk is already public — checkout labels this row "pz:{id}".
+                "id": z.id,
+                "lga": z.lga_region.name,
+                "lcda_name": z.lcda_name,
+                "areas_covered": z.areas_covered,
+                "dispatch_zone": z.dispatch_zone,
+                "price": str(z.price),
+                "min_days": z.min_days,
+                "max_days": z.max_days,
+            })
+        return Response(list(cards.values()))
+
+
 class PartnerZoneSerializer(serializers.ModelSerializer):
     """The five doc fields Hammed ruled the partner manages — LGA, LCDA, Major
     Locations & Landmarks, Dispatch Zone, Rate — plus the visibility switch.

@@ -7,6 +7,7 @@ from apps.delivery.partner_views import (
     PartnerLoginView,
     PartnerMeView,
     PartnerZoneViewSet,
+    PublicRatesView,
 )
 
 router = SimpleRouter()
@@ -16,4 +17,6 @@ urlpatterns = [
     path("auth/login/", PartnerLoginView.as_view(), name="partner-login"),
     path("me/", PartnerMeView.as_view(), name="partner-me"),
     path("lgas/", PartnerLgaListView.as_view(), name="partner-lgas"),
+    # Public, no auth: the marketers' read-only price list (see PublicRatesView).
+    path("rates/", PublicRatesView.as_view(), name="partner-public-rates"),
 ] + router.urls

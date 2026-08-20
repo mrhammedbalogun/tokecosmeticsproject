@@ -46,6 +46,25 @@ export interface DeliveryPartnerRow {
   updated_at: string;
 }
 
+/** One row of GET /partner/rates/ — the public, read-only quoting list. Only rows
+ * checkout would actually offer appear here, so `price` is never null. */
+export interface PublicRateZone {
+  id: number;
+  lga: string;
+  lcda_name: string;
+  areas_covered: string;
+  dispatch_zone: string;
+  price: string;
+  min_days: number;
+  max_days: number;
+}
+
+export interface PublicRateCard {
+  partner: string;
+  code: string;
+  zones: PublicRateZone[];
+}
+
 /** "4000.00" → "₦4,000" (the portal never shows kobo — the rate card is whole naira). */
 export function formatNaira(price: string | null): string {
   if (price === null) return "—";

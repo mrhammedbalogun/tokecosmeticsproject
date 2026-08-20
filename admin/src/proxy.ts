@@ -66,6 +66,9 @@ function redirectFor(
   // cookies must never influence staff routing. Same presence-theatre caveat as
   // everything in this file: the real fence is the backend's audience claim.
   if (isSegment(pathname, "/partner")) {
+    // The marketers' read-only price list: public by design, like /accept-invite —
+    // Hammed's ruling (2026-08-20) is a link anyone can open, so no cookie matrix.
+    if (isSegment(pathname, "/partner/rates")) return null;
     const partnerSession = Boolean(
       req.cookies.get(PARTNER_ACCESS_COOKIE) || req.cookies.get(PARTNER_REFRESH_COOKIE),
     );

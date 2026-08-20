@@ -237,6 +237,39 @@ def test_the_lga_dropdown_serves_the_20_lagos_lgas(portal):
     assert len(response.data) == 20
 
 
+# --- the public rates list (marketers' view) ---------------------------------------
+
+
+def test_anyone_can_read_the_live_rate_card():
+    """No login, no cookie: the marketers' quoting page reads this cold."""
+    response = APIClient().get("/api/v1/partner/rates/")
+    assert response.status_code == 200
+    [card] = response.data
+    assert card["partner"] == "BrandnPack" and card["code"] == "brandnpack"
+    assert len(card["zones"]) == 47  # live rows only — the 8 unpriced stay hidden
+    first = card["zones"][0]
+    assert set(first) == {
+        "id", "lga", "lcda_name", "areas_covered", "dispatch_zone",
+        "price", "min_days", "max_days",
+    }
+    assert first["price"] not in (None, "")  # a quotable row always carries a price
+
+
+def test_the_public_list_mirrors_checkouts_visibility_rules():
+    """A marketer must never quote a rate checkout would not offer: hidden rows and
+    the partner kill-switch remove rows from both surfaces at once."""
+    zone = PartnerZone.objects.filter(price__isnull=False).first()
+    zone.is_active = False
+    zone.save(update_fields=["is_active"])
+    [card] = APIClient().get("/api/v1/partner/rates/").data
+    assert len(card["zones"]) == 46
+    assert not any(z["lcda_name"] == zone.lcda_name and z["lga"] == zone.lga_region.name
+                   for z in card["zones"])
+
+    DeliveryPartner.objects.filter(code="brandnpack").update(is_active=False)
+    assert APIClient().get("/api/v1/partner/rates/").data == []
+
+
 # --- staff admin surface -----------------------------------------------------------
 
 

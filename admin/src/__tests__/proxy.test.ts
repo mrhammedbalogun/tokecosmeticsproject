@@ -140,6 +140,14 @@ describe("the partner portal's own mini-matrix (Plan-39)", () => {
     );
   });
 
+  it("the public price list renders for everyone — no cookies, any cookies", () => {
+    expect(target(proxy(request("/partner/rates")))).toBeNull();
+    expect(target(proxy(request("/partner/rates", PARTNER)))).toBeNull();
+    expect(target(proxy(request("/partner/rates", PAIR)))).toBeNull();
+    // A prefix collision is still gated: only the rates page itself is public.
+    expect(target(proxy(request("/partner/rates-editor")))).toBe("/partner/login");
+  });
+
   it("a prefix collision is not the portal", () => {
     expect(target(proxy(request("/partnership")))).toBe(
       `/login?next=${encodeURIComponent("/partnership")}`,
