@@ -3,6 +3,8 @@ import {
   gigShipmentsQueryString,
   lastScanStatus,
   parseGigShipmentFilters,
+  parsePartnerShipmentFilters,
+  partnerShipmentsQueryString,
 } from "@/lib/deliveries";
 
 const params = (qs: string) => new URLSearchParams(qs);
@@ -77,5 +79,41 @@ describe("lastScanStatus", () => {
   it("returns null when there is nothing to say", () => {
     expect(lastScanStatus({ last_scan: {} })).toBeNull();
     expect(lastScanStatus({ last_scan: { Status: "  " } })).toBeNull();
+  });
+});
+
+describe("parsePartnerShipmentFilters", () => {
+  it("reads the endpoint's whole vocabulary — status is the ORDER vocabulary", () => {
+    const filters = parsePartnerShipmentFilters(
+      params(
+        "status=refunded&delivered=yes&placed_after=2026-01-01" +
+          "&placed_before=2026-12-31&page=2",
+      ),
+    );
+    expect(filters).toEqual({
+      status: "refunded",
+      delivered: "yes",
+      placed_after: "2026-01-01",
+      placed_before: "2026-12-31",
+      page: 2,
+    });
+  });
+
+  it("drops unrecognised values and treats blanks as absent", () => {
+    expect(parsePartnerShipmentFilters(params("status=in_transit")).status).toBeUndefined();
+    expect(parsePartnerShipmentFilters(params("delivered=maybe")).delivered).toBeUndefined();
+    expect(parsePartnerShipmentFilters(params("status=&delivered="))).toEqual({ page: 1 });
+  });
+});
+
+describe("partnerShipmentsQueryString", () => {
+  it("round-trips what the parser accepted, omitting page 1", () => {
+    const filters = parsePartnerShipmentFilters(
+      params("status=delivered&delivered=no&placed_after=2026-01-01"),
+    );
+    expect(partnerShipmentsQueryString(filters)).toBe(
+      "status=delivered&delivered=no&placed_after=2026-01-01",
+    );
+    expect(partnerShipmentsQueryString({ page: 1 })).toBe("");
   });
 });

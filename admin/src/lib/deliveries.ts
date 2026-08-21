@@ -1,11 +1,15 @@
 /**
- * Shapes and query handling for the deliveries table (Plan-35). No fetching — that is
- * `app/(shell)/deliveries/gig/page.tsx`.
+ * Shapes and query handling for the deliveries tables (Plan-35: GIG; partner
+ * shipments beside it). No fetching — that is `app/(shell)/deliveries/gig/page.tsx`
+ * and `app/(shell)/deliveries/brandnpack/page.tsx`.
  *
  * THE FILTER VOCABULARY IS THE ENDPOINT'S (`AdminGigShipmentListView.get_queryset`
- * reads `status`, `origin`, `service`, `placed_after`, `placed_before` and ignores
- * everything else), same contract as `lib/orders.ts`.
+ * reads `status`, `origin`, `service`, `placed_after`, `placed_before`;
+ * `AdminPartnerShipmentListView` reads `partner`, `status`, `delivered`,
+ * `placed_after`, `placed_before` — both ignore everything else), same contract as
+ * `lib/orders.ts`.
  */
+import { isOrderStatus, type OrderStatus } from "@/lib/orders";
 
 /** `GigShipment.STATUSES` in `backend/apps/delivery/models.py`, in lifecycle order. */
 export const SHIPMENT_STATUSES = [
@@ -94,6 +98,73 @@ export function gigShipmentsQueryString(filters: GigShipmentFilters): string {
   if (filters.status) params.set("status", filters.status);
   if (filters.origin !== undefined) params.set("origin", filters.origin);
   if (filters.service) params.set("service", filters.service);
+  if (filters.placed_after) params.set("placed_after", filters.placed_after);
+  if (filters.placed_before) params.set("placed_before", filters.placed_before);
+  if (filters.page > 1) params.set("page", String(filters.page));
+  return params.toString();
+}
+
+/** One row of `GET /admin/partner-shipments/` — the zone and address render from
+ *  placement-time snapshots; `status` is the ORDER's status (a partner shipment has
+ *  no lifecycle of its own), and `delivered_at` is the machine stamp that survives
+ *  a refund-after-delivery. */
+export interface PartnerShipmentRow {
+  order_number: string;
+  placed_at: string | null;
+  status: OrderStatus;
+  partner: { code: string; name: string };
+  lcda: string;
+  /** Blank when the snapshot never carried it (race fallback, label-only backfill). */
+  dispatch_zone: string;
+  destination: string;
+  customer_name: string;
+  customer_phone: string;
+  charged: string;
+  cost: string | null;
+  currency: string;
+  delivered_at: string | null;
+}
+
+export interface PartnerShipmentPage {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: PartnerShipmentRow[];
+}
+
+/** `partner` is NOT here — the page pins it ("/deliveries/brandnpack" is one
+ *  partner's table) and appends it to the backend call, never to its own URL. */
+export interface PartnerShipmentFilters {
+  status?: OrderStatus;
+  delivered?: "yes" | "no";
+  placed_after?: string;
+  placed_before?: string;
+  page: number;
+}
+
+export function parsePartnerShipmentFilters(
+  params: URLSearchParams,
+): PartnerShipmentFilters {
+  const filters: PartnerShipmentFilters = { page: parsePage(params.get("page")) };
+
+  const status = params.get("status")?.trim();
+  if (status && isOrderStatus(status)) filters.status = status;
+
+  const delivered = params.get("delivered")?.trim();
+  if (delivered === "yes" || delivered === "no") filters.delivered = delivered;
+
+  for (const key of ["placed_after", "placed_before"] as const) {
+    const value = params.get(key)?.trim();
+    if (value) filters[key] = value;
+  }
+
+  return filters;
+}
+
+export function partnerShipmentsQueryString(filters: PartnerShipmentFilters): string {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.delivered) params.set("delivered", filters.delivered);
   if (filters.placed_after) params.set("placed_after", filters.placed_after);
   if (filters.placed_before) params.set("placed_before", filters.placed_before);
   if (filters.page > 1) params.set("page", String(filters.page));

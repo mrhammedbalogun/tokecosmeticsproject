@@ -14,7 +14,12 @@ from django.db.models import Max
 from rest_framework import serializers
 
 from apps.core.models import Country, Region
-from apps.delivery.models import DeliveryOption, GigShipment, SenderLocation
+from apps.delivery.models import (
+    DeliveryOption,
+    GigShipment,
+    PartnerShipment,
+    SenderLocation,
+)
 
 # The carriers checkout can actually quote and capture (apps/checkout/services/checkout.py
 # branches on carrier_code). A "carrier" option naming anything else falls through to the
@@ -421,6 +426,59 @@ class GigShipmentRowSerializer(serializers.ModelSerializer):
     def get_destination(self, obj) -> str:
         if obj.centre:
             return obj.centre.get("name", "")
+        addr = obj.order.shipping_address or {}
+        return ", ".join(p for p in (addr.get("area"), addr.get("state")) if p)
+
+    def get_customer_name(self, obj) -> str:
+        addr = obj.order.shipping_address or {}
+        return " ".join(p for p in (addr.get("first_name"), addr.get("last_name")) if p)
+
+    def get_customer_phone(self, obj) -> str:
+        return (obj.order.shipping_address or {}).get("phone", "")
+
+
+class PartnerShipmentRowSerializer(serializers.ModelSerializer):
+    """One row of the partner deliveries table — READ ONLY, composed from the zone
+    and address snapshots plus the order it hangs off, one query and zero HTTP
+    (the GigShipmentRowSerializer posture exactly).
+
+    `status` is the ORDER's status: PartnerShipment deliberately has no lifecycle
+    of its own (model docstring), so the table renders the one authority staff
+    already move by hand. `delivered_at` rides beside it because a refund rewrites
+    the status but not the fact of delivery.
+    """
+
+    order_number = serializers.CharField(source="order.number", read_only=True)
+    placed_at = serializers.DateTimeField(source="order.placed_at", read_only=True)
+    status = serializers.CharField(source="order.status", read_only=True)
+    currency = serializers.CharField(source="order.currency_id", read_only=True)
+    partner = serializers.SerializerMethodField()
+    lcda = serializers.SerializerMethodField()
+    dispatch_zone = serializers.SerializerMethodField()
+    destination = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PartnerShipment
+        fields = [
+            "order_number", "placed_at", "status", "partner", "lcda", "dispatch_zone",
+            "destination", "customer_name", "customer_phone", "charged", "cost",
+            "currency", "delivered_at",
+        ]
+
+    def get_partner(self, obj) -> dict:
+        return {"code": obj.partner.code, "name": obj.partner.name}
+
+    def get_lcda(self, obj) -> str:
+        return obj.zone.get("lcda", "")
+
+    def get_dispatch_zone(self, obj) -> str:
+        # Absent from race-fallback and label-only backfill snapshots — blank is
+        # "not recorded", not an error (see the model's zone comment).
+        return obj.zone.get("dispatch_zone", "")
+
+    def get_destination(self, obj) -> str:
         addr = obj.order.shipping_address or {}
         return ", ".join(p for p in (addr.get("area"), addr.get("state")) if p)
 

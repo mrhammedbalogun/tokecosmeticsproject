@@ -268,6 +268,13 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
                 order, chosen, charged=totals.delivery,
                 centre=centre if is_pickup else None,
             )
+        if chosen["kind"] == "partner":
+            # Same reasoning once more: the PartnerShipment row is how the partner
+            # deliveries table learns this order goes out with BrandnPack (or any
+            # later partner), so it is born with the order.
+            from apps.delivery.partners import create_partner_shipment
+
+            create_partner_shipment(order, chosen, charged=totals.delivery)
         for variant, qty in lines:
             rp = resolve_price(variant, country)
             OrderItem.objects.create(

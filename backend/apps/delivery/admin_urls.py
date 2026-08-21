@@ -6,6 +6,7 @@ from apps.delivery.admin_views import (
     AdminGigLabelView,
     AdminGigShipmentListView,
     AdminGigShipmentView,
+    AdminPartnerShipmentListView,
     DeliveryBlockAdminViewSet,
     DeliveryFeeMaskAdminViewSet,
     DeliveryOptionAdminViewSet,
@@ -36,6 +37,10 @@ urlpatterns = router.urls + [
     # The deliveries table (Plan-35): every shipment, filterable by origin — the
     # packing-desk view. Read-only; capture lives on the order page.
     path("gig-shipments/", AdminGigShipmentListView.as_view(), name="admin-gig-shipments"),
+    # The partner deliveries table — the GIG table's sibling for couriers with no
+    # API (BrandnPack). Read-only; status moves live on the order page.
+    path("partner-shipments/", AdminPartnerShipmentListView.as_view(),
+         name="admin-partner-shipments"),
     # Mounted here (delivery owns GIG) but addressed by order number, beside the other
     # order endpoints the fulfilment screen already talks to.
     path("orders/<str:number>/gig/", AdminGigShipmentView.as_view(), name="admin-gig-shipment"),

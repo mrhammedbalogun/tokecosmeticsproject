@@ -24,6 +24,13 @@ const SECTIONS = [
     scopes: ["orders.view"],
   },
   {
+    href: "/deliveries/brandnpack",
+    title: "BrandnPack shipments",
+    blurb:
+      "Every order handed to BrandnPack: zone, destination, and what it cost vs charged.",
+    scopes: ["orders.view"],
+  },
+  {
     href: "/deliveries/pickup-locations",
     title: "Pickup locations",
     blurb: "The Toke shops carriers collect parcels from. The pin routes every order.",

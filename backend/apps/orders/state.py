@@ -77,6 +77,7 @@ def _effects_for(to_status: str):
     Statuses absent from this table mail nothing on purpose. `on_hold` and `expired` are
     our words for our problems, not news for a customer.
     """
+    from apps.delivery import partners as partner_shipments
     from apps.delivery.gig import shipments as gig_shipments
     from apps.orders import emails
 
@@ -98,7 +99,10 @@ def _effects_for(to_status: str):
         # one. Do not rely on either alone — add new effects AFTER the customer's.
         "processing": (emails.enqueue_order_confirmation, emails.enqueue_staff_order_paid),
         "shipped": (emails.enqueue_shipped,),
-        "delivered": (emails.enqueue_delivered,),
+        # The partner stamp comes AFTER the customer's email (see the ordering note
+        # above): `mark_delivered` is a one-row UPDATE that can hardly fail, but if
+        # it somehow did, it must not cost the customer their delivered email.
+        "delivered": (emails.enqueue_delivered, partner_shipments.mark_delivered),
         # Dead orders mail nothing (our words for our problems) but they do release a
         # merely-quoted GIG shipment; one that reached capture keeps its state — the
         # waybill and wallet debit are facts the reconciliation trail must keep.

@@ -292,6 +292,57 @@ class PartnerZone(TimeStampedModel):
         return f"{self.partner.code}: {self.lga_region.name} / {self.lcda_name} ({state})"
 
 
+class PartnerShipment(TimeStampedModel):
+    """One order's hand-off to a delivery partner — GigShipment's analogue for
+    couriers with no API. Born at ORDER PLACEMENT, same transaction as the order
+    (the ShippingQuote/GigShipment reasoning verbatim: created later it would be
+    an absence, and absences are invisible — this row is how the deliveries table
+    learns the order goes out with a partner at all).
+
+    DELIBERATELY NO STATUS COLUMN. GIG's lifecycle exists because GIG feeds it
+    (webhooks + polling); a partner feeds nothing, staff already move the ORDER's
+    status by hand, and a second hand-maintained status would only drift from the
+    first. The order stays the single status authority and the admin table renders
+    it. The one fact that column cannot keep is `delivered_at` below.
+
+    `cost` and `charged` mirror GigShipment's split: cost is the partner's raw
+    zone price (what the partner invoices us), charged is what the customer paid —
+    since Plan-41 their difference is exactly the fee mask. Cost is nullable for
+    the rows where the raw price is genuinely unknowable (a zone deleted mid-
+    checkout, ambiguous backfill matches), never coerced to 0.
+
+    `delivered_at` is stamped by the order state machine's deferred-effects lane
+    when the order reaches `delivered` — machine-written, never hand-edited. It
+    deliberately SURVIVES a later refund: `delivered -> refunded` rewrites the
+    order's status, but "the partner did deliver this" is a fact the partner's
+    invoice reconciliation still needs (the same falsified-trail reasoning that
+    keeps a refunded GigShipment's waybill and wallet debit).
+    """
+
+    order = models.OneToOneField(
+        "orders.Order", on_delete=models.PROTECT, related_name="partner_shipment"
+    )
+    partner = models.ForeignKey(
+        DeliveryPartner, on_delete=models.PROTECT, related_name="shipments"
+    )
+    # The chosen PartnerZone at placement — {"id", "lcda", "areas", "dispatch_zone",
+    # "min_days", "max_days"}. A SNAPSHOT, not an FK: the partner edits and deletes
+    # their own rate-card rows through the portal, and a placed order must never
+    # shift under them. The race fallback (zone deleted between pricing and
+    # placement) snapshots from the option dict, which never carried dispatch_zone
+    # — a blank dispatch zone in the table is that, not a bug.
+    zone = models.JSONField(default=dict)
+    cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    charged = models.DecimalField(max_digits=12, decimal_places=2)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = "partner shipment"
+
+    def __str__(self) -> str:
+        return f"{self.order_id}: {self.partner.code} / {self.zone.get('lcda', '?')}"
+
+
 class DeliveryBlock(TimeStampedModel):
     """Plan-41: "do not offer this delivery service HERE." Coverage is additive and
     this table is subtractive: a DeliveryOption covering all of Lagos cannot exclude

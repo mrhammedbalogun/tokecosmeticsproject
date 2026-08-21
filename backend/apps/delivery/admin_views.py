@@ -24,6 +24,7 @@ from apps.delivery.admin_serializers import (
     DeliveryOptionAdminSerializer,
     DeliveryPartnerAdminSerializer,
     GigShipmentRowSerializer,
+    PartnerShipmentRowSerializer,
     PartnerZoneAdminSerializer,
     SenderLocationAdminSerializer,
     RegionAdminSerializer,
@@ -455,6 +456,61 @@ class AdminGigShipmentListView(AdminAuditMixin, generics.ListAPIView):
                 qs = qs.filter(centre={})
         # Dates are parsed eagerly: a lazy-filtered garbage value would 500 at
         # evaluation time, deep in pagination. Unparseable cutoff = no matches.
+        from django.utils.dateparse import parse_date, parse_datetime
+
+        for param, lookup in (("placed_after", "gte"), ("placed_before", "lte")):
+            if v := p.get(param):
+                parsed = parse_datetime(v) or parse_date(v)
+                if parsed is None:
+                    return qs.none()
+                qs = qs.filter(**{f"order__placed_at__{lookup}": parsed})
+        return qs.order_by("-order__placed_at", "-pk")
+
+
+class AdminPartnerShipmentListView(AdminAuditMixin, generics.ListAPIView):
+    """GET /api/v1/admin/partner-shipments/ — the partner deliveries table, the
+    GIG table's sibling for couriers with no API (BrandnPack today). Every order
+    handed to a partner: which zone, where it goes, and the charged/cost split
+    the partner's invoice reconciles against.
+
+    `orders.view` and READ-AUDITED, the gig-shipments posture exactly — every row
+    names a customer and their phone, and the list is paginated for the same
+    bulk-PII reason.
+
+    The table READS; the order page ACTS: status moves stay on `/orders/{number}`.
+    There is no shipment status to filter — `status` filters the ORDER's status
+    (the row's one authority), and `delivered` (yes|no) filters the machine-stamped
+    `delivered_at`, which is the invoicing question a refund must not un-answer.
+
+    Filters: `partner` (code), `status`, `delivered` (yes|no), `placed_after`/
+    `placed_before` (the order's placed date). Unknown filter values match nothing,
+    honestly, rather than everything.
+    """
+
+    serializer_class = PartnerShipmentRowSerializer
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.view")]
+    audit_reads = True
+    audit_action = "list"
+
+    def get_queryset(self):
+        from apps.delivery.models import PartnerShipment
+
+        qs = PartnerShipment.objects.select_related("order", "partner")
+        p = self.request.query_params
+        if v := p.get("partner"):
+            qs = qs.filter(partner__code=v)
+        if v := p.get("status"):
+            qs = qs.filter(order__status=v)
+        if v := p.get("delivered"):
+            if v == "yes":
+                qs = qs.filter(delivered_at__isnull=False)
+            elif v == "no":
+                qs = qs.filter(delivered_at__isnull=True)
+            else:
+                return qs.none()
+        # Same eager date parsing as the GIG list: garbage → no matches, not a 500
+        # deep in pagination.
         from django.utils.dateparse import parse_date, parse_datetime
 
         for param, lookup in (("placed_after", "gte"), ("placed_before", "lte")):
