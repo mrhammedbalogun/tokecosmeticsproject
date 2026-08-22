@@ -1,8 +1,11 @@
 # Plan 42 — Find a Store (public locator + admin directory)
 
-**Date:** 2026-08-21 · **Status:** built + verified locally (new backend app 58 tests
-green, full backend suite 994 green; storefront 957 and admin 949 green; both apps
-typecheck + lint clean; desktop, mobile and admin walked in a real browser).
+**Date:** 2026-08-21 · **Status:** DEPLOYED 2026-08-22 — `d6774f1` → `backend-v0.50.0`
+(CI deploy success, VPS on the tag, `stores.0001_initial` applied) + both Vercel apps,
+live-verified: `api.tokecosmetics.com/api/v1/stores/places/` 200, `tokecosmetics.com/find-stores`
+renders, `admin.tokecosmetics.com/find-stores` gates to login. Prod directory is EMPTY
+until stores are added through the admin. (Pre-deploy: backend 60 + full suite green,
+storefront 963, admin 949; both apps typecheck + lint clean; browser-walked.)
 
 ## What
 
