@@ -427,13 +427,19 @@ export function StoreForm({
       )}
 
       <div className="mt-4 flex gap-2">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
-        >
-          {saving ? "Saving…" : row ? "Save changes" : "Add store"}
-        </button>
+        {/* While a duplicate warning is up, the warning's own button is the ONLY save on
+            screen. With both visible an operator clicks the familiar one, gets the same
+            warning back, and concludes the form is refusing them — which is what happened
+            on the very first store anyone tried to add (2026-08-22). */}
+        {!duplicates && (
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded bg-accent px-3 py-1.5 text-sm font-medium text-white hover:opacity-90 disabled:opacity-60"
+          >
+            {saving ? "Saving…" : row ? "Save changes" : "Add store"}
+          </button>
+        )}
         <button
           type="button"
           onClick={onCancel}
@@ -446,9 +452,18 @@ export function StoreForm({
   );
 }
 
-/** The 409's rows, and the one button that gets past them. An empty `hints` list means
- *  the database's unique index refused the save outright — there is nothing to confirm,
- *  so no override is offered. */
+/**
+ * The 409's rows, and the one button that gets past them. An empty `hints` list means
+ * the database's unique index refused the save outright — there is nothing to confirm,
+ * so no override is offered.
+ *
+ * TWO VOICES. When every match is one of OUR OWN pickup locations, this is not a
+ * warning at all: a Toke store that also hands parcels to couriers is the normal case,
+ * the two lists are separate on purpose (`stores/models.py` says why), and the
+ * operator needs reassurance and a green button — not an orange box that reads as
+ * "refused". The orange voice is kept for matches against other STORE rows, where
+ * "is this the same shop?" is a real question only a human can answer.
+ */
 function DuplicateWarning({
   hints,
   message,
@@ -460,12 +475,27 @@ function DuplicateWarning({
   saving: boolean;
   onConfirm: () => void;
 }) {
+  const ownPickupOnly = hints.length > 0 && hints.every((h) => h.kind === "pickup_location");
+  const tone = ownPickupOnly
+    ? "border-accent/40 bg-accent/5 text-foreground"
+    : "border-warn/40 bg-warn/5 text-warn";
+  const button = ownPickupOnly
+    ? "bg-accent text-white hover:opacity-90"
+    : "border border-warn hover:bg-warn/10";
+
   return (
-    <div
-      role="alert"
-      className="mt-3 rounded border border-warn/40 bg-warn/5 p-3 text-xs text-warn"
-    >
-      <p className="font-medium">{message}</p>
+    <div role="alert" className={`mt-3 rounded border p-3 text-xs ${tone}`}>
+      <p className="font-medium">
+        {ownPickupOnly
+          ? "This address is already one of your pickup locations — that is expected for a Toke store."
+          : message}
+      </p>
+      {ownPickupOnly && (
+        <p className="mt-1 text-muted">
+          Pickup locations and the public store directory are kept as separate lists on
+          purpose. Nothing is wrong; confirm below to list this store for customers.
+        </p>
+      )}
       {hints.length > 0 && (
         <>
           <ul className="mt-2 space-y-1">
@@ -481,9 +511,13 @@ function DuplicateWarning({
             type="button"
             onClick={onConfirm}
             disabled={saving}
-            className="mt-3 rounded border border-warn px-3 py-1.5 font-medium hover:bg-warn/10 disabled:opacity-60"
+            className={`mt-3 rounded px-3 py-1.5 font-medium disabled:opacity-60 ${button}`}
           >
-            {saving ? "Saving…" : "Save anyway — this is a different shop"}
+            {saving
+              ? "Saving…"
+              : ownPickupOnly
+                ? "Yes — list this store"
+                : "Save anyway — this is a different shop"}
           </button>
         </>
       )}

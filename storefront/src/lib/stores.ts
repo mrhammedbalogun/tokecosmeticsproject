@@ -112,10 +112,11 @@ export async function getPlaces(
   try {
     return await apiFetch<PlacesResponse>(`/stores/places/${qs ? `?${qs}` : ""}`, {
       country,
-      // Revalidated rather than no-store: the answer changes when a store is added,
-      // which is a weekly event at most, and this is on the critical path of a page
-      // whose first paint should not wait on Django.
-      next: { revalidate: 300 },
+      // Cached under the "stores" tag, which `apps/stores/revalidate.py` flushes on
+      // every write — so a newly added shop is live the moment it is saved, and the
+      // five-minute window is only the fallback for a storefront the backend could
+      // not reach. The tag name is the contract between the two; change both or neither.
+      next: { revalidate: 300, tags: ["stores"] },
     });
   } catch {
     return null;
@@ -147,7 +148,7 @@ export async function getStores(
   try {
     return await apiFetch<StorePage>(`/stores/?${selectionQuery(sel)}`, {
       country,
-      next: { revalidate: 300 },
+      next: { revalidate: 300, tags: ["stores"] },
     });
   } catch {
     return null;
