@@ -53,6 +53,10 @@ INSTALLED_APPS = [
     "apps.orders",
     "apps.payments",
     "apps.delivery",
+    # The public store locator (Plan-42). Its own app rather than a table inside
+    # `delivery`: an active `delivery.SenderLocation` is a live GIG shipping origin,
+    # and a directory of distributors must never be able to become one.
+    "apps.stores",
     "apps.shipping",
     "apps.wishlist",
     "apps.reviews",

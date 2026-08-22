@@ -252,6 +252,21 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # they sit with the other delivery numbers a Manager adjusts.
     "DeliveryPartnerAdminViewSet": "settings.manage",
     "PartnerZoneAdminViewSet": "products.manage",
+    # Plan-41: "do not offer this service here" and "add this % to its fee". Both are
+    # operational levers on a delivery price, same scope as the price itself.
+    # Declared 2026-08-21 — Plan-41 and the BrandnPack shipments table routed four
+    # views without adding them here, so this whole file had been failing since; the
+    # scopes below are what those views already enforce, transcribed, not changed.
+    "DeliveryBlockAdminViewSet": "products.manage",
+    "DeliveryFeeMaskAdminViewSet": "products.manage",
+    # The service picker behind the block/mask forms — a list of service codes.
+    "DeliveryServiceListView": "products.manage",
+    # The partner deliveries table: `orders.view`, the gig-shipments posture exactly.
+    "AdminPartnerShipmentListView": "orders.view",
+    # --- store locator (Plan-42): the shops and distributors customers can walk
+    # into. Rows about physical shop addresses maintained by whoever runs the day to
+    # day — the same thing SenderLocation is, and filed under the same scope.
+    "StoreLocationAdminViewSet": "products.manage",
     # --- reports (Plan-20a). The third scope this project declared before anything used
     # it, after cms.manage and settings.manage.
     "ReportView": "reports.view",

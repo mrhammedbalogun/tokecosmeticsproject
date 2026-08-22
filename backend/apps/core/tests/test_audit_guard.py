@@ -85,6 +85,9 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     "PayoutQueueViewSet": "unmasked bank account numbers — the highest-value read on the admin surface",
     "ReferrerListView": "every referrer, their contact details and what they have earned — a list of people and what they are worth",
     "ReferrerAdjustmentsView": "one referrer's hand-written balance corrections, each with a staff reason attached",
+    # The GIG deliveries table's sibling for couriers with no API. Same reason,
+    # verbatim: customer name and phone on every row, paginated bulk PII.
+    "AdminPartnerShipmentListView": "the partner deliveries table: customer name and phone on every row",
 }
 
 

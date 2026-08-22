@@ -153,6 +153,25 @@ MATRIX: list[Row] = [
     # Partner rate cards (Plan-39): an operational delivery price, same reasoning
     # as DeliveryOptionAdminViewSet above.
     Row("PartnerZoneAdminViewSet", "get", "/api/v1/admin/partner-zones/", _MANAGERS),
+    # Plan-41 blocks and masks, plus the service picker behind their forms. Rows added
+    # 2026-08-21 with the store locator: Plan-41 and the BrandnPack shipments table
+    # routed four views without matrix rows, so nobody was checking who could reach
+    # them. The role sets below are the ones those views already enforce.
+    Row("DeliveryBlockAdminViewSet", "get", "/api/v1/admin/delivery-blocks/", _MANAGERS),
+    Row("DeliveryFeeMaskAdminViewSet", "get", "/api/v1/admin/delivery-fee-masks/",
+        _MANAGERS),
+    Row("DeliveryServiceListView", "get", "/api/v1/admin/delivery-services/", _MANAGERS),
+    # The partner deliveries table is desk reading, like the GIG one beside it.
+    Row("AdminPartnerShipmentListView", "get", "/api/v1/admin/partner-shipments/", _DESK),
+    # Store locator (Plan-42): the public shop/distributor directory. Read, write and
+    # the restore action all sit on `products.manage` — three rows rather than one,
+    # because a viewset's extra `@action` is a route the class-level declaration in
+    # `ADMIN_SURFACE` cannot speak for.
+    Row("StoreLocationAdminViewSet", "get", "/api/v1/admin/stores/", _MANAGERS),
+    Row("StoreLocationAdminViewSet", "post", "/api/v1/admin/stores/", _MANAGERS,
+        body={"name": "Nowhere"}),
+    Row("StoreLocationAdminViewSet", "post", "/api/v1/admin/stores/999999/restore/",
+        _MANAGERS),
     # --- reports: Owner and Manager. Support works the desk and does not see the books.
     Row("ReportView", "get", "/api/v1/admin/reports/revenue/", _MANAGERS),
     Row("ReportExportView", "get", "/api/v1/admin/reports/revenue/export.csv", _MANAGERS),

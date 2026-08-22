@@ -327,13 +327,20 @@ class PartnerZoneAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         return changes
 
 
-class DeliveryServiceListView(APIView):
+class DeliveryServiceListView(AdminAuditMixin, APIView):
     """GET /admin/delivery-services/ — the picker behind Plan-41's block and mask
     forms: every service a rule can name, with its human label. Read-only reference
-    data (no PII, no audit), `products.manage` like the rules it feeds."""
+    data (no PII, no audit), `products.manage` like the rules it feeds.
+
+    It carries `AdminAuditMixin` with `audit_reads` left False, which writes nothing:
+    that is the recorded decision, and it is what `test_audit_guard` asks every admin
+    view for. `audit_model_label` is declared because this view has no queryset and no
+    serializer for the label to be derived from — the rules it feeds are the blocks.
+    """
 
     authentication_classes = [AdminJWTAuthentication]
     permission_classes = [HasAdminScope("products.manage")]
+    audit_model_label = "delivery.deliveryblock"
 
     def get(self, request):
         from apps.delivery.services import known_delivery_services

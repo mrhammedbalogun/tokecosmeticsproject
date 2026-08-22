@@ -178,3 +178,46 @@ export function faqJsonLd(faqs: { q: string; a: string }[]): Record<string, any>
     })),
   };
 }
+
+/**
+ * The store locator's results as an ItemList of LocalBusiness (Plan-42).
+ *
+ * Emitted ONLY for server-rendered results — a shared `?country=…&state=…&area=…` link,
+ * which is the only version of this page a crawler ever sees results on. Client-side
+ * picks do not re-emit it: structured data describes the document that was served, and
+ * a crawler is not clicking dropdowns.
+ *
+ * `telephone` is the E.164 value rather than the prettified one, which is what the
+ * schema asks for and what a "call" affordance in a search result needs to dial.
+ */
+export function storeListJsonLd(
+  stores: {
+    name: string; address: string; city: string; area: string; state: string;
+    country: string; country_code: string; phone: string; opening_hours: string;
+  }[],
+  path: string,
+): Record<string, any> {
+  return {
+    "@context": "https://schema.org",
+    "@type": "ItemList",
+    url: absoluteUrl(path),
+    numberOfItems: stores.length,
+    itemListElement: stores.map((s, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      item: {
+        "@type": "LocalBusiness",
+        name: s.name,
+        telephone: s.phone,
+        ...(s.opening_hours ? { openingHours: s.opening_hours } : {}),
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: s.address,
+          addressLocality: s.area || s.city || undefined,
+          addressRegion: s.state || undefined,
+          addressCountry: s.country_code || undefined,
+        },
+      },
+    })),
+  };
+}

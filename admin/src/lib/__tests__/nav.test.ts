@@ -46,6 +46,10 @@ describe("the sidebar renders only what the scopes allow", () => {
       // Categories carries `products.manage`, the same scope as Products — editing the
       // tree is editing the catalogue, and it is what the storefront nav is built from.
       "Dashboard", "Orders", "Deliveries", "Products", "Categories", "Inventory",
+      // The store directory (Plan-42) — `products.manage`, the same scope Pickup
+      // locations carries, because both are lists of physical shops kept by whoever
+      // runs the day to day.
+      "Find a Store",
       "Customers", "Reviews",
       "Coupons",
       "Home Content",

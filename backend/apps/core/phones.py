@@ -33,3 +33,34 @@ def normalize_e164(value: str) -> str:
     if not phonenumbers.is_valid_number(parsed):
         raise ValueError("That phone number does not look valid for its country.")
     return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+
+
+def format_display(value: str, viewer_country: str = "") -> str:
+    """A human-readable rendering of a stored E.164 number. Never raises.
+
+    "+2348023900964" -> "0802 390 0964" for a Nigerian reader, "+234 802 390 0964"
+    for everyone else. The distinction matters on the store locator: a Lagos
+    customer reads and dials the national form, and printing "+234…" to them looks
+    like an international call they will be charged for; a customer abroad looking
+    up a Lagos stockist needs the country code or the number does not connect.
+
+    FORMATTING ONLY — the stored value is untouched and every `tel:`/`wa.me` link
+    is built from the E.164 form, so a prettified string can never be dialled.
+    Anything unparseable comes back verbatim rather than raising: this runs on a
+    read path serving a public page, and a bad row must degrade to "shows the raw
+    number", never to a 500.
+    """
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    try:
+        parsed = phonenumbers.parse(raw, None)
+    except phonenumbers.NumberParseException:
+        return raw
+    national = phonenumbers.region_code_for_number(parsed)
+    fmt = (
+        phonenumbers.PhoneNumberFormat.NATIONAL
+        if national and national.upper() == (viewer_country or "").upper()
+        else phonenumbers.PhoneNumberFormat.INTERNATIONAL
+    )
+    return phonenumbers.format_number(parsed, fmt)

@@ -42,6 +42,12 @@ export const NAV_ITEMS: NavItem[] = [
   // `/products/…` would highlight Products while the categories page was on screen.
   { label: "Categories", href: "/categories", scopes: ["products.manage"] },
   { label: "Inventory", href: "/inventory", scopes: ["products.manage"] },
+  // The public store locator's directory (Plan-42). `products.manage` for the same
+  // reason Pickup locations is: it is a list of physical shops maintained by whoever
+  // runs the day to day. Top-level rather than under Deliveries, because nothing in it
+  // ships anything — an active row here is a shop a customer walks into, and filing it
+  // beside the carrier screens is how somebody eventually confuses the two.
+  { label: "Find a Store", href: "/find-stores", scopes: ["products.manage"] },
   { label: "Customers", href: "/customers", scopes: ["customers.view"] },
   { label: "Reviews", href: "/reviews", scopes: ["reviews.manage"] },
   { label: "Coupons", href: "/coupons", scopes: ["marketing.manage"] },

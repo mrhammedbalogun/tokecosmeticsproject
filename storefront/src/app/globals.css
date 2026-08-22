@@ -112,3 +112,20 @@ html[data-scrolled] header[data-site-header] .site-logo { transform: scale(0.85)
    column". The homepage sections, header and footer use THIS, never mx-auto max-w-*
    — the centered-column look was an implementation deviation, caught 2026-08-05. */
 .wrap { width: 100%; margin: 0; padding-left: clamp(20px, 3vw, 48px); padding-right: clamp(20px, 3vw, 48px); }
+
+/* Store locator (Plan-42): result cards fade up as they arrive, lightly staggered so a
+   grid reads as one motion rather than six separate ones. Mount-only, like the currency
+   popup above. The global prefers-reduced-motion catch-all collapses the duration; the
+   delay is not a duration, so it is zeroed here explicitly — otherwise a reduced-motion
+   reader would watch cards appear one by one for no reason. */
+.store-card-in {
+  animation: storeCardIn 0.42s cubic-bezier(0.21, 0.61, 0.35, 1) both;
+  animation-delay: calc(var(--card-index, 0) * 45ms);
+}
+@keyframes storeCardIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .store-card-in { animation-delay: 0ms !important; }
+}
