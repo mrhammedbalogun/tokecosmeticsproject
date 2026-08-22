@@ -122,6 +122,23 @@ fixed, each with a test that fails without the fix:
   card; the empty-directory intro said "choose your country" to a dropdown with nothing
   in it.
 
+## First real use (2026-08-22) → backend-v0.50.1
+
+Hammed's first attempt to add "Toke Ikorodu Store" stopped at the duplicate warning: the
+address is also a pickup location, which is the EXPECTED case for a Toke store, but the
+orange box plus the untouched "Add store" button read as a refusal. The server log shows
+exactly one POST → 409 and nothing after. Had the save gone through, the public page
+would still have said "Stores are coming" for up to five minutes, because the locator's
+fetches carried no cache tag for the backend to flush.
+
+Fixed in `ea8b47c` → `backend-v0.50.1` + both Vercel apps (live-verified):
+- `apps/stores/revalidate.py` + signals flush the storefront's new `"stores"` tag on
+  every `StoreLocation` save/delete, through the CMS's existing fire-and-forget caller.
+  Prod has `REVALIDATE_SECRET` and `STOREFRONT_BASE_URL` set, so it is active.
+- When every duplicate match is one of our own pickup locations the box is green, says
+  nothing is wrong, and the button reads "Yes — list this store". The primary submit is
+  hidden while any duplicate warning is up, so the override is the only save on screen.
+
 ## Known limitations
 
 - **No map and no distance sort.** `latitude`/`longitude` exist and are used only to
