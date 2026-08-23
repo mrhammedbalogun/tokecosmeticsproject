@@ -65,6 +65,14 @@ _PREVIEWS: dict[str, dict] = {
         ],
         "is_first": False,
     },
+    "delivery.aaj_attention": {
+        "is_preview": True,
+        "order_number": "TC-10234",
+        "tracking_id": "6961577F",
+        "status_label": "Returned",
+        "reason": "returned to sender",
+        "description": "Shipment has been returned",
+    },
     "delivery.gig_wallet_low": {
         "is_preview": True,
         # A string, matching what `monitor_gig_wallet` now sends — the real context

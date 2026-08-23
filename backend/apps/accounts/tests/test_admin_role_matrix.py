@@ -196,6 +196,15 @@ MATRIX: list[Row] = [
     Row("AdminGigShipmentListView", "get", "/api/v1/admin/gig-shipments/", _DESK),
     Row("AdminGigLabelView", "post", f"{_ORDER}/gig/label/", _DESK),
     Row("AdminGigCaptureView", "post", f"{_ORDER}/gig/capture/", _MANAGERS),
+    # --- orders: AAJ fulfilment (Plan-43). Same split as GIG: the panel, the label
+    # and the reconcile check are desk work; capture charges our AAJ account and void
+    # reverses a charge, so both sit with the money.
+    Row("AdminAajShipmentView", "get", f"{_ORDER}/aaj/", _DESK),
+    Row("AdminAajShipmentListView", "get", "/api/v1/admin/aaj-shipments/", _DESK),
+    Row("AdminAajLabelView", "post", f"{_ORDER}/aaj/label/", _DESK),
+    Row("AdminAajCheckView", "post", f"{_ORDER}/aaj/check/", _DESK),
+    Row("AdminAajCaptureView", "post", f"{_ORDER}/aaj/capture/", _MANAGERS),
+    Row("AdminAajVoidView", "post", f"{_ORDER}/aaj/void/", _MANAGERS),
     # --- orders: money. Support is deliberately out ------------------------------
     Row("AdminRefundsOwedView", "get", "/api/v1/admin/refunds-owed/", _MANAGERS),
     Row("AdminResolveReviewView", "post", f"{_ORDER}/resolve-review/", _MANAGERS),

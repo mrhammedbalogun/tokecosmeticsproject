@@ -1,0 +1,37 @@
+{% extends "email/base.html" %}
+{% block preheader %}{% if order_number %}Order {{ order_number }}: {% endif %}{{ reason }}{% if description %} — {{ description }}{% endif %}{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Delivery alert" title="An AAJ shipment needs attention" %}{% endblock %}
+{% block content %}
+{% if is_preview %}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 20px;background-color:#eef4fb;border:1px solid #c9dcf0;border-radius:10px;">
+  <tr><td style="padding:14px 16px;font-size:14px;line-height:1.6;">
+    <strong style="color:#1b4f80;">This is a test.</strong> The details below are made up —
+    it was sent from the admin's Email Notifications screen to check that this address
+    receives mail.
+  </td></tr>
+</table>
+{% endif %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 22px;background-color:#fdf3f2;border:1px solid #f0cfc9;border-radius:10px;">
+  <tr><td style="padding:18px;font-size:14px;line-height:1.6;">
+    <div style="font-size:11px;font-weight:bold;letter-spacing:1.2px;text-transform:uppercase;
+                color:#8a1c1c;margin:0 0 6px;">{% if order_number %}Order {{ order_number }}{% else %}AAJ integration{% endif %}</div>
+    <div style="font-family:Georgia,'Times New Roman',serif;font-size:24px;line-height:1.2;
+                color:#8a1c1c;">{{ reason|capfirst }}</div>
+    {% if tracking_id %}<div style="color:#6b6862;margin:8px 0 0;">AAJ tracking <span style="font-family:monospace;">{{ tracking_id }}</span>{% if status_label %} · status: {{ status_label }}{% endif %}</div>{% endif %}
+    {% if description %}<div style="color:#6b6862;margin:8px 0 0;">AAJ says: {{ description }}</div>{% endif %}
+  </td></tr>
+</table>
+
+<p style="margin:0 0 16px;"><strong>Nothing has been changed on the order.</strong> Open it in
+  the admin to decide what happens next — a returned parcel is a refund-direction decision,
+  a reweigh may mean AAJ bills more than was quoted, and an exception is AAJ asking for a
+  human.</p>
+{% endblock %}
+{% block socials %}{% endblock %}
+{% block footer_links %}<a href="{{ admin_home_url }}"
+   style="color:#145f30;text-decoration:none;">Open the admin</a>{% endblock %}
+{% block footer_note %}An internal Toke Cosmetics alert. This address is subscribed to
+<strong>AAJ shipment needs attention</strong> on the admin's Email Notifications screen.{% endblock %}

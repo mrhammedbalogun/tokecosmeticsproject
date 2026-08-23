@@ -107,6 +107,16 @@ EVENTS: tuple[NotificationEvent, ...] = (
         ),
         template="gig_wallet_low",
     ),
+    NotificationEvent(
+        code="delivery.aaj_attention",
+        label="AAJ shipment needs attention",
+        description=(
+            "An AAJ Express parcel was returned, voided at AAJ's end, flagged with an "
+            "exception, or reweighed (AAJ may bill the difference) — and once a day, if "
+            "AAJ's state list drifts from ours. For whoever runs the packing bench."
+        ),
+        template="aaj_attention",
+    ),
 )
 
 EVENTS_BY_CODE: dict[str, NotificationEvent] = {event.code: event for event in EVENTS}

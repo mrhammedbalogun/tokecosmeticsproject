@@ -1,0 +1,14 @@
+{% if is_preview %}*** THIS IS A TEST — the details below are made up. Sent from the admin's
+Email Notifications screen to check that this address receives mail. ***
+
+{% endif %}{% if order_number %}Order {{ order_number }}{% if tracking_id %} (AAJ tracking {{ tracking_id }}){% endif %} needs a look: {{ reason }}.
+{% else %}AAJ Express integration needs a look: {{ reason }}.
+{% endif %}
+{% if status_label %}AAJ status: {{ status_label }}
+{% endif %}{% if description %}AAJ says: {{ description }}
+{% endif %}
+Nothing has been changed on the order. Open it in the admin to decide what happens next —
+a returned parcel is a refund-direction decision, a reweigh may mean AAJ bills more than
+was quoted, and an exception is AAJ asking for a human.
+
+{% include "email/_footer_internal.txt" with footer_note="This address is subscribed to the AAJ shipment attention alert on the admin Email Notifications screen." %}

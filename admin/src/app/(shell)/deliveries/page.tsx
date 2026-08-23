@@ -11,9 +11,8 @@ export const metadata: Metadata = { title: "Deliveries" };
  * The Settings-door pattern exactly: sections are scope-filtered (any-of, ergonomics
  * not authorization — every endpoint behind each card carries its own `HasAdminScope`).
  * Support gets the GIG table (`orders.view`, the desk's reading); a Manager also gets
- * Pickup locations (`products.manage`). An AAJ card appears here when that integration
- * exists — nothing is greyed out in advance, listing only what is BUILT keeps the door
- * honest.
+ * Pickup locations (`products.manage`). The AAJ card arrived with Plan-43 — nothing is
+ * ever greyed out in advance; listing only what is BUILT keeps the door honest.
  */
 const SECTIONS = [
   {
@@ -21,6 +20,13 @@ const SECTIONS = [
     title: "GIG shipments",
     blurb:
       "Every GIG delivery: where it collects from, where it goes, and what it cost.",
+    scopes: ["orders.view"],
+  },
+  {
+    href: "/deliveries/aaj",
+    title: "AAJ Express shipments",
+    blurb:
+      "Every AAJ delivery: where it collects from, where it goes, what the customer paid and what AAJ charged us.",
     scopes: ["orders.view"],
   },
   {

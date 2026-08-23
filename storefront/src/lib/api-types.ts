@@ -4,6 +4,28 @@
  */
 
 export interface paths {
+    "/api/v1/admin/aaj-shipments/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/aaj-shipments/ — the AAJ deliveries table, the GIG table's
+         *     sibling: `orders.view`, READ-AUDITED, paginated, reads only (the order page acts).
+         *
+         *     Filters: `status`, `origin` (snapshot id), `placed_after`/`placed_before`.
+         */
+        get: operations["v1_admin_aaj_shipments_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/audit/": {
         parameters: {
             query?: never;
@@ -746,6 +768,148 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/delivery-blocks/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Plan-41 block rules — full CRUD. `products.manage` by the coverage doctrine:
+         *     "where is this service offered" is the same operational question the coverage
+         *     editor answers, just subtractive. Delete is referentially safe the same way
+         *     option delete is: checkout re-reads the rules at every quote and at placement,
+         *     where a deleted rule simply stops removing anything.
+         */
+        get: operations["v1_admin_delivery_blocks_list"];
+        put?: never;
+        /**
+         * @description Plan-41 block rules — full CRUD. `products.manage` by the coverage doctrine:
+         *     "where is this service offered" is the same operational question the coverage
+         *     editor answers, just subtractive. Delete is referentially safe the same way
+         *     option delete is: checkout re-reads the rules at every quote and at placement,
+         *     where a deleted rule simply stops removing anything.
+         */
+        post: operations["v1_admin_delivery_blocks_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-blocks/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Plan-41 block rules — full CRUD. `products.manage` by the coverage doctrine:
+         *     "where is this service offered" is the same operational question the coverage
+         *     editor answers, just subtractive. Delete is referentially safe the same way
+         *     option delete is: checkout re-reads the rules at every quote and at placement,
+         *     where a deleted rule simply stops removing anything.
+         */
+        get: operations["v1_admin_delivery_blocks_retrieve"];
+        /**
+         * @description Plan-41 block rules — full CRUD. `products.manage` by the coverage doctrine:
+         *     "where is this service offered" is the same operational question the coverage
+         *     editor answers, just subtractive. Delete is referentially safe the same way
+         *     option delete is: checkout re-reads the rules at every quote and at placement,
+         *     where a deleted rule simply stops removing anything.
+         */
+        put: operations["v1_admin_delivery_blocks_update"];
+        post?: never;
+        /**
+         * @description Plan-41 block rules — full CRUD. `products.manage` by the coverage doctrine:
+         *     "where is this service offered" is the same operational question the coverage
+         *     editor answers, just subtractive. Delete is referentially safe the same way
+         *     option delete is: checkout re-reads the rules at every quote and at placement,
+         *     where a deleted rule simply stops removing anything.
+         */
+        delete: operations["v1_admin_delivery_blocks_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Plan-41 block rules — full CRUD. `products.manage` by the coverage doctrine:
+         *     "where is this service offered" is the same operational question the coverage
+         *     editor answers, just subtractive. Delete is referentially safe the same way
+         *     option delete is: checkout re-reads the rules at every quote and at placement,
+         *     where a deleted rule simply stops removing anything.
+         */
+        patch: operations["v1_admin_delivery_blocks_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-fee-masks/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Plan-41 fee masks — full CRUD, one row per service (the model's unique
+         *     constraint). `products.manage`: a mask changes the customer's delivery price,
+         *     which this file has always ruled an operational number — the raw carrier cost
+         *     is untouched and stays visible to reconciliation.
+         */
+        get: operations["v1_admin_delivery_fee_masks_list"];
+        put?: never;
+        /**
+         * @description Plan-41 fee masks — full CRUD, one row per service (the model's unique
+         *     constraint). `products.manage`: a mask changes the customer's delivery price,
+         *     which this file has always ruled an operational number — the raw carrier cost
+         *     is untouched and stays visible to reconciliation.
+         */
+        post: operations["v1_admin_delivery_fee_masks_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-fee-masks/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Plan-41 fee masks — full CRUD, one row per service (the model's unique
+         *     constraint). `products.manage`: a mask changes the customer's delivery price,
+         *     which this file has always ruled an operational number — the raw carrier cost
+         *     is untouched and stays visible to reconciliation.
+         */
+        get: operations["v1_admin_delivery_fee_masks_retrieve"];
+        /**
+         * @description Plan-41 fee masks — full CRUD, one row per service (the model's unique
+         *     constraint). `products.manage`: a mask changes the customer's delivery price,
+         *     which this file has always ruled an operational number — the raw carrier cost
+         *     is untouched and stays visible to reconciliation.
+         */
+        put: operations["v1_admin_delivery_fee_masks_update"];
+        post?: never;
+        /**
+         * @description Plan-41 fee masks — full CRUD, one row per service (the model's unique
+         *     constraint). `products.manage`: a mask changes the customer's delivery price,
+         *     which this file has always ruled an operational number — the raw carrier cost
+         *     is untouched and stays visible to reconciliation.
+         */
+        delete: operations["v1_admin_delivery_fee_masks_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Plan-41 fee masks — full CRUD, one row per service (the model's unique
+         *     constraint). `products.manage`: a mask changes the customer's delivery price,
+         *     which this file has always ruled an operational number — the raw carrier cost
+         *     is untouched and stays visible to reconciliation.
+         */
+        patch: operations["v1_admin_delivery_fee_masks_partial_update"];
+        trace?: never;
+    };
     "/api/v1/admin/delivery-options/": {
         parameters: {
             query?: never;
@@ -867,6 +1031,32 @@ export interface paths {
          *     carrier: the admin wants coverage truth, not a live GIG quote per keystroke.
          */
         get: operations["v1_admin_delivery_options_preview_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/delivery-services/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /admin/delivery-services/ — the picker behind Plan-41's block and mask
+         *     forms: every service a rule can name, with its human label. Read-only reference
+         *     data (no PII, no audit), `products.manage` like the rules it feeds.
+         *
+         *     It carries `AdminAuditMixin` with `audit_reads` left False, which writes nothing:
+         *     that is the recorded decision, and it is what `test_audit_guard` asks every admin
+         *     view for. `audit_model_label` is declared because this view has no queryset and no
+         *     serializer for the label to be derived from — the rules it feeds are the blocks.
+         */
+        get: operations["v1_admin_delivery_services_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1288,6 +1478,211 @@ export interface paths {
         patch: operations["v1_admin_menu_items_partial_update"];
         trace?: never;
     };
+    "/api/v1/admin/notification-recipients/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `/admin/notification-recipients/` — the subscriber list, all events at once.
+         *
+         *     NOT PAGINATED and not filtered by event. The whole point of the screen is to answer
+         *     "who hears about what" in one glance, and four events with a handful of addresses
+         *     each is a page, not a dataset. Paginating it would let a recipient hide on page two of
+         *     a list whose entire job is to have nothing hidden in it.
+         */
+        get: operations["v1_admin_notification_recipients_list"];
+        put?: never;
+        /**
+         * @description `/admin/notification-recipients/` — the subscriber list, all events at once.
+         *
+         *     NOT PAGINATED and not filtered by event. The whole point of the screen is to answer
+         *     "who hears about what" in one glance, and four events with a handful of addresses
+         *     each is a page, not a dataset. Paginating it would let a recipient hide on page two of
+         *     a list whose entire job is to have nothing hidden in it.
+         */
+        post: operations["v1_admin_notification_recipients_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/notification-recipients/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `/admin/notification-recipients/` — the subscriber list, all events at once.
+         *
+         *     NOT PAGINATED and not filtered by event. The whole point of the screen is to answer
+         *     "who hears about what" in one glance, and four events with a handful of addresses
+         *     each is a page, not a dataset. Paginating it would let a recipient hide on page two of
+         *     a list whose entire job is to have nothing hidden in it.
+         */
+        get: operations["v1_admin_notification_recipients_retrieve"];
+        put?: never;
+        post?: never;
+        /**
+         * @description `/admin/notification-recipients/` — the subscriber list, all events at once.
+         *
+         *     NOT PAGINATED and not filtered by event. The whole point of the screen is to answer
+         *     "who hears about what" in one glance, and four events with a handful of addresses
+         *     each is a page, not a dataset. Paginating it would let a recipient hide on page two of
+         *     a list whose entire job is to have nothing hidden in it.
+         */
+        delete: operations["v1_admin_notification_recipients_destroy"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/notification-recipients/events/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description `GET …/events/` — the registry the screen renders its sections from.
+         *
+         *     An endpoint rather than a constant copied into the frontend, unlike
+         *     `admin/src/lib/staff.ts`'s `ROLES`. The reasoning there was that the role list
+         *     changes only with an RBAC redesign; this list is meant to grow, and the whole
+         *     promise of the registry is that adding an event needs no frontend change. A copy
+         *     in TypeScript would break that promise on the first new event.
+         */
+        get: operations["v1_admin_notification_recipients_events_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/notification-recipients/mark-confirmed/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `POST …/mark-confirmed/` {"recipient_id": n} — the Owner vouches for an
+         *     address instead of waiting for its click.
+         *
+         *     WHAT IS TRADED AWAY, DELIBERATELY. The click proves two things nothing else can:
+         *     the address is deliverable, and a human there agreed. This override discards both
+         *     and substitutes the Owner's word — which is acceptable exactly because the act is
+         *     Owner-only and audited, so "who vouched, for what, when" is on the record where
+         *     the address's own consent would have been. It exists for the address the Owner
+         *     personally controls, where the email round-trip is ceremony.
+         *
+         *     GOES THROUGH `confirm()`, THE SAME DOOR THE CLICK USES. Confirmation is a
+         *     property of the ADDRESS, not the row, and an override that only touched one row
+         *     would quietly create a second, weaker kind of confirmed — every other pending row
+         *     for the address still dark, `inherit_confirmation` not firing for later adds.
+         *     One path means one meaning.
+         *
+         *     No throttle: unlike resend-confirmation this sends no mail, so there is nothing
+         *     for a caller to amplify.
+         */
+        post: operations["v1_admin_notification_recipients_mark_confirmed_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/notification-recipients/resend-confirmation/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `POST …/resend-confirmation/` {"recipient_id": n} — mint a fresh link.
+         *
+         *     THE RECOVERY PATH for the two ways confirmation stalls: the link expired (7 days)
+         *     or the mail never arrived. Both leave a row visibly pending on the screen with
+         *     this button next to it, which is the whole reason a short TTL is safe to choose.
+         *
+         *     Refuses an already-confirmed row rather than quietly re-sending: a second
+         *     confirmation email to someone already receiving alerts reads as a security
+         *     incident to the person getting it.
+         */
+        post: operations["v1_admin_notification_recipients_resend_confirmation_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/notification-recipients/staff-options/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The account picker. Active staff only — offering a deactivated colleague would
+         *     create a row that resolves to nobody the moment it is saved.
+         */
+        get: operations["v1_admin_notification_recipients_staff_options_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/notification-recipients/test-send/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `POST …/test-send/` {"recipient_id": n} — send this row a sample of its event.
+         *
+         *     THIS EXISTS BECAUSE NO SCOPE PROTECTS AGAINST A TYPO. Owner-only keeps strangers
+         *     off the list; it does nothing about `orders@gmali.com`, which would silently
+         *     receive every order in the shop forever and never be noticed, because the symptom
+         *     of a wrong address is exactly the symptom of a working one — nothing.
+         *
+         *     THE ADDRESS IS TAKEN FROM THE STORED ROW, NEVER FROM THE REQUEST. An endpoint that
+         *     mails an address in the body is an open relay wearing a staff login: it would send
+         *     our branded, authenticated mail to anywhere a caller named, without leaving a
+         *     recipient row behind to show for it. Requiring the row to exist first means a test
+         *     send can only ever go somewhere the audit log already records a decision about.
+         *
+         *     Sent through Celery like every other mail, so a Resend outage is a retry rather
+         *     than a 502 on a settings screen.
+         */
+        post: operations["v1_admin_notification_recipients_test_send_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/orders/": {
         parameters: {
             query?: never;
@@ -1344,6 +1739,107 @@ export interface paths {
         get: operations["v1_admin_orders_retrieve"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/aaj/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/orders/{number}/aaj/ — the fulfilment panel's data: the
+         *     shipment and whether capture / check / void are currently legal, with the
+         *     backend's own reason when not. `orders.view`, read-audited (PII linkage).
+         */
+        get: operations["v1_admin_orders_aaj_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/aaj/capture/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/admin/orders/{number}/aaj/capture/ — create the booking and
+         *     charge it. `orders.manage`: process-booking charges our AAJ account.
+         */
+        post: operations["v1_admin_orders_aaj_capture_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/aaj/check/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/admin/orders/{number}/aaj/check/ — reconcile an unconfirmed or
+         *     booked shipment against AAJ's records. Reads AAJ only; `orders.operate`.
+         */
+        post: operations["v1_admin_orders_aaj_check_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/aaj/label/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/admin/orders/{number}/aaj/label/ — the label PDF URL.
+         *     `orders.operate`: packing-bench work.
+         */
+        post: operations["v1_admin_orders_aaj_label_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/orders/{number}/aaj/void/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/admin/orders/{number}/aaj/void/ — void the shipment with AAJ
+         *     (reverses the pending charge). `orders.manage`: it reverses money.
+         */
+        post: operations["v1_admin_orders_aaj_void_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1816,6 +2312,214 @@ export interface paths {
          *     the catalogue reads rather than the order desk (`apps/core/audit.py` draws that line).
          */
         patch: operations["v1_admin_pages_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/partner-shipments/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/admin/partner-shipments/ — the partner deliveries table, the
+         *     GIG table's sibling for couriers with no API (BrandnPack today). Every order
+         *     handed to a partner: which zone, where it goes, and the charged/cost split
+         *     the partner's invoice reconciles against.
+         *
+         *     `orders.view` and READ-AUDITED, the gig-shipments posture exactly — every row
+         *     names a customer and their phone, and the list is paginated for the same
+         *     bulk-PII reason.
+         *
+         *     The table READS; the order page ACTS: status moves stay on `/orders/{number}`.
+         *     There is no shipment status to filter — `status` filters the ORDER's status
+         *     (the row's one authority), and `delivered` (yes|no) filters the machine-stamped
+         *     `delivered_at`, which is the invoicing question a refund must not un-answer.
+         *
+         *     Filters: `partner` (code), `status`, `delivered` (yes|no), `placed_after`/
+         *     `placed_before` (the order's placed date). Unknown filter values match nothing,
+         *     honestly, rather than everything.
+         */
+        get: operations["v1_admin_partner_shipments_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/partner-zones/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Partner rate-card rows, staff side (Plan-39). `products.manage`, same reasoning
+         *     as delivery options: a delivery price is an operational number. Delete is
+         *     referentially safe for the same reason option delete is — orders snapshot only
+         *     the composed option name, and an in-flight checkout re-matches at place time,
+         *     where a deleted zone fails exactly like a deactivated one.
+         */
+        get: operations["v1_admin_partner_zones_list"];
+        put?: never;
+        /**
+         * @description Partner rate-card rows, staff side (Plan-39). `products.manage`, same reasoning
+         *     as delivery options: a delivery price is an operational number. Delete is
+         *     referentially safe for the same reason option delete is — orders snapshot only
+         *     the composed option name, and an in-flight checkout re-matches at place time,
+         *     where a deleted zone fails exactly like a deactivated one.
+         */
+        post: operations["v1_admin_partner_zones_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/partner-zones/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Partner rate-card rows, staff side (Plan-39). `products.manage`, same reasoning
+         *     as delivery options: a delivery price is an operational number. Delete is
+         *     referentially safe for the same reason option delete is — orders snapshot only
+         *     the composed option name, and an in-flight checkout re-matches at place time,
+         *     where a deleted zone fails exactly like a deactivated one.
+         */
+        get: operations["v1_admin_partner_zones_retrieve"];
+        /**
+         * @description Partner rate-card rows, staff side (Plan-39). `products.manage`, same reasoning
+         *     as delivery options: a delivery price is an operational number. Delete is
+         *     referentially safe for the same reason option delete is — orders snapshot only
+         *     the composed option name, and an in-flight checkout re-matches at place time,
+         *     where a deleted zone fails exactly like a deactivated one.
+         */
+        put: operations["v1_admin_partner_zones_update"];
+        post?: never;
+        /**
+         * @description Partner rate-card rows, staff side (Plan-39). `products.manage`, same reasoning
+         *     as delivery options: a delivery price is an operational number. Delete is
+         *     referentially safe for the same reason option delete is — orders snapshot only
+         *     the composed option name, and an in-flight checkout re-matches at place time,
+         *     where a deleted zone fails exactly like a deactivated one.
+         */
+        delete: operations["v1_admin_partner_zones_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Partner rate-card rows, staff side (Plan-39). `products.manage`, same reasoning
+         *     as delivery options: a delivery price is an operational number. Delete is
+         *     referentially safe for the same reason option delete is — orders snapshot only
+         *     the composed option name, and an in-flight checkout re-matches at place time,
+         *     where a deleted zone fails exactly like a deactivated one.
+         */
+        patch: operations["v1_admin_partner_zones_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/partners/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Delivery partners (Plan-39): the kill-switch, the login email, and the
+         *     `password/` action. `settings.manage` (Owner-only), NOT `products.manage` like the
+         *     rest of this file: setting a partner's password mints a credential for an external
+         *     business whose edits land straight at checkout — that is closer to staff.manage's
+         *     "invites mint administrators" reasoning than to editing a delivery price.
+         *
+         *     NO CREATE OR DELETE. A partner arrives via migration/shell (it needs a user row
+         *     and a portal onboarding conversation, not a form), and delete would orphan the
+         *     login and the zones — "the partnership ended" is `is_active=False`.
+         */
+        get: operations["v1_admin_partners_list"];
+        put?: never;
+        /**
+         * @description Delivery partners (Plan-39): the kill-switch, the login email, and the
+         *     `password/` action. `settings.manage` (Owner-only), NOT `products.manage` like the
+         *     rest of this file: setting a partner's password mints a credential for an external
+         *     business whose edits land straight at checkout — that is closer to staff.manage's
+         *     "invites mint administrators" reasoning than to editing a delivery price.
+         *
+         *     NO CREATE OR DELETE. A partner arrives via migration/shell (it needs a user row
+         *     and a portal onboarding conversation, not a form), and delete would orphan the
+         *     login and the zones — "the partnership ended" is `is_active=False`.
+         */
+        post: operations["v1_admin_partners_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/partners/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Delivery partners (Plan-39): the kill-switch, the login email, and the
+         *     `password/` action. `settings.manage` (Owner-only), NOT `products.manage` like the
+         *     rest of this file: setting a partner's password mints a credential for an external
+         *     business whose edits land straight at checkout — that is closer to staff.manage's
+         *     "invites mint administrators" reasoning than to editing a delivery price.
+         *
+         *     NO CREATE OR DELETE. A partner arrives via migration/shell (it needs a user row
+         *     and a portal onboarding conversation, not a form), and delete would orphan the
+         *     login and the zones — "the partnership ended" is `is_active=False`.
+         */
+        get: operations["v1_admin_partners_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description Delivery partners (Plan-39): the kill-switch, the login email, and the
+         *     `password/` action. `settings.manage` (Owner-only), NOT `products.manage` like the
+         *     rest of this file: setting a partner's password mints a credential for an external
+         *     business whose edits land straight at checkout — that is closer to staff.manage's
+         *     "invites mint administrators" reasoning than to editing a delivery price.
+         *
+         *     NO CREATE OR DELETE. A partner arrives via migration/shell (it needs a user row
+         *     and a portal onboarding conversation, not a form), and delete would orphan the
+         *     login and the zones — "the partnership ended" is `is_active=False`.
+         */
+        patch: operations["v1_admin_partners_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/partners/{id}/password/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /admin/partners/{id}/password/ {"password": "..."} — set the portal
+         *     login password. Validated through the project's AUTH_PASSWORD_VALIDATORS
+         *     (same bar as staff/customer passwords); the value itself never reaches the
+         *     audit row — the serializer allowlist has no password field, and this action
+         *     records only that the reset happened.
+         */
+        post: operations["v1_admin_partners_password_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/payment-gateways/": {
@@ -3023,6 +3727,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/staff/{id}/remove/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description `POST /admin/staff/<pk>/remove/` — take a staff member off the team.
+         *
+         *     NOT a row delete, deliberately. A hard `user.delete()` would cascade away any
+         *     referral ledger rows, reviews and notification subscriptions the person had,
+         *     raise PROTECT if they were also a delivery-partner login, and null the actor on
+         *     every audit row they ever wrote. `AccountDeletionView` set the soft-delete
+         *     precedent for exactly these reasons; this is the staff-shaped version of it:
+         *     strip `is_staff` and every group, set `is_active=False` (which ends live access
+         *     tokens on their next request — SimpleJWT checks it), revoke trusted devices and
+         *     second factors, and blacklist every outstanding refresh token. The account is off
+         *     the roster and locked out everywhere; history keeps its names.
+         *
+         *     OWNERS CANNOT BE REMOVED HERE — not even by another Owner, and superusers count
+         *     as Owners (`scopes_for_user` short-circuits them to every scope). The last-Owner
+         *     case would lock the shop out of its own admin, and distinguishing "last" from
+         *     "co-Owner" turns a kill switch into a policy engine; anyone actually demoting an
+         *     Owner is having a shell-access conversation, not clicking a button. Removing
+         *     YOURSELF is refused for the same lockout reason.
+         *
+         *     A POST action rather than `DELETE /admin/staff/<pk>/`, matching invite revoke:
+         *     the row is not deleted, and a verb that says so keeps the API honest.
+         */
+        post: operations["v1_admin_staff_remove_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/staff/invites/": {
         parameters: {
             query?: never;
@@ -3499,6 +4242,191 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/stores/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
+        get: operations["v1_admin_stores_list"];
+        put?: never;
+        /**
+         * @description Turn the race the unique index catches into the same 409 the soft
+         *     warning uses.
+         *
+         *     Two operators saving the same shop in the same second both pass
+         *     `possible_duplicates` (neither row exists yet) and the second one hits the
+         *     database constraint. Untranslated that is a 500 and a Sentry event about
+         *     nothing; here it is the answer the UI already knows how to render.
+         *
+         *     THE INNER `atomic()` IS LOAD-BEARING, not decoration. `AdminAuditMixin.dispatch`
+         *     already opened a transaction around this request; an IntegrityError inside it
+         *     poisons that transaction, and every later query — including rendering this very
+         *     response — then raises `TransactionManagementError`. The savepoint confines the
+         *     rollback to the failed INSERT.
+         */
+        post: operations["v1_admin_stores_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/stores/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
+        get: operations["v1_admin_stores_retrieve"];
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
+        put: operations["v1_admin_stores_update"];
+        post?: never;
+        /**
+         * @description Archive, do not delete. 204 either way, so the client needs no special case.
+         *
+         *     Snapshotted into the audit row first: `changes` is normally built from the
+         *     request body, which a DELETE has none of, so without this the trail would
+         *     prove only that *something* was archived.
+         */
+        delete: operations["v1_admin_stores_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description Mix into every admin view. Writes one row per successful request.
+         *
+         *     Applied FIRST in the bases list (`class X(AdminAuditMixin, APIView)`) so its
+         *     `dispatch` wraps the view's. `test_audit_guard.py` asserts that every view on the
+         *     admin surface carries it, in both directions.
+         *
+         *     ── THE FOUR KNOBS ──────────────────────────────────────────────────────────────
+         *
+         *     * `audit_reads` — opt in to auditing GETs. PII-bearing endpoints only.
+         *     * `audit_action` — the verb stored in the row. Defaults to a verb derived from the
+         *       HTTP method, which is right for CRUD and useless for `POST .../freight/waive/`,
+         *       so the money endpoints name themselves.
+         *     * `audit_model_label` — `"app_label.modelname"`. Derived from the view's queryset
+         *       or serializer when it has one; declared explicitly by the plain `APIView`s.
+         *     * `audit_allowlist` / `audit_serializers` — which body keys may be stored. See the
+         *       module docstring for why this is an allowlist and nothing else.
+         *
+         *     ── WHY IT WRITES ONLY ON 2xx ───────────────────────────────────────────────────
+         *
+         *     A refused request changed nothing, and a table where "tried and was denied" looks
+         *     the same as "did it" answers the wrong question. Denials are not lost: 403s and
+         *     401s already reach `apps.security` through the permission and authentication
+         *     layers, and a validation 400 is not a security event at all. The row here means an
+         *     action HAPPENED.
+         */
+        patch: operations["v1_admin_stores_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/stores/{id}/restore/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description Bring an archived store back, INACTIVE.
+         *
+         *     Deliberately not straight back onto the website: the row was archived for a
+         *     reason, and whoever restores it should confirm the address and phone before
+         *     customers are sent there. One more click, and it is the click that stops a
+         *     closed shop reappearing with a year-old phone number.
+         *
+         *     The unique index can refuse this — somebody may have re-typed the shop after
+         *     it was archived — so the collision is caught and reported rather than 500ing.
+         */
+        post: operations["v1_admin_stores_restore_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/tags/": {
         parameters: {
             query?: never;
@@ -3643,6 +4571,99 @@ export interface paths {
          *     a whole-catalogue dump is a bulk egress whatever it contains.
          */
         patch: operations["v1_admin_tags_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/tax/countries/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET/PATCH /api/v1/admin/tax/countries/ — the per-market tax knobs.
+         *
+         *     GET + PATCH only: markets are created by seed migrations, never from a settings
+         *     screen, and deleting one would orphan every order pointing at it (the FK is
+         *     PROTECT anyway). Inactive markets stay listed — a switched-off market's tax
+         *     config should be inspectable before it is switched back on.
+         */
+        get: operations["v1_admin_tax_countries_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/tax/countries/{code}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET/PATCH /api/v1/admin/tax/countries/ — the per-market tax knobs.
+         *
+         *     GET + PATCH only: markets are created by seed migrations, never from a settings
+         *     screen, and deleting one would orphan every order pointing at it (the FK is
+         *     PROTECT anyway). Inactive markets stay listed — a switched-off market's tax
+         *     config should be inspectable before it is switched back on.
+         */
+        get: operations["v1_admin_tax_countries_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description GET/PATCH /api/v1/admin/tax/countries/ — the per-market tax knobs.
+         *
+         *     GET + PATCH only: markets are created by seed migrations, never from a settings
+         *     screen, and deleting one would orphan every order pointing at it (the FK is
+         *     PROTECT anyway). Inactive markets stay listed — a switched-off market's tax
+         *     config should be inspectable before it is switched back on.
+         */
+        patch: operations["v1_admin_tax_countries_partial_update"];
+        trace?: never;
+    };
+    "/api/v1/admin/tax/settings/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET/PATCH /api/v1/admin/tax/settings/ — the store-wide master switch.
+         *
+         *     `settings.manage` (Owner-only), same reasoning as the payments config: this
+         *     changes what every customer pays, which is not an operational knob. The row is a
+         *     singleton `StoreSettings.load()` creates on first touch, so there is no 404 arm.
+         */
+        get: operations["v1_admin_tax_settings_retrieve"];
+        /**
+         * @description GET/PATCH /api/v1/admin/tax/settings/ — the store-wide master switch.
+         *
+         *     `settings.manage` (Owner-only), same reasoning as the payments config: this
+         *     changes what every customer pays, which is not an operational knob. The row is a
+         *     singleton `StoreSettings.load()` creates on first touch, so there is no 404 arm.
+         */
+        put: operations["v1_admin_tax_settings_update"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * @description GET/PATCH /api/v1/admin/tax/settings/ — the store-wide master switch.
+         *
+         *     `settings.manage` (Owner-only), same reasoning as the payments config: this
+         *     changes what every customer pays, which is not an operational knob. The row is a
+         *     singleton `StoreSettings.load()` creates on first touch, so there is no 404 arm.
+         */
+        patch: operations["v1_admin_tax_settings_partial_update"];
         trace?: never;
     };
     "/api/v1/admin/variants/": {
@@ -4627,6 +5648,19 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /**
+         * @description POST /api/v1/checkout/ — place an order. Authenticated customers, or guests
+         *     (Plan-38): a guest request carries guest_email/guest_phone + an inline address
+         *     and a Turnstile token.
+         *
+         *     GUEST ORDERING IS DELIBERATE AND LOAD-BEARING: serializer validation (no
+         *     idempotency state touched on a 400) → begin() → replay? answer the stored 201
+         *     WITHOUT a Turnstile check (Turnstile tokens are single-use, and both documented
+         *     same-key retry paths — the gateway-502 resume and the lost-201 replay — arrive
+         *     carrying an already-consumed token; a replay does no work, so waving it through
+         *     is safe) → require_turnstile → place_order. A Turnstile failure clears the
+         *     inflight marker so the same key retries immediately with a fresh token.
+         */
         post: operations["v1_checkout_create"];
         delete?: never;
         options?: never;
@@ -4650,6 +5684,11 @@ export interface paths {
          *     separate `kind="express"` cart per Plan-08 D14, retired 2026-07-28: nothing ever
          *     read an express cart, so Buy Now produced an empty checkout. The Cart.kind field
          *     stays for the inert historical rows.)
+         *
+         *     AllowAny since Plan-38: guests shop the same cart machinery (get_or_create_cart
+         *     already resolves the X-Cart-Id guest cart), so guest Buy Now is just an
+         *     anonymous add-to-cart — the same operation the AllowAny cart endpoints have
+         *     always offered — followed by the client navigating to checkout.
          */
         post: operations["v1_checkout_buy_now_create"];
         delete?: never;
@@ -4691,6 +5730,70 @@ export interface paths {
         get: operations["v1_checkout_gig_centres_retrieve"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/guest/delivery-options/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/checkout/guest/delivery-options/ — DeliveryOptionsView's guest
+         *     twin: {cart_id, address:{...}}. Validating through GuestAddressSerializer here is
+         *     also the guest address form's REAL validation pass — field errors surface on the
+         *     form before the shopper ever reaches delivery.
+         */
+        post: operations["v1_checkout_guest_delivery_options_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/guest/gig-centres/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/checkout/guest/gig-centres/ — GigCentresView's guest twin:
+         *     {cart_id, address:{...}} → nearest active GIG centres for the inline address.
+         */
+        post: operations["v1_checkout_guest_gig_centres_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/checkout/guest/quote/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/checkout/guest/quote/ — QuoteView's guest twin. guest_email rides
+         *     along so the coupon preview enforces the same per-email limits place_order will
+         *     (quote.py threads it into validate_coupon). Same non-authoritative posture as
+         *     QuoteView: a stale option id just leaves delivery at 0.00.
+         */
+        post: operations["v1_checkout_guest_quote_create"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5150,6 +6253,12 @@ export interface paths {
          *
          *     Token holders get the REDACTED serializer. Deliberately open to anonymous callers,
          *     but only with a valid token for the order named in the URL.
+         *
+         *     `guest_token` (Plan-38) is the OTHER salt and the OTHER serializer: the guest-order
+         *     token gets the FULL owner view. Justified by its provenance — it is minted only on
+         *     the guest's own checkout 201 and lives in an httpOnly BFF cookie for 7 days, never
+         *     in email — so the holder is the person who typed the address in the first place.
+         *     The emailed 90-day tracking token stays redacted; the salts cannot be exchanged.
          */
         get: operations["v1_orders_retrieve"];
         put?: never;
@@ -5200,12 +6309,200 @@ export interface paths {
          *     Not idempotency-tracked through begin()/finish() like CheckoutView: there is no cart
          *     to convert and no order to duplicate here, so the Payment row's unique idempotency_key
          *     is protection enough — a repeated key replays the same attempt (see retry_payment).
+         *
+         *     Guests (Plan-38): a `guest_token` in the body — the signed guest-order token the
+         *     checkout BFF holds in an httpOnly cookie — stands in for auth, scoped to the one
+         *     order it names. The token names the order; the URL is checked AGAINST it. The
+         *     durable key is namespaced sha256("guest-pay:{number}:{key}") for the same
+         *     cross-guest-replay reason as CheckoutView. No Turnstile here: minting an attempt
+         *     requires the token, which only ever exists after a Turnstile-gated placement.
          */
         post: operations["v1_orders_pay_create"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partner/auth/login/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * @description POST /api/v1/partner/auth/login/ — {email, password} → partner token pair.
+         *
+         *     Same refusal discipline as the staff gate: every failure — unknown email, wrong
+         *     password, an account with no partner profile, a partner switched off — answers
+         *     with ONE generic 401, and the difference goes to the `apps.security` log. Saying
+         *     more would make this endpoint an oracle for which addresses exist.
+         *
+         *     Failure-counting throttles, IP first (see PartnerLoginIPThrottle), and the BFF
+         *     shared-secret gate in front — the portal lives in the admin app's deployment, so
+         *     the secret is already provisioned wherever this is legitimately called from.
+         */
+        post: operations["v1_partner_auth_login_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partner/lgas/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/partner/lgas/?state=<id> — the LGA dropdown for the rate-card form.
+         *
+         *     One state's LGAs at a time (the cascade keeps the dropdown from being a 774-row
+         *     data-entry hazard). `state` must name a seeded NG state; with no param the
+         *     original Lagos-only behaviour stands, so a portal build from before the cascade
+         *     keeps working during a deploy window.
+         */
+        get: operations["v1_partner_lgas_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partner/me/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description GET /api/v1/partner/me/ — who am I, for the portal shell. */
+        get: operations["v1_partner_me_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partner/rates/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/partner/rates/ — every live rate card, for anybody.
+         *
+         *     Hammed's marketers sell on the go and need to quote a delivery fee without a
+         *     login; his ruling (2026-08-20) was a FULLY PUBLIC page showing the partner's raw
+         *     fees. `AllowAny` follows the `ReferralTermsView` precedent: everything here is
+         *     already disclosed to any guest by checkout itself (probe an LGA, read the
+         *     BrandnPack option cards), so this endpoint discloses nothing new — it only saves
+         *     the marketer 20 probes. Nothing about any person, ever.
+         *
+         *     The filter is checkout's, exactly (`services.options_for_address`): active
+         *     partner AND active zone AND a non-null price — and, since Plan-41, minus any
+         *     zone a DeliveryBlock hides and with the partner's fee mask applied. A row this
+         *     endpoint shows is a row a customer can buy right now, at the price they would
+         *     pay — a marketer must never quote from a stale or staged rate, so the two
+         *     surfaces must not be allowed to drift apart.
+         */
+        get: operations["v1_partner_rates_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partner/states/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/partner/states/ — the STATE dropdown for the rate-card form.
+         *
+         *     BrandnPack's 2026-08 request: coverage beyond Lagos. The form is now a
+         *     state → LGA cascade, and this endpoint feeds its first half — all 37 seeded
+         *     Nigerian states, so a partner can open any of them the day they start serving it.
+         */
+        get: operations["v1_partner_states_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partner/zones/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD over the caller's OWN rows — the partner FK comes from the token, never
+         *     the payload, so one partner can neither read nor write another's card.
+         */
+        get: operations["v1_partner_zones_list"];
+        put?: never;
+        /**
+         * @description CRUD over the caller's OWN rows — the partner FK comes from the token, never
+         *     the payload, so one partner can neither read nor write another's card.
+         */
+        post: operations["v1_partner_zones_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partner/zones/{id}/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description CRUD over the caller's OWN rows — the partner FK comes from the token, never
+         *     the payload, so one partner can neither read nor write another's card.
+         */
+        get: operations["v1_partner_zones_retrieve"];
+        /**
+         * @description CRUD over the caller's OWN rows — the partner FK comes from the token, never
+         *     the payload, so one partner can neither read nor write another's card.
+         */
+        put: operations["v1_partner_zones_update"];
+        post?: never;
+        /**
+         * @description CRUD over the caller's OWN rows — the partner FK comes from the token, never
+         *     the payload, so one partner can neither read nor write another's card.
+         */
+        delete: operations["v1_partner_zones_destroy"];
+        options?: never;
+        head?: never;
+        /**
+         * @description CRUD over the caller's OWN rows — the partner FK comes from the token, never
+         *     the payload, so one partner can neither read nor write another's card.
+         */
+        patch: operations["v1_partner_zones_partial_update"];
         trace?: never;
     };
     "/api/v1/payments/{reference}/verify/": {
@@ -5219,7 +6516,14 @@ export interface paths {
         put?: never;
         /**
          * @description POST /api/v1/payments/{reference}/verify/ — re-verify with the gateway and return
-         *     the current order + payment state. Scoped to the requesting user's own orders.
+         *     the current order + payment state. Scoped to the requesting user's own orders, OR
+         *     (Plan-38) to the single order a signed guest-order token names: without that path a
+         *     guest returning from Paystack/Flutterwave literally could not verify the payment
+         *     they just made. The token names the order and the reference is looked up WITHIN it
+         *     — a guessed reference reaches nobody else's payment, same property as the authed
+         *     scope. No user filter on the token path on purpose: a mid-payment claim (the
+         *     account verifying its email while the guest tab polls) must not 404 the customer's
+         *     own confirmation.
          */
         post: operations["v1_payments_verify_create"];
         delete?: never;
@@ -5353,6 +6657,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/referrals/terms/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description GET /api/v1/referrals/terms/ — the programme's published numbers, for anybody.
+         *
+         *     ── WHY A PUBLIC ENDPOINT AND NOT A CONSTANT IN THE STOREFRONT ──────────────────
+         *
+         *     `/affiliates` is a MARKETING page: it tells the world "10% of every sale", "30-day
+         *     window", "60-day hold", "₦20,000 minimum". Those four sentences are advertising, and
+         *     the shop is bound by them. `ReferralOverviewView` already argues this out for the
+         *     signed-in dashboard — a hardcoded "10%" in JSX is a promise written somewhere that
+         *     cannot change when the promise does. The public page needed the identical guarantee
+         *     and had no way to get it, because every other endpoint in this app is
+         *     `IsAuthenticated`.
+         *
+         *     So this serves the SAME `settings.*` values the commission is actually calculated
+         *     from. Change `REFERRAL_COMMISSION_PERCENT` and the advertisement moves with the
+         *     payment, in one deploy, with no second place to remember.
+         *
+         *     ── WHAT IT DOES NOT DISCLOSE ──────────────────────────────────────────────────
+         *
+         *     Nothing about any person. No codes, no balances, no counts, no names. Every value
+         *     below is already published at tokecosmetics.com/affiliates-2/ and printed on the
+         *     terms, so this endpoint's entire content is a page of the contract. That is why it
+         *     is `AllowAny` and unthrottled where `lookup/` is neither: there is nothing here to
+         *     enumerate.
+         *
+         *     ── A CURRENCY WITH NO `Currency` ROW IS SKIPPED, NOT GUESSED ──────────────────
+         *
+         *     `format_money` needs the row (it reads `decimal_places` and `symbol`), and inventing
+         *     a symbol for a missing one would publish a threshold in the wrong denomination. A
+         *     currency the shop cannot format is a currency it should not be advertising a minimum
+         *     in — and `services` already refuses to pay one out.
+         */
+        get: operations["v1_referrals_terms_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search/": {
         parameters: {
             query?: never;
@@ -5377,6 +6729,54 @@ export interface paths {
             cookie?: never;
         };
         get: operations["v1_search_suggest_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stores/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The results. Paginated with the project default (24) rather than capped.
+         *
+         *     A cap would be simpler and would be a silent lie the day an LGA holds 30
+         *     stockists: the page would show 24 and read as complete. The storefront pages
+         *     through it with a "Show more" control.
+         */
+        get: operations["v1_stores_list"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stores/places/": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * @description The cascade. One URL, three levels, distinguished by what is passed.
+         *
+         *     One endpoint rather than three because the client asks the same question at
+         *     every step ("what can I pick next?") and the response says which level it
+         *     answered — three URLs would put that fact in the caller's head instead of in
+         *     the payload. `level` is therefore always present, and the item shape is the
+         *     same at every level bar the two label fields only a country carries.
+         */
+        get: operations["v1_stores_places_retrieve"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5427,6 +6827,51 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description One row of the AAJ deliveries table (Plan-43) — READ ONLY, composed from the
+         *     snapshots the shipment and its order hold, the GigShipmentRowSerializer posture
+         *     exactly. `quote_total` rides beside `charged` and `cost` so the owner can SEE the
+         *     retail-vs-account gap the model docstring describes (charged − cost is the margin,
+         *     and under free_over charged is 0 while quote_total still says what AAJ retail was).
+         */
+        AajShipmentRow: {
+            readonly order_number: string;
+            /** Format: date-time */
+            readonly placed_at: string;
+            status?: components["schemas"]["AajShipmentRowStatusEnum"];
+            booking_id?: string;
+            tracking_id?: string;
+            readonly origin: {
+                [key: string]: unknown;
+            };
+            readonly destination: string;
+            readonly customer_name: string;
+            readonly customer_phone: string;
+            /** Format: decimal */
+            quote_total?: string | null;
+            /** Format: decimal */
+            charged: string;
+            /** Format: decimal */
+            cost?: string | null;
+            readonly currency: string;
+            last_scan?: unknown;
+            last_status?: number | null;
+            /** Format: date-time */
+            last_tracked_at?: string | null;
+        };
+        /**
+         * @description * `quoted` - Quoted
+         *     * `booked` - Booked — not yet paid
+         *     * `created` - Shipment created
+         *     * `in_transit` - In transit
+         *     * `delivered` - Delivered
+         *     * `returned` - Returned to sender
+         *     * `voided` - Voided
+         *     * `create_unconfirmed` - Capture unconfirmed — check with AAJ
+         *     * `abandoned` - Abandoned
+         * @enum {string}
+         */
+        AajShipmentRowStatusEnum: "quoted" | "booked" | "created" | "in_transit" | "delivered" | "returned" | "voided" | "create_unconfirmed" | "abandoned";
         AccountDeletion: {
             password: string;
         };
@@ -5509,10 +6954,12 @@ export interface components {
             shipping_total?: string;
             /** Format: decimal */
             tax_total?: string;
+            readonly tax_label: string;
             /** Format: decimal */
             grand_total?: string;
             readonly grand_total_display: string;
             delivery_option_name?: string;
+            readonly pickup_store: string;
             shipping_address?: unknown;
             billing_address?: unknown;
             customer_note?: string;
@@ -5848,6 +7295,7 @@ export interface components {
             /** Format: decimal */
             tax_rate_percent?: string;
             prices_include_tax?: boolean;
+            tax_label?: string;
             state_label?: string;
             area_label?: string;
         };
@@ -6011,6 +7459,39 @@ export interface components {
             last_login?: string | null;
             legacy_source?: components["schemas"]["LegacySourceEnum"] | components["schemas"]["BlankEnum"];
         };
+        /**
+         * @description One Plan-41 block rule. The three place fields cascade: country alone blocks
+         *     the whole country, + state narrows to the state, + LGA narrows to the LGA. The
+         *     write refuses geographically impossible combinations here — checkout would not
+         *     error on them, it would just silently never match, which is worse.
+         */
+        DeliveryBlockAdmin: {
+            readonly id: number;
+            service_code: string;
+            readonly service_name: string;
+            country_code: string;
+            state_region?: number | null;
+            readonly state_name: string;
+            area_region?: number | null;
+            readonly area_name: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /**
+         * @description One Plan-41 fee mask: service + the percentage added on top of its real fee.
+         *     The 400% ceiling is a typo guard ("110" for "10"), not a policy position.
+         */
+        DeliveryFeeMaskAdmin: {
+            readonly id: number;
+            service_code: string;
+            readonly service_name: string;
+            /** Format: decimal */
+            percent: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
         DeliveryOptionAdmin: {
             readonly id: number;
             name: string;
@@ -6048,6 +7529,29 @@ export interface components {
          * @enum {string}
          */
         DeliveryOptionAdminKindEnum: "manual" | "carrier";
+        /**
+         * @description Staff view of a partner (Plan-39): identity, the kill-switch, and the login
+         *     email. The PASSWORD is deliberately not a field — it travels only through the
+         *     dedicated `password/` action, which the audit allowlist here can never leak.
+         */
+        DeliveryPartnerAdmin: {
+            readonly id: number;
+            name: string;
+            readonly code: string;
+            /** Format: email */
+            email: string;
+            is_active?: boolean;
+            readonly zone_count: number;
+            readonly live_zone_count: number;
+            /**
+             * @description False until staff set real credentials — the seed migration creates the
+             *     login with an UNUSABLE password, and the portal link is useless (and unsafe
+             *     to share) before this flips.
+             */
+            readonly has_password: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
         /**
          * @description Response shape of the email-code send. `retry_after` is the cooldown remainder:
          *     0 means "a fresh code was just sent", anything else means "one is already on its
@@ -6215,6 +7719,30 @@ export interface components {
          * @enum {string}
          */
         MethodEnum: "totp" | "email" | "trusted_device";
+        /**
+         * @description One row of the list. Read-mostly: the screen adds and deletes rows, it never
+         *     edits one — changing who a subscription points at is delete-then-add, which leaves
+         *     two honest audit rows instead of one that hides what it used to be.
+         */
+        NotificationRecipient: {
+            readonly id: number;
+            event: string;
+            /** @description A staff account. Deleting the account removes the subscription. */
+            user?: number | null;
+            /** @description An address with no admin account. Blank on staff rows. */
+            email?: string;
+            readonly address: string;
+            readonly staff_name: string;
+            /**
+             * @description Flagged for the UI so an address with no account behind it can be labelled as
+             *     such. These rows receive order contents with no login and no second factor, and a
+             *     list that renders them identically to colleagues is a list nobody audits.
+             */
+            readonly is_external: boolean;
+            readonly is_confirmed: boolean;
+            /** Format: date-time */
+            readonly confirmed_at: string;
+        };
         OrderEvent: {
             type: string;
             message?: string;
@@ -6233,7 +7761,7 @@ export interface components {
             line_total: string;
             readonly unit_price_display: string;
             readonly line_total_display: string;
-            image_url?: string;
+            readonly image_url: string;
         };
         OrderList: {
             number: string;
@@ -6274,6 +7802,21 @@ export interface components {
          * @enum {string}
          */
         PageAdminStatusEnum: "draft" | "published";
+        PaginatedAajShipmentRowList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["AajShipmentRow"][];
+        };
         PaginatedAdjustmentRowList: {
             /** @example 123 */
             count: number;
@@ -6544,6 +8087,21 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["PageAdmin"][];
         };
+        PaginatedPartnerShipmentRowList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["PartnerShipmentRow"][];
+        };
         PaginatedPayoutQueueList: {
             /** @example 123 */
             count: number;
@@ -6754,6 +8312,36 @@ export interface components {
             previous?: string | null;
             results: components["schemas"]["StockMovement"][];
         };
+        PaginatedStoreList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["Store"][];
+        };
+        PaginatedStoreLocationAdminList: {
+            /** @example 123 */
+            count: number;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=4
+             */
+            next?: string | null;
+            /**
+             * Format: uri
+             * @example http://api.example.org/accounts/?page=2
+             */
+            previous?: string | null;
+            results: components["schemas"]["StoreLocationAdmin"][];
+        };
         PaginatedTagAdminList: {
             /** @example 123 */
             count: number;
@@ -6783,6 +8371,94 @@ export interface components {
              */
             previous?: string | null;
             results: components["schemas"]["WarehouseAdmin"][];
+        };
+        /**
+         * @description One row of the partner deliveries table — READ ONLY, composed from the zone
+         *     and address snapshots plus the order it hangs off, one query and zero HTTP
+         *     (the GigShipmentRowSerializer posture exactly).
+         *
+         *     `status` is the ORDER's status: PartnerShipment deliberately has no lifecycle
+         *     of its own (model docstring), so the table renders the one authority staff
+         *     already move by hand. `delivered_at` rides beside it because a refund rewrites
+         *     the status but not the fact of delivery.
+         */
+        PartnerShipmentRow: {
+            readonly order_number: string;
+            /** Format: date-time */
+            readonly placed_at: string;
+            readonly status: string;
+            readonly partner: {
+                [key: string]: unknown;
+            };
+            readonly lcda: string;
+            readonly dispatch_zone: string;
+            readonly destination: string;
+            readonly customer_name: string;
+            readonly customer_phone: string;
+            /** Format: decimal */
+            charged: string;
+            /** Format: decimal */
+            cost?: string | null;
+            readonly currency: string;
+            /** Format: date-time */
+            delivered_at?: string | null;
+        };
+        /**
+         * @description The doc fields Hammed ruled the partner manages — LGA, LCDA, Major
+         *     Locations & Landmarks, Dispatch Zone, Rate — plus the visibility switch and,
+         *     since the multi-state expansion, the delivery-day estimate the customer sees.
+         *
+         *     `price` floor of ₦1: with no approval step (edits go live immediately), a zero
+         *     price would render as free delivery at checkout; a NULL price is the legitimate
+         *     "not priced yet" state and stays allowed. The obvious remaining typo (₦400 for
+         *     ₦4,000) is accepted risk under the same ruling — the storefront shows exactly
+         *     what this table says.
+         *
+         *     `min_days`/`max_days` surfaced for the same reason states were: the model's 1–3
+         *     default was written for Lagos and would show interstate customers a promise the
+         *     partner cannot keep. Capped at 30 — anything longer is a data-entry mistake, not
+         *     a delivery plan.
+         */
+        PartnerZone: {
+            readonly id: number;
+            lga_region: number;
+            readonly lga_name: string;
+            readonly state_id: number;
+            readonly state_name: string;
+            lcda_name: string;
+            areas_covered: string;
+            dispatch_zone?: string;
+            /** Format: decimal */
+            price?: string | null;
+            min_days?: number;
+            max_days?: number;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /**
+         * @description Staff CRUD over partner rate-card rows (Plan-39) — the oversight half of a
+         *     table the partner normally edits themselves: fix a typo'd rate, deactivate a row
+         *     the moment a complaint lands, without waiting on the partner.
+         */
+        PartnerZoneAdmin: {
+            readonly id: number;
+            partner: number;
+            readonly partner_name: string;
+            lga_region: number;
+            readonly lga_name: string;
+            readonly state_id: number;
+            readonly state_name: string;
+            lcda_name: string;
+            areas_covered: string;
+            dispatch_zone?: string;
+            /** Format: decimal */
+            price?: string | null;
+            readonly min_days: number;
+            readonly max_days: number;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at: string;
         };
         PasswordChange: {
             old_password: string;
@@ -6978,6 +8654,39 @@ export interface components {
             /** Format: date-time */
             readonly created_at?: string;
         };
+        /**
+         * @description One Plan-41 block rule. The three place fields cascade: country alone blocks
+         *     the whole country, + state narrows to the state, + LGA narrows to the LGA. The
+         *     write refuses geographically impossible combinations here — checkout would not
+         *     error on them, it would just silently never match, which is worse.
+         */
+        PatchedDeliveryBlockAdmin: {
+            readonly id?: number;
+            service_code?: string;
+            readonly service_name?: string;
+            country_code?: string;
+            state_region?: number | null;
+            readonly state_name?: string;
+            area_region?: number | null;
+            readonly area_name?: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
+        /**
+         * @description One Plan-41 fee mask: service + the percentage added on top of its real fee.
+         *     The 400% ceiling is a typo guard ("110" for "10"), not a policy position.
+         */
+        PatchedDeliveryFeeMaskAdmin: {
+            readonly id?: number;
+            service_code?: string;
+            readonly service_name?: string;
+            /** Format: decimal */
+            percent?: string;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
         PatchedDeliveryOptionAdmin: {
             readonly id?: number;
             name?: string;
@@ -7008,6 +8717,29 @@ export interface components {
             readonly coverage?: {
                 [key: string]: unknown;
             };
+        };
+        /**
+         * @description Staff view of a partner (Plan-39): identity, the kill-switch, and the login
+         *     email. The PASSWORD is deliberately not a field — it travels only through the
+         *     dedicated `password/` action, which the audit allowlist here can never leak.
+         */
+        PatchedDeliveryPartnerAdmin: {
+            readonly id?: number;
+            name?: string;
+            readonly code?: string;
+            /** Format: email */
+            email?: string;
+            is_active?: boolean;
+            readonly zone_count?: number;
+            readonly live_zone_count?: number;
+            /**
+             * @description False until staff set real credentials — the seed migration creates the
+             *     login with an UNUSABLE password, and the portal link is useless (and unsafe
+             *     to share) before this flips.
+             */
+            readonly has_password?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
         };
         /**
          * @description Everything is audited: a fabricated five-star review on the homepage is a
@@ -7073,6 +8805,63 @@ export interface components {
             seo_title?: string;
             seo_description?: string;
             sort?: number;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
+        /**
+         * @description The doc fields Hammed ruled the partner manages — LGA, LCDA, Major
+         *     Locations & Landmarks, Dispatch Zone, Rate — plus the visibility switch and,
+         *     since the multi-state expansion, the delivery-day estimate the customer sees.
+         *
+         *     `price` floor of ₦1: with no approval step (edits go live immediately), a zero
+         *     price would render as free delivery at checkout; a NULL price is the legitimate
+         *     "not priced yet" state and stays allowed. The obvious remaining typo (₦400 for
+         *     ₦4,000) is accepted risk under the same ruling — the storefront shows exactly
+         *     what this table says.
+         *
+         *     `min_days`/`max_days` surfaced for the same reason states were: the model's 1–3
+         *     default was written for Lagos and would show interstate customers a promise the
+         *     partner cannot keep. Capped at 30 — anything longer is a data-entry mistake, not
+         *     a delivery plan.
+         */
+        PatchedPartnerZone: {
+            readonly id?: number;
+            lga_region?: number;
+            readonly lga_name?: string;
+            readonly state_id?: number;
+            readonly state_name?: string;
+            lcda_name?: string;
+            areas_covered?: string;
+            dispatch_zone?: string;
+            /** Format: decimal */
+            price?: string | null;
+            min_days?: number;
+            max_days?: number;
+            is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
+        /**
+         * @description Staff CRUD over partner rate-card rows (Plan-39) — the oversight half of a
+         *     table the partner normally edits themselves: fix a typo'd rate, deactivate a row
+         *     the moment a complaint lands, without waiting on the partner.
+         */
+        PatchedPartnerZoneAdmin: {
+            readonly id?: number;
+            partner?: number;
+            readonly partner_name?: string;
+            lga_region?: number;
+            readonly lga_name?: string;
+            readonly state_id?: number;
+            readonly state_name?: string;
+            lcda_name?: string;
+            areas_covered?: string;
+            dispatch_zone?: string;
+            /** Format: decimal */
+            price?: string | null;
+            readonly min_days?: number;
+            readonly max_days?: number;
+            is_active?: boolean;
             /** Format: date-time */
             readonly updated_at?: string;
         };
@@ -7228,11 +9017,54 @@ export interface components {
             latitude?: string;
             /** Format: decimal */
             longitude?: string;
-            /** @description Display only — routing follows the pin, never this label. */
+            /** @description Display label — GIG routing follows the pin, never this. */
             state?: string;
-            /** @description Display only — routing follows the pin, never this label. */
+            /** @description Display label — GIG routing follows the pin, never this. */
             lga?: string;
+            /**
+             * @description Offer this location to customers as a ₦0 pickup store.
+             * @default false
+             */
+            customer_pickup: boolean;
+            /** @description Canonical state — customer store pickup matches on this. */
+            state_region?: number | null;
             is_active?: boolean;
+            /** Format: date-time */
+            readonly updated_at?: string;
+        };
+        PatchedStoreLocationAdmin: {
+            readonly id?: number;
+            name?: string;
+            store_type?: components["schemas"]["StoreTypeEnum"];
+            readonly store_type_label?: string;
+            /** @description The market this shop is in. */
+            country?: string;
+            readonly country_name?: string;
+            state_region?: number;
+            readonly state_name?: string;
+            area_region?: number | null;
+            readonly area_name?: string;
+            readonly state_label?: string;
+            readonly area_label?: string;
+            city_text?: string;
+            address?: string;
+            /** Format: decimal */
+            latitude?: string | null;
+            /** Format: decimal */
+            longitude?: string | null;
+            phone?: string;
+            phone_alt?: string;
+            whatsapp_phone?: string;
+            opening_hours?: string;
+            notes?: string;
+            is_active?: boolean;
+            readonly status?: string;
+            /** Format: date-time */
+            readonly archived_at?: string | null;
+            /** @default false */
+            confirm_duplicate: boolean;
+            /** Format: date-time */
+            readonly created_at?: string;
             /** Format: date-time */
             readonly updated_at?: string;
         };
@@ -7244,6 +9076,28 @@ export interface components {
             readonly updated_at?: string;
             name?: string;
             slug?: string;
+        };
+        /**
+         * @description Per-market tax knobs. `code`/`name`/`currency_code` identify the row and are
+         *     read-only — creating or renaming a MARKET is schema-level work (seed migrations),
+         *     not a settings screen; this endpoint only tunes how an existing one taxes.
+         */
+        PatchedTaxCountryAdmin: {
+            readonly code?: string;
+            readonly name?: string;
+            readonly currency_code?: string;
+            readonly is_default?: boolean;
+            readonly is_rest_of_world?: boolean;
+            charge_tax?: boolean;
+            /** Format: decimal */
+            tax_rate_percent?: string;
+            prices_include_tax?: boolean;
+            tax_applies_to_delivery?: boolean;
+            tax_label?: string;
+        };
+        /** @description The store-wide master switch, `PATCH`-ed by the Owner from /settings/taxes. */
+        PatchedTaxSettings: {
+            charge_tax?: boolean;
         };
         /**
          * @description Plan-17c Task 1. CRUD minus delete — see the viewset for why deletion is refused.
@@ -7339,9 +9193,11 @@ export interface components {
          *     * `babies` - Babies section banner
          *     * `tiktok` - TikTok section banner
          *     * `trio` - Collections trio tile
+         *     * `affiliate_hero` - Affiliates page — hero image
+         *     * `affiliate_tier` - Affiliates page — ₦200k Club image
          * @enum {string}
          */
-        PlacementEnum: "hero" | "strip" | "category" | "concern" | "feature" | "feature_nature" | "feature_collection" | "men" | "women" | "babies" | "tiktok" | "trio";
+        PlacementEnum: "hero" | "strip" | "category" | "concern" | "feature" | "feature_nature" | "feature_collection" | "men" | "women" | "babies" | "tiktok" | "trio" | "affiliate_hero" | "affiliate_tier";
         PriceAdmin: {
             readonly id: number;
             /** Format: decimal */
@@ -7680,10 +9536,17 @@ export interface components {
             latitude: string;
             /** Format: decimal */
             longitude: string;
-            /** @description Display only — routing follows the pin, never this label. */
+            /** @description Display label — GIG routing follows the pin, never this. */
             state?: string;
-            /** @description Display only — routing follows the pin, never this label. */
+            /** @description Display label — GIG routing follows the pin, never this. */
             lga?: string;
+            /**
+             * @description Offer this location to customers as a ₦0 pickup store.
+             * @default false
+             */
+            customer_pickup: boolean;
+            /** @description Canonical state — customer store pickup matches on this. */
+            state_region?: number | null;
             is_active?: boolean;
             /** Format: date-time */
             readonly updated_at: string;
@@ -7821,12 +9684,83 @@ export interface components {
             readonly created_at: string;
         };
         /**
+         * @description A public store card.
+         *
+         *     `id` is present and is a React key, nothing else — it is never rendered, and
+         *     the URL vocabulary for this feature is slugs precisely so a customer never sees
+         *     a primary key. It is here rather than a synthesised public reference because
+         *     inventing a second identifier for a directory of publicly-advertised shop
+         *     addresses would be ceremony: there is nothing to enumerate that the page does
+         *     not already show.
+         */
+        Store: {
+            readonly id: number;
+            readonly name: string;
+            readonly store_type: components["schemas"]["StoreTypeEnum"];
+            readonly store_type_label: string;
+            readonly address: string;
+            readonly city: string;
+            readonly area: string;
+            readonly state: string;
+            readonly country: string;
+            readonly country_code: string;
+            readonly phone: string;
+            readonly phone_display: string;
+            readonly phone_alt: string;
+            readonly phone_alt_display: string;
+            readonly whatsapp_url: string;
+            readonly opening_hours: string;
+            readonly directions_url: string;
+        };
+        /**
          * @description * `legacy_ng` - Nigeria — current store
          *     * `legacy_ng_old` - Nigeria — old store (dead since Nov 2025)
          *     * `legacy_intl` - International (US/UK/CA)
          * @enum {string}
          */
         StoreEnum: "legacy_ng" | "legacy_ng_old" | "legacy_intl";
+        StoreLocationAdmin: {
+            readonly id: number;
+            name: string;
+            store_type?: components["schemas"]["StoreTypeEnum"];
+            readonly store_type_label: string;
+            /** @description The market this shop is in. */
+            country: string;
+            readonly country_name: string;
+            state_region: number;
+            readonly state_name: string;
+            area_region?: number | null;
+            readonly area_name: string;
+            readonly state_label: string;
+            readonly area_label: string;
+            city_text?: string;
+            address: string;
+            /** Format: decimal */
+            latitude?: string | null;
+            /** Format: decimal */
+            longitude?: string | null;
+            phone: string;
+            phone_alt?: string;
+            whatsapp_phone?: string;
+            opening_hours?: string;
+            notes?: string;
+            is_active?: boolean;
+            readonly status: string;
+            /** Format: date-time */
+            readonly archived_at: string | null;
+            /** @default false */
+            confirm_duplicate: boolean;
+            /** Format: date-time */
+            readonly created_at: string;
+            /** Format: date-time */
+            readonly updated_at: string;
+        };
+        /**
+         * @description * `toke_store` - Toke Store
+         *     * `distributor` - Authorized Distributor
+         * @enum {string}
+         */
+        StoreTypeEnum: "toke_store" | "distributor";
         Subscribe: {
             /** Format: email */
             email: string;
@@ -7890,6 +9824,28 @@ export interface components {
             name: string;
             slug: string;
         };
+        /**
+         * @description Per-market tax knobs. `code`/`name`/`currency_code` identify the row and are
+         *     read-only — creating or renaming a MARKET is schema-level work (seed migrations),
+         *     not a settings screen; this endpoint only tunes how an existing one taxes.
+         */
+        TaxCountryAdmin: {
+            readonly code: string;
+            readonly name: string;
+            readonly currency_code: string;
+            readonly is_default: boolean;
+            readonly is_rest_of_world: boolean;
+            charge_tax?: boolean;
+            /** Format: decimal */
+            tax_rate_percent?: string;
+            prices_include_tax?: boolean;
+            tax_applies_to_delivery?: boolean;
+            tax_label?: string;
+        };
+        /** @description The store-wide master switch, `PATCH`-ed by the Owner from /settings/taxes. */
+        TaxSettings: {
+            charge_tax?: boolean;
+        };
         TokenObtainPair: {
             email: string;
             password: string;
@@ -7952,6 +9908,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    v1_admin_aaj_shipments_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAajShipmentRowList"];
+                };
+            };
+        };
+    };
     v1_admin_audit_list: {
         parameters: {
             query?: {
@@ -8123,8 +10101,10 @@ export interface operations {
                  *     * `babies` - Babies section banner
                  *     * `tiktok` - TikTok section banner
                  *     * `trio` - Collections trio tile
+                 *     * `affiliate_hero` - Affiliates page — hero image
+                 *     * `affiliate_tier` - Affiliates page — ₦200k Club image
                  */
-                placement?: "babies" | "category" | "concern" | "feature" | "feature_collection" | "feature_nature" | "hero" | "men" | "strip" | "tiktok" | "trio" | "women";
+                placement?: "affiliate_hero" | "affiliate_tier" | "babies" | "category" | "concern" | "feature" | "feature_collection" | "feature_nature" | "hero" | "men" | "strip" | "tiktok" | "trio" | "women";
             };
             header?: never;
             path?: never;
@@ -8881,6 +10861,296 @@ export interface operations {
             };
         };
     };
+    v1_admin_delivery_blocks_list: {
+        parameters: {
+            query?: {
+                country_code?: string;
+                is_active?: boolean;
+                service_code?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryBlockAdmin"][];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_blocks_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryBlockAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryBlockAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryBlockAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryBlockAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_blocks_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery block. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryBlockAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_blocks_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery block. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryBlockAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryBlockAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryBlockAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryBlockAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_blocks_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery block. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_delivery_blocks_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery block. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedDeliveryBlockAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedDeliveryBlockAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedDeliveryBlockAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryBlockAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_fee_masks_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryFeeMaskAdmin"][];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_fee_masks_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryFeeMaskAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryFeeMaskAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryFeeMaskAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryFeeMaskAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_fee_masks_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery fee mask. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryFeeMaskAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_fee_masks_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery fee mask. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryFeeMaskAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryFeeMaskAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryFeeMaskAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryFeeMaskAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_delivery_fee_masks_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery fee mask. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_delivery_fee_masks_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery fee mask. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedDeliveryFeeMaskAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedDeliveryFeeMaskAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedDeliveryFeeMaskAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryFeeMaskAdmin"];
+                };
+            };
+        };
+    };
     v1_admin_delivery_options_list: {
         parameters: {
             query?: {
@@ -9076,6 +11346,24 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DeliveryOptionAdmin"];
                 };
+            };
+        };
+    };
+    v1_admin_delivery_services_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -9812,6 +12100,206 @@ export interface operations {
             };
         };
     };
+    v1_admin_notification_recipients_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"][];
+                };
+            };
+        };
+    };
+    v1_admin_notification_recipients_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRecipient"];
+                "application/x-www-form-urlencoded": components["schemas"]["NotificationRecipient"];
+                "multipart/form-data": components["schemas"]["NotificationRecipient"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"];
+                };
+            };
+        };
+    };
+    v1_admin_notification_recipients_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this notification recipient. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"];
+                };
+            };
+        };
+    };
+    v1_admin_notification_recipients_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this notification recipient. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_notification_recipients_events_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"];
+                };
+            };
+        };
+    };
+    v1_admin_notification_recipients_mark_confirmed_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRecipient"];
+                "application/x-www-form-urlencoded": components["schemas"]["NotificationRecipient"];
+                "multipart/form-data": components["schemas"]["NotificationRecipient"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"];
+                };
+            };
+        };
+    };
+    v1_admin_notification_recipients_resend_confirmation_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRecipient"];
+                "application/x-www-form-urlencoded": components["schemas"]["NotificationRecipient"];
+                "multipart/form-data": components["schemas"]["NotificationRecipient"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"];
+                };
+            };
+        };
+    };
+    v1_admin_notification_recipients_staff_options_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"];
+                };
+            };
+        };
+    };
+    v1_admin_notification_recipients_test_send_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NotificationRecipient"];
+                "application/x-www-form-urlencoded": components["schemas"]["NotificationRecipient"];
+                "multipart/form-data": components["schemas"]["NotificationRecipient"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationRecipient"];
+                };
+            };
+        };
+    };
     v1_admin_orders_list: {
         parameters: {
             query?: {
@@ -9852,6 +12340,106 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["AdminOrder"];
                 };
+            };
+        };
+    };
+    v1_admin_orders_aaj_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_orders_aaj_capture_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_orders_aaj_check_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_orders_aaj_label_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_orders_aaj_void_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                number: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -10298,6 +12886,297 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partner_shipments_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedPartnerShipmentRowList"];
+                };
+            };
+        };
+    };
+    v1_admin_partner_zones_list: {
+        parameters: {
+            query?: {
+                is_active?: boolean;
+                lga_region?: number;
+                partner?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZoneAdmin"][];
+                };
+            };
+        };
+    };
+    v1_admin_partner_zones_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerZoneAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PartnerZoneAdmin"];
+                "multipart/form-data": components["schemas"]["PartnerZoneAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZoneAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partner_zones_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this partner zone. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZoneAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partner_zones_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this partner zone. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerZoneAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PartnerZoneAdmin"];
+                "multipart/form-data": components["schemas"]["PartnerZoneAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZoneAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partner_zones_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this partner zone. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_partner_zones_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this partner zone. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedPartnerZoneAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedPartnerZoneAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedPartnerZoneAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZoneAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partners_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPartnerAdmin"][];
+                };
+            };
+        };
+    };
+    v1_admin_partners_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryPartnerAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryPartnerAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryPartnerAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPartnerAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partners_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery partner. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPartnerAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partners_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery partner. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedDeliveryPartnerAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedDeliveryPartnerAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedDeliveryPartnerAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPartnerAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_partners_password_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this delivery partner. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeliveryPartnerAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["DeliveryPartnerAdmin"];
+                "multipart/form-data": components["schemas"]["DeliveryPartnerAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryPartnerAdmin"];
                 };
             };
         };
@@ -11656,6 +14535,26 @@ export interface operations {
             };
         };
     };
+    v1_admin_staff_remove_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_admin_staff_invites_list: {
         parameters: {
             query?: never;
@@ -11934,6 +14833,197 @@ export interface operations {
             };
         };
     };
+    v1_admin_stores_list: {
+        parameters: {
+            query?: {
+                area_region?: number;
+                country?: string;
+                /** @description A page number within the paginated result set. */
+                page?: number;
+                /** @description Name, address or phone */
+                q?: string;
+                state_region?: number;
+                /**
+                 * @description * `active` - Active
+                 *     * `inactive` - Inactive
+                 *     * `archived` - Archived
+                 *     * `all` - All (including archived)
+                 */
+                status?: "active" | "all" | "archived" | "inactive";
+                /**
+                 * @description * `toke_store` - Toke Store
+                 *     * `distributor` - Authorized Distributor
+                 */
+                store_type?: "distributor" | "toke_store";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedStoreLocationAdminList"];
+                };
+            };
+        };
+    };
+    v1_admin_stores_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreLocationAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["StoreLocationAdmin"];
+                "multipart/form-data": components["schemas"]["StoreLocationAdmin"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreLocationAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_stores_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this store location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreLocationAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_stores_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this store location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreLocationAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["StoreLocationAdmin"];
+                "multipart/form-data": components["schemas"]["StoreLocationAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreLocationAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_stores_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this store location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_admin_stores_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this store location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedStoreLocationAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedStoreLocationAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedStoreLocationAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreLocationAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_stores_restore_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique integer value identifying this store location. */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StoreLocationAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["StoreLocationAdmin"];
+                "multipart/form-data": components["schemas"]["StoreLocationAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreLocationAdmin"];
+                };
+            };
+        };
+    };
     v1_admin_tags_list: {
         parameters: {
             query?: {
@@ -12072,6 +15162,144 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TagAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_tax_countries_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxCountryAdmin"][];
+                };
+            };
+        };
+    };
+    v1_admin_tax_countries_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique value identifying this country. */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxCountryAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_tax_countries_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description A unique value identifying this country. */
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedTaxCountryAdmin"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedTaxCountryAdmin"];
+                "multipart/form-data": components["schemas"]["PatchedTaxCountryAdmin"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxCountryAdmin"];
+                };
+            };
+        };
+    };
+    v1_admin_tax_settings_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxSettings"];
+                };
+            };
+        };
+    };
+    v1_admin_tax_settings_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaxSettings"];
+                "application/x-www-form-urlencoded": components["schemas"]["TaxSettings"];
+                "multipart/form-data": components["schemas"]["TaxSettings"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxSettings"];
+                };
+            };
+        };
+    };
+    v1_admin_tax_settings_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedTaxSettings"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedTaxSettings"];
+                "multipart/form-data": components["schemas"]["PatchedTaxSettings"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxSettings"];
                 };
             };
         };
@@ -13141,6 +16369,60 @@ export interface operations {
             };
         };
     };
+    v1_checkout_guest_delivery_options_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_checkout_guest_gig_centres_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_checkout_guest_quote_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_checkout_payment_methods_retrieve: {
         parameters: {
             query?: never;
@@ -13798,6 +17080,235 @@ export interface operations {
             };
         };
     };
+    v1_partner_auth_login_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_partner_lgas_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_partner_me_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_partner_rates_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_partner_states_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_partner_zones_list: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZone"][];
+                };
+            };
+        };
+    };
+    v1_partner_zones_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerZone"];
+                "application/x-www-form-urlencoded": components["schemas"]["PartnerZone"];
+                "multipart/form-data": components["schemas"]["PartnerZone"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZone"];
+                };
+            };
+        };
+    };
+    v1_partner_zones_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZone"];
+                };
+            };
+        };
+    };
+    v1_partner_zones_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerZone"];
+                "application/x-www-form-urlencoded": components["schemas"]["PartnerZone"];
+                "multipart/form-data": components["schemas"]["PartnerZone"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZone"];
+                };
+            };
+        };
+    };
+    v1_partner_zones_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_partner_zones_partial_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PatchedPartnerZone"];
+                "application/x-www-form-urlencoded": components["schemas"]["PatchedPartnerZone"];
+                "multipart/form-data": components["schemas"]["PatchedPartnerZone"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerZone"];
+                };
+            };
+        };
+    };
     v1_payments_verify_create: {
         parameters: {
             query?: never;
@@ -13939,6 +17450,24 @@ export interface operations {
             };
         };
     };
+    v1_referrals_terms_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_search_list: {
         parameters: {
             query?: {
@@ -13962,6 +17491,46 @@ export interface operations {
         };
     };
     v1_search_suggest_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_stores_list: {
+        parameters: {
+            query?: {
+                /** @description A page number within the paginated result set. */
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedStoreList"];
+                };
+            };
+        };
+    };
+    v1_stores_places_retrieve: {
         parameters: {
             query?: never;
             header?: never;

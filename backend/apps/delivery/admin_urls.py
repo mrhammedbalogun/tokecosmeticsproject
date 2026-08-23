@@ -2,6 +2,12 @@ from django.urls import path
 from rest_framework.routers import SimpleRouter
 
 from apps.delivery.admin_views import (
+    AdminAajCaptureView,
+    AdminAajCheckView,
+    AdminAajLabelView,
+    AdminAajShipmentListView,
+    AdminAajShipmentView,
+    AdminAajVoidView,
     AdminGigCaptureView,
     AdminGigLabelView,
     AdminGigShipmentListView,
@@ -47,4 +53,12 @@ urlpatterns = router.urls + [
     path("orders/<str:number>/gig/capture/", AdminGigCaptureView.as_view(),
          name="admin-gig-capture"),
     path("orders/<str:number>/gig/label/", AdminGigLabelView.as_view(), name="admin-gig-label"),
+    # AAJ Express (Plan-43): the GIG surface's sibling, plus check (reconcile) and void.
+    path("aaj-shipments/", AdminAajShipmentListView.as_view(), name="admin-aaj-shipments"),
+    path("orders/<str:number>/aaj/", AdminAajShipmentView.as_view(), name="admin-aaj-shipment"),
+    path("orders/<str:number>/aaj/capture/", AdminAajCaptureView.as_view(),
+         name="admin-aaj-capture"),
+    path("orders/<str:number>/aaj/check/", AdminAajCheckView.as_view(), name="admin-aaj-check"),
+    path("orders/<str:number>/aaj/void/", AdminAajVoidView.as_view(), name="admin-aaj-void"),
+    path("orders/<str:number>/aaj/label/", AdminAajLabelView.as_view(), name="admin-aaj-label"),
 ]

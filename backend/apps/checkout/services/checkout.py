@@ -268,6 +268,11 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
                 order, chosen, charged=totals.delivery,
                 centre=centre if is_pickup else None,
             )
+        if chosen["kind"] == "carrier" and chosen.get("carrier_code") == "aaj":
+            # AAJ (Plan-43): same birth-with-the-order rule as the GigShipment above.
+            from apps.delivery.aaj.shipments import create_quoted_shipment as create_aaj_shipment
+
+            create_aaj_shipment(order, chosen, charged=totals.delivery)
         if chosen["kind"] == "partner":
             # Same reasoning once more: the PartnerShipment row is how the partner
             # deliveries table learns this order goes out with BrandnPack (or any

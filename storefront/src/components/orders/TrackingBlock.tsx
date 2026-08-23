@@ -47,6 +47,26 @@ const GIG_STATUS_COPY: Record<string, string> = {
   delivered: "Delivered",
 };
 
+/** The carrier-neutral scan shape (`carrier_tracking`, Plan-43): the backend has
+ * already normalised GIG's and AAJ's field names into one record, so this block
+ * renders any carrier without learning a second vocabulary. */
+export type CarrierTracking = {
+  carrier: string;
+  status: string;
+  headline: string;
+  description: string;
+  location: string;
+  at: string;
+} | null;
+
+const CARRIER_STATUS_COPY: Record<string, string> = {
+  created: "Shipment created — the courier is collecting your parcel",
+  in_transit: "On its way",
+  delivered: "Delivered",
+  returned: "Returned to sender — we'll be in touch",
+  voided: "Shipment cancelled — we'll be in touch",
+};
+
 function scanLine(scan: Record<string, unknown>): string {
   // The fields GIG's scans actually carry (measured): Status, DateTime, and sometimes
   // a location/comment. Join what exists; never invent.
@@ -55,7 +75,15 @@ function scanLine(scan: Record<string, unknown>): string {
   return parts.join(" · ");
 }
 
-export function TrackingBlock({ order, gig = null }: { order: Trackable; gig?: GigTracking }) {
+export function TrackingBlock({
+  order,
+  gig = null,
+  carrier = null,
+}: {
+  order: Trackable;
+  gig?: GigTracking;
+  carrier?: CarrierTracking;
+}) {
   // Blank halves filtered before the join, so a carrier recorded without a consignment
   // number (or the reverse) never renders a dangling " · ".
   const trackingLine = [order.tracking_carrier, order.tracking_number]
@@ -70,14 +98,25 @@ export function TrackingBlock({ order, gig = null }: { order: Trackable; gig?: G
       <p className="mt-2 text-sm text-muted">
         {trackingLine || "You'll get tracking details when your order ships."}
       </p>
-      {gig && (
+      {gig ? (
         <div className="mt-3 rounded border border-line p-3 text-sm">
           <p className="font-medium">{GIG_STATUS_COPY[gig.status] ?? gig.status}</p>
           {Object.keys(gig.last_scan ?? {}).length > 0 && (
             <p className="mt-1 text-muted">{scanLine(gig.last_scan)}</p>
           )}
         </div>
-      )}
+      ) : carrier ? (
+        <div className="mt-3 rounded border border-line p-3 text-sm">
+          <p className="font-medium">{CARRIER_STATUS_COPY[carrier.status] ?? carrier.status}</p>
+          {(carrier.headline || carrier.description || carrier.location || carrier.at) && (
+            <p className="mt-1 text-muted">
+              {[carrier.description || carrier.headline, carrier.location, carrier.at.slice(0, 16).replace("T", " ")]
+                .filter((v) => v && v.trim())
+                .join(" · ")}
+            </p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

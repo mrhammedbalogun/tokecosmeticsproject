@@ -101,6 +101,7 @@ class OrderListSerializer(_BaseOrderSerializer):
 class OrderSerializer(_BaseOrderSerializer):
     payment_gateway = serializers.SerializerMethodField()
     gig_tracking = serializers.SerializerMethodField()
+    carrier_tracking = serializers.SerializerMethodField()
     pickup_centre = serializers.SerializerMethodField()
     pickup_store = serializers.SerializerMethodField()
     # The order's market ("NG"), same shape as `currency` above. The pay-again UI
@@ -117,7 +118,8 @@ class OrderSerializer(_BaseOrderSerializer):
                   "tax_label", "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",
                   "tracking_carrier", "tracking_number", "payment_gateway",
-                  "gig_tracking", "pickup_centre", "pickup_store", "items")
+                  "gig_tracking", "carrier_tracking", "pickup_centre", "pickup_store",
+                  "items")
 
     def get_pickup_store(self, order):
         """The Toke store snapshot for store-pickup orders (Plan-40), or None so the
@@ -147,6 +149,39 @@ class OrderSerializer(_BaseOrderSerializer):
             "last_scan": shipment.last_scan,
             "last_tracked_at": shipment.last_tracked_at,
         }
+
+    def get_carrier_tracking(self, order):
+        """The parcel's latest scan in ONE carrier-neutral shape (Plan-43):
+        {carrier, status, headline, description, location, at}. The storefront
+        renders this for any carrier; `gig_tracking` above stays for compatibility
+        and for the verbatim-scan rendering. None when no carrier shipment has a
+        tracking id yet, so the page can simply not render the block."""
+        gig = getattr(order, "gig_shipment", None)
+        if gig is not None and gig.waybill:
+            scan = gig.last_scan or {}
+            return {
+                "carrier": "GIG", "status": gig.status,
+                "headline": str(scan.get("ScanStatusComment") or scan.get("Status") or ""),
+                "description": "",
+                "location": str(scan.get("Location") or ""),
+                "at": str(scan.get("DateTime") or ""),
+                "tracked_at": gig.last_tracked_at,
+            }
+        aaj = getattr(order, "aaj_shipment", None)
+        if aaj is not None and aaj.tracking_id:
+            from apps.delivery.aaj.tracking import STATUS_LABELS
+
+            scan = aaj.last_scan or {}
+            meta = scan.get("meta") if isinstance(scan.get("meta"), dict) else {}
+            return {
+                "carrier": "AAJ", "status": aaj.status,
+                "headline": STATUS_LABELS.get(aaj.last_status, "") if aaj.last_status is not None else "",
+                "description": str(scan.get("description") or ""),
+                "location": str(meta.get("location") or ""),
+                "at": str(scan.get("dateTime") or ""),
+                "tracked_at": aaj.last_tracked_at,
+            }
+        return None
 
     def get_payment_gateway(self, order) -> str:
         """How this order was paid — the gateway of its most recent payment attempt.

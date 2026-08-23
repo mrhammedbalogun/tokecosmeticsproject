@@ -15,6 +15,7 @@ from rest_framework import serializers
 
 from apps.core.models import Country, Region
 from apps.delivery.models import (
+    AajShipment,
     DeliveryOption,
     GigShipment,
     PartnerShipment,
@@ -25,7 +26,7 @@ from apps.delivery.models import (
 # branches on carrier_code). A "carrier" option naming anything else falls through to the
 # flat-price path — and the carrier pattern sets price=0, so the customer would be offered
 # free delivery. The API refuses it here rather than trusting every client.
-KNOWN_CARRIERS = {"gig"}
+KNOWN_CARRIERS = {"gig", "aaj"}
 
 
 def currency_mismatches(currency_id: str, countries, regions) -> list[str]:
@@ -426,6 +427,47 @@ class GigShipmentRowSerializer(serializers.ModelSerializer):
     def get_destination(self, obj) -> str:
         if obj.centre:
             return obj.centre.get("name", "")
+        addr = obj.order.shipping_address or {}
+        return ", ".join(p for p in (addr.get("area"), addr.get("state")) if p)
+
+    def get_customer_name(self, obj) -> str:
+        addr = obj.order.shipping_address or {}
+        return " ".join(p for p in (addr.get("first_name"), addr.get("last_name")) if p)
+
+    def get_customer_phone(self, obj) -> str:
+        return (obj.order.shipping_address or {}).get("phone", "")
+
+
+class AajShipmentRowSerializer(serializers.ModelSerializer):
+    """One row of the AAJ deliveries table (Plan-43) — READ ONLY, composed from the
+    snapshots the shipment and its order hold, the GigShipmentRowSerializer posture
+    exactly. `quote_total` rides beside `charged` and `cost` so the owner can SEE the
+    retail-vs-account gap the model docstring describes (charged − cost is the margin,
+    and under free_over charged is 0 while quote_total still says what AAJ retail was).
+    """
+
+    order_number = serializers.CharField(source="order.number", read_only=True)
+    placed_at = serializers.DateTimeField(source="order.placed_at", read_only=True)
+    currency = serializers.CharField(source="order.currency_id", read_only=True)
+    origin = serializers.SerializerMethodField()
+    destination = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
+    customer_phone = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AajShipment
+        fields = [
+            "order_number", "placed_at", "status", "booking_id", "tracking_id", "origin",
+            "destination", "customer_name", "customer_phone", "quote_total", "charged",
+            "cost", "currency", "last_scan", "last_status", "last_tracked_at",
+        ]
+
+    def get_origin(self, obj) -> dict:
+        origin = obj.origin or {}
+        return {"id": origin.get("id", 0), "name": origin.get("name", ""),
+                "state": origin.get("state_name", "")}
+
+    def get_destination(self, obj) -> str:
         addr = obj.order.shipping_address or {}
         return ", ".join(p for p in (addr.get("area"), addr.get("state")) if p)
 

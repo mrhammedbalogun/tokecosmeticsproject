@@ -64,6 +64,8 @@ PII_SCOPE_PREFIXES = ("orders.", "customers.", "referrals.")
 READ_AUDITED_VIEWS: dict[str, str] = {
     "AdminGigShipmentView": "the fulfilment panel sits on an order and names its receiver linkage",
     "AdminGigShipmentListView": "the deliveries table: customer name and phone on every row",
+    "AdminAajShipmentView": "the AAJ panel sits on an order and names its receiver linkage",
+    "AdminAajShipmentListView": "the AAJ deliveries table: customer name and phone on every row",
     "AdminOrderListView": "the order queue: customer email and address on every row, and the search term is the record",
     "AdminOrderDetailView": "one order in full: name, email, phone, both addresses, payment history",
     "AdminRefundsOwedView": "a list of orders, each with the customer on it",

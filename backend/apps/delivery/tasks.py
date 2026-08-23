@@ -107,3 +107,71 @@ def monitor_gig_wallet() -> dict:
             key=_WALLET_ALERT_STATE_KEY, defaults={"value": state, "value_type": "str"}
         )
     return {"balance": str(balance), "state": state, "alerted": state == "low" and previous != "low"}
+
+
+# --- AAJ Express (Plan-43) -----------------------------------------------------------
+
+@shared_task
+def poll_aaj_tracking() -> dict:
+    """Every 2h, forever — AAJ has no webhook. Outage = the pass stops at the first
+    unreachable call; the shipments keep their last known scan and the next pass
+    catches up."""
+    from apps.delivery.aaj.client import AajError
+    from apps.delivery.aaj.tracking import poll_tracking
+
+    try:
+        return poll_tracking()
+    except AajError as exc:
+        return {"skipped": f"AAJ unavailable: {exc}"}
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=600)
+def delete_aaj_booking(self, shipment_pk: int, booking_id: str) -> dict:
+    """Best-effort removal of an UNPAID booking at AAJ after its order died
+    (aaj/shipments.py). Free, idempotent (a second delete 404s), and never a
+    reason to fail the order transition that queued it. Refused once processed —
+    that means money moved after all, which the order page's check must settle."""
+    from apps.delivery.aaj import client
+
+    try:
+        client.call("DELETE", f"/partner/booking/delete-booking/{booking_id}", retries=0)
+    except client.AajUnavailable as exc:
+        raise self.retry(exc=exc)
+    except client.AajError as exc:
+        return {"shipment_pk": shipment_pk, "booking_id": booking_id, "deleted": False,
+                "reason": str(exc)}
+    return {"booking_id": booking_id, "deleted": True}
+
+
+@shared_task
+def check_aaj_states() -> dict:
+    """Nightly drift check of `aaj/states.py` against AAJ's own delivery-locations
+    list. The table prices every AAJ order and an unknown code silently prices as
+    Lagos, so a state AAJ renames or re-codes would undercharge with no signal
+    except the bank statement. Mismatch = staff email; outage = skipped."""
+    from apps.delivery.aaj import client
+    from apps.delivery.aaj.states import STATE_CODES, state_code
+    from apps.notifications.staff import notify_staff
+
+    try:
+        result = client.call("GET", "/partner/booking/delivery-locations/aaj")
+    except client.AajError as exc:
+        return {"skipped": f"AAJ unavailable: {exc}"}
+    rows = result.data if isinstance(result.data, list) else []
+    theirs = {str(r.get("stateCode", "")).upper(): str(r.get("state", "")) for r in rows if isinstance(r, dict)}
+    mismatches = []
+    for code, name in theirs.items():
+        if state_code(name) != code:
+            mismatches.append(f"{name} ({code})")
+    missing = sorted(set(STATE_CODES.values()) - set(theirs))
+    if mismatches or missing:
+        notify_staff("delivery.aaj_attention", {
+            "order_number": "", "tracking_id": "", "status_label": "",
+            "reason": "state code table drift",
+            "description": (
+                f"AAJ's list disagrees with ours. Unmatched: {', '.join(mismatches) or 'none'}. "
+                f"No longer listed by AAJ: {', '.join(missing) or 'none'}. "
+                "Until apps/delivery/aaj/states.py is updated, affected states are not quoted."
+            ),
+        })
+    return {"states": len(theirs), "mismatches": mismatches, "missing": missing}

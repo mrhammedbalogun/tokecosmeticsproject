@@ -8,6 +8,9 @@ down, an uncovered LGA, a missing centroid — none of them may block a checkout
 that the flat-rate options can carry. The worst outcome of a carrier outage is
 a customer paying the flat ₦3,500 instead of a live ₦2,900.
 
+Since Plan-43 the same wrapper prices AAJ Express (door delivery, every NG state)
+through `aaj/quotes.py`; the dispatch below is by `carrier_code`.
+
 The customer-facing dict deliberately does NOT carry GIG's breakdown — it holds
 our discount rank and cost structure, which is nobody's business at the cart.
 The full payload sits in the quote cache under `carrier_quote_key`, where order
@@ -17,6 +20,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from apps.delivery.aaj.quotes import quote_home_delivery as aaj_quote_home_delivery
 from apps.delivery.gig.centres import haversine_km
 from apps.delivery.gig.quotes import (
     coverage_region,
@@ -64,6 +68,11 @@ def priced_options_for_address(
         return options
 
     weight_g = _total_weight_g(lines)
+    # AAJ prices by weight in 1 kg tiers and reweighs on receipt, so a line with no
+    # weight is a line we cannot price — the option is omitted (Plan-43), never
+    # guessed at the ≤1 kg tier and billed up later. GIG is unaffected: its price
+    # ignores weight below 5 kg.
+    weightless = any(getattr(v, "weight_grams", None) in (None, 0) for v, _ in lines)
     # Plan-41 fee masks for the LIVE-priced rows only — services.py already masked
     # every other kind. The mask touches what the CUSTOMER pays; the raw quote stays
     # in the cache and in GigShipment.quote/cost, so reconciliation sees true cost.
@@ -73,13 +82,21 @@ def priced_options_for_address(
         if option["kind"] != "carrier":
             priced.append(option)
             continue
-        if option["carrier_code"] != "gig":  # only GIG is wired up (DHL: Plan-32c)
+        code = option["carrier_code"]
+        eta_days = None
+        if code == "gig":
+            if option.get("carrier_service") == "pickup":
+                centre = pickup_centre or nearest_centre(address)
+                quote = quote_centre_pickup(address, weight_g, declared_value=subtotal, centre=centre)
+            else:
+                quote = quote_home_delivery(address, weight_g, declared_value=subtotal)
+        elif code == "aaj":
+            if weightless:
+                continue
+            quote = aaj_quote_home_delivery(address, weight_g, declared_value=subtotal)
+            eta_days = getattr(quote, "eta_days", None)
+        else:  # a carrier checkout cannot quote (DHL: Plan-32c) is never offered for free
             continue
-        if option.get("carrier_service") == "pickup":
-            centre = pickup_centre or nearest_centre(address)
-            quote = quote_centre_pickup(address, weight_g, declared_value=subtotal, centre=centre)
-        else:
-            quote = quote_home_delivery(address, weight_g, declared_value=subtotal)
         if quote is None:
             continue
         charged = apply_fee_mask(quote.price, masks.get(option["carrier_code"]))
@@ -89,9 +106,16 @@ def priced_options_for_address(
         row = DeliveryOption.objects.filter(pk=option["id"]).first()
         if row and row.free_over is not None and subtotal >= row.free_over:
             charged = Decimal("0.00")
-        priced.append({
+        row_out = {
             **option,
             "price": str(charged),
             "carrier_quote_key": quote.cache_key,
-        })
+        }
+        if eta_days:
+            # AAJ's own per-state ETA (2 Lagos … 8 Kano) replaces the row's static
+            # pair, which cannot be honest for every state at once. Max only: one
+            # number is not a promise of a day, so min stays the smaller of the two.
+            row_out["min_days"] = min(option["min_days"], eta_days)
+            row_out["max_days"] = max(eta_days, row_out["min_days"])
+        priced.append(row_out)
     return priced

@@ -299,6 +299,14 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "AdminGigShipmentListView": "orders.view",
     "AdminGigCaptureView": "orders.manage",
     "AdminGigLabelView": "orders.operate",
+    # --- orders: AAJ fulfilment (Plan-43), the GIG split exactly — plus a reconcile
+    # check (reads AAJ, desk work) and a void (reverses a charge: money).
+    "AdminAajShipmentView": "orders.view",
+    "AdminAajShipmentListView": "orders.view",
+    "AdminAajCaptureView": "orders.manage",
+    "AdminAajCheckView": "orders.operate",
+    "AdminAajVoidView": "orders.manage",
+    "AdminAajLabelView": "orders.operate",
     "AdminOrderNoteView": "orders.operate",
     # --- orders: money -----------------------------------------------------------
     "AdminRefundsOwedView": "orders.manage",

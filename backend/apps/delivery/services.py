@@ -151,8 +151,8 @@ def _store_pickup_option(resolved_code: str, country, address) -> list[dict]:
 
 
 def service_code_for(option: dict) -> str:
-    """The stable code Plan-41 block/mask rules are keyed on. GIG's two rows (door +
-    centre pickup) share "gig" on purpose — the operator's mental model is the
+    """The stable code Plan-41 block/mask rules are keyed on. Carrier rows key on the
+    carrier ("gig", "aaj"); GIG's two rows (door + centre pickup) share "gig" on purpose — the operator's mental model is the
     courier, not the row — and each manual option is its own service ("option:{pk}")
     because each one is its own courier arrangement."""
     kind = option.get("kind", "manual")
@@ -168,7 +168,10 @@ def known_delivery_services() -> list[dict]:
     write-side validation set. Inactive partners and options are listed deliberately:
     a rule outlives a kill-switch flip, and hiding the code would strand existing
     rules unlabelled in the admin."""
-    services = [{"code": "gig", "name": "GIG Logistics", "kind": "carrier"}]
+    services = [
+        {"code": "gig", "name": "GIG Logistics", "kind": "carrier"},
+        {"code": "aaj", "name": "AAJ Express", "kind": "carrier"},
+    ]
     services += [
         {"code": p.code, "name": p.name, "kind": "partner"}
         for p in DeliveryPartner.objects.order_by("name")

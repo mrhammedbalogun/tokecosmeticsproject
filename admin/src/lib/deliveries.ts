@@ -185,3 +185,94 @@ export function lastScanStatus(row: {
   }
   return null;
 }
+
+// --- AAJ Express (Plan-43) --------------------------------------------------------------
+
+/** `AajShipment.STATUSES` in `backend/apps/delivery/models.py`, in lifecycle order. */
+export const AAJ_SHIPMENT_STATUSES = [
+  "quoted",
+  "booked",
+  "created",
+  "in_transit",
+  "delivered",
+  "returned",
+  "voided",
+  "create_unconfirmed",
+  "abandoned",
+] as const;
+
+export type AajShipmentStatus = (typeof AAJ_SHIPMENT_STATUSES)[number];
+
+export function isAajShipmentStatus(value: string): value is AajShipmentStatus {
+  return (AAJ_SHIPMENT_STATUSES as readonly string[]).includes(value);
+}
+
+/** One row of `GET /admin/aaj-shipments/`. `quote_total` is AAJ's retail figure the
+ *  customer was priced from; `cost` is what our account was charged at booking — the
+ *  gap is margin the table shows rather than hides. */
+export interface AajShipmentRow {
+  order_number: string;
+  placed_at: string | null;
+  status: AajShipmentStatus;
+  booking_id: string;
+  tracking_id: string;
+  origin: { id: number; name: string; state: string };
+  destination: string;
+  customer_name: string;
+  customer_phone: string;
+  quote_total: string | null;
+  charged: string;
+  cost: string | null;
+  currency: string;
+  last_scan: Record<string, unknown>;
+  last_status: number | null;
+  last_tracked_at: string | null;
+}
+
+export interface AajShipmentPage {
+  count: number;
+  next: string | null;
+  previous: string | null;
+  results: AajShipmentRow[];
+}
+
+export interface AajShipmentFilters {
+  status?: AajShipmentStatus;
+  origin?: string;
+  placed_after?: string;
+  placed_before?: string;
+  page: number;
+}
+
+export function parseAajShipmentFilters(params: URLSearchParams): AajShipmentFilters {
+  const filters: AajShipmentFilters = { page: parsePage(params.get("page")) };
+  const status = params.get("status")?.trim();
+  if (status && isAajShipmentStatus(status)) filters.status = status;
+  const origin = params.get("origin")?.trim();
+  if (origin && /^\d+$/.test(origin)) filters.origin = origin;
+  for (const key of ["placed_after", "placed_before"] as const) {
+    const value = params.get(key)?.trim();
+    if (value) filters[key] = value;
+  }
+  return filters;
+}
+
+export function aajShipmentsQueryString(filters: AajShipmentFilters): string {
+  const params = new URLSearchParams();
+  if (filters.status) params.set("status", filters.status);
+  if (filters.origin !== undefined) params.set("origin", filters.origin);
+  if (filters.placed_after) params.set("placed_after", filters.placed_after);
+  if (filters.placed_before) params.set("placed_before", filters.placed_before);
+  if (filters.page > 1) params.set("page", String(filters.page));
+  return params.toString();
+}
+
+/** AAJ's newest event as one line: its description (the human sentence), else the
+ *  scan type. Stored verbatim by tracking.py, so nothing deeper is parsed. */
+export function aajLastScan(row: { last_scan: Record<string, unknown> }): string | null {
+  for (const key of ["description", "scanType"]) {
+    const value = row.last_scan?.[key];
+    if (typeof value === "string" && value.trim()) return value;
+  }
+  return null;
+}

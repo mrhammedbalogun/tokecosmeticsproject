@@ -663,6 +663,32 @@ GIG_WEBHOOK_API_BASE = env(
     "GIG_WEBHOOK_API_BASE", default="https://dev-agilitythirdpartyapi.theagilitysystems.com"
 )
 
+# --- AAJ Express (Plan-43; sandbox base by default, production at go-live) ---
+# Bearer API key auth — no login call, no token lifetime. The key decides which AAJ
+# partner account a booking lands on (measured: two test keys, two `source` accounts).
+AAJ_BASE_URL = env("AAJ_BASE_URL", default="https://dev.aajexpress.org/api/v2")
+AAJ_API_KEY = env("AAJ_API_KEY", default="")
+# `payments.accountNumber` on every booking — AAJ's number for our account. Charged at
+# process-booking time (create-booking is free) via CREDIT_FACILITY (post-paid) or
+# WALLET (prepaid); which one AAJ enabled for us is a commercial fact, hence a setting.
+AAJ_ACCOUNT_NUMBER = env("AAJ_ACCOUNT_NUMBER", default="")
+AAJ_PAYMENT_METHOD = env("AAJ_PAYMENT_METHOD", default="CREDIT_FACILITY")
+# Booking category is REQUIRED for DOMESTIC and its id is environment-specific. Empty =
+# resolve "Non Electronics" by name from get-categories (cached); set to pin one.
+AAJ_CATEGORY_ID = env("AAJ_CATEGORY_ID", default="")
+# Sender contact fields AAJ requires that SenderLocation does not hold. The email is
+# where AAJ's booking notifications land; the postal code is required for the sender
+# (measured: irrelevant to pricing, printed on the label). The sender's STATE — which
+# PRICES the zone — is never a setting: aaj/origins.py resolves it per row from its
+# state region, its state label, or its pin, and skips a row it cannot place.
+AAJ_SENDER_EMAIL = env("AAJ_SENDER_EMAIL", default="")
+AAJ_SENDER_POSTAL_CODE = env("AAJ_SENDER_POSTAL_CODE", default="100001")
+# THE KILL-SWITCH ON THE MONEY CALL. process-booking cannot be rehearsed on AAJ's
+# sandbox (its test credit is not chargeable), so the first real order is the first
+# real test. Off = capture stops after the free create-booking step with a clear
+# refusal; the runbook flips it on after one controlled live booking.
+AAJ_PROCESS_ENABLED = env.bool("AAJ_PROCESS_ENABLED", default=False)
+
 # --- Google Places: homepage reviews header refresh (runbooks/google-apis-setup.md) ---
 # The SERVER key (IP-locked to the VPS, Places API (New) only) — never the browser key
 # and never NEXT_PUBLIC anything. Empty = the refresh task skips, admin numbers stand.
@@ -731,6 +757,14 @@ CELERY_BEAT_SCHEDULE = {
     "monitor-gig-wallet": {
         "task": "apps.delivery.tasks.monitor_gig_wallet",
         "schedule": 21600.0,  # every 6h — the wallet drains at fulfilment speed, not checkout speed
+    },
+    "poll-aaj-tracking": {
+        "task": "apps.delivery.tasks.poll_aaj_tracking",
+        "schedule": 7200.0,  # every 2h — AAJ has no webhook; pull is the only feed
+    },
+    "check-aaj-states": {
+        "task": "apps.delivery.tasks.check_aaj_states",
+        "schedule": 86400.0,  # daily — the state-code table prices every AAJ order
     },
     "mature-referral-commissions": {
         "task": "apps.referrals.tasks.mature_commissions",

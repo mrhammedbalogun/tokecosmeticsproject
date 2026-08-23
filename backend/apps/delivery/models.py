@@ -218,6 +218,88 @@ class GigShipment(TimeStampedModel):
         return f"{self.order_id}: {self.status}" + (f" ({self.waybill})" if self.waybill else "")
 
 
+class AajShipment(TimeStampedModel):
+    """One order's AAJ Express story, from checkout quote to delivered parcel
+    (Plan-43) — GigShipment's sibling for a carrier with a two-step booking API.
+
+    Born at ORDER PLACEMENT (status `quoted`, same transaction as the order — the
+    GigShipment reasoning verbatim: created later it would be an absence, and
+    absences are invisible). Capture is TWO calls: create-booking (free, yields
+    `booking_id`, status `booked`) then process-booking (THE MONEY CALL — charges
+    our AAJ account, yields `tracking_id` + label, status `created`). Advanced by
+    the tracking poll; AAJ has no webhooks.
+
+    `cost` and `charged` are deliberately separate columns — and for AAJ they
+    differ by design, not only under free_over: the customer is priced from AAJ's
+    RETAIL `/quote` (the documented, booking-free endpoint) while create-booking
+    under our partner key prices ~14% lower (measured 2026-08-23: ₦2,779 retail vs
+    ₦2,392 booked, intra-Lagos ≤1 kg). That gap is an invisible margin BEFORE any
+    Plan-41 fee mask; both figures sit here so the deliveries table can show it.
+    `quote_total` is the retail figure the customer was priced from (pre-mask),
+    kept beside `charged` because a free_over order charges 0 and would otherwise
+    lose the number. Both prices are VAT-INCLUSIVE (AAJ's 7.5% rides inside
+    `total`) — never add tax on top of an AAJ delivery figure.
+
+    `create_unconfirmed` is the ambiguity lane: process-booking failed or timed
+    out AND the follow-up get-booking read could not settle whether money moved.
+    MEASURED: a 500 "Credit facility cannot be charged" still minted a shipment
+    record (tracking id + label, booking `paid:false`), so a refusal is not proof
+    of no side-effect — capture.py reconciles after EVERY non-success. A human
+    resolves this lane from the order page; nothing retries it blind.
+
+    `booked` can be re-captured (process only, same booking — never a second
+    create) and is released by the abandon lane, which also asks AAJ to delete the
+    unpaid booking so customer PII does not sit in their system as a DUE record.
+    `voided` and `returned` are terminal for the POLL but a voided shipment can be
+    captured again (fresh booking: the void use-case is "wrong address, fix and
+    resend"); the voided attempt's ids stay in the order timeline.
+    """
+
+    STATUSES = [
+        ("quoted", "Quoted"),
+        ("booked", "Booked — not yet paid"),
+        ("created", "Shipment created"),
+        ("in_transit", "In transit"),
+        ("delivered", "Delivered"),
+        ("returned", "Returned to sender"),
+        ("voided", "Voided"),
+        ("create_unconfirmed", "Capture unconfirmed — check with AAJ"),
+        ("abandoned", "Abandoned"),
+    ]
+    # Nothing moves these forward through capture: no booking may happen from them.
+    TERMINAL = frozenset({"delivered", "returned", "abandoned"})
+    # Capture (create or process) may start from these.
+    CAPTURABLE = frozenset({"quoted", "booked", "voided"})
+
+    order = models.OneToOneField(
+        "orders.Order", on_delete=models.PROTECT, related_name="aaj_shipment"
+    )
+    status = models.CharField(max_length=20, default="quoted", choices=STATUSES)
+    quote = models.JSONField(default=dict)  # {price, breakdown, eta_days, origin} from checkout
+    quote_total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    cost = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    charged = models.DecimalField(max_digits=12, decimal_places=2)
+    booking_id = models.CharField(max_length=40, blank=True)      # AAJ booking _id
+    tracking_id = models.CharField(max_length=40, blank=True)     # AAJ shipment tracking id
+    aaj_shipment_id = models.CharField(max_length=40, blank=True)  # AAJ shipment _id (void key)
+    label_url = models.URLField(blank=True)
+    last_scan = models.JSONField(default=dict)  # newest raw tracking event, verbatim
+    last_status = models.IntegerField(null=True, blank=True)  # AAJ numeric status at last poll
+    last_tracked_at = models.DateTimeField(null=True, blank=True)
+    # The SENDER origin this shipment was quoted from — `aaj/origins.py`
+    # `as_snapshot()` shape — snapshotted at placement so capture books from exactly
+    # what was priced (the origin's STATE prices the zone) even after the row is
+    # edited or deactivated.
+    origin = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "AAJ shipment"
+
+    def __str__(self) -> str:
+        ref = self.tracking_id or self.booking_id
+        return f"{self.order_id}: {self.status}" + (f" ({ref})" if ref else "")
+
+
 class DeliveryPartner(TimeStampedModel):
     """A small local courier with no API (Plan-39): flat per-zone rates the partner
     maintains THEMSELVES through the partner portal (`partner_views.py`).

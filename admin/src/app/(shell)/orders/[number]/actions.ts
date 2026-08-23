@@ -43,10 +43,19 @@ function fail(e: unknown, fallback: string): WriteState {
   // The two overrides. Both carry a `code` the UI switches on, and the discrepancy also
   // carries the numbers — returned by the endpoint precisely so a person can decide
   // rather than just be refused (payments/views.py:263-267).
-  if (typeof data.code === "string") {
+  // The delivery endpoints (GIG, AAJ) name their case in `error` rather than `code`
+  // ("capture_unconfirmed", "process_disabled") — a bare slug, never a sentence, so it
+  // is safe to treat as the same machine-readable hook.
+  const code =
+    typeof data.code === "string"
+      ? data.code
+      : typeof data.error === "string" && /^[a-z_]+$/.test(data.error)
+        ? data.error
+        : undefined;
+  if (code) {
     return {
       error: typeof data.detail === "string" ? data.detail : fallback,
-      code: data.code,
+      code,
       expected: typeof data.expected === "string" ? data.expected : undefined,
       received: typeof data.received === "string" ? data.received : undefined,
     };
@@ -301,6 +310,72 @@ export async function gigLabelAction(input: { number: string }): Promise<WriteSt
       // A sentence, not an error: GIG generates the label only after the parcel passes
       // through their station.
       return { error: result.detail ?? "Label not generated yet — try again after GIG processes the parcel.", code: "label_not_ready" };
+    }
+    revalidatePath(`/orders/${input.number}`);
+    return { success: "Label ready.", code: "label_ready" };
+  } catch (e) {
+    return fail(e, "The label could not be fetched.");
+  }
+}
+
+// --- AAJ fulfilment (Plan-43) ----------------------------------------------------------
+
+export async function aajCaptureAction(input: { number: string }): Promise<WriteState> {
+  const bad = guard(input.number);
+  if (bad) return bad;
+
+  try {
+    const result = await write<{ tracking_id: string; booking_id: string; cost: string; status: string }>(
+      input.number, "/aaj/capture/", { method: "POST" },
+    );
+    revalidatePath(`/orders/${input.number}`);
+    return { success: `AAJ shipment ${result.tracking_id} created — ₦${result.cost} charged to the AAJ account (booking ${result.booking_id}). Print the label and hand the parcel to AAJ.` };
+  } catch (e) {
+    // Two answers must never read as plain errors: `process_disabled` (the booking
+    // exists, nothing charged — the kill-switch) and `capture_unconfirmed` (money MAY
+    // have moved). fail() keeps the backend's code so the panel renders each honestly.
+    return fail(e, "The AAJ shipment could not be created.");
+  }
+}
+
+export async function aajCheckAction(input: { number: string }): Promise<WriteState> {
+  const bad = guard(input.number);
+  if (bad) return bad;
+
+  try {
+    const result = await write<{ outcome: string }>(input.number, "/aaj/check/", { method: "POST" });
+    revalidatePath(`/orders/${input.number}`);
+    if (result.outcome === "created") return { success: "AAJ confirms the charge went through — the shipment is created.", code: "check_created" };
+    if (result.outcome === "booked") return { success: "AAJ confirms nothing was charged — the booking is waiting; you can create the shipment again.", code: "check_booked" };
+    return { error: "AAJ's records still cannot settle it. Check the booking in AAJ's portal before anything else.", code: "capture_unconfirmed" };
+  } catch (e) {
+    return fail(e, "AAJ could not be checked.");
+  }
+}
+
+export async function aajVoidAction(input: { number: string }): Promise<WriteState> {
+  const bad = guard(input.number);
+  if (bad) return bad;
+
+  try {
+    const result = await write<{ status: string; tracking_id: string }>(input.number, "/aaj/void/", { method: "POST" });
+    revalidatePath(`/orders/${input.number}`);
+    return { success: `AAJ shipment ${result.tracking_id} voided — the charge is reversed. Create the shipment again to rebook.` };
+  } catch (e) {
+    return fail(e, "The shipment could not be voided.");
+  }
+}
+
+export async function aajLabelAction(input: { number: string }): Promise<WriteState> {
+  const bad = guard(input.number);
+  if (bad) return bad;
+
+  try {
+    const result = await write<{ ready: boolean; label_url?: string; detail?: string }>(
+      input.number, "/aaj/label/", { method: "POST" },
+    );
+    if (!result.ready) {
+      return { error: result.detail ?? "AAJ has not issued the label yet.", code: "label_not_ready" };
     }
     revalidatePath(`/orders/${input.number}`);
     return { success: "Label ready.", code: "label_ready" };

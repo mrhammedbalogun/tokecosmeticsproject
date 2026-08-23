@@ -23,6 +23,7 @@ from apps.delivery.admin_serializers import (
     DeliveryFeeMaskAdminSerializer,
     DeliveryOptionAdminSerializer,
     DeliveryPartnerAdminSerializer,
+    AajShipmentRowSerializer,
     GigShipmentRowSerializer,
     PartnerShipmentRowSerializer,
     PartnerZoneAdminSerializer,
@@ -664,3 +665,210 @@ class AdminGigLabelView(AdminAuditMixin, APIView):
                              "detail": "Label not generated yet — GIG produces it after the "
                                        "parcel is processed at their station."})
         return Response({"ready": True, "label_url": url})
+
+
+# --- AAJ Express (Plan-43) -----------------------------------------------------------
+
+class AdminAajShipmentListView(AdminAuditMixin, generics.ListAPIView):
+    """GET /api/v1/admin/aaj-shipments/ — the AAJ deliveries table, the GIG table's
+    sibling: `orders.view`, READ-AUDITED, paginated, reads only (the order page acts).
+
+    Filters: `status`, `origin` (snapshot id), `placed_after`/`placed_before`.
+    """
+
+    serializer_class = AajShipmentRowSerializer
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.view")]
+    audit_reads = True
+    audit_action = "list"
+
+    def get_queryset(self):
+        from apps.delivery.models import AajShipment
+
+        qs = AajShipment.objects.select_related("order")
+        p = self.request.query_params
+        if v := p.get("status"):
+            qs = qs.filter(status=v)
+        if (v := p.get("origin")) is not None and v != "":
+            try:
+                qs = qs.filter(origin__id=int(v))
+            except ValueError:
+                return qs.none()
+        from django.utils.dateparse import parse_date, parse_datetime
+
+        for param, lookup in (("placed_after", "gte"), ("placed_before", "lte")):
+            if v := p.get(param):
+                parsed = parse_datetime(v) or parse_date(v)
+                if parsed is None:
+                    return qs.none()
+                qs = qs.filter(**{f"order__placed_at__{lookup}": parsed})
+        return qs.order_by("-order__placed_at", "-pk")
+
+
+class AdminAajShipmentView(AdminAuditMixin, APIView):
+    """GET /api/v1/admin/orders/{number}/aaj/ — the fulfilment panel's data: the
+    shipment and whether capture / check / void are currently legal, with the
+    backend's own reason when not. `orders.view`, read-audited (PII linkage)."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.view")]
+    audit_reads = True
+    audit_action = "read"
+    audit_model_label = "delivery.aajshipment"
+
+    def get(self, request, number: str):
+        from django.conf import settings
+
+        from apps.delivery.aaj.capture import can_void
+        from apps.delivery.models import AajShipment
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+        shipment = AajShipment.objects.filter(order=order).first()
+        if shipment is None:
+            return Response({"shipment": None})
+
+        can_capture, reason = True, ""
+        if shipment.status not in AajShipment.CAPTURABLE:
+            can_capture, reason = False, f"shipment is {shipment.status}"
+        elif order.status != "processing":
+            can_capture, reason = False, f"order is {order.status} — capture after payment"
+        voidable, void_reason = can_void(shipment)
+        return Response({
+            "shipment": {
+                "status": shipment.status,
+                "booking_id": shipment.booking_id,
+                "tracking_id": shipment.tracking_id,
+                "quote_total": str(shipment.quote_total) if shipment.quote_total is not None else None,
+                "cost": str(shipment.cost) if shipment.cost is not None else None,
+                "charged": str(shipment.charged),
+                "eta_days": (shipment.quote or {}).get("eta_days"),
+                "label_url": shipment.label_url,
+                "last_scan": shipment.last_scan,
+                "last_status": shipment.last_status,
+                "last_tracked_at": shipment.last_tracked_at,
+                "origin": shipment.origin,
+            },
+            "can_capture": can_capture,
+            "capture_blocked_reason": reason,
+            "can_check": shipment.status in ("create_unconfirmed", "booked") and bool(shipment.booking_id),
+            "can_void": voidable,
+            "void_blocked_reason": void_reason,
+            # The kill-switch, surfaced so the desk knows a capture will stop at
+            # "booked" before they press anything.
+            "process_enabled": bool(settings.AAJ_PROCESS_ENABLED),
+        })
+
+
+def _aaj_action(request_user, order, fn):
+    from apps.delivery.aaj.capture import CaptureRefused, CaptureUnconfirmed
+    from apps.delivery.aaj.client import AajError, AajUnavailable
+
+    try:
+        return fn()
+    except CaptureRefused as exc:
+        return Response({"error": exc.code, "detail": exc.detail}, status=409)
+    except CaptureUnconfirmed as exc:
+        return Response(
+            {"error": "capture_unconfirmed",
+             "detail": "AAJ did not confirm the charge and its records could not settle it. "
+                       f"Check AAJ's portal before ANY retry ({exc})."},
+            status=502,
+        )
+    except AajUnavailable as exc:
+        return Response({"error": "aaj_unreachable", "detail": str(exc)}, status=502)
+    except AajError as exc:
+        return Response({"error": "aaj_rejected", "detail": str(exc)}, status=502)
+
+
+class AdminAajCaptureView(AdminAuditMixin, APIView):
+    """POST /api/v1/admin/orders/{number}/aaj/capture/ — create the booking and
+    charge it. `orders.manage`: process-booking charges our AAJ account."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
+    audit_action = "aaj_capture"
+    audit_model_label = "delivery.aajshipment"
+
+    def post(self, request, number: str):
+        from apps.delivery.aaj.capture import capture_shipment
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+
+        def run():
+            shipment = capture_shipment(order, actor=request.user)
+            return Response({"tracking_id": shipment.tracking_id, "booking_id": shipment.booking_id,
+                             "cost": str(shipment.cost), "status": shipment.status})
+
+        return _aaj_action(request.user, order, run)
+
+
+class AdminAajCheckView(AdminAuditMixin, APIView):
+    """POST /api/v1/admin/orders/{number}/aaj/check/ — reconcile an unconfirmed or
+    booked shipment against AAJ's records. Reads AAJ only; `orders.operate`."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.operate")]
+    audit_action = "aaj_check"
+    audit_model_label = "delivery.aajshipment"
+
+    def post(self, request, number: str):
+        from apps.delivery.aaj.capture import check_unconfirmed
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+
+        def run():
+            outcome = check_unconfirmed(order, actor=request.user)
+            return Response({"outcome": outcome})
+
+        return _aaj_action(request.user, order, run)
+
+
+class AdminAajVoidView(AdminAuditMixin, APIView):
+    """POST /api/v1/admin/orders/{number}/aaj/void/ — void the shipment with AAJ
+    (reverses the pending charge). `orders.manage`: it reverses money."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.manage")]
+    audit_action = "aaj_void"
+    audit_model_label = "delivery.aajshipment"
+
+    def post(self, request, number: str):
+        from apps.delivery.aaj.capture import void_shipment
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+
+        def run():
+            shipment = void_shipment(order, actor=request.user)
+            return Response({"status": shipment.status, "tracking_id": shipment.tracking_id})
+
+        return _aaj_action(request.user, order, run)
+
+
+class AdminAajLabelView(AdminAuditMixin, APIView):
+    """POST /api/v1/admin/orders/{number}/aaj/label/ — the label PDF URL.
+    `orders.operate`: packing-bench work."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("orders.operate")]
+    audit_action = "aaj_label"
+    audit_model_label = "delivery.aajshipment"
+
+    def post(self, request, number: str):
+        from apps.delivery.aaj.capture import fetch_label
+        from apps.delivery.models import AajShipment
+        from apps.orders.models import Order
+
+        order = get_object_or_404(Order, number=number)
+        shipment = get_object_or_404(AajShipment, order=order)
+
+        def run():
+            url = fetch_label(shipment)
+            if url is None:
+                return Response({"ready": False, "detail": "AAJ has not issued a label for this shipment yet."})
+            return Response({"ready": True, "label_url": url})
+
+        return _aaj_action(request.user, order, run)

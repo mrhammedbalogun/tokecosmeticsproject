@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AajPanel, type AajPanelData } from "@/components/order/AajPanel";
 import { GigPanel, type GigPanelData } from "@/components/order/GigPanel";
 import { OrderOpsPanel } from "@/components/order/OrderOpsPanel";
 import { PaymentPanel } from "@/components/order/PaymentPanel";
@@ -12,6 +13,10 @@ import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 import {
   confirmReceiptAction,
   gatewayRefundAction,
+  aajCaptureAction,
+  aajCheckAction,
+  aajLabelAction,
+  aajVoidAction,
   gigCaptureAction,
   gigLabelAction,
   manualRefundAction,
@@ -43,12 +48,14 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
   const path = `/orders/${number}`;
   await requireAdmin(path);
 
-  const [orderResult, meResult, gigResult] = await Promise.allSettled([
+  const [orderResult, meResult, gigResult, aajResult] = await Promise.allSettled([
     fetchWithAuthOrBounce<OrderDetail>(`/admin/orders/${encodeURIComponent(number)}/`, path),
     // Never throws and never redirects — answers null on anything going wrong.
     getAdminMeOrNull(),
     // {shipment: null} for a non-GIG order; a failure here costs the panel, not the page.
     fetchWithAuthOrBounce<GigPanelData>(`/admin/orders/${encodeURIComponent(number)}/gig/`, path),
+    // Same shape for AAJ (Plan-43): {shipment: null} when the order is not an AAJ one.
+    fetchWithAuthOrBounce<AajPanelData>(`/admin/orders/${encodeURIComponent(number)}/aaj/`, path),
   ]);
 
   for (const result of [orderResult, meResult]) {
@@ -72,6 +79,7 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
   // fence either way, so the buttons stay enabled and an unauthorised move 403s honestly.
   const scopes = meResult.status === "fulfilled" ? (meResult.value?.scopes ?? []) : [];
   const gig = gigResult.status === "fulfilled" && gigResult.value?.shipment ? gigResult.value : null;
+  const aaj = aajResult.status === "fulfilled" && aajResult.value?.shipment ? aajResult.value : null;
 
   return (
     <div>
@@ -213,6 +221,19 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
               data={gig}
               scopes={scopes}
               actions={{ capture: gigCaptureAction, label: gigLabelAction }}
+            />
+          )}
+          {aaj && (
+            <AajPanel
+              number={order.number}
+              data={aaj}
+              scopes={scopes}
+              actions={{
+                capture: aajCaptureAction,
+                check: aajCheckAction,
+                void: aajVoidAction,
+                label: aajLabelAction,
+              }}
             />
           )}
 

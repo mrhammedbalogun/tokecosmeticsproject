@@ -626,6 +626,67 @@ def _case_gig_label(client, monkeypatch):
     return client.post(f"/api/v1/admin/orders/{order.number}/gig/label/"), 200
 
 
+def _case_aaj_capture(client, monkeypatch):
+    from decimal import Decimal
+
+    from apps.delivery.models import AajShipment
+
+    order, _ = _order("TC-900032")
+    shipment = AajShipment.objects.create(order=order, status="quoted", charged=Decimal("2779.00"))
+
+    def fake_capture(o, *, actor):
+        shipment.status, shipment.booking_id, shipment.tracking_id = "created", "bk-audit", "AUDIT001"
+        shipment.cost = Decimal("2392.00")
+        shipment.save()
+        return shipment
+
+    # Faked for the same reason as the GIG case: this file tests THE AUDIT WRAPPER.
+    monkeypatch.setattr("apps.delivery.aaj.capture.capture_shipment", fake_capture)
+    return client.post(f"/api/v1/admin/orders/{order.number}/aaj/capture/"), 200
+
+
+def _case_aaj_check(client, monkeypatch):
+    from decimal import Decimal
+
+    from apps.delivery.models import AajShipment
+
+    order, _ = _order("TC-900033")
+    AajShipment.objects.create(order=order, status="create_unconfirmed", booking_id="bk-a",
+                               charged=Decimal("2779.00"))
+    monkeypatch.setattr("apps.delivery.aaj.capture.check_unconfirmed", lambda o, *, actor: "created")
+    return client.post(f"/api/v1/admin/orders/{order.number}/aaj/check/"), 200
+
+
+def _case_aaj_void(client, monkeypatch):
+    from decimal import Decimal
+
+    from apps.delivery.models import AajShipment
+
+    order, _ = _order("TC-900034")
+    shipment = AajShipment.objects.create(order=order, status="created", booking_id="bk-v",
+                                          tracking_id="AUDIT002", charged=Decimal("2779.00"))
+
+    def fake_void(o, *, actor):
+        shipment.status = "voided"
+        shipment.save()
+        return shipment
+
+    monkeypatch.setattr("apps.delivery.aaj.capture.void_shipment", fake_void)
+    return client.post(f"/api/v1/admin/orders/{order.number}/aaj/void/"), 200
+
+
+def _case_aaj_label(client, monkeypatch):
+    from decimal import Decimal
+
+    from apps.delivery.models import AajShipment
+
+    order, _ = _order("TC-900035")
+    AajShipment.objects.create(order=order, status="created", booking_id="bk-l",
+                               tracking_id="AUDIT003", charged=Decimal("2779.00"))
+    monkeypatch.setattr("apps.delivery.aaj.capture.fetch_label", lambda s: "https://s3.example/aaj.pdf")
+    return client.post(f"/api/v1/admin/orders/{order.number}/aaj/label/"), 200
+
+
 def _case_google_review(client, monkeypatch):
     return client.post(
         "/api/v1/admin/google-reviews/",
@@ -807,6 +868,12 @@ WRITE_CASES: dict[str, tuple] = {
     "BlockReferrerView": (_case_referrer_block, "referrer_block"),
     "CreateAdjustmentView": (_case_referral_adjustment, "referral_adjustment"),
     "AdminGigLabelView": (_case_gig_label, "gig_label"),
+    # Plan-43: the AAJ writes — capture charges, void reverses, check and label read
+    # AAJ but are staff acts on an order and therefore audited like the GIG label.
+    "AdminAajCaptureView": (_case_aaj_capture, "aaj_capture"),
+    "AdminAajCheckView": (_case_aaj_check, "aaj_check"),
+    "AdminAajVoidView": (_case_aaj_void, "aaj_void"),
+    "AdminAajLabelView": (_case_aaj_label, "aaj_label"),
     "ProductAdminViewSet": (_case_product, "create"),
     "CategoryAdminViewSet": (_case_category, "create"),
     "BrandAdminViewSet": (_case_brand, "create"),
@@ -887,6 +954,9 @@ READ_ONLY_VIEWS = frozenset(
         # docstring argues why editing a customer does not belong here), so there is no
         # write case. Read-audited — declared in test_audit_guard.READ_AUDITED_VIEWS.
         "CustomerAdminViewSet",
+        # Plan-43: the AAJ panel and table are GET-only, read-audited like GIG's.
+        "AdminAajShipmentView",
+        "AdminAajShipmentListView",
         # Plan-32a: the fulfilment panel is GET-only; its writes are the two views
         # above. Read-audited — declared in test_audit_guard.READ_AUDITED_VIEWS.
         "AdminGigShipmentView",

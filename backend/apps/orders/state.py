@@ -78,6 +78,7 @@ def _effects_for(to_status: str):
     our words for our problems, not news for a customer.
     """
     from apps.delivery import partners as partner_shipments
+    from apps.delivery.aaj import shipments as aaj_shipments
     from apps.delivery.gig import shipments as gig_shipments
     from apps.orders import emails
 
@@ -106,9 +107,11 @@ def _effects_for(to_status: str):
         # Dead orders mail nothing (our words for our problems) but they do release a
         # merely-quoted GIG shipment; one that reached capture keeps its state — the
         # waybill and wallet debit are facts the reconciliation trail must keep.
-        "cancelled": (gig_shipments.abandon_quoted_shipment,),
-        "expired": (gig_shipments.abandon_quoted_shipment,),
-        "refunded": (gig_shipments.abandon_quoted_shipment,),
+        # AAJ's abandon (Plan-43) releases quoted AND booked rows — a booked one also
+        # queues a delete of the unpaid booking at AAJ (HTTP via Celery, never here).
+        "cancelled": (gig_shipments.abandon_quoted_shipment, aaj_shipments.abandon_quoted_shipment),
+        "expired": (gig_shipments.abandon_quoted_shipment, aaj_shipments.abandon_quoted_shipment),
+        "refunded": (gig_shipments.abandon_quoted_shipment, aaj_shipments.abandon_quoted_shipment),
     }.get(to_status, ())
 
 
