@@ -127,6 +127,15 @@ export function TrainingLibrary({
                     className="absolute inset-0 h-full w-full"
                     allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
                     allowFullScreen
+                    // The admin ships `Referrer-Policy: no-referrer` site-wide
+                    // (next.config.ts) so customer IDs never leak into third-party
+                    // referers. YouTube, however, REQUIRES a referer on embeds since
+                    // 2025 and refuses to play without one ("Error 153 — video player
+                    // configuration error"). This per-element override wins over the
+                    // document policy for this one request and sends ONLY our origin —
+                    // no path, so nothing sensitive — which is exactly what YouTube
+                    // needs to verify the embed.
+                    referrerPolicy="strict-origin-when-cross-origin"
                   />
                 ) : (
                   <button
