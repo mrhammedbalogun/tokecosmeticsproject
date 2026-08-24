@@ -350,3 +350,65 @@ class GoogleReviewsMeta(TimeStampedModel):
         else:
             kwargs["force_insert"] = True
         super().save(*args, **kwargs)
+
+
+class TrainingResource(TimeStampedModel):
+    """One training video in the staff library (2026-08-23).
+
+    THE LIBRARY IS FOR STAFF, NOT CUSTOMERS. Nothing in `apps/cms/urls.py` (the
+    public CMS surface) may ever serve these rows: the descriptions are internal
+    process notes and the videos may be unlisted on YouTube, which is privacy by
+    obscurity that survives only as long as the links stay inside the admin.
+
+    THE SOURCE OF TRUTH IS `video_id`, derived by `save()` from `youtube_url` via
+    `apps/cms/youtube.py` — the same arrangement as `StoreLocation`'s name/address
+    keys, and for the same reason: the derived value is what the unique constraint
+    and the admin's player/thumbnail URLs are built from, so it must exist on every
+    row however the row was created. The serializer validates the URL FIRST and puts
+    a sentence under the field; `save()` re-deriving is what keeps a shell-created
+    row honest. `bulk_create` bypasses `save()` and must set `video_id` itself.
+
+    `is_published` instead of delete-to-hide: the Owner drafts a training, watches
+    it back, then flips it on — and can pull one that went stale without losing the
+    title and description typed for it. Staff (`TrainingLibraryView`) only ever see
+    published rows. DELETE is a real delete, unlike stores: a row here is a link
+    plus two typed fields, the video itself lives on YouTube, and the scope that can
+    delete (`training.manage`) is the Owner's alone.
+
+    `position` orders the curriculum ("watch these in order"). Default 0 for every
+    row means untouched rows fall back to insertion order via the `id` tie-break.
+    """
+
+    title = models.CharField(max_length=200)
+    # Plain text, rendered with newlines preserved — never HTML. The admin is the
+    # only renderer and it must never `dangerouslySetInnerHTML` staff-typed prose.
+    description = models.TextField(blank=True)
+    # The canonical `watch?v=` spelling, rewritten by the serializer from whatever
+    # was pasted. Kept (rather than only the id) so "open on YouTube" needs no
+    # reconstruction and the row is legible in the Django admin and in audit rows.
+    youtube_url = models.URLField(max_length=200)
+    video_id = models.CharField(max_length=16, editable=False, db_index=True)
+    position = models.PositiveIntegerField(default=0)
+    is_published = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["position", "id"]
+        constraints = [
+            # One row per video. Two trainings pointing at the same video is an
+            # accidental re-add in every real case; the serializer refuses it with a
+            # sentence naming the existing row, and this is the backstop for the
+            # race and for non-serializer writes.
+            models.UniqueConstraint(fields=["video_id"], name="training_unique_video"),
+        ]
+
+    def __str__(self) -> str:
+        state = "published" if self.is_published else "hidden"
+        return f"{self.title} ({state})"
+
+    def save(self, *args, **kwargs):
+        from apps.cms.youtube import parse_youtube_video_id
+
+        derived = parse_youtube_video_id(self.youtube_url)
+        if derived:
+            self.video_id = derived
+        return super().save(*args, **kwargs)

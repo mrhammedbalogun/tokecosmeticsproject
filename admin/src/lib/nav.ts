@@ -67,6 +67,12 @@ export const NAV_ITEMS: NavItem[] = [
   // the endpoints; this item is only the door.
   { label: "Referrals", href: "/referrals", scopes: ["referrals.view"] },
   { label: "Reports", href: "/reports", scopes: ["reports.view"] },
+  // The staff training library (2026-08-23). NO scope on purpose — the library exists
+  // for every staff member, so the link shows for every staff member, like Dashboard.
+  // Authoring inside the page is gated on `training.manage` (Owner-only), which the
+  // page reads from admin-me to decide whether to render the editor at all; the
+  // endpoints enforce it regardless.
+  { label: "Training", href: "/training", scopes: [] },
   { label: "Settings", href: "/settings", scopes: ["settings.manage", "products.manage"] },
   { label: "Staff", href: "/staff", scopes: ["staff.manage"] },
   // Owner-only, like Staff above, and top-level for the same reason: it is a list of

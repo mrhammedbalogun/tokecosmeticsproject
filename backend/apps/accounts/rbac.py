@@ -143,6 +143,13 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     # the person doing the work gets worked around by borrowing the Owner's login, which
     # is strictly worse than granting it. The audit row names whoever clicked, and that is
     # what makes widening this safe.
+    # The staff training library (2026-08-23). WRITES ONLY — reading the library is
+    # every staff member's right and is gated on `is_staff` alone
+    # (`cms.TrainingLibraryView`, scope None in ADMIN_SURFACE), so no `.view` scope
+    # exists for it. Owner alone by Hammed's brief: staff watch, only the Owner decides
+    # what the team is trained on. Deliberately NOT `cms.manage` — the Content role
+    # holds that, and page-copy authority was never meant to imply curriculum authority.
+    "training.manage": frozenset({"Owner"}),
     "referrals.view": frozenset({"Owner", "Manager", "Support"}),
     "referrals.manage": frozenset({"Owner", "Manager"}),
     "referrals.pay": frozenset({"Owner", "Manager"}),

@@ -5,8 +5,9 @@ Content, `admin/src/lib/nav.ts` showed a Content editor a "Content" link, and no
 in the project declared the scope. This is the first thing that role can do.
 """
 from botocore.exceptions import ClientError
+from django.db import IntegrityError, transaction
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, serializers, viewsets
+from rest_framework import generics, mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -23,12 +24,15 @@ from apps.cms.admin_serializers import (
     MediaAssetAdminSerializer,
     MenuItemAdminSerializer,
     PageAdminSerializer,
+    TrainingLibrarySerializer,
+    TrainingResourceAdminSerializer,
     VideoFinalizeSerializer,
     VideoTicketRequestSerializer,
 )
 from apps.cms.video_sniff import VIDEO_CONTENT_TYPES, is_faststart, sniff_video_container
 from apps.cms.models import (
     Banner, HomepageSection, MediaAsset, MenuItem, Page, GoogleReview, GoogleReviewsMeta,
+    TrainingResource,
 )
 from apps.core.audit import AdminAuditMixin
 
@@ -256,3 +260,83 @@ class GoogleReviewsMetaAdminView(AdminAuditMixin, APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class TrainingResourceAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """The Owner's half of the training library (2026-08-23): full CRUD, drafts
+    included.
+
+    `training.manage` IS OWNER-ONLY BY DESIGN — Hammed's brief: staff watch, only
+    the Owner authors. It lives in the cms app because a training row is content,
+    but it deliberately does NOT ride `cms.manage`: that scope is held by the
+    Content role, and "can rewrite the returns policy" was never meant to imply
+    "decides what the team is trained on".
+
+    READS AND WRITES ARE SPLIT ACROSS TWO CLASSES (this one and
+    `TrainingLibraryView`) rather than per-action permissions on one viewset — the
+    referrals precedent, and for the same reason: `test_admin_surface_guard`
+    judges the class the URLconf routes, and a class whose declared permission is
+    not the permission every route enforces is exactly what it exists to refuse.
+
+    DELETE IS A REAL DELETE, unlike stores. A row is a link plus two typed fields;
+    the video lives on YouTube; and the only scope that can reach this endpoint is
+    the Owner's. Hiding without losing the row is `is_published=false`.
+
+    UNPAGINATED on purpose: a training curriculum is tens of rows at most, and the
+    admin page renders it as one ordered list.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("training.manage")]
+    serializer_class = TrainingResourceAdminSerializer
+    audit_serializers = (TrainingResourceAdminSerializer,)
+    queryset = TrainingResource.objects.all()
+    pagination_class = None
+
+    def create(self, request, *args, **kwargs):
+        """Translate the unique-index race into the serializer's own sentence.
+
+        Two saves of the same video in the same second both pass the serializer's
+        duplicate check; the second hits `training_unique_video`. The savepoint
+        confines the rollback — `AdminAuditMixin.dispatch` already holds a
+        transaction open, and an unhandled IntegrityError inside it poisons every
+        later query including this response (the stores lesson, verbatim).
+        """
+        try:
+            with transaction.atomic():
+                return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            return Response(
+                {"youtube_url": ["That video is already in the library."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    def update(self, request, *args, **kwargs):
+        try:
+            with transaction.atomic():
+                return super().update(request, *args, **kwargs)
+        except IntegrityError:
+            return Response(
+                {"youtube_url": ["That video is already in the library."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+
+class TrainingLibraryView(AdminAuditMixin, generics.ListAPIView):
+    """What staff open from the Training menu: published rows, curriculum order.
+
+    `IsAdminUser`, scope None in ADMIN_SURFACE — the AdminSearchView posture. The
+    library exists FOR every staff member ("a resource for all staffs going
+    forward"), so gating it on any scope would be gating it on the wrong thing;
+    admission is the admin ceremony itself. Authorship stays behind
+    `training.manage` on the viewset above.
+
+    NOT read-audited: titles of internal how-to videos are not PII, and auditing
+    them would only bury the reads the audit table exists for.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [permissions.IsAdminUser]
+    serializer_class = TrainingLibrarySerializer
+    queryset = TrainingResource.objects.filter(is_published=True)
+    pagination_class = None

@@ -3,7 +3,9 @@ from rest_framework import serializers
 
 from apps.cms.models import (
     GoogleReview, GoogleReviewsMeta, Banner, HomepageSection, MediaAsset, MenuItem, Page,
+    TrainingResource,
 )
+from apps.cms.youtube import canonical_watch_url, parse_youtube_video_id
 
 # Server-side upload ceilings (2026-08-07). Until now the only size check lived in the
 # admin's Next action layer, which a direct API client never passes through — these are
@@ -276,3 +278,81 @@ class VideoFinalizeSerializer(serializers.Serializer):
 
     key = serializers.CharField(max_length=300)
     original_name = serializers.CharField(max_length=255, allow_blank=True, default="")
+
+
+class TrainingResourceAdminSerializer(serializers.ModelSerializer):
+    """The Owner's editor for one training-library row.
+
+    THE LINK IS VALIDATED, THEN REWRITTEN. `validate` derives the video id from
+    whatever was pasted (`apps/cms/youtube.py` takes every shape YouTube links come
+    in) and stores the canonical `watch?v=` spelling — so the row the Owner reads
+    back is the row every player and thumbnail is built from, and a link that names
+    no video is refused under the field while the person who pasted it is still
+    looking at the form.
+
+    THE DUPLICATE CHECK IS HERE, NOT A `UniqueValidator`, because the unique column
+    is `video_id` — derived, `editable=False`, invisible to DRF's field discovery —
+    and the message must name the training that already holds the video, not recite
+    a constraint. The DB constraint (`training_unique_video`) remains the backstop
+    for the race; the view translates that IntegrityError into the same sentence.
+    """
+
+    video_id = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = TrainingResource
+        fields = [
+            "id", "title", "description", "youtube_url", "video_id",
+            "position", "is_published", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "video_id", "created_at", "updated_at"]
+
+    def validate_title(self, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError(
+                "Give the training a title staff will recognise in the list."
+            )
+        return value
+
+    def validate(self, attrs):
+        # PATCH may legitimately omit the link (flipping is_published, reordering);
+        # only judge it when it is being set.
+        if "youtube_url" in attrs:
+            video_id = parse_youtube_video_id(attrs["youtube_url"])
+            if not video_id:
+                raise serializers.ValidationError(
+                    {
+                        "youtube_url": (
+                            "Paste the link of one YouTube video — the address-bar URL "
+                            "(youtube.com/watch?v=…) or a Share link (youtu.be/…)."
+                        )
+                    }
+                )
+            existing = (
+                TrainingResource.objects.filter(video_id=video_id)
+                .exclude(pk=getattr(self.instance, "pk", None))
+                .first()
+            )
+            if existing:
+                raise serializers.ValidationError(
+                    {
+                        "youtube_url": (
+                            f"That video is already in the library as “{existing.title}” "
+                            "— edit that training instead of adding it twice."
+                        )
+                    }
+                )
+            attrs["youtube_url"] = canonical_watch_url(video_id)
+        return attrs
+
+
+class TrainingLibrarySerializer(serializers.ModelSerializer):
+    """What every staff member sees — the same fields, all read-only, no draft state
+    to leak because `TrainingLibraryView`'s queryset is published rows only."""
+
+    class Meta:
+        model = TrainingResource
+        fields = ["id", "title", "description", "youtube_url", "video_id", "position",
+                  "created_at"]
+        read_only_fields = fields

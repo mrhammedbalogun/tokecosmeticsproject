@@ -40,6 +40,7 @@ OWNER = {
     "reports.view",
     "staff.manage",
     "settings.manage",
+    "training.manage",  # the staff training library; authoring is the Owner's alone
     "referrals.view",
     "referrals.manage",
     "referrals.pay",  # asserting cash left the bank; Owner and Manager

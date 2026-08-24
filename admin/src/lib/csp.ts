@@ -70,14 +70,21 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     // and homepage-banner thumbnails, which the admin absolutely does render. The API
     // origin is here for dev, where Django serves uploads itself (/media/…) — in
     // production it serves none, so the entry is inert.
-    "img-src": ["'self'", "data:", "blob:", mediaHost(), apiOrigin()],
+    // `i.ytimg.com` is the training library's click-to-play posters (2026-08-23):
+    // the thumbnail URL is built from a server-validated 11-char video id, never
+    // from a pasted URL, so this origin can only ever serve YouTube's own stills.
+    "img-src": ["'self'", "data:", "blob:", mediaHost(), apiOrigin(), "https://i.ytimg.com"],
     // The tile editor and media library preview VIDEOS too: uploaded ones from the
     // media host (dev: Django), staged ones from blob: object URLs. Without this
     // directive they fall back to default-src 'self' and every preview is blocked.
     "media-src": ["'self'", "blob:", mediaHost(), apiOrigin()],
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", apiOrigin(), uploadHost(), ...TURNSTILE].filter(Boolean),
-    "frame-src": [...TURNSTILE, storefrontOrigin()],
+    // youtube-nocookie is the training library's player (2026-08-23) — the
+    // privacy-enhanced embed origin, and the ONLY YouTube origin allowed: the iframe
+    // src is built from a server-validated video id (`lib/training.ts`), and a frame
+    // is not a script, so the zero-third-party-scripts rule above still stands.
+    "frame-src": [...TURNSTILE, storefrontOrigin(), "https://www.youtube-nocookie.com"],
     "frame-ancestors": ["'none'"],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],

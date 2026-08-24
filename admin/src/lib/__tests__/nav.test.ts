@@ -8,6 +8,7 @@ const OWNER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "cms.manage", "reports.view", "staff.manage",
   "settings.manage", "referrals.view", "referrals.manage", "referrals.pay",
+  "training.manage",
 ];
 const MANAGER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
@@ -63,6 +64,10 @@ describe("the sidebar renders only what the scopes allow", () => {
       // monthly transfers. The scopes live on the endpoints, not the nav.
       "Referrals",
       "Reports",
+      // Training (2026-08-23) carries no scope at all — the library is for every staff
+      // member, so every staff member gets the link. Authoring stays Owner-only on the
+      // endpoints (`training.manage`).
+      "Training",
       // Settings is any-of `settings.manage` / `products.manage`: the Delivery section
       // runs on `products.manage`, so a Manager gets the door. The index page then shows
       // only Delivery; Payments and Audit stay behind `settings.manage`.
@@ -76,17 +81,19 @@ describe("the sidebar renders only what the scopes allow", () => {
     // Referrals is on the list for the same reason Orders is: the desk answers "where
     // is my commission?" and needs to see the request without being able to decide it.
     expect(labels(SUPPORT)).toEqual([
-      "Dashboard", "Orders", "Deliveries", "Customers", "Referrals",
+      "Dashboard", "Orders", "Deliveries", "Customers", "Referrals", "Training",
     ]);
   });
 
   it("Content sees content only — customer reviews are shop management, not copy", () => {
-    expect(labels(CONTENT)).toEqual(["Dashboard", "Content"]);
+    expect(labels(CONTENT)).toEqual(["Dashboard", "Content", "Training"]);
   });
 
-  it("a staff member with no scopes still sees the dashboard and nothing else", () => {
-    expect(labels([])).toEqual(["Dashboard"]);
-    expect(visibleNav(undefined).map((i) => i.label)).toEqual(["Dashboard"]);
+  it("a staff member with no scopes still sees the scopeless items and nothing else", () => {
+    // Dashboard and Training are the two deliberately scope-free items: the first is
+    // the landing page, the second is the library that exists FOR every staff member.
+    expect(labels([])).toEqual(["Dashboard", "Training"]);
+    expect(visibleNav(undefined).map((i) => i.label)).toEqual(["Dashboard", "Training"]);
   });
 
   it("Staff stays Owner-only, and Settings opens to nobody below Manager", () => {

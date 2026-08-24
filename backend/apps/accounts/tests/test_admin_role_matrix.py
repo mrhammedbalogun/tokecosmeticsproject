@@ -110,6 +110,9 @@ MATRIX: list[Row] = [
     Row("CreateAdjustmentView", "post", "/api/v1/admin/referrers/999999/adjust/",
         _MANAGERS,
         body={"currency": "NGN", "amount": "-100.00", "kind": "correction", "reason": "x"}),
+    # --- training: staff watch, the Owner authors -------------------------------
+    Row("TrainingResourceAdminViewSet", "get", "/api/v1/admin/training/", {"Owner"}),
+    Row("TrainingLibraryView", "get", "/api/v1/admin/training-library/", ALL_ROLES),
     # --- cms: Content holds this and nothing else; Manager and Support do not.
     Row("PageAdminViewSet", "get", "/api/v1/admin/pages/", _CONTENT),
     Row("MenuItemAdminViewSet", "get", "/api/v1/admin/menu-items/", _CONTENT),

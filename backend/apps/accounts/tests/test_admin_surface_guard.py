@@ -355,6 +355,12 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # per seeded role and asserts the exact set of sections returned. Read that before
     # changing anything here.
     "AdminSearchView": None,
+    # --- training: the staff library (2026-08-23) --------------------------------
+    # Two classes, referrals-style, because this guard judges the class the URLconf
+    # routes. Authoring is Owner-only by brief; reading is every staff member's right,
+    # so the library gates on is_staff alone.
+    "TrainingResourceAdminViewSet": "training.manage",
+    "TrainingLibraryView": None,
     # --- audit -------------------------------------------------------------------
     # `settings.manage` rather than a scope of its own: an `audit.view` scope would be
     # held by exactly the roles that already hold this one, and the log records what
