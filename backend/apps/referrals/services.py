@@ -161,7 +161,7 @@ class AttributionRefusal:
     reason: str
 
 
-def attribution_code_for_order(code: str, buyer) -> str:
+def attribution_code_for_order(code: str, buyer, *, email: str = "", phone: str = "") -> str:
     """The code to stamp on an order, or "" if this one earns nothing.
 
     Called from `place_order` with whatever the storefront's cookie held. Everything
@@ -169,7 +169,12 @@ def attribution_code_for_order(code: str, buyer) -> str:
     (which runs in the payment path and must not do interesting work) has nothing left
     to decide.
 
-    The four refusals:
+    ``email`` / ``phone`` are the GUEST's submitted contact details, and are consulted
+    ONLY when there is no account behind the order — see `_refuse_attribution`. An
+    authenticated buyer is identified by their account row, always, so a caller that
+    passes both cannot talk the self-referral guard out of a refusal.
+
+    The three refusals:
 
     * unknown code — a typo, or a code from a deleted account.
     * blocked referrer — `is_blocked` stops new earnings, by design; money already
@@ -180,8 +185,23 @@ def attribution_code_for_order(code: str, buyer) -> str:
       Not matched on shipping address, deliberately — a referrer's flatmate ordering is
       a legitimate sale, and address-matching would refuse it silently at checkout. That
       signal belongs on the payout review screen, where a human can weigh it.
-    * anonymous buyer — cannot happen today (checkout is authenticated) but the guard
-      costs a line and the alternative is an AttributeError in the checkout path.
+
+    ── GUESTS ARE ATTRIBUTED (2026-08-28) ──────────────────────────────────────────────
+
+    They were not until this date: an anonymous buyer was refused outright, so a guest
+    who typed a referral code earned their referrer nothing and got no discount. The
+    storefront never knew — `POST /api/referral` is a PUBLIC lookup with no idea who is
+    asking, so it cheerfully answered "✓ that's 5% off for you" and the checkout then
+    charged full price. Since guest checkout is how a large share of first orders arrive
+    (that is what it is FOR), the old rule quietly aimed the programme away from the
+    orders it was most likely to win, and broke a promise made on screen.
+
+    A guest is now identified by the email and phone they type at checkout. That identity
+    is weaker than an account — someone determined to refer themselves can use a second
+    mailbox — but it is the same weakness the account path already lives with (a second
+    account is free), it closes the lazy version of the dodge, and self-referral at scale
+    is caught where it was always going to be caught: `fraud_flags` on the payout screen,
+    in front of a human, before any money moves.
 
     Returns the UPPERCASED code so `Order.referral_code` matches `ReferralProfile.code`
     byte-for-byte and accrual's lookup does not have to be case-insensitive again.
@@ -190,7 +210,7 @@ def attribution_code_for_order(code: str, buyer) -> str:
     if not code:
         return ""
 
-    refusal = _refuse_attribution(code, buyer)
+    refusal = _refuse_attribution(code, buyer, email=email, phone=phone)
     if refusal is not None:
         # INFO, not WARNING: the overwhelmingly common case is a customer clicking their
         # own link to check that it works, which is not an incident.
@@ -199,9 +219,16 @@ def attribution_code_for_order(code: str, buyer) -> str:
     return code
 
 
-def _refuse_attribution(code: str, buyer) -> AttributionRefusal | None:
-    if buyer is None or not getattr(buyer, "is_authenticated", False):
-        return AttributionRefusal(code, "anonymous buyer")
+def _refuse_attribution(
+    code: str, buyer, *, email: str = "", phone: str = ""
+) -> AttributionRefusal | None:
+    # WHOSE contact details count. An account holder's own row wins over anything the
+    # caller passes: the kwargs describe a guest, and letting them override a real user
+    # would turn the self-referral guard into an opt-out. A guest has no row, so the
+    # submitted details are the only identity there is.
+    authenticated = buyer is not None and getattr(buyer, "is_authenticated", False)
+    buyer_email = (buyer.email if authenticated else email) or ""
+    buyer_phone = (buyer.phone if authenticated else phone) or ""
 
     profile = (
         ReferralProfile.objects.select_related("user").filter(code__iexact=code).first()
@@ -210,16 +237,16 @@ def _refuse_attribution(code: str, buyer) -> AttributionRefusal | None:
         return AttributionRefusal(code, "unknown code")
     if profile.is_blocked:
         return AttributionRefusal(code, "referrer is blocked")
-    if profile.user_id == buyer.pk:
+    if authenticated and profile.user_id == buyer.pk:
         return AttributionRefusal(code, "self-referral (same account)")
 
     referrer = profile.user
-    if referrer.email and referrer.email.lower() == (buyer.email or "").lower():
+    if referrer.email and referrer.email.lower() == buyer_email.lower():
         return AttributionRefusal(code, "self-referral (same email)")
-    # Phone numbers are normalised to E.164 on write (accounts.serializers), so a plain
-    # comparison is meaningful. Blank never matches blank — two accounts with no phone
-    # are not evidence of anything.
-    if referrer.phone and referrer.phone == (buyer.phone or ""):
+    # Phone numbers are normalised to E.164 on write (accounts.serializers, and
+    # GuestCheckoutSerializer for a guest), so a plain comparison is meaningful. Blank
+    # never matches blank — two people with no phone on file are not evidence of anything.
+    if referrer.phone and referrer.phone == buyer_phone:
         return AttributionRefusal(code, "self-referral (same phone)")
     return None
 
@@ -249,19 +276,19 @@ def customer_discount_percent(attributed_code: str, buyer, email: str = "") -> D
 
     Prior orders are counted by USER, falling back to email.
 
-    ── GUESTS GET NOTHING TODAY, AND THAT IS NOT DECIDED HERE ─────────────────────────
+    ── GUESTS, AND WHY THE EMAIL FALLBACK IS LIVE NOW ─────────────────────────────────
 
-    The email fallback is currently unreachable, because `_refuse_attribution` turns an
-    anonymous buyer away before this function is ever consulted: a guest checkout earns no
-    commission, so it also earns no discount. The two halves of the programme stay in step,
-    which is the property worth protecting.
+    Until 2026-08-28 the email branch below was unreachable: `_refuse_attribution` turned
+    an anonymous buyer away before this function was ever consulted, so a guest earned no
+    commission and therefore took no discount. It was written anyway, against the day
+    guest attribution was wanted — and that day came. Nothing here needed changing, which
+    is the whole point of having put the decision in ONE place: `_refuse_attribution`
+    answers "who gets PAID", and both halves of the programme read the answer off the
+    attributed code rather than each deciding for themselves.
 
-    It is written anyway, and deliberately. If guest attribution is ever wanted — and it
-    is a fair thing to want, since guest checkout is how a lot of first orders arrive — the
-    change belongs in `_refuse_attribution`, where it is one decision about who gets PAID
-    rather than two decisions that could disagree. This side would then already be correct.
-    The email match is imperfect in the obvious way (a guest with two addresses gets two
-    first orders); that is the right trade against refusing every guest.
+    The email match is imperfect in the obvious way (a guest with two mailboxes gets two
+    first orders); that is the right trade against refusing every guest, and it only
+    matters at all when `customer_discount_first_order_only` is switched on.
     """
     if not attributed_code:
         return ZERO
@@ -1361,7 +1388,17 @@ def fraud_flags(request: PayoutRequest) -> list[str]:
             f"{same_address} of {len(commissions)} orders shipped to the referrer's own address"
         )
 
-    buyers = {c.order.user_id for c in commissions}
+    # Guests are keyed by EMAIL, not by `user_id`. Since guest attribution shipped
+    # (2026-08-28) a referrer can legitimately have several guest orders, and every one
+    # of them carries `user_id = None` — grouping on that alone would collapse three
+    # unrelated shoppers into one key and accuse an honest referrer of self-dealing. The
+    # email is the only identity a guest has, so it is the one this counts, which also
+    # makes the flag MEAN something on the guest path: the same person ordering three
+    # times through their own code is exactly what a reviewer wants to see.
+    buyers = {
+        c.order.user_id if c.order.user_id else f"guest:{(c.order.email or '').lower()}"
+        for c in commissions
+    }
     if len(buyers) == 1 and len(commissions) > 2:
         flags.append(f"all {len(commissions)} orders came from a single customer")
 

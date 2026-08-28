@@ -13,13 +13,21 @@ def _lines(cart):
     return [(i.variant, i.quantity) for i in cart.items.select_related("variant").all()]
 
 
-def quote(cart, country, *, user=None, email="", coupon_code="", delivery_amount=Decimal("0.00"),
-          referral_code=""):
+def quote(cart, country, *, user=None, email="", phone="", coupon_code="",
+          delivery_amount=Decimal("0.00"), referral_code=""):
     """Return {"totals": {...string money...}, "coupon": {"ok": bool, "error_code"?: str}}.
 
     ``email`` (Plan-38): the guest's submitted email, so the per-email coupon limits
     the preview checks are the ones place_order will enforce. Ignored when a user is
     present — the user's own email wins, exactly as in place_order.
+
+    ``phone`` (2026-08-28): the guest's submitted phone, used for nothing but the
+    self-referral guard, and there only so this preview reaches the SAME verdict
+    placement will. A guest quoting from /cart has typed neither yet, so the cart page
+    previews the discount on the strength of the code alone and the review step — where
+    the contact details exist — is where a self-referring guest sees it withdrawn. That
+    is the right place for it to happen: before the pay button rather than as a
+    `cart_changed` refusal at it.
 
     ``referral_code`` (2026-08-27): the attribution cookie, so the cart can SHOW the
     referred customer's 5% before they commit. It is put through exactly the same
@@ -32,6 +40,11 @@ def quote(cart, country, *, user=None, email="", coupon_code="", delivery_amount
     placement reads the cookie, and the `expected_total` guard turns any disagreement into
     a refusal rather than a cheap order."""
     lines = _lines(cart)
+    # Captured BEFORE the coupon block, which rebinds `email` to the user's own address
+    # when there is a user. Attribution wants the GUEST's details specifically, and
+    # reading a rebound variable further down is exactly the kind of quiet coupling that
+    # breaks the next time these two blocks are reordered.
+    guest_email, guest_phone = ("", "") if user is not None else (email, phone)
     # Subtotal first — validate_coupon's min-spend (min_not_met) check needs it.
     base = compute_totals(lines, country)  # no coupon, no delivery
     coupon = None
@@ -49,9 +62,11 @@ def quote(cart, country, *, user=None, email="", coupon_code="", delivery_amount
             coupon = v.coupon
         else:
             coupon_result = {"ok": False, "error_code": v.error_code}
-    attributed = attribution_code_for_order(referral_code, user)
+    attributed = attribution_code_for_order(
+        referral_code, user, email=guest_email, phone=guest_phone
+    )
     referral_percent = customer_discount_percent(
-        attributed, user, email=email or (user.email if user is not None else "")
+        attributed, user, email=guest_email or (user.email if user is not None else "")
     )
     totals = compute_totals(
         lines, country, delivery_amount=delivery_amount, coupon=coupon,

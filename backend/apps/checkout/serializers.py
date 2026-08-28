@@ -107,9 +107,30 @@ class GuestQuoteRequestSerializer(serializers.Serializer):
     cart_id = serializers.UUIDField()
     coupon_code = serializers.CharField(required=False, allow_blank=True, default="")
     guest_email = serializers.EmailField(required=False, allow_blank=True, default="")
+    # Optional, and blank on the /cart preview where the guest has typed nothing yet.
+    # Its only job is the self-referral guard: without it a self-referring guest would
+    # see the 5% on the review screen and lose it at the pay button as `cart_changed`.
+    # Normalised through the same E.164 gate as the real checkout, or the comparison
+    # against a referrer's stored number is meaningless — but NOT rejected when it
+    # fails, because a half-typed number in a preview is not an error worth a 400.
+    guest_phone = serializers.CharField(
+        required=False, allow_blank=True, default="", max_length=32
+    )
     address = GuestAddressSerializer(required=False)
     # CharField for the same mixed-id-space reason as QuoteRequestSerializer above.
     delivery_option_id = serializers.CharField(required=False)
     gig_centre_id = serializers.IntegerField(required=False)
     # Same as QuoteRequestSerializer.referral_code — a guest can be referred too.
     referral_code = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_guest_phone(self, value):
+        """Best-effort E.164, never a 400. This is a PREVIEW: the guest is mid-typing,
+        and the real gate is `GuestContactMixin.validate_guest_phone` at placement.
+        An unparseable number simply fails to match any referrer, which is the same
+        outcome as sending nothing."""
+        if not value:
+            return ""
+        try:
+            return normalize_e164(value)
+        except ValueError:
+            return ""

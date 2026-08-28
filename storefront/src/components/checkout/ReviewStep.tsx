@@ -158,11 +158,21 @@ export function ReviewStep() {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             cart_id: cartId,
-            // Saved-address id for the authed flow; inline payload + contact email
-            // for guests (the BFF routes to the guest quote endpoint, which threads
-            // the email into the per-email coupon checks).
+            // Saved-address id for the authed flow; inline payload + contact details
+            // for guests (the BFF routes to the guest quote endpoint, which threads the
+            // email into the per-email coupon checks).
+            //
+            // The PHONE goes too, since 2026-08-28, and only for the self-referral
+            // guard: a guest is identified to the referral programme by these two
+            // fields, and if the preview cannot see them it will quote a 5% discount
+            // that `place_order` then refuses — turning the pay button into a
+            // `cart_changed` error instead of showing the truth on this screen.
             ...(guestAddress
-              ? { address: guestAddress, guest_email: guest?.email ?? "" }
+              ? {
+                  address: guestAddress,
+                  guest_email: guest?.email ?? "",
+                  guest_phone: guest?.phone ?? "",
+                }
               : { address_id: addressId }),
             delivery_option_id: deliveryOptionId,
             gig_centre_id: gigCentreId,

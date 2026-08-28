@@ -74,12 +74,33 @@ function Harness() {
   );
 }
 
-function renderHarness() {
+/** The Plan-38 guest twin of `Harness`: `guest` present is what puts every later step
+ *  into guest mode, and the address arrives inline instead of as a saved id. */
+function GuestHarness() {
+  const { setSelection } = useCheckout();
+  useEffect(() => {
+    setSelection({
+      guest: { email: "guest@example.com", phone: "+2348012345678" },
+      guestAddress: {
+        first_name: "Ada", last_name: "Obi", phone: "+2348012345678",
+        line1: "1 Guest Close", country_code: "NG", state_region: 1,
+      },
+      addressDisplay: "1 Guest Close",
+      deliveryOptionId: 2,
+      deliveryDisplay: "Standard — £5.00",
+      paymentGateway: "bank_transfer",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <ReviewStep />;
+}
+
+function renderHarness(harness: React.ReactNode = <Harness />) {
   const qc = new QueryClient();
   return render(
     <QueryClientProvider client={qc}>
       <CheckoutProvider>
-        <Harness />
+        {harness}
       </CheckoutProvider>
     </QueryClientProvider>
   );
@@ -267,6 +288,31 @@ describe("ReviewStep", () => {
     expect(body.coupon_code).toBe("WELCOME");
   });
 
+  it("sends a guest's email AND phone on the quote, so the referral preview tells the truth", async () => {
+    // A guest is identified to the referral programme by these two fields and nothing
+    // else. Without the phone, the preview cannot tell a self-referring guest apart from
+    // any other shopper, so it would quote the 5% and `place_order` would then refuse it
+    // — the shopper's reward for clicking pay being a `cart_changed` error. The email was
+    // already going for the per-email coupon limits; the phone rides the same request.
+    const f = mockFetch({
+      [QUOTE_URL]: {
+        status: 200,
+        body: { totals: { subtotal: "20.00", discount: "0.00", delivery: "5.00", tax: "0.00", grand_total: "25.00", currency: "GBP" }, coupon: { ok: true } },
+      },
+    });
+
+    renderHarness(<GuestHarness />);
+
+    await waitFor(() => expect(f).toHaveBeenCalled());
+    const [, init] = f.mock.calls[0];
+    const body = JSON.parse((init as RequestInit).body as string);
+    expect(body.guest_email).toBe("guest@example.com");
+    expect(body.guest_phone).toBe("+2348012345678");
+    // The inline address goes with them, and no saved-address id — this is the guest twin.
+    expect(body.address).toBeTruthy();
+    expect(body.address_id).toBeUndefined();
+  });
+
   it("renders PaymentLauncher (not a redirect to confirmation) for an online gateway", async () => {
     mockFetch({
       [QUOTE_URL]: {
@@ -312,6 +358,11 @@ describe("ReviewStep", () => {
   // read off a WhatsApp message can be entered.
 
   it("offers the referral field collapsed, with no input until asked for", async () => {
+    // Collapsed on every surface, deliberately: most shoppers have no code, and an open
+    // box labelled "referral code" invites people to hunt for one they do not have — at
+    // the review step that means leaving a checkout they had almost finished. Reaffirmed
+    // by Hammed 2026-08-28 after a build that opened it here; `initiallyOpen` still
+    // exists on the component and nothing passes it.
     mockFetch({
       [QUOTE_URL]: {
         status: 200,
@@ -322,26 +373,44 @@ describe("ReviewStep", () => {
     // Let the mount quote settle before asserting, so the state update it causes lands
     // inside the test rather than after it (React act warning otherwise).
     await waitFor(() => expect(screen.getByText("£25.00")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /friend.s referral code/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /have a friend.s referral code/i }),
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(/friend.s referral code/i)).not.toBeInTheDocument();
   });
 
-  it("applies a referral code without re-quoting the order", async () => {
-    // The whole point of keeping this separate from the coupon box: attribution changes
-    // who gets paid later, never what this shopper pays. A re-quote here would be both
-    // wasted work and a chance to drop the code on the quote path.
-    const f = mockFetch({
+  it("applies a referral code and RE-QUOTES, so the customer's discount lands on screen", async () => {
+    // This test used to be called "…without re-quoting", and asserted the opposite. That
+    // was true until 2026-08-27, when the referred customer's 5% shipped: attribution now
+    // moves the total as well as deciding who gets paid, so the totals on screen are
+    // stale the instant a code is accepted and `referralNonce` has to re-run the quote.
+    // The old assertion survived that change by luck — its `waitFor` settled on the
+    // success message, which can land before the re-quote's fetch is recorded, so it was
+    // reading the count in a race it usually won. Pinned properly now: the SECOND quote
+    // is what the shopper is charged, and the number on screen must be the server's.
+    const routes = {
       [QUOTE_URL]: {
         status: 200,
         body: { totals: { subtotal: "20.00", discount: "0.00", delivery: "5.00", tax: "0.00", grand_total: "25.00", currency: "GBP" }, coupon: { ok: true } },
       },
-      "/api/referral": { status: 200, body: { valid: true, referrer_name: "Amina" } },
-    });
+      "/api/referral": {
+        status: 200,
+        body: { valid: true, referrer_name: "Amina", customer_discount_percent: "5.00" },
+      },
+    };
+    const f = mockFetch(routes);
     renderHarness();
     await waitFor(() => expect(screen.getByText("£25.00")).toBeInTheDocument());
     const quotesBefore = f.mock.calls.filter(([url]) => url === QUOTE_URL).length;
 
-    fireEvent.click(screen.getByRole("button", { name: /friend.s referral code/i }));
+    // The server takes the 5% off the goods on the NEXT quote; mutating the canned route
+    // is how this stands in for that (mockFetch reads `routes` per call).
+    routes[QUOTE_URL] = {
+      status: 200,
+      body: { totals: { subtotal: "20.00", discount: "0.00", referral_discount: "1.00", referral_discount_percent: "5.00", delivery: "5.00", tax: "0.00", grand_total: "24.00", currency: "GBP" }, coupon: { ok: true } },
+    };
+
+    fireEvent.click(screen.getByRole("button", { name: /have a friend.s referral code/i }));
     const input = screen.getByLabelText(/friend.s referral code/i);
     fireEvent.change(input, { target: { value: "amina7k3p" } });
     // Scoped to the field's own row: the coupon box above has an "Apply" button too, and
@@ -353,8 +422,13 @@ describe("ReviewStep", () => {
     // Sent as typed — normalisation and validation are the server's job, and the cookie
     // it sets is the only thing checkout will trust.
     expect(JSON.parse(String(call?.[1]?.body))).toEqual({ code: "amina7k3p" });
-    expect(f.mock.calls.filter(([url]) => url === QUOTE_URL).length).toBe(quotesBefore);
-    expect(screen.getByText("£25.00")).toBeInTheDocument();
+    // The discount the lookup quoted is named in the confirmation, so the field never
+    // promises money off that the checkout will not give.
+    expect(screen.getByText(/5% off for you/)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(f.mock.calls.filter(([url]) => url === QUOTE_URL).length).toBe(quotesBefore + 1),
+    );
+    await waitFor(() => expect(screen.getByText("£24.00")).toBeInTheDocument());
   });
 
   it("clears the guest coupon stash on the online-gateway path too", async () => {

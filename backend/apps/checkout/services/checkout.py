@@ -220,7 +220,13 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
         # 2026-08-27 the attribution buys the customer a discount as well as the referrer
         # a commission, so the totals cannot be computed without knowing it. Nothing
         # between here and `compute_totals` depends on the old ordering.
-        attributed_code = attribution_code_for_order(referral_code, user)
+        # The guest's own contact details go in as the identity the self-referral guard
+        # matches on; for a signed-in customer they are ignored in favour of the account.
+        # Both are already normalised by GuestCheckoutSerializer (email lowercased, phone
+        # to E.164), which is what makes the comparison against a referrer's row honest.
+        attributed_code = attribution_code_for_order(
+            referral_code, user, email=guest_email, phone=guest_phone
+        )
         referral_percent = customer_discount_percent(
             attributed_code, user, email=guest_email or (user.email if user else "")
         )

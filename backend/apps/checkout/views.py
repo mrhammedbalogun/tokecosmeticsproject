@@ -243,6 +243,7 @@ class GuestQuoteView(APIView):
                 delivery_amount = Decimal(chosen["price"])
         return Response(quote_service(
             cart, request.country, user=None, email=v.get("guest_email", ""),
+            phone=v.get("guest_phone", ""),
             coupon_code=v.get("coupon_code", ""), delivery_amount=delivery_amount,
             referral_code=v.get("referral_code", ""),
         ))

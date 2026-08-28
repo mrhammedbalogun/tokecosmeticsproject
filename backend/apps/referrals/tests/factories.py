@@ -49,7 +49,12 @@ def make_order(
     status="processing",
     referral_code: str = "",
     placed_at=None,
+    email: str = "",
 ) -> Order:
+    """``user=None`` builds a GUEST order (Plan-38), which is a real shape on this table
+    and — since guest attribution shipped, 2026-08-28 — one that can carry a commission.
+    Pass ``email`` to give it the identity a guest order actually has; it defaults to the
+    account's address when there is a user, exactly as `place_order` sets it."""
     country = country or ng()
     subtotal_d = Decimal(subtotal)
     discount_d = Decimal(discount) + Decimal(referral_discount)
@@ -63,7 +68,7 @@ def make_order(
     return Order.objects.create(
         number=next_order_number(),
         user=user,
-        email=user.email,
+        email=email or (user.email if user is not None else "guest@x.com"),
         country=country,
         currency=country.currency,
         status=status,
