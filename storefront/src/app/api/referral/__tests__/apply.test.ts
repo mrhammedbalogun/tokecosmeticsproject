@@ -38,7 +38,11 @@ describe("apply-a-referral-code BFF", () => {
     upstream(200, { valid: true, referrer_name: "Amina" });
     const res = await POST(req({ code: "amina7k3p" }));
 
-    expect(await res.json()).toEqual({ valid: true, referrer_name: "Amina" });
+    // The rate rides along so the confirmation can name a real number instead of
+    // promising "a discount" — it is fetched from the terms, not echoed from upstream.
+    expect(await res.json()).toEqual({
+      valid: true, referrer_name: "Amina", customer_discount_percent: "5.00",
+    });
     const cookie = res.headers.get("set-cookie") ?? "";
     expect(cookie).toContain("tc_ref=AMINA7K3P");
     expect(cookie).toContain("HttpOnly");
@@ -106,6 +110,11 @@ describe("response projection", () => {
     });
     const res = await POST(req({ code: "amina7k3p" }));
 
-    expect(await res.json()).toEqual({ valid: true, referrer_name: "Amina" });
+    // Three fields, exactly as the name says — `customer_discount_percent` is the third
+    // and comes from the published terms, not from `upstream` above. The email, the id
+    // and the internal flags are all dropped.
+    expect(await res.json()).toEqual({
+      valid: true, referrer_name: "Amina", customer_discount_percent: "5.00",
+    });
   });
 });
