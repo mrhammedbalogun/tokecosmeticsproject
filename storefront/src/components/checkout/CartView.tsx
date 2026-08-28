@@ -42,9 +42,21 @@ export function CartView() {
     setQuote({ status: "idle" });
   }
 
-  async function applyCoupon() {
+  /** Re-quote after a referral code is applied, so the customer's discount appears on
+   *  the summary instead of being promised and then not shown.
+   *
+   *  Reuses the coupon path with whatever code is (or is not) in the box — the quote
+   *  endpoint takes both and the BFF supplies the referral cookie either way. It does not
+   *  break this page's rule that the quote is hit only on an explicit click: applying a
+   *  referral code IS one. */
+  function requoteAfterReferral() {
+    if (!cart.id) return;
+    void applyCoupon({ allowEmptyCode: true });
+  }
+
+  async function applyCoupon({ allowEmptyCode = false } = {}) {
     const code = couponInput.trim();
-    if (!code || !cart.id) return;
+    if ((!code && !allowEmptyCode) || !cart.id) return;
     setApplying(true);
     try {
       const res = await fetch("/api/checkout/quote", {
@@ -52,23 +64,33 @@ export function CartView() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ cart_id: cart.id, coupon_code: code }),
       });
+      // With no coupon typed, this quote was triggered by a REFERRAL code, and every
+      // failure message below is about coupons. Saying "sign in to use a coupon" to
+      // somebody who just entered a friend's referral code is worse than saying nothing,
+      // so a failed referral re-quote leaves the summary exactly as it found it — which
+      // is the subtotal-only view this page shows by default anyway.
       if (res.status === 401) {
-        sessionStorage.setItem(COUPON_STORAGE_KEY, code);
-        setQuote({ status: "guest" });
+        if (code) {
+          sessionStorage.setItem(COUPON_STORAGE_KEY, code);
+          setQuote({ status: "guest" });
+        }
         return;
       }
       if (!res.ok) {
-        setQuote({ status: "error" });
+        if (code) setQuote({ status: "error" });
         return;
       }
       const data = await res.json();
-      if (data.coupon?.ok) {
+      if (data.coupon?.ok || !code) {
+        // `!code` also lands here on a coupon verdict of "not ok", which is not a verdict
+        // on anything the shopper did — there was no coupon. The totals are still good
+        // and they carry the referral discount, so show them.
         setQuote({ status: "ok", totals: data.totals });
       } else {
         setQuote({ status: "invalid", code: data.coupon?.error_code ?? "" });
       }
     } catch {
-      setQuote({ status: "error" });
+      if (code) setQuote({ status: "error" });
     } finally {
       setApplying(false);
     }
@@ -184,7 +206,7 @@ export function CartView() {
             />
             <button
               type="button"
-              onClick={applyCoupon}
+              onClick={() => void applyCoupon()}
               disabled={!couponInput.trim() || applying}
               className="rounded-[var(--radius-card)] bg-accent px-4 py-2 text-sm text-surface transition-colors hover:bg-accent-strong disabled:cursor-not-allowed disabled:opacity-60"
             >
@@ -205,10 +227,11 @@ export function CartView() {
         </div>
 
         {/* Under the coupon box, collapsed. A referral code is the same SHAPE of thing
-            to a shopper ("I was given a code") so it belongs here, but it does not
-            touch the price and must not be confused with a discount — hence its own
-            component and its own wording rather than a second mode of the box above. */}
-        <ReferralCodeField />
+            to a shopper ("I was given a code") so it belongs here, and since 2026-08-27
+            it does move the price too — the referred customer takes a percentage off.
+            It keeps its own component and wording anyway: only this one can be refused
+            for being your own code, and only this one pays somebody. */}
+        <ReferralCodeField onApplied={requoteAfterReferral} />
 
         <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
           <OrderSummary totals={totals} fallbackSubtotal={cart.subtotal} currency={cart.currency} />

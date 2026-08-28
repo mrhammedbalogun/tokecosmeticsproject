@@ -67,6 +67,12 @@ export const NAV_ITEMS: NavItem[] = [
   // the endpoints; this item is only the door.
   { label: "Referrals", href: "/referrals", scopes: ["referrals.view"] },
   { label: "Reports", href: "/reports", scopes: ["reports.view"] },
+  // The referral percentages (2026-08-27). Top-level rather than behind the Settings
+  // door for the reason Hammed asked for it: the two numbers on it are a commercial
+  // decision the Owner or Manager revisits, not a configuration they set once — and
+  // Settings is `settings.manage`, which a Manager does not hold, so filing it there
+  // would have hidden the page from half its audience.
+  { label: "Business Decisions", href: "/business-decisions", scopes: ["decisions.manage"] },
   // The staff training library (2026-08-23). NO scope on purpose — the library exists
   // for every staff member, so the link shows for every staff member, like Dashboard.
   // Authoring inside the page is gated on `training.manage` (Owner-only), which the

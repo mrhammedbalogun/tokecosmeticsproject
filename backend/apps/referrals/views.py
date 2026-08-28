@@ -17,7 +17,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.throttling import PayoutMethodWriteThrottle, ReferralLookupThrottle
-from apps.core.models import Currency
+from apps.core.models import BusinessDecisions, Currency
 from apps.referrals import services
 from apps.referrals.models import (
     Commission,
@@ -72,6 +72,7 @@ class ReferralOverviewView(APIView):
     def get(self, request):
         profile = services.ensure_profile(request.user)
         wallets = services.balances(request.user)
+        decisions = BusinessDecisions.load()
         return Response({
             "code": profile.code,
             "is_blocked": profile.is_blocked,
@@ -80,10 +81,13 @@ class ReferralOverviewView(APIView):
             "current_terms_version": settings.REFERRAL_TERMS_VERSION,
             "share_url": _share_url(profile.code),
             # Published as data rather than baked into the storefront copy: the page
-            # tells the customer "10%", "30 days", "60 days", and those three numbers
-            # ARE the settings. A hardcoded "10%" in JSX is a promise that silently
-            # stops matching the code that pays it.
-            "commission_percent": str(settings.REFERRAL_COMMISSION_PERCENT),
+            # tells the customer "10%", "5%", "30 days", "60 days", and those numbers ARE
+            # the live configuration. A hardcoded "10%" in JSX is a promise that silently
+            # stops matching the code that pays it. Since 2026-08-27 the two percentages
+            # come from `BusinessDecisions`, which an Owner can move without a deploy —
+            # which makes reading them live matter more, not less.
+            "commission_percent": str(decisions.referrer_commission_percent),
+            "customer_discount_percent": str(decisions.customer_discount_percent),
             "cookie_days": settings.REFERRAL_COOKIE_DAYS,
             "hold_days": settings.REFERRAL_HOLD_DAYS,
             "referred_customers": services.referred_customer_count(request.user),
@@ -198,6 +202,7 @@ class ReferralTermsView(APIView):
 
     def get(self, request):
         currencies = {c.code: c for c in Currency.objects.all()}
+        decisions = BusinessDecisions.load()
 
         thresholds = [
             {
@@ -226,7 +231,12 @@ class ReferralTermsView(APIView):
         ]
 
         return Response({
-            "commission_percent": str(settings.REFERRAL_COMMISSION_PERCENT),
+            "commission_percent": str(decisions.referrer_commission_percent),
+            # What the REFERRED CUSTOMER gets off their own order. Published here for the
+            # same reason the commission is: /affiliates now advertises both halves, and
+            # an advertisement that can drift from the checkout that honours it is a
+            # promise the shop cannot keep.
+            "customer_discount_percent": str(decisions.customer_discount_percent),
             "cookie_days": settings.REFERRAL_COOKIE_DAYS,
             "hold_days": settings.REFERRAL_HOLD_DAYS,
             "terms_version": settings.REFERRAL_TERMS_VERSION,

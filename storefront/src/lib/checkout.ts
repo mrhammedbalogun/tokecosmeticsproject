@@ -5,6 +5,11 @@ import { apiFetch } from "@/lib/api";
 
 export interface Totals {
   subtotal: string; discount: string; delivery: string;
+  /** The referred customer's own discount, and the rate it was worked out at. Optional
+   * so a cached quote payload from before 2026-08-27 still renders — the summary treats
+   * a missing value exactly as it treats "0.00" and draws no row. */
+  referral_discount?: string;
+  referral_discount_percent?: string;
   tax: string; grand_total: string; currency: string;
   /** The market's name for its tax line ("VAT", "Sales Tax"). Optional so cached/old
    * quote payloads without it keep rendering — the UI falls back to "Tax". */

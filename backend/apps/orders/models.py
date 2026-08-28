@@ -38,7 +38,22 @@ class Order(TimeStampedModel):
     review_reason = models.TextField(blank=True)
 
     subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # COUPON discount only. The referral discount has its own column below rather than
+    # sharing this one, because the order document has to name them separately — "you
+    # used code SUMMER20" and "you arrived through a friend's link" are different
+    # sentences, and a customer who sees one number for both writes in to ask which.
     discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # The referred customer's own discount (2026-08-27), and the rate it was worked out
+    # at. Both snapshots: `BusinessDecisions.customer_discount_percent` may move tomorrow
+    # and this order must still explain the number printed on its invoice.
+    #
+    # A REAL price reduction, so it leaves the tax base in `compute_totals` and leaves the
+    # referrer's commission base in `referrals.services.commission_base`. Anything added
+    # here that is a TENDER instead — commission spent at checkout, store credit — must
+    # NOT come through this field; see the asymmetry argued out in master-tokerebuild.md
+    # Plan-29 Amendment 2(b).
+    referral_discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    referral_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     shipping_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     # The slice of `tax_total` attributable to delivery (0 unless the market has

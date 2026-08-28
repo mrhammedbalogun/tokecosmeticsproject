@@ -842,6 +842,14 @@ def _case_tax_settings(client, monkeypatch):
     ), 200
 
 
+def _case_business_decisions(client, monkeypatch):
+    return client.patch(
+        "/api/v1/admin/business-decisions/",
+        {"referrer_commission_percent": "9.00"},
+        format="json",
+    ), 200
+
+
 def _case_tax_country(client, monkeypatch):
     return client.patch(
         "/api/v1/admin/tax/countries/GB/", {"tax_applies_to_delivery": True}, format="json"
@@ -901,6 +909,12 @@ WRITE_CASES: dict[str, tuple] = {
     # `update` for the singleton view (RetrieveUpdateAPIView PATCH has no DRF action
     # name to prefer); `partial_update` for the viewset, same as the image editor.
     "TaxSettingsView": (_case_tax_settings, "update"),
+    # Business Decisions (2026-08-27). The referral percentages are PUBLISHED TERMS, so
+    # "who changed the commission rate, and when" has to leave a row — the model keeps no
+    # history of its own, because every number it holds is snapshotted onto the
+    # commissions and orders that used it. `update`, same as the tax singleton next door
+    # and for the same reason (a RetrieveUpdateAPIView PATCH has no DRF action name).
+    "BusinessDecisionsView": (_case_business_decisions, "update"),
     "TaxCountryAdminViewSet": (_case_tax_country, "partial_update"),
     "CouponAdminViewSet": (_case_coupon_create, "create"),
     "DeliveryOptionAdminViewSet": (_case_delivery_option_create, "create"),

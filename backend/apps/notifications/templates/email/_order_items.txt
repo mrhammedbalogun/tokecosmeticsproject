@@ -1,7 +1,8 @@
 {% for item in items %}  {{ item.quantity }} x {{ item.name }}{% if item.variant %} ({{ item.variant }}){% endif %} — {{ item.line_total }}
 {% endfor %}
   Subtotal: {{ subtotal }}{% if discount_total %}
-  Discount: -{{ discount_total }}{% endif %}
+  Discount: -{{ discount_total }}{% endif %}{% if referral_discount_total %}
+  Referral discount{% if referral_discount_percent %} ({{ referral_discount_percent }}%){% endif %}: -{{ referral_discount_total }}{% endif %}
   Delivery ({{ delivery_option_name }}): {{ shipping_total }}{% if tax_total %}
   {{ tax_label|default:"Tax" }}: {{ tax_total }}{% endif %}
   Total: {{ grand_total }}

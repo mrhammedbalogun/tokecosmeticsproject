@@ -21,8 +21,14 @@ class TestQuoteApi:
         res = c.post("/api/v1/checkout/quote/", {"cart_id": str(cart.id)}, format="json", HTTP_X_COUNTRY="NG")
         assert res.status_code == 200
         t = res.data["totals"]
-        assert set(t) == {"subtotal", "discount", "delivery", "tax", "tax_label", "grand_total", "currency"}
+        assert set(t) == {
+            "subtotal", "discount", "referral_discount", "referral_discount_percent",
+            "delivery", "tax", "tax_label", "grand_total", "currency",
+        }
         assert t["discount"] == "0.00" and t["delivery"] == "0.00"
+        # No referral cookie was forwarded, so the referred-customer discount is absent
+        # rather than zero-rated. An un-referred quote must look exactly as it always did.
+        assert t["referral_discount"] == "0.00" and t["referral_discount_percent"] == "0.00"
         assert res.data["coupon"] == {"ok": True}   # no code supplied â†’ trivially ok
 
     def test_invalid_coupon_reports_error_code_without_failing(self, priced_cart):

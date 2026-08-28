@@ -27,6 +27,10 @@ export interface OrderDetail {
    * guest-typed one). On the FULL serializer only — absent from OrderTracking. */
   email: string; phone: string;
   subtotal: string; discount_total: string; shipping_total: string; tax_total: string;
+  /** The referred customer's discount (2026-08-27) and the rate it was given at, both
+   * snapshotted on the order. Optional for orders placed before the columns existed. */
+  referral_discount_total?: string;
+  referral_discount_percent?: string;
   /** The market's name for the tax line ("VAT", "Sales Tax"); serializer default keeps
    * it present on every order. */
   tax_label: string;

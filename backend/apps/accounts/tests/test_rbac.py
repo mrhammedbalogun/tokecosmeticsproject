@@ -44,6 +44,11 @@ OWNER = {
     "referrals.view",
     "referrals.manage",
     "referrals.pay",  # asserting cash left the bank; Owner and Manager
+    # The referral percentages (2026-08-27). Owner AND Manager — deliberately one notch
+    # wider than the Owner-only `settings.manage` that holds the tax screens: tax is a
+    # legal position, the commission rate and the referred customer's discount are a
+    # commercial one, and the Manager is who makes it.
+    "decisions.manage",
 }
 MANAGER = {
     "orders.view",
@@ -59,6 +64,7 @@ MANAGER = {
     # Hammed's call 2026-08-15: the Manager runs the monthly bank transfers, so the
     # Manager marks them paid. Withholding it just gets the Owner's login borrowed.
     "referrals.pay",
+    "decisions.manage",  # see the note on the Owner set above
 }
 # Support reads the payout queue for the same reason it reads orders: answering
 # "where is my commission?" is the job. It decides nothing.

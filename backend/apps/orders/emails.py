@@ -22,7 +22,7 @@ from apps.notifications.tasks import send_email_task
 from apps.orders.models import Order
 from apps.orders.tokens import make_tracking_token
 from apps.payments.labels import gateway_label
-from apps.payments.money import format_money
+from apps.payments.money import format_money, format_percent
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +80,12 @@ def _context(order: Order) -> dict:
         "items": _items(order),
         "subtotal": money(order.subtotal),
         "discount_total": money(order.discount_total) if order.discount_total else "",
+        # The referred customer's own discount, its own line beside the coupon's. "" when
+        # there was none, which is what the template's {% if %} keys off.
+        "referral_discount_total": (
+            money(order.referral_discount_total) if order.referral_discount_total else ""
+        ),
+        "referral_discount_percent": format_percent(order.referral_discount_percent),
         "shipping_total": money(order.shipping_total),
         "tax_total": money(order.tax_total) if order.tax_total else "",
         "tax_label": order.country.tax_label,

@@ -144,6 +144,9 @@ MATRIX: list[Row] = [
     # Tax settings (Plan-37) sit with the money config: they change what customers pay.
     Row("TaxSettingsView", "get", "/api/v1/admin/tax/settings/", _OWNER),
     Row("TaxCountryAdminViewSet", "get", "/api/v1/admin/tax/countries/", _OWNER),
+    # Business Decisions (2026-08-27) is money config too, but deliberately one notch
+    # WIDER than the tax screens above it — the Manager sets the referral percentages.
+    Row("BusinessDecisionsView", "get", "/api/v1/admin/business-decisions/", _MANAGERS),
     Row("CouponAdminViewSet", "get", "/api/v1/admin/coupons/", _MANAGERS),
     Row("DeliveryOptionAdminViewSet", "get", "/api/v1/admin/delivery-options/", _MANAGERS),
     Row("RegionAdminViewSet", "get", "/api/v1/admin/regions/?country_code=NG", _MANAGERS),

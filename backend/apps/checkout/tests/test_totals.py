@@ -180,3 +180,120 @@ def test_delivery_untaxed_unless_the_market_opts_in():
     assert t.tax == Decimal("10.00")  # items only, as before
     assert t.delivery_tax == Decimal("0.00")
     assert t.grand_total == Decimal("130.00")
+
+
+# ── the referred customer's discount (2026-08-27) ────────────────────────────────────
+
+
+def test_the_referral_discount_comes_off_the_goods_and_out_of_the_tax_base():
+    """It is a REAL price reduction, not a tender: the customer pays less for the goods,
+    so less tax is due on them. A tender (store credit, commission spent at checkout)
+    would have to come off AFTER tax instead, or the shop under-declares VAT on goods it
+    sold at full price — the asymmetry argued out in Plan-29 Amendment 2(b).
+
+    Exclusive market so the tax line is visible arithmetic rather than an extraction:
+    1,000 of goods, 5% off = 950 taxable, 10% tax = 95, total 1,045.
+    """
+    market = _country(include_tax=False, rate="10", code="GB", ccy="GBP")
+    v = _priced_variant(market, "1000.00")
+    t = compute_totals([(v, 1)], market, referral_discount_percent=Decimal("5"))
+
+    assert t.subtotal == Decimal("1000.00")
+    assert t.referral_discount == Decimal("50.00")
+    assert t.referral_discount_percent == Decimal("5")
+    assert t.tax == Decimal("95.00")
+    assert t.grand_total == Decimal("1045.00")
+
+
+def test_no_referral_means_the_totals_are_byte_identical_to_before():
+    """The default path. Every un-referred order — which is most of them — must compute
+    exactly as it did before this feature existed."""
+    market = _country(include_tax=False, rate="10", code="GB", ccy="GBP")
+    v = _priced_variant(market, "1000.00")
+
+    assert compute_totals([(v, 1)], market) == compute_totals(
+        [(v, 1)], market, referral_discount_percent=Decimal("0")
+    )
+
+
+def test_the_referral_discount_is_taken_after_the_coupon_not_beside_it():
+    """Charged on what is left after the coupon, so the two can never together exceed the
+    goods. 60% off 1,000 leaves 400; 5% of THAT is 20, not 50."""
+    market = _country(include_tax=False, rate="0", code="GB", ccy="GBP")
+    v = _priced_variant(market, "1000.00")
+    coupon = CouponFactory(type="percent", value=Decimal("60"))
+    t = compute_totals([(v, 1)], market, coupon=coupon, referral_discount_percent=Decimal("5"))
+
+    assert t.discount == Decimal("600.00")
+    assert t.referral_discount == Decimal("20.00")
+    assert t.grand_total == Decimal("380.00")
+
+
+def test_a_hundred_percent_coupon_leaves_the_referral_discount_at_zero_not_negative():
+    """The clamp. Nothing left to discount is not an error and must not produce a
+    negative line that would add money back onto the order."""
+    market = _country(include_tax=False, rate="0", code="GB", ccy="GBP")
+    v = _priced_variant(market, "1000.00")
+    coupon = CouponFactory(type="percent", value=Decimal("100"))
+    t = compute_totals([(v, 1)], market, coupon=coupon, referral_discount_percent=Decimal("5"))
+
+    assert t.referral_discount == Decimal("0.00")
+    assert t.grand_total == Decimal("0.00")
+
+
+def test_the_snapshot_rate_is_zero_when_no_discount_was_actually_given():
+    """`referral_discount_percent` rides onto the order so the invoice can say "(5%)".
+    When nothing was discounted there is no rate to print, and a stored 5% beside a 0.00
+    amount would be a line the customer could not reconcile."""
+    market = _country(include_tax=False, rate="0", code="GB", ccy="GBP")
+    v = _priced_variant(market, "1000.00")
+    coupon = CouponFactory(type="percent", value=Decimal("100"))
+    t = compute_totals([(v, 1)], market, coupon=coupon, referral_discount_percent=Decimal("5"))
+
+    assert t.referral_discount_percent == Decimal("0.00")
+
+
+def test_the_referral_discount_on_a_tax_inclusive_market_takes_exactly_the_headline_percent():
+    """NIGERIA — the shop's main market, and the arithmetic most likely to be wrong.
+
+    NG prices INCLUDE VAT, so the displayed ₦10,000 already contains 7.5%. The customer
+    must save exactly ₦500 — five percent of the number on the label, not five percent of
+    some ex-VAT figure they never saw — and the VAT line must fall with it, because they
+    genuinely bought less. Both are asserted here because the inclusive branch derives tax
+    by DIVISION (`base - base/(1+r)`), which is where an off-by-a-fraction hides.
+    """
+    ng = _country(include_tax=True, rate="7.5")
+    v = _priced_variant(ng, "10000.00")
+    t = compute_totals([(v, 1)], ng, referral_discount_percent=Decimal("5"))
+
+    assert t.subtotal == Decimal("10000.00")
+    assert t.referral_discount == Decimal("500.00")
+    # The headline promise: 5% off what the customer was quoted.
+    assert t.subtotal - t.grand_total == Decimal("500.00")
+    assert t.grand_total == Decimal("9500.00")
+    # VAT inside the reduced price, not inside the original.
+    assert t.tax == Decimal("662.79")
+
+
+def test_the_inclusive_market_commission_base_matches_that_order():
+    """The other half of the same order: what the REFERRER earns on it.
+
+    Pinned beside the totals rather than in the referrals suite so the two halves of one
+    transaction are read together — ₦10,000 listed, customer pays ₦9,500, VAT ₦662.79
+    comes out, referrer earns 10% of ₦8,837.21. If either side moves, this pair fails.
+    """
+    from apps.referrals.services import commission_base
+
+    ng = _country(include_tax=True, rate="7.5")
+    v = _priced_variant(ng, "10000.00")
+    t = compute_totals([(v, 1)], ng, referral_discount_percent=Decimal("5"))
+
+    class _Order:  # only the columns commission_base reads
+        subtotal = t.subtotal
+        discount_total = t.discount
+        referral_discount_total = t.referral_discount
+        tax_total = t.tax
+        delivery_tax_total = t.delivery_tax
+        country = ng
+
+    assert commission_base(_Order()) == Decimal("8837.21")

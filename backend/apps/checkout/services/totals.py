@@ -19,6 +19,10 @@ def q2(amount: Decimal) -> Decimal:
 class Totals:
     subtotal: Decimal
     discount: Decimal
+    # The referred customer's own discount, kept apart from `discount` so the cart, the
+    # invoice and the confirmation email can each name it — see Order.referral_discount_total.
+    referral_discount: Decimal
+    referral_discount_percent: Decimal
     delivery: Decimal
     tax: Decimal
     # The slice of `tax` sitting on the delivery fee (0 unless the market taxes
@@ -42,9 +46,38 @@ def _coupon_discount(coupon, subtotal: Decimal) -> Decimal:
     return min(q2(raw), subtotal)
 
 
-def compute_totals(items, country, delivery_amount=Decimal("0.00"), coupon=None) -> Totals:
+def _referral_discount(percent: Decimal, base: Decimal) -> Decimal:
+    """The referred customer's discount, on what is left after any coupon.
+
+    Charged on `subtotal - coupon discount` rather than on the raw subtotal so the two
+    can never together exceed the goods: a 60%-off coupon plus 5% takes 5% of the
+    remaining 40%, not 65% of the order. It also matches how a shopper reads a receipt —
+    each line comes off the line above it.
+
+    Shipping is not in the base, for the same reason it is not in the commission base:
+    the shop discounts its own goods, not the courier's fee.
+    """
+    if percent <= 0 or base <= 0:
+        return Decimal("0.00")
+    return min(q2(base * percent / Decimal("100")), base)
+
+
+def compute_totals(
+    items,
+    country,
+    delivery_amount=Decimal("0.00"),
+    coupon=None,
+    referral_discount_percent=Decimal("0.00"),
+) -> Totals:
     """items = iterable of (ProductVariant, qty). delivery_amount already resolved by
     the caller (via apps.delivery). coupon must be pre-validated (validate_coupon).
+
+    `referral_discount_percent` is what the REFERRED CUSTOMER gets for arriving through
+    somebody's link. The caller resolves it — `referrals.services.customer_discount_percent`
+    is the only thing that should — because deciding it needs the attribution code, the
+    buyer's identity and their order history, none of which this function has or wants.
+    Passing 0 (the default) is what every non-referred order does, and keeps this function
+    byte-identical to its pre-2026-08-27 behaviour.
 
     Tax is charged only when BOTH switches are on — the store-wide master
     (`StoreSettings.charge_tax`) and the market's own (`Country.charge_tax`). When
@@ -65,12 +98,19 @@ def compute_totals(items, country, delivery_amount=Decimal("0.00"), coupon=None)
     subtotal = q2(subtotal)
 
     discount = _coupon_discount(coupon, subtotal)
+    referral_discount = _referral_discount(
+        Decimal(str(referral_discount_percent)), subtotal - discount
+    )
 
     delivery = q2(delivery_amount)
     if coupon is not None and coupon.type == "free_shipping":
         delivery = Decimal("0.00")
 
-    taxable = subtotal - discount
+    # Both discounts leave the tax base. That is correct BECAUSE both are genuine price
+    # reductions — the customer is paying less for the goods, so less tax is due on them.
+    # A tender (store credit, commission spent at checkout) would have to be subtracted
+    # AFTER tax instead, or the shop would under-declare VAT on goods sold at full price.
+    taxable = subtotal - discount - referral_discount
     # The delivery fee joins the tax base only where the market says so (UK VAT
     # applies to shipping; NG practice does not).
     taxed_delivery = delivery if (rate and country.tax_applies_to_delivery) else Decimal("0.00")
@@ -91,6 +131,12 @@ def compute_totals(items, country, delivery_amount=Decimal("0.00"), coupon=None)
     return Totals(
         subtotal=subtotal,
         discount=discount,
+        referral_discount=referral_discount,
+        # Echoed back so the order can snapshot the rate it was actually given, and so a
+        # quote can label the line "Referral discount (5%)" without asking a second source.
+        referral_discount_percent=(
+            Decimal(str(referral_discount_percent)) if referral_discount else Decimal("0.00")
+        ),
         delivery=delivery,
         tax=tax,
         delivery_tax=delivery_tax,

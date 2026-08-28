@@ -1347,6 +1347,47 @@ Lightweight Sage-style module (`apps/accounting/`): double-entry-lite — `Accou
 **REFERRAL HALF: customer experience SHIPPED 2026-08-14** (`apps/referrals/`, storefront
 `/account/referrals`). See `docs/runbooks/referral-programme.md`.
 
+> **AMENDMENT 4 (Hammed, 2026-08-27): the referred CUSTOMER now gets a discount too, and
+> both percentages become an admin screen.**
+>
+> Until now the programme paid the referrer and gave the buyer nothing. It now does both:
+> the referrer earns 10% and the person who used their link takes **5% off their own
+> order**, applied at checkout and named on the order document.
+>
+> Three decisions inside that, all Hammed's on 2026-08-27:
+>
+> **(a) The discount applies to EVERY referred order, not just the first** — the same
+> shape as the commission. He asked for the narrower rule to be available as a switch
+> rather than a deploy, so `BusinessDecisions.customer_discount_first_order_only` exists
+> and ships OFF. It is worth knowing why the switch is there: two customers who refer each
+> other take the discount *and* the commission on every order they ever place, so "every
+> order" has a cost that may one day stop being acceptable.
+>
+> **(b) Commission is worked out AFTER the discount.** On a ₦100,000 order the customer
+> pays ₦95,000 and the referrer earns ₦9,500. The referrer earns their percentage of what
+> was actually received, which is the rule coupons and points already follow and the
+> natural reading of the published "10% of net sales". Note this is NOT in tension with
+> Amendment 2(b): that one forbids commission spent as a TENDER from touching `discount`,
+> and commission-as-tender is still cancelled. A discount the customer is given is a real
+> price reduction and belongs in the tax base exactly where it now is.
+>
+> **(c) Both percentages move to an admin screen** — "Business Decisions", Owner and
+> Manager, at `admin.tokecosmetics.com/business-decisions`. This OVERRULES the standing
+> rule that a rate change is a deploy plus a terms update; Hammed wants these to move at
+> the speed of a marketing decision. What survives of the old argument: the settings still
+> SEED the row so nothing changes on deploy, both numbers are still snapshotted onto the
+> commission and the order that used them, every write is audited, and the admin form says
+> in as many words that the terms page is not updated by saving.
+>
+> Scope: `decisions.manage` (Owner + Manager) — deliberately one notch wider than the
+> Owner-only `settings.manage` that holds the tax screens. Tax is a legal position; these
+> two are a commercial one.
+>
+> Still not done, and named so it is not discovered by a customer: **a guest checkout is
+> not attributed**, so a guest who arrives through a referral link earns their referrer
+> nothing and gets no 5%. That was already true of the commission; the discount inherits
+> it. Fixing it is one change in `services._refuse_attribution`.
+
 > **AMENDMENT 1 (Hammed, 2026-08-14): the published affiliate terms win over the sketch
 > below.** This stage originally said "referral codes per user with reward on referee's
 > first completed order". The shop already runs a public affiliate programme with

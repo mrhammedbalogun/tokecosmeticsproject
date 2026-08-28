@@ -153,6 +153,17 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     "referrals.view": frozenset({"Owner", "Manager", "Support"}),
     "referrals.manage": frozenset({"Owner", "Manager"}),
     "referrals.pay": frozenset({"Owner", "Manager"}),
+    # The Business Decisions page (2026-08-27): the referrer's commission rate and the
+    # referred customer's discount. `.manage` because it is unambiguously money — moving
+    # either number changes what every future order costs the shop.
+    #
+    # Owner AND Manager, by Hammed's brief. It sits one notch wider than `settings.manage`
+    # (Owner-only, which holds the tax switches) and that asymmetry is deliberate: tax is a
+    # legal position, while these two are a marketing decision the Manager is expected to
+    # make. Nothing here can be set destructively — the serializer bounds both percentages
+    # to 0–100 — and every write is audited with the old and new value, which is what makes
+    # the wider grant safe.
+    "decisions.manage": frozenset({"Owner", "Manager"}),
 }
 
 SCOPES: frozenset[str] = frozenset(SCOPE_GRANTS)

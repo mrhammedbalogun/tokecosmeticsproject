@@ -111,3 +111,57 @@ def test_a_paid_order_renders_a_real_invoice():
     html = render_invoice_html(_order(number="TC-600007", status="processing"))
 
     assert "PROFORMA" not in html
+
+
+# ── the referred customer's discount (2026-08-27) ────────────────────────────────────
+
+
+def test_the_invoice_names_the_referral_discount_and_says_the_rate():
+    """The customer asked to be told, in as many words, why their order cost less. A bare
+    negative number they cannot attribute is the support ticket this line exists to avoid.
+    """
+    order = _order(
+        number="TC-600010",
+        referral_discount_total="45.00",
+        referral_discount_percent="5.00",
+    )
+
+    html = render_invoice_html(order)
+
+    assert "Referral discount (5%)" in html
+    assert "-₦45.00" in html
+
+
+def test_the_rate_is_trimmed_the_way_a_customer_says_it():
+    """"5", not "5.00" — a trailing .00 on an offer reads as a spreadsheet cell. A real
+    fractional rate has to survive, though, so this is a trim and not a round."""
+    order = _order(
+        number="TC-600011",
+        referral_discount_total="45.00",
+        referral_discount_percent="12.50",
+    )
+
+    assert "Referral discount (12.5%)" in render_invoice_html(order)
+
+
+def test_an_order_with_no_referral_discount_draws_no_row():
+    """Most orders. The line must not appear as "-₦0.00", which reads as a mistake."""
+    assert "Referral discount" not in render_invoice_html(_order(number="TC-600012"))
+
+
+def test_a_coupon_and_a_referral_discount_are_two_separate_lines():
+    """The reason this has its own column rather than sharing `discount_total`: "you used
+    code SUMMER20" and "you came through a friend's link" are different sentences, and one
+    merged number cannot say either."""
+    order = _order(
+        number="TC-600013",
+        discount_total="100.00",
+        referral_discount_total="40.00",
+        referral_discount_percent="5.00",
+    )
+
+    html = render_invoice_html(order)
+
+    assert "-₦100.00" in html
+    assert "Referral discount (5%)" in html
+    assert "-₦40.00" in html

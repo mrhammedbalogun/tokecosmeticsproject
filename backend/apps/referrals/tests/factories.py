@@ -42,6 +42,7 @@ def make_order(
     country: Country | None = None,
     subtotal="10000.00",
     discount="0.00",
+    referral_discount="0.00",
     tax="0.00",
     delivery_tax="0.00",
     shipping="1500.00",
@@ -51,7 +52,7 @@ def make_order(
 ) -> Order:
     country = country or ng()
     subtotal_d = Decimal(subtotal)
-    discount_d = Decimal(discount)
+    discount_d = Decimal(discount) + Decimal(referral_discount)
     tax_d = Decimal(tax)
     shipping_d = Decimal(shipping)
     grand = (
@@ -67,7 +68,8 @@ def make_order(
         currency=country.currency,
         status=status,
         subtotal=subtotal_d,
-        discount_total=discount_d,
+        discount_total=Decimal(discount),
+        referral_discount_total=Decimal(referral_discount),
         tax_total=tax_d,
         delivery_tax_total=Decimal(delivery_tax),
         shipping_total=shipping_d,

@@ -372,6 +372,12 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # per-market rates change what every customer PAYS. Owner-only, audited.
     "TaxSettingsView": "settings.manage",
     "TaxCountryAdminViewSet": "settings.manage",
+
+    # --- business decisions (2026-08-27) -------------------------------------------
+    # The referral percentages. `decisions.manage` rather than `settings.manage`
+    # because Hammed put this one in the Manager's hands: tax is a legal position,
+    # the commission rate and the referred customer's discount are a commercial one.
+    "BusinessDecisionsView": "decisions.manage",
 }
 
 

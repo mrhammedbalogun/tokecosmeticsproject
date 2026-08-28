@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { ApiError, apiFetch } from "@/lib/api";
 import { ACCESS_COOKIE } from "@/lib/auth";
+import { getReferralTerms } from "@/lib/referral-terms";
 import {
   REFERRAL_COOKIE,
   REFERRAL_COOKIE_MAX_AGE,
@@ -46,7 +47,17 @@ function referralCookie(code: string): string {
   );
 }
 
-type Lookup = { valid: boolean; reason?: string; referrer_name?: string };
+type Lookup = {
+  valid: boolean;
+  reason?: string;
+  referrer_name?: string;
+  /** The referred customer's discount, as a percentage string. Added to this response
+   *  (2026-08-27) rather than passed down through props so the field can say what the
+   *  shopper ACTUALLY gets — an Owner may have set it to 0 on the admin's Business
+   *  Decisions page, and a message promising money off is worse than no message. It
+   *  comes from the same `/referrals/terms/` values /affiliates advertises. */
+  customer_discount_percent?: string;
+};
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
@@ -77,6 +88,12 @@ export async function POST(req: Request) {
       // visitor already has from a link they really did click.
       return json(out, 200);
     }
+    // Best effort, and deliberately so: the code IS valid and the cookie IS being
+    // written, so a terms lookup that fails must not turn a successful apply into a
+    // failed one. The field falls back to wording that promises no amount.
+    out.customer_discount_percent = await getReferralTerms()
+      .then((t) => t.customer_discount_percent)
+      .catch(() => undefined);
     return json(out, 200, referralCookie(code));
   } catch (e) {
     if (e instanceof ApiError) {

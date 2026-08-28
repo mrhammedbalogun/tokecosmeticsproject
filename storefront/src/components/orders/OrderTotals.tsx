@@ -1,5 +1,6 @@
 import { formatMoney } from "@/lib/country";
 import type { OrderDetail } from "@/lib/orders";
+import { referralDiscountLabel } from "@/lib/referral";
 
 /** Only the money fields, so a caller never has to hold a whole OrderDetail to render
  * the totals. */
@@ -7,6 +8,7 @@ type OrderMoney = Pick<
   OrderDetail,
   | "currency" | "subtotal" | "discount_total" | "shipping_total" | "tax_total"
   | "tax_label" | "grand_total_display"
+  | "referral_discount_total" | "referral_discount_percent"
 >;
 
 export function OrderTotals({ order }: { order: OrderMoney }) {
@@ -20,6 +22,17 @@ export function OrderTotals({ order }: { order: OrderMoney }) {
         <div className="flex justify-between gap-4">
           <dt className="text-muted">Discount</dt>
           <dd>−{formatMoney(order.discount_total, order.currency)}</dd>
+        </div>
+      )}
+      {/* Named separately from the coupon line above so "why is this less than the
+          products" is answerable from the order itself. Absent, not zero, on every order
+          placed before the column existed. */}
+      {(order.referral_discount_total ?? "0.00") !== "0.00" && (
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted">
+            {referralDiscountLabel(order.referral_discount_percent)}
+          </dt>
+          <dd>−{formatMoney(order.referral_discount_total!, order.currency)}</dd>
         </div>
       )}
       <div className="flex justify-between gap-4">

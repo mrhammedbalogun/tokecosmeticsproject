@@ -69,6 +69,10 @@ export interface OrderDetail {
   currency: string;
   subtotal: string;
   discount_total: string;
+  /** The referred customer's discount (2026-08-27) and the rate it was given at.
+   * Optional: orders placed before the columns existed carry neither. */
+  referral_discount_total?: string;
+  referral_discount_percent?: string;
   shipping_total: string;
   tax_total: string;
   /** The market's name for the tax line ("VAT", "Sales Tax"); optional so older
@@ -148,6 +152,15 @@ export function totalRows(
   ];
   if (Number(order.discount_total) !== 0) {
     rows.push({ label: "Discount", value: `−${order.discount_total}` });
+  }
+  // Separate from the coupon line above: support answering "why was this order cheaper"
+  // needs to see WHICH discount, and a merged number cannot tell them.
+  if (Number(order.referral_discount_total ?? 0) !== 0) {
+    const rate = (order.referral_discount_percent ?? "").replace(/\.0+$/, "");
+    rows.push({
+      label: rate && Number(rate) > 0 ? `Referral discount (${rate}%)` : "Referral discount",
+      value: `−${order.referral_discount_total}`,
+    });
   }
   if (Number(order.shipping_total) !== 0) {
     rows.push({ label: "Delivery", value: order.shipping_total });

@@ -224,6 +224,80 @@ def _refuse_attribution(code: str, buyer) -> AttributionRefusal | None:
     return None
 
 
+def customer_discount_percent(attributed_code: str, buyer, email: str = "") -> Decimal:
+    """What the REFERRED CUSTOMER gets off this order, as a percentage. 0 if nothing.
+
+    The buyer's half of the programme (Hammed, 2026-08-27): the referrer earns 10% and
+    the person who used their link takes 5% off the goods, there and then.
+
+    ── IT TAKES THE *ATTRIBUTED* CODE, NOT THE RAW ONE ────────────────────────────────
+
+    Callers must pass the output of `attribution_code_for_order`, never the cookie. That
+    is what makes every refusal that already protects the commission protect the discount
+    too, with no second list to keep in step: an unknown code, a blocked referrer or a
+    SELF-REFERRAL all arrive here as "" and buy nobody 5% off. Self-referral is the one
+    that matters commercially — without it every customer would simply apply their own
+    code and the shop would run a permanent 5%-off sale.
+
+    ── FIRST ORDER ONLY, WHEN THE OWNER ASKS FOR IT ───────────────────────────────────
+
+    Off by default: the discount applies to EVERY referred order, matching the commission.
+    When `customer_discount_first_order_only` is on, "first" means the buyer's first order
+    ever — the welcome-offer reading — not their first *referred* order. Anything narrower
+    invites the same abuse by a different route (place one unattributed order, then take
+    5% off for ever afterwards).
+
+    Prior orders are counted by USER, falling back to email.
+
+    ── GUESTS GET NOTHING TODAY, AND THAT IS NOT DECIDED HERE ─────────────────────────
+
+    The email fallback is currently unreachable, because `_refuse_attribution` turns an
+    anonymous buyer away before this function is ever consulted: a guest checkout earns no
+    commission, so it also earns no discount. The two halves of the programme stay in step,
+    which is the property worth protecting.
+
+    It is written anyway, and deliberately. If guest attribution is ever wanted — and it
+    is a fair thing to want, since guest checkout is how a lot of first orders arrive — the
+    change belongs in `_refuse_attribution`, where it is one decision about who gets PAID
+    rather than two decisions that could disagree. This side would then already be correct.
+    The email match is imperfect in the obvious way (a guest with two addresses gets two
+    first orders); that is the right trade against refusing every guest.
+    """
+    if not attributed_code:
+        return ZERO
+
+    from apps.core.models import BusinessDecisions
+
+    decisions = BusinessDecisions.load()
+    percent = Decimal(decisions.customer_discount_percent)
+    if percent <= 0:
+        return ZERO
+    if not decisions.customer_discount_first_order_only:
+        return percent
+
+    # REVENUE_STATUSES, not "any Order row": a first order means a first PURCHASE. An
+    # order that was abandoned at the bank-transfer screen, expired unpaid or was
+    # cancelled took no money, and counting it would quietly deny the welcome discount to
+    # someone who has never actually bought anything — the exact customer this offer is
+    # for. Imported rather than restated because `analytics.queries` calls itself the
+    # single definition of "money was actually taken", and a second copy here is the drift
+    # that makes two screens disagree about who is a customer.
+    from apps.analytics.queries import REVENUE_STATUSES
+    from apps.orders.models import Order
+
+    orders = Order.objects.filter(status__in=REVENUE_STATUSES)
+    if buyer is not None and getattr(buyer, "is_authenticated", False):
+        seen = orders.filter(user=buyer).exists()
+    elif email:
+        seen = orders.filter(email__iexact=email).exists()
+    else:
+        # No identity to check a history against. Give the discount rather than refuse
+        # it: this is a marketing offer, and the failure that costs the shop a customer
+        # is a first-time buyer being quoted one price and charged another.
+        seen = False
+    return ZERO if seen else percent
+
+
 # --- accrual ------------------------------------------------------------------------
 
 
@@ -256,11 +330,26 @@ def commission_base(order) -> Decimal:
     `delivery_tax_total` is 0 for every order placed before the column existed, so old
     orders compute exactly as they always did.
 
+    THE REFERRED CUSTOMER'S OWN DISCOUNT COMES OUT TOO (Hammed, 2026-08-27). A referrer
+    earns their percentage of what the customer actually paid for the goods, not of the
+    list price they did not pay: on a ₦100,000 order the customer pays ₦95,000 and the
+    referrer earns ₦9,500. That is the rule coupons and loyalty points already follow —
+    the base has always been net of discounts — and it is the natural reading of the
+    published "10% of net sales". Pinned by
+    `test_accrual.py::test_the_referred_customers_discount_comes_out_of_the_commission_base`.
+
+    `referral_discount_total` is 0 for every order placed before the column existed, so
+    old orders compute exactly as they always did.
+
     Returns 0.00 rather than a negative number if a discount somehow exceeds the goods —
-    it cannot today (`_coupon_discount` clamps to the subtotal) but a commission is not
-    a place to propagate an impossible number.
+    it cannot today (both discounts clamp to what is left of the subtotal) but a
+    commission is not a place to propagate an impossible number.
     """
-    net = Decimal(order.subtotal) - Decimal(order.discount_total)
+    net = (
+        Decimal(order.subtotal)
+        - Decimal(order.discount_total)
+        - Decimal(order.referral_discount_total)
+    )
     if order.country.prices_include_tax:
         net -= Decimal(order.tax_total) - Decimal(order.delivery_tax_total)
     return max(q2(net), ZERO)
@@ -336,9 +425,30 @@ def accrue_for_order(order) -> Commission | None:
             )
             return None
 
-        rate = Decimal(str(settings.REFERRAL_COMMISSION_PERCENT))
-        base = commission_base(order)
+        from apps.core.models import BusinessDecisions
+
         with transaction.atomic():  # savepoint — see the docstring
+            # INSIDE the savepoint, deliberately. Both of these touch the database —
+            # `load()` opens with a SELECT on `core_businessdecisions`, and
+            # `commission_base` can lazy-load `order.country` — and a database error is
+            # not like a Python one: it ABORTS the surrounding transaction, and the bare
+            # `except` below cannot undo that. This runs inside `_fulfil_locked`, so an
+            # aborted transaction there would roll back `payment.save()` and lose a
+            # payment that has already been charged.
+            #
+            # The window is not hypothetical: this project's deploy starts the new
+            # containers BEFORE running migrations (`infra/deploy/deploy.sh`), so on the
+            # release that adds this table there are seconds in which the SELECT hits a
+            # relation that does not exist yet. Inside the savepoint that is survivable —
+            # the commission is skipped, logged, and recoverable with
+            # `backfill_referral_commissions`; outside it, it costs a payment.
+            #
+            # The rate is read live and then SNAPSHOT onto the row below. An Owner may
+            # have changed it on the Business Decisions page since this order was placed;
+            # the rate that applies is the one in force when the commission is EARNED, and
+            # from here on it is frozen at `Commission.rate_percent` and never re-read.
+            rate = Decimal(BusinessDecisions.load().referrer_commission_percent)
+            base = commission_base(order)
             commission, created = Commission.objects.get_or_create(
                 order=order,
                 defaults={
@@ -473,7 +583,15 @@ def _surviving_base(order, refunded: Decimal) -> Decimal:
     refunds, and inventing a type here would be inventing precision this data does not
     have. If refund typing ever lands, this is the one function to change.
     """
-    gross_goods = q2(Decimal(order.subtotal) - Decimal(order.discount_total))
+    # Gross of tax, NET of both discounts — the referral discount has to come out here
+    # for the same reason the coupon does: it is money the customer never paid, so it can
+    # never be refunded, and leaving it in would make the proration divide by a total
+    # larger than the one a full refund can ever reach.
+    gross_goods = q2(
+        Decimal(order.subtotal)
+        - Decimal(order.discount_total)
+        - Decimal(order.referral_discount_total)
+    )
     net_goods = commission_base(order)
     if gross_goods <= ZERO:
         return ZERO

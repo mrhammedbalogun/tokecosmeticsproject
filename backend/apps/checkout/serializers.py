@@ -20,6 +20,10 @@ class QuoteRequestSerializer(serializers.Serializer):
     # The chosen pickup centre (32b slice 4) — keeps the preview priced to the same
     # centre place_order will re-quote, so expected_total can't mismatch on pickup.
     gig_centre_id = serializers.IntegerField(required=False)
+    # The attribution cookie, injected by the storefront BFF (never typed by the browser
+    # — the BFF strips any the client sends). Present so the PREVIEW can show the referred
+    # customer's discount; placement still reads only the cookie. See quote.quote().
+    referral_code = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 # --- guest checkout (Plan-38) -------------------------------------------------
@@ -107,3 +111,5 @@ class GuestQuoteRequestSerializer(serializers.Serializer):
     # CharField for the same mixed-id-space reason as QuoteRequestSerializer above.
     delivery_option_id = serializers.CharField(required=False)
     gig_centre_id = serializers.IntegerField(required=False)
+    # Same as QuoteRequestSerializer.referral_code — a guest can be referred too.
+    referral_code = serializers.CharField(required=False, allow_blank=True, default="")

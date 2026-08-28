@@ -8,16 +8,21 @@
  * typed from a story screenshot, or pasted from a WhatsApp message. Without it the
  * account page advertised a code that nothing could redeem.
  *
- * DELIBERATELY SEPARATE FROM THE COUPON FIELD, though they sit together. They look alike
- * and do unrelated things: a coupon changes what the shopper pays and must therefore
- * re-quote the cart; a referral code changes who gets paid commission afterwards and
- * changes the shopper's total by exactly nothing. Sharing one box would mean explaining
- * why one "code" moves the price and another does not, and would put attribution on the
- * cart-quote path where a re-quote could drop it.
+ * DELIBERATELY SEPARATE FROM THE COUPON FIELD, though they sit together and — since
+ * 2026-08-27 — both now move the total. They remain separate because they are still
+ * different things: a coupon is a campaign the shop is running, a referral code decides
+ * who gets PAID as well as what the shopper saves, and only one of them can be refused
+ * for being your own. Sharing one box would mean one field with two failure vocabularies.
+ *
+ * WHAT CHANGED WITH THE CUSTOMER DISCOUNT. A code now moves the total, because the
+ * referred customer takes a percentage off their own goods — so a successful apply calls
+ * `onApplied`, and the surrounding page re-quotes. Attribution itself still does NOT ride
+ * the quote: the code goes into the httpOnly cookie and the BFF reads it back out on both
+ * the quote and the placement, so what the browser ASKS for can still never decide who is
+ * paid. This component never sees the totals; it only says "something changed".
  *
  * It is COLLAPSED by default. The overwhelming majority of shoppers have no code, and an
- * empty box labelled "referral code" invites people to hunt for one they do not have —
- * which is how you get a checkout page that feels like it is withholding a discount.
+ * empty box labelled "referral code" invites people to hunt for one they do not have.
  *
  * RENDERED IN TWO PLACES: the cart page (`CartView`) and the checkout review step
  * (`ReviewStep`). Both are needed because two routes reach payment without ever passing
@@ -30,8 +35,20 @@ import { useState } from "react";
 type Result =
   | { state: "idle" }
   | { state: "applying" }
-  | { state: "ok"; name: string }
+  /** `discount` is the live percentage from `POST /api/referral`, or "" when the lookup
+   *  could not tell us. Carried per-result rather than read from a prop because an Owner
+   *  can set it to 0 from the admin at any time, and this message must never promise
+   *  money off that the checkout will not give. */
+  | { state: "ok"; name: string; discount: string }
   | { state: "bad"; reason: string };
+
+/** "5" from "5.00"; "" from "0.00", a missing value, or anything unparseable. Mirrors
+ *  `ratePercent` in lib/referral-terms.ts — imported from there would pull `lib/api`
+ *  into this client bundle. */
+function shownRate(raw: string | undefined): string {
+  const rate = (raw ?? "").replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+  return Number(rate) > 0 ? rate : "";
+}
 
 const MESSAGES: Record<string, string> = {
   not_found: "We don't recognise that code — check it and try again.",
@@ -44,8 +61,12 @@ const MESSAGES: Record<string, string> = {
 export function ReferralCodeField({
   initiallyOpen = false,
   variant = "card",
+  onApplied,
 }: {
   initiallyOpen?: boolean;
+  /** Called after a code is successfully applied, so the page can re-quote and show the
+   *  customer's discount. Optional: a caller that shows no totals has nothing to redraw. */
+  onApplied?: () => void;
   /**
    * Where this is being rendered, which is only a chrome decision.
    *
@@ -77,9 +98,16 @@ export function ReferralCodeField({
       const data = await res.json();
       setResult(
         data.valid
-          ? { state: "ok", name: data.referrer_name || "a friend" }
+          ? {
+              state: "ok",
+              name: data.referrer_name || "a friend",
+              discount: shownRate(data.customer_discount_percent),
+            }
           : { state: "bad", reason: data.reason || "error" },
       );
+      // Only on success: a refused code left the cookie untouched, so there is nothing
+      // new to fetch and a re-quote would just be a wasted round trip mid-checkout.
+      if (data.valid) onApplied?.();
     } catch {
       setResult({ state: "bad", reason: "error" });
     }
@@ -141,18 +169,22 @@ export function ReferralCodeField({
       <p aria-live="polite" className="mt-2 text-sm">
         {result.state === "ok" && (
           <span className="text-accent-strong">
-            ✓ You&rsquo;re shopping with {result.name}&rsquo;s link — they&rsquo;ll earn
-            commission on this order.
+            ✓ You&rsquo;re shopping with {result.name}&rsquo;s link
+            {result.discount
+              ? ` — that\u2019s ${result.discount}% off for you, and commission for them.`
+              : " — they\u2019ll earn commission on this order."}
           </span>
         )}
         {result.state === "bad" && (
           <span className="text-muted">{MESSAGES[result.reason] ?? MESSAGES.error}</span>
         )}
         {result.state === "idle" && (
-          // Said up front, because a shopper typing a "code" into a cart reasonably
-          // expects money off and would otherwise feel misled when the total does not move.
+          // Before applying, the rate is not known here — so this promises nothing and
+          // the confirmation above names the actual number. It used to say the total
+          // would NOT move, which was true until the customer discount shipped.
           <span className="text-muted">
-            This won&rsquo;t change your total — it just credits the friend who sent you.
+            We&rsquo;ll credit the friend who sent you, and apply any discount you&rsquo;re
+            due.
           </span>
         )}
       </p>

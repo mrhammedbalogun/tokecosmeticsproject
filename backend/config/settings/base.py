@@ -435,13 +435,35 @@ RETURN_WINDOW_DAYS = env.int("RETURN_WINDOW_DAYS", default=14)
 #
 # THESE NUMBERS ARE PUBLISHED TERMS, not tuning knobs. Every one of them is on
 # https://tokecosmetics.com/affiliates-2/ where customers can read it, so changing one
-# changes what the shop has promised. They live in settings (env-overridable) rather
-# than in a SiteSetting row precisely BECAUSE they are not meant to be edited casually
-# from an admin screen — a rate change is a deploy and a terms update, together.
+# changes what the shop has promised.
 #
-# Note what does NOT follow from a change here: commissions already earned keep the
-# rate they were earned under, because `Commission.rate_percent` is a snapshot.
+# Most of them still live here, env-overridable, precisely BECAUSE they are not meant to
+# be edited casually from an admin screen — a change is a deploy and a terms update,
+# together.
+#
+# THE TWO PERCENTAGES ARE THE EXCEPTION (Hammed, 2026-08-27). The commission rate and the
+# referred customer's discount are now edited from the admin's Business Decisions page and
+# stored on `core.BusinessDecisions`. The settings below survive as that row's SEED — it
+# is created from them on first touch, so a fresh database and every existing deploy start
+# at the published 10%/5% with no migration step — and are never read again afterwards.
+# **Changing them in the environment moves nothing on a database that already has the
+# row.** Change those two from the admin page, or edit the row.
+#
+# Note what does NOT follow from any change: commissions already earned keep the rate they
+# were earned under (`Commission.rate_percent`), and orders already placed keep the
+# discount they were given (`Order.referral_discount_percent`). Both are snapshots.
 REFERRAL_COMMISSION_PERCENT = env("REFERRAL_COMMISSION_PERCENT", default="10.00")
+
+# What the REFERRED CUSTOMER gets off their own order for arriving through a referral —
+# the buyer's half of the programme, added 2026-08-27. Seeds
+# `BusinessDecisions.customer_discount_percent`; see that model before changing it here.
+#
+# It is a REAL price reduction, not a tender: it lands in `Order.referral_discount_total`,
+# comes out of the tax base in `compute_totals`, and therefore also out of the referrer's
+# commission base — the referrer earns their percentage of what the customer actually
+# paid for the goods. That last consequence is Hammed's explicit ruling of 2026-08-27 and
+# is pinned by a test; it is also the rule coupons and loyalty points already follow.
+REFERRAL_CUSTOMER_DISCOUNT_PERCENT = env("REFERRAL_CUSTOMER_DISCOUNT_PERCENT", default="5.00")
 
 # The click-attribution window. A visit carrying ?ref=CODE credits that referrer for
 # any order the visitor places in the next 30 days. Read by the STOREFRONT too (its

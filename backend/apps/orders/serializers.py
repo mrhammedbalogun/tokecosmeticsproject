@@ -114,7 +114,9 @@ class OrderSerializer(_BaseOrderSerializer):
         model = Order
         fields = ("number", "status", "placed_at", "email", "phone", "currency",
                   "country",
-                  "subtotal", "discount_total", "shipping_total", "tax_total",
+                  "subtotal", "discount_total",
+                  "referral_discount_total", "referral_discount_percent",
+                  "shipping_total", "tax_total",
                   "tax_label", "grand_total", "grand_total_display", "delivery_option_name",
                   "shipping_address", "billing_address", "customer_note",
                   "tracking_carrier", "tracking_number", "payment_gateway",
@@ -265,6 +267,7 @@ class AdminOrderSerializer(_BaseOrderSerializer):
         model = Order
         fields = ("number", "status", "review_reason", "placed_at", "email", "phone",
                   "user_email", "country", "currency", "subtotal", "discount_total",
+                  "referral_discount_total", "referral_discount_percent",
                   "shipping_total", "tax_total", "tax_label", "grand_total", "grand_total_display",
                   "delivery_option_name", "pickup_store", "shipping_address", "billing_address",
                   "customer_note", "admin_note", "tracking_carrier", "tracking_number",

@@ -8,12 +8,12 @@ const OWNER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "cms.manage", "reports.view", "staff.manage",
   "settings.manage", "referrals.view", "referrals.manage", "referrals.pay",
-  "training.manage",
+  "training.manage", "decisions.manage",
 ];
 const MANAGER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "reports.view", "referrals.view",
-  "referrals.manage", "referrals.pay",
+  "referrals.manage", "referrals.pay", "decisions.manage",
 ];
 const SUPPORT = ["orders.view", "orders.operate", "customers.view", "referrals.view"];
 const CONTENT = ["cms.manage"];
@@ -64,6 +64,11 @@ describe("the sidebar renders only what the scopes allow", () => {
       // monthly transfers. The scopes live on the endpoints, not the nav.
       "Referrals",
       "Reports",
+      // Business Decisions (2026-08-27) is `decisions.manage`, which the Manager holds —
+      // deliberately WIDER than the Owner-only `settings.manage` next door. Tax is a
+      // legal position; the referral percentages are a commercial one, and the Manager
+      // makes it.
+      "Business Decisions",
       // Training (2026-08-23) carries no scope at all — the library is for every staff
       // member, so every staff member gets the link. Authoring stays Owner-only on the
       // endpoints (`training.manage`).

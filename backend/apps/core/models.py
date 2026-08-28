@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
@@ -159,6 +160,90 @@ class StoreSettings(models.Model):
 
     def __str__(self) -> str:
         return f"store settings (tax {'on' if self.charge_tax else 'off'})"
+
+
+class BusinessDecisions(models.Model):
+    """The two referral percentages, editable by an Owner or Manager without a deploy.
+
+    ONE row, pk forced to 1, read through `load()` — the `StoreSettings` shape above,
+    for the same reasons.
+
+    ── WHY THESE MOVED OUT OF settings.py ─────────────────────────────────────────────
+
+    `config/settings/base.py` still carries `REFERRAL_COMMISSION_PERCENT` and
+    `REFERRAL_CUSTOMER_DISCOUNT_PERCENT`, and its comment there argues they belong in
+    settings precisely so that changing one is a deploy plus a terms update, together.
+    That argument was overruled deliberately (Hammed, 2026-08-27): the shop wants to move
+    these two numbers at the speed of a marketing decision, not a release.
+
+    The settings did NOT become dead. They are the SEED — `load()` creates the row from
+    them on first touch, so a fresh database and every existing deploy start at exactly
+    the published 10%/5% with no migration step. After that first touch the row wins and
+    the setting is never read again.
+
+    What the overruling did not change: **these are still published terms.** The public
+    `/affiliates` page and the affiliate agreement quote both numbers, and they are served
+    from here (`ReferralTermsView`), so an edit moves the advertisement and the payment
+    together. What it cannot do is update the prose on the terms page — hence the warning
+    the admin form carries, and hence every write here being audited.
+
+    ── WHY NOTHING ALREADY EARNED MOVES ───────────────────────────────────────────────
+
+    Both numbers are SNAPSHOT at the moment they are used: the commission rate onto
+    `Commission.rate_percent`, the customer discount onto `Order.referral_discount_percent`
+    and `Order.referral_discount_total`. Lowering the commission to 8% tomorrow does not
+    re-cut a commission earned today, and raising the discount to 7% does not reprice an
+    order already placed. Nothing in this table is ever read to display history.
+    """
+
+    # Percentages, not fractions: "10.00" means 10%. `max_digits=5` allows up to 999.99,
+    # which the serializer narrows to the 0–100 a percentage can actually be.
+    referrer_commission_percent = models.DecimalField(max_digits=5, decimal_places=2)
+    customer_discount_percent = models.DecimalField(max_digits=5, decimal_places=2)
+
+    # OFF by default, which is Hammed's ruling of 2026-08-27: the discount applies to
+    # EVERY order placed under a referral, exactly as the 10% commission does, so the two
+    # halves of the programme have the same shape and the same explanation.
+    #
+    # The switch exists because that generosity has a known cost. A customer who keeps
+    # re-clicking a friend's link keeps 5% off for ever, and two customers who refer each
+    # other cost the shop the discount AND the commission on every order they ever place.
+    # Turning this on narrows the discount to a customer's FIRST order — the classic
+    # welcome offer — without a deploy, on the day that arithmetic stops being acceptable.
+    customer_discount_first_order_only = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name_plural = "business decisions"
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def load(cls) -> "BusinessDecisions":
+        """The row, created from the settings defaults on first touch.
+
+        Called on every commission accrual and every checkout quote, so it is one
+        primary-key SELECT — the same cost `StoreSettings.load()` already pays inside
+        `compute_totals`, and for the same reason: a cached percentage that goes stale
+        pays the wrong person the wrong amount.
+        """
+        obj, _ = cls.objects.get_or_create(
+            pk=1,
+            defaults={
+                "referrer_commission_percent": Decimal(str(settings.REFERRAL_COMMISSION_PERCENT)),
+                "customer_discount_percent": Decimal(
+                    str(settings.REFERRAL_CUSTOMER_DISCOUNT_PERCENT)
+                ),
+            },
+        )
+        return obj
+
+    def __str__(self) -> str:
+        return (
+            f"business decisions (referrer {self.referrer_commission_percent}%, "
+            f"customer {self.customer_discount_percent}%)"
+        )
 
 
 class AuditLogImmutable(Exception):

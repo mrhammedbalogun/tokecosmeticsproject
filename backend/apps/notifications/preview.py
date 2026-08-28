@@ -37,6 +37,11 @@ _ORDER = {
          "line_total": "₦5,000.00", "image": "", "image_alt": "Another Sample"},
     ],
     "item_count": 3,
+    # Exercised so the "send test" button renders the referral row rather than silently
+    # skipping it — the whole point of a preview is to see the branch that only fires on
+    # some real orders.
+    "referral_discount_total": "₦1,250.00",
+    "referral_discount_percent": "5",
     "grand_total": "₦25,000.00",
     "currency": "NGN",
     "country": "Nigeria",

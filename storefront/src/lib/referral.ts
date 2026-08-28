@@ -50,6 +50,24 @@ export function normalizeReferralCode(raw: string | null | undefined): string {
 }
 
 /**
+ * The label on the referred customer's discount line: "Referral discount (5%)".
+ *
+ * Lives HERE, with no imports, so the cart, the checkout summary, the confirmation page
+ * and the account order page all say the same words — and so a client component can use
+ * it without pulling `lib/api` into the browser bundle, which is what would happen if it
+ * sat next to the `Totals` type in `lib/checkout.ts`.
+ *
+ * Falls back to the bare noun when the rate is missing or zero: an order placed before
+ * the rate was snapshotted still has an amount to explain, and "Referral discount (0%)"
+ * explains nothing. The backend's `payments.money.format_percent` renders the same string
+ * for emails and invoices — the two must agree.
+ */
+export function referralDiscountLabel(percent: string | undefined): string {
+  const rate = (percent ?? "").replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1");
+  return rate && Number(rate) > 0 ? `Referral discount (${rate}%)` : "Referral discount";
+}
+
+/**
  * LAST-CLICK WINS, stated once so it can be pointed at in a dispute.
  *
  * A visitor who arrives on Amina's link, browses, then arrives again on Chidi's link is

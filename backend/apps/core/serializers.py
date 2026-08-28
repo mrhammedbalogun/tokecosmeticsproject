@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from apps.core.models import AuditLog, Country, Currency, StoreSettings
+from apps.core.models import AuditLog, BusinessDecisions, Country, Currency, StoreSettings
 
 
 class CurrencySerializer(serializers.ModelSerializer):
@@ -72,6 +72,46 @@ class TaxCountryAdminSerializer(serializers.ModelSerializer):
                 "The tax line needs a name — customers see this word at checkout."
             )
         return value
+
+
+class BusinessDecisionsSerializer(serializers.ModelSerializer):
+    """The two referral percentages, `PATCH`-ed from the admin's Business Decisions page.
+
+    Every field is allowlisted for audit on purpose. These are published terms: the answer
+    to "who dropped the commission to 4% and when" has to exist, and it is the audit row —
+    the model itself keeps no history, because each number is snapshotted onto the
+    commission or order that used it and nothing ever reads the table for the past.
+    """
+
+    audit_allowlist = (
+        "referrer_commission_percent",
+        "customer_discount_percent",
+        "customer_discount_first_order_only",
+    )
+
+    class Meta:
+        model = BusinessDecisions
+        fields = [
+            "referrer_commission_percent",
+            "customer_discount_percent",
+            "customer_discount_first_order_only",
+        ]
+
+    def _percent(self, value, what):
+        # 0 is legal and meaningful: it switches that half of the programme off without
+        # tearing anything out — no orphaned commissions, no dead code path, and the day
+        # it comes back is one edit. Above 100 is not a generous offer, it is a typo that
+        # would pay a referrer more than the order was worth.
+        if value < 0 or value > 100:
+            raise serializers.ValidationError(f"{what} is a percentage between 0 and 100.")
+        return value
+
+    def validate_referrer_commission_percent(self, value):
+        return self._percent(value, "Commission")
+
+    def validate_customer_discount_percent(self, value):
+        return self._percent(value, "The customer discount")
+
 
 class AuditLogSerializer(serializers.ModelSerializer):
     """Read shape for the audit log. EVERY field is read-only, twice over.

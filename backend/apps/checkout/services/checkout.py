@@ -29,7 +29,7 @@ from apps.orders.state import record_event
 from apps.payments.gateways.registry import active_gateways_for, get_gateway
 from apps.payments.models import Payment
 from apps.pricing.services import resolve_price
-from apps.referrals.services import attribution_code_for_order
+from apps.referrals.services import attribution_code_for_order, customer_discount_percent
 
 
 class CheckoutError(Exception):
@@ -208,11 +208,6 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
         delivery_amount = (
             Decimal("0.00") if chosen["quote_required"] else Decimal(chosen["price"])
         )
-        totals = compute_totals(lines, country, delivery_amount=delivery_amount, coupon=coupon)
-
-        if expected_total is not None and Decimal(str(expected_total)) != totals.grand_total:
-            raise CheckoutError("cart_changed", "Totals changed.",
-                                extra={"totals": _totals_dict(totals)})
 
         # Referral attribution. THIS IS THE LAST MOMENT IT CAN HAPPEN: the code comes
         # from a 30-day cookie the storefront's BFF read off the checkout request, and
@@ -220,7 +215,24 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
         # the code is resolved and validated here (unknown / blocked / self-referral all
         # collapse to "") and stamped on the order; the money row is written later, from
         # the payment path, off this stamp. Never raises — see referrals.services.
+        #
+        # It resolves BEFORE the totals now (it used to sit just below them). Since
+        # 2026-08-27 the attribution buys the customer a discount as well as the referrer
+        # a commission, so the totals cannot be computed without knowing it. Nothing
+        # between here and `compute_totals` depends on the old ordering.
         attributed_code = attribution_code_for_order(referral_code, user)
+        referral_percent = customer_discount_percent(
+            attributed_code, user, email=guest_email or (user.email if user else "")
+        )
+
+        totals = compute_totals(
+            lines, country, delivery_amount=delivery_amount, coupon=coupon,
+            referral_discount_percent=referral_percent,
+        )
+
+        if expected_total is not None and Decimal(str(expected_total)) != totals.grand_total:
+            raise CheckoutError("cart_changed", "Totals changed.",
+                                extra={"totals": _totals_dict(totals)})
 
         number = next_order_number()
         try:
@@ -235,6 +247,8 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
             phone=user.phone if user is not None else guest_phone,
             country=country, currency=country.currency, status="pending_payment",
             subtotal=totals.subtotal, discount_total=totals.discount,
+            referral_discount_total=totals.referral_discount,
+            referral_discount_percent=totals.referral_discount_percent,
             shipping_total=totals.delivery, tax_total=totals.tax,
             delivery_tax_total=totals.delivery_tax, grand_total=totals.grand_total,
             coupon=coupon, delivery_option_name=chosen["name"],
@@ -491,7 +505,14 @@ def _initiate_payment(payment, order) -> None:
 
 
 def _totals_dict(t) -> dict:
+    """The totals a `cart_changed` refusal hands back, so the storefront can redraw the
+    summary with the numbers that actually apply instead of the stale ones it sent.
+
+    Must carry every line `quote.py` carries, or the redraw silently drops one — which is
+    how a customer ends up looking at a summary whose rows do not add up to its total."""
     return {
         "subtotal": str(t.subtotal), "discount": str(t.discount), "delivery": str(t.delivery),
+        "referral_discount": str(t.referral_discount),
+        "referral_discount_percent": str(t.referral_discount_percent),
         "tax": str(t.tax), "grand_total": str(t.grand_total), "currency": t.currency,
     }

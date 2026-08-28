@@ -14,6 +14,7 @@ from django.conf import settings
 from django.test import override_settings
 from rest_framework.test import APIClient
 
+from apps.core.models import BusinessDecisions
 from apps.referrals.tests.factories import customer, ngn
 
 TERMS = "/api/v1/referrals/terms/"
@@ -30,17 +31,31 @@ def test_the_terms_are_public():
 def test_it_publishes_the_numbers_the_commission_is_actually_calculated_from():
     body = APIClient().get(TERMS).json()
     assert body["commission_percent"] == "10.00"
+    # The referred customer's half of the programme (2026-08-27). Advertised from the
+    # same row the checkout discounts from, for the same reason as the commission.
+    assert body["customer_discount_percent"] == "5.00"
     assert body["cookie_days"] == 30
     assert body["hold_days"] == 60
 
 
 @pytest.mark.django_db
-@override_settings(REFERRAL_COMMISSION_PERCENT="12.50", REFERRAL_HOLD_DAYS=45)
+@override_settings(REFERRAL_HOLD_DAYS=45)
 def test_changing_the_rate_changes_the_advertisement():
     """THE WHOLE REASON THIS ENDPOINT EXISTS. If this test can be made to pass while the
-    storefront still says 10%, the storefront has hardcoded a promise it cannot keep."""
+    storefront still says 10%, the storefront has hardcoded a promise it cannot keep.
+
+    Since 2026-08-27 the two PERCENTAGES move on `BusinessDecisions`, not in settings, so
+    this drives them the way an Owner does — through the row. The holding period is still
+    a setting and is overridden the old way, which is the point: both routes have to keep
+    reaching the advertisement."""
+    decisions = BusinessDecisions.load()
+    decisions.referrer_commission_percent = Decimal("12.50")
+    decisions.customer_discount_percent = Decimal("7.00")
+    decisions.save()
+
     body = APIClient().get(TERMS).json()
     assert body["commission_percent"] == "12.50"
+    assert body["customer_discount_percent"] == "7.00"
     assert body["hold_days"] == 45
 
 
@@ -118,11 +133,20 @@ def test_the_storefront_fallback_still_matches_these_settings():
     dependency that would eventually be the reason this stopped running.
 
     If this fails, change the constant in that file to match — do not delete the assert.
+
+    HONEST LIMIT, since the two percentages moved to `BusinessDecisions` (2026-08-27):
+    this pins the fallback to the SETTINGS SEED, not to the live row. An Owner who drops
+    the commission to 8% from the admin page moves the endpoint and every page that reads
+    it, but not this constant — so if the API is also down at that moment, /affiliates
+    would show the last-deployed 10%. That is a two-failure coincidence on a marketing
+    page, and the alternative (no fallback) is a blank page on a single failure. Accepted
+    knowingly; the admin form says so in as many words.
     """
     source = STOREFRONT_TERMS.read_text(encoding="utf-8")
 
     expected = {
         "commission_percent": f'"{settings.REFERRAL_COMMISSION_PERCENT}"',
+        "customer_discount_percent": f'"{settings.REFERRAL_CUSTOMER_DISCOUNT_PERCENT}"',
         "cookie_days": str(settings.REFERRAL_COOKIE_DAYS),
         "hold_days": str(settings.REFERRAL_HOLD_DAYS),
         "terms_version": f'"{settings.REFERRAL_TERMS_VERSION}"',

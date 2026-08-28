@@ -44,6 +44,10 @@ export interface EliteTier {
 
 export interface ReferralTerms {
   commission_percent: string;
+  /** What the REFERRED CUSTOMER takes off their own order for arriving through a link.
+   *  The buyer's half of the programme, added 2026-08-27. Same rule as every other
+   *  number here: it is advertised from the value the checkout actually discounts by. */
+  customer_discount_percent: string;
   cookie_days: number;
   hold_days: number;
   terms_version: string;
@@ -54,6 +58,7 @@ export interface ReferralTerms {
 /** PINNED BY A BACKEND TEST — see the file docstring before editing. */
 export const PUBLISHED_TERMS: ReferralTerms = {
   commission_percent: "10.00",
+  customer_discount_percent: "5.00",
   cookie_days: 30,
   hold_days: 60,
   terms_version: "2026-08-14",
@@ -87,6 +92,12 @@ export async function getReferralTerms(): Promise<ReferralTerms> {
     // "undefined%" on a page about money is the failure this guards.
     if (!terms?.commission_percent || !terms?.cookie_days || !terms?.hold_days) {
       return PUBLISHED_TERMS;
+    }
+    // The customer discount is checked separately, and only for PRESENCE — "0.00" is a
+    // legitimate answer (the Owner can switch that half of the programme off from the
+    // admin) and must not be mistaken for a malformed payload the way a missing key is.
+    if (terms.customer_discount_percent == null) {
+      return { ...terms, customer_discount_percent: "0.00" };
     }
     return terms;
   } catch {

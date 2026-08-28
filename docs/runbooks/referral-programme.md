@@ -11,13 +11,20 @@ Published terms, which this implements: <https://tokecosmetics.com/affiliates-2/
 
 ## The numbers, and where they live
 
-Every published number is a Django setting, env-overridable, in `config/settings/base.py`.
-They are settings rather than `SiteSetting` rows deliberately: each one is a promise
-printed on a public page, so changing one is a deploy *and* a terms update, together.
+**Two of them moved out of settings on 2026-08-27.** The commission rate and the referred
+customer's discount now live on `core.BusinessDecisions` — a singleton row — and an Owner
+or Manager edits them at **admin.tokecosmetics.com/business-decisions** without a deploy.
+Hammed asked for that explicitly, overruling the original "a rate change is a deploy"
+design. The settings below survive as the row's SEED (`BusinessDecisions.load()` creates it
+from them on first touch), so a fresh database still starts at the published 10% and 5% —
+but **changing those two in the environment moves nothing once the row exists.**
+
+Everything else is still a Django setting, env-overridable, in `config/settings/base.py`.
 
 | Setting | Default | What it is |
 |---|---|---|
-| `REFERRAL_COMMISSION_PERCENT` | `10.00` | Commission on qualifying net sales |
+| `REFERRAL_COMMISSION_PERCENT` | `10.00` | **Seed only.** Commission on qualifying net sales — live value on `BusinessDecisions` |
+| `REFERRAL_CUSTOMER_DISCOUNT_PERCENT` | `5.00` | **Seed only.** What the referred customer takes off their own order — live value on `BusinessDecisions` |
 | `REFERRAL_COOKIE_DAYS` | `30` | Click-attribution window |
 | `REFERRAL_HOLD_DAYS` | `60` | Holding period, counted **from shipping** |
 | `REFERRAL_PAYOUT_THRESHOLDS` | `NGN 20,000 · GBP 20 · USD 25 · CAD 30` | Minimum payout, per currency |
@@ -29,8 +36,33 @@ printed on a public page, so changing one is a deploy *and* a terms update, toge
 (`REFERRAL_COOKIE_DAYS`). **They must match** — one is how long the browser keeps the
 code, the other is what the account page tells the referrer the window is.
 
-The commission rate is SNAPSHOT onto every `Commission` row at accrual, so changing the
-setting never rewrites what has already been earned.
+The commission rate is SNAPSHOT onto every `Commission` row at accrual, and the customer
+discount onto `Order.referral_discount_percent` / `referral_discount_total` at placement.
+Changing either never rewrites what has already been earned or already been charged.
+
+Every write to `BusinessDecisions` is audited with the before and after value
+(`model_label="core.businessdecisions"`). That audit row is the **only** record of who
+moved a published term and when — the table itself keeps no history, because every number
+it holds has already been copied onto the rows that used it.
+
+### The customer's 5%
+
+A **real price reduction**, not a tender: it lands in `Order.referral_discount_total`,
+leaves the tax base in `compute_totals`, and therefore also leaves the referrer's
+commission base. On a ₦100,000 order the customer pays ₦95,000 and the referrer earns
+₦9,500 — Hammed's ruling of 2026-08-27, and the same rule coupons and loyalty points
+already follow. Do not "fix" this by paying commission on the pre-discount subtotal; the
+asymmetry that *would* be wrong is described in Plan-29 Amendment 2(b), and it is about
+commission spent as a TENDER, which is a different thing and is still cancelled.
+
+Its own column rather than sharing `discount_total`, so the invoice, the confirmation email
+and the admin order screen can each name it separately from a coupon.
+
+`customer_discount_first_order_only` is OFF by default: the discount applies to every
+referred order, matching the commission. Turning it on narrows it to a customer's first
+order ever (not their first *referred* order — the narrower reading reopens the same hole
+by another route). It exists because "every order" has a known cost: two customers who
+refer each other take the discount AND the commission on every order they ever place.
 
 ---
 
@@ -44,6 +76,11 @@ the *only* thing the checkout reads.
 | Link | `tokecosmetics.com/?ref=AMINA7K3P` | `proxy.ts`, on any route |
 | Short link | `tokecosmetics.com/r/AMINA7K3P` | `proxy.ts`, then redirects to `/` |
 | Typed code | "Friend's referral code" box on the cart page **and** the checkout review step | `POST /api/referral`, after validating upstream |
+
+Since 2026-08-27 the cart and the review step **re-quote** after a code is applied, because
+the total genuinely moves. The code still never rides the quote payload from the browser:
+the storefront BFF strips any `referral_code` in the body and injects the cookie's, on the
+quote exactly as it already did on the placement. So a browser can still only *ask*.
 
 The typed-code path exists because people share codes in captions and voice notes, not
 only as links. It renders in two places because two routes reach payment without ever
@@ -88,8 +125,8 @@ than confirming a link that will never pay them.
 gateway webhook with no browser and no cookie behind it, so a commission worked out at
 that point would have nothing to work from. `Order.referral_code` is the bridge.
 
-**The commission base** is `subtotal − discount_total`, minus `tax_total` in markets where
-`prices_include_tax` (Nigeria). Shipping never enters it. See
+**The commission base** is `subtotal − discount_total − referral_discount_total`, minus
+`tax_total` in markets where `prices_include_tax` (Nigeria). Shipping never enters it. See
 `referrals/services.commission_base` for the full reasoning.
 
 ---
@@ -296,6 +333,10 @@ The customer experience is complete. The staff side is not:
 - **No admin UI for blocking a referrer or writing an adjustment.**
 - **No `referrals.*` RBAC scopes** in `accounts/rbac.py` — they belong with the admin
   endpoints that will need them.
+- **Guests are still not attributed**, so a guest checkout earns no commission and gets no
+  5% either. The two halves are in step, which is the property worth having, but guest
+  checkout is how a lot of first orders arrive — worth revisiting. The change belongs in
+  `services._refuse_attribution`; `customer_discount_percent` is already written for it.
 - **No commission-earned emails.** Only the two payout emails exist. A per-sale email
   would be a spam cannon from a domain whose deliverability is already fragile; a weekly
   digest is the right shape and belongs with the admin phase.
@@ -307,8 +348,11 @@ The customer experience is complete. The staff side is not:
   `PayoutRequest` can carry a deduction line when that is decided.
 - **`referrals.*` RBAC scopes ARE now defined** (2026-08-15, `accounts/rbac.py`):
   `referrals.view` (Owner/Manager/Support), `referrals.manage` (Owner/Manager),
-  `referrals.pay` (Owner only — marking a payout paid asserts cash left the company
-  account and nothing downstream re-checks it). The endpoints that use them are next.
+  `referrals.pay` (Owner **and Manager** — Hammed's ruling the same day: the Manager runs
+  the monthly bank transfers, and withholding the scope from the person doing the work
+  just gets the Owner's login borrowed. The audit row names whoever clicked). Since
+  2026-08-27 there is also `decisions.manage` (Owner/Manager) on the Business Decisions
+  page, which is where the two percentages are now set.
 
 ---
 

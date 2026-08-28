@@ -58,3 +58,22 @@ def format_money(amount: Decimal, currency) -> str:
             f"({exponent} decimal places) — refusing to round money."
         )
     return f"{currency.symbol}{amount:,.{exponent}f}"
+
+
+def format_percent(percent: Decimal) -> str:
+    """A rate as a customer says it — "5" for 5.00, "12.5" for 12.50, "" for nothing.
+
+    Lives beside `format_money` for the same reason `format_money` lives beside the
+    minor-unit math: a template writing `{{ rate }}` renders "5.00%", which reads as a
+    spreadsheet cell rather than an offer, and every template that got it wrong would get
+    it wrong differently. Trims only the zeros that carry no information, so a genuinely
+    fractional rate survives intact.
+
+    Mirrors `ratePercent` in storefront/src/lib/referral-terms.ts, which does the same job
+    for the marketing page. The two must agree — a customer reading "5% off" on
+    /affiliates and "5.00%" on their invoice is a small thing that reads as carelessness.
+    """
+    percent = Decimal(str(percent))
+    if percent == 0:
+        return ""
+    return f"{percent.normalize():f}"

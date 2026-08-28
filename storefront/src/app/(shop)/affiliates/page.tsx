@@ -205,17 +205,31 @@ function Opening({
  */
 function OfferRow({ terms, currency }: { terms: ReferralTerms; currency: string | undefined }) {
   const mine = thresholdsForMarket(terms.payout_thresholds, currency)[0];
+  const customerDiscount = ratePercent(terms.customer_discount_percent ?? "0");
   const facts = [
     {
       figure: `${ratePercent(terms.commission_percent)}%`,
       label: "Commission",
       body: "Of every qualifying sale made through your link, on the products in the order.",
     },
-    {
-      figure: `${terms.cookie_days} days`,
-      label: "Tracking window",
-      body: "You keep the credit long after the first click, not just for that visit.",
-    },
+    // The buyer's half (2026-08-27). It replaces the tracking-window tile rather than
+    // making a fourth, because three figures is the reference's scanning device and a
+    // four-up row reads as a spec sheet — and because this is the tile that makes the
+    // link WORTH SENDING. The window is still stated in the fine print below.
+    //
+    // Dropped entirely when the Owner sets the discount to 0 from the admin: a tile
+    // reading "0% for them" advertises the absence of an offer.
+    ...(Number(customerDiscount) > 0
+      ? [{
+          figure: `${customerDiscount}%`,
+          label: "For them",
+          body: "Whoever uses your link takes that off their own order, straight away.",
+        }]
+      : [{
+          figure: `${terms.cookie_days} days`,
+          label: "Tracking window",
+          body: "You keep the credit long after the first click, not just for that visit.",
+        }]),
     {
       figure: mine?.amount_display ?? "—",
       label: "Minimum payout",

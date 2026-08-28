@@ -141,6 +141,7 @@ class QuoteView(APIView):
         return Response(quote_service(
             cart, request.country, user=request.user,
             coupon_code=v.get("coupon_code", ""), delivery_amount=delivery_amount,
+            referral_code=v.get("referral_code", ""),
         ))
 
 
@@ -243,6 +244,7 @@ class GuestQuoteView(APIView):
         return Response(quote_service(
             cart, request.country, user=None, email=v.get("guest_email", ""),
             coupon_code=v.get("coupon_code", ""), delivery_amount=delivery_amount,
+            referral_code=v.get("referral_code", ""),
         ))
 
 

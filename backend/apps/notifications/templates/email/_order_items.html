@@ -70,6 +70,10 @@ nothing says what it is until you have read three rows of it.
   <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Discount</td>
       <td align="right" style="padding:3px 0;white-space:nowrap;color:#1c7a3e;">&minus;&nbsp;{{ discount_total }}</td></tr>
   {% endif %}
+  {% if referral_discount_total %}
+  <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Referral discount{% if referral_discount_percent %} ({{ referral_discount_percent }}%){% endif %}</td>
+      <td align="right" style="padding:3px 0;white-space:nowrap;color:#1c7a3e;">&minus;&nbsp;{{ referral_discount_total }}</td></tr>
+  {% endif %}
   <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Delivery
         <span style="color:#8a857c;">({{ delivery_option_name }})</span></td>
       <td align="right" style="padding:3px 0;white-space:nowrap;">{{ shipping_total }}</td></tr>

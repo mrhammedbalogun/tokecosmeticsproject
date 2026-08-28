@@ -23,9 +23,10 @@ from rest_framework import viewsets
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
 from apps.core.audit import AdminAuditMixin
-from apps.core.models import AuditLog, Country, StoreSettings
+from apps.core.models import AuditLog, BusinessDecisions, Country, StoreSettings
 from apps.core.serializers import (
     AuditLogSerializer,
+    BusinessDecisionsSerializer,
     TaxCountryAdminSerializer,
     TaxSettingsSerializer,
 )
@@ -117,6 +118,29 @@ class TaxSettingsView(AdminAuditMixin, generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return StoreSettings.load()
+
+
+class BusinessDecisionsView(AdminAuditMixin, generics.RetrieveUpdateAPIView):
+    """GET/PATCH /api/v1/admin/business-decisions/ — the two referral percentages.
+
+    `decisions.manage`, Owner AND Manager — one notch wider than the tax screens next
+    door, which are `settings.manage` and Owner-only. The reasoning is in `rbac.py`: tax
+    is a legal position, these are a commercial one, and the Manager is who makes it.
+
+    A singleton, so there is no 404 arm and no list route; `BusinessDecisions.load()`
+    creates the row from the settings defaults on first touch. Both writes are audited
+    with the before and after value, which is the only record of who changed a published
+    term and when — the table itself keeps no history, because every number it holds has
+    already been snapshotted onto the commissions and orders that used it.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("decisions.manage")]
+    serializer_class = BusinessDecisionsSerializer
+    audit_serializers = (BusinessDecisionsSerializer,)
+
+    def get_object(self):
+        return BusinessDecisions.load()
 
 
 class TaxCountryAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):

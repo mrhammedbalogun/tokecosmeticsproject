@@ -71,6 +71,12 @@ interface QuoteFetchResult {
   deliveryOptionId: number | string;
   gigCentreId?: number;
   couponCode: string;
+  /** Which referral state this result was fetched under. Part of the key, not just an
+   *  effect dependency, so the totals go STALE the instant a code is applied. Without it
+   *  the old grand_total stays on screen — and stays sendable as `expected_total` — until
+   *  the new quote lands, and a place-order in that window is refused as `cart_changed`.
+   *  Safe, but a confusing refusal where a disabled button is the honest answer. */
+  referralNonce: number;
   totals: Totals | null;
   couponError: string | null;
   error: string | null;
@@ -129,6 +135,13 @@ export function ReviewStep() {
   );
   const [appliedCoupon, setAppliedCoupon] = useState(couponInput);
 
+  // Bumped when a referral code is applied, to re-run the quote below. A counter rather
+  // than the code itself: the code never reaches this component — it goes into an
+  // httpOnly cookie the BFF reads — so all this side knows, and all it needs to know, is
+  // that the server's answer has changed. Since 2026-08-27 an attributed order discounts
+  // the customer's own goods, so the quote genuinely does move.
+  const [referralNonce, setReferralNonce] = useState(0);
+
   // Keyed-result pattern (mirrors DeliveryStep/PaymentStep): the effect never resets
   // state synchronously on a dependency change; staleness is derived at render time
   // by comparing the result's key to the current inputs, and `cancelled` stops a
@@ -161,6 +174,7 @@ export function ReviewStep() {
         if (!res.ok || !data?.totals) {
           setResult({
             cartId, addressKey, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
+            referralNonce,
             totals: null, couponError: null,
             error: "Couldn't load your order total — please try again.",
           });
@@ -169,12 +183,14 @@ export function ReviewStep() {
         const couponError = appliedCoupon && !data.coupon?.ok ? data.coupon?.error_code ?? "" : null;
         setResult({
           cartId, addressKey, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
+          referralNonce,
           totals: data.totals as Totals, couponError, error: null,
         });
       } catch {
         if (cancelled) return;
         setResult({
           cartId, addressKey, deliveryOptionId, gigCentreId, couponCode: appliedCoupon,
+          referralNonce,
           totals: null, couponError: null,
           error: "Couldn't load your order total — please try again.",
         });
@@ -183,7 +199,8 @@ export function ReviewStep() {
     return () => {
       cancelled = true;
     };
-  }, [cartId, addressKey, addressId, guestAddress, guest, deliveryOptionId, gigCentreId, appliedCoupon]);
+  }, [cartId, addressKey, addressId, guestAddress, guest, deliveryOptionId, gigCentreId,
+      appliedCoupon, referralNonce]);
 
   const stale =
     !result ||
@@ -191,7 +208,8 @@ export function ReviewStep() {
     result.addressKey !== addressKey ||
     result.deliveryOptionId !== deliveryOptionId ||
     result.gigCentreId !== gigCentreId ||
-    result.couponCode !== appliedCoupon;
+    result.couponCode !== appliedCoupon ||
+    result.referralNonce !== referralNonce;
   const totals = stale ? null : result.totals;
   const quoteError = stale ? null : result.error;
   const couponError = stale ? null : result.couponError;
@@ -350,19 +368,24 @@ export function ReviewStep() {
       </div>
 
       {/* Under the coupon, same as on the cart page, and for the same reason: to a
-          shopper both are "a code I was given", so they belong next to each other — but
-          a referral code does not move the total and must not be mistaken for a
-          discount, hence its own component and wording rather than a second mode of the
-          box above.
+          shopper both are "a code I was given", so they belong next to each other. They
+          keep separate components and wording because only one of them can be refused for
+          being your own code, and only one of them pays somebody.
 
           This is the LAST point at which attribution can still be claimed, and for
           anyone who arrived via "Buy now" or the cart drawer it is the ONLY one — those
-          two routes never render /cart. Applying here is safe with no re-quote: the
-          field's POST /api/referral writes the httpOnly cookie server-side, and the
-          checkout BFF reads that cookie when the order is placed, not when it is
-          quoted. Nothing in `totals` depends on it. */}
+          two routes never render /cart.
+
+          IT NOW RE-QUOTES. Until 2026-08-27 applying here changed nothing in `totals`,
+          so the field could fire and forget. The referred customer's discount changed
+          that: the code still only reaches the server as an httpOnly cookie, but the
+          quote reads that cookie, so the totals on screen are stale the moment a code is
+          accepted. `referralNonce` is what re-runs the effect. */}
       <div className="border-t border-line pt-4">
-        <ReferralCodeField variant="inline" />
+        <ReferralCodeField
+          variant="inline"
+          onApplied={() => setReferralNonce((n) => n + 1)}
+        />
       </div>
 
       <div className="border-t border-line pt-4">

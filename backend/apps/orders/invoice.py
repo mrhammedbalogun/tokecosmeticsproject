@@ -18,7 +18,7 @@ from django.db.models import Sum
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from apps.payments.money import format_money
+from apps.payments.money import format_money, format_percent
 
 
 # No money has been collected in these states, so the document is a proforma, not an
@@ -63,6 +63,13 @@ def invoice_context(order) -> dict:
         ],
         "subtotal": money(order.subtotal),
         "discount_total": money(order.discount_total) if order.discount_total else "",
+        # Its own line, never folded into `discount_total`: an invoice is the document a
+        # customer reconciles against, and "why is this cheaper than the products" has to
+        # be answerable from the page itself.
+        "referral_discount_total": (
+            money(order.referral_discount_total) if order.referral_discount_total else ""
+        ),
+        "referral_discount_percent": format_percent(order.referral_discount_percent),
         "shipping_total": money(order.shipping_total),
         "tax_total": money(order.tax_total) if order.tax_total else "",
         "tax_label": order.country.tax_label,
