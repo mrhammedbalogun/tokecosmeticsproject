@@ -21,16 +21,39 @@
  * the quote and the placement, so what the browser ASKS for can still never decide who is
  * paid. This component never sees the totals; it only says "something changed".
  *
- * It is COLLAPSED by default. The overwhelming majority of shoppers have no code, and an
- * empty box labelled "referral code" invites people to hunt for one they do not have.
+ * It is COLLAPSED by default everywhere except the checkout review step. The overwhelming
+ * majority of shoppers have no code, and an empty box labelled "referral code" invites
+ * people to hunt for one they do not have — which at the review step means leaving a
+ * checkout they had almost finished. Review is the exception because it is the LAST
+ * chance: a shopper who was given a code and cannot find where to type it has been failed
+ * outright, and that failure was real (2026-08-28) — the collapsed trigger read as a
+ * footnote next to the coupon field's full bordered card, and went unnoticed.
  *
- * RENDERED IN TWO PLACES: the cart page (`CartView`) and the checkout review step
- * (`ReviewStep`). Both are needed because two routes reach payment without ever passing
- * through /cart — "Buy now" on a product page (`BuyButtons`) and the mini-cart drawer's
- * checkout button (`CartDrawer`) — so a cart-only field is invisible to anyone who takes
- * either. See `variant` for the only difference between the two renderings.
+ * The collapsed trigger is a full-width row with a chevron, deliberately matching
+ * `CartDrawer`'s "Got a discount code?" control rather than the muted sentence it used to
+ * be. Same reason: to a shopper these are the same kind of thing, so they should look
+ * like the same kind of thing.
+ *
+ * RENDERED IN THREE PLACES: the cart page (`CartView`), the mini-cart drawer
+ * (`CartDrawer`) and the checkout review step (`ReviewStep`). All three are needed
+ * because two routes reach payment without ever passing through /cart — "Buy now" on a
+ * product page (`BuyButtons`) and the drawer's own checkout button — so a cart-only field
+ * is invisible to anyone who takes either. See `variant` for what differs between them.
  */
 import { useState } from "react";
+
+/** Duplicated from CartDrawer rather than imported, for the reason its own BagIcon gives:
+ *  CartDrawer imports THIS file, so importing back would be a cycle. Six lines of SVG is
+ *  the cheaper of the two problems. */
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg aria-hidden viewBox="0 0 24 24"
+      className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`}
+      fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
 
 type Result =
   | { state: "idle" }
@@ -74,12 +97,15 @@ export function ReferralCodeField({
    * card and the order summary, so it wears its own border and background.
    * "inline" — the checkout review step, whose sections are separated by a top rule and
    * carry no box of their own. Keeping the card there would nest a box inside a box.
+   * "drawer" — the mini-cart, whose footer rows are full-bleed strips divided by rules,
+   * so this supplies its own `border-t` + gutter and sits flush under the discount box.
    *
-   * Deliberately NOT two components: the behaviour (validate upstream, let the server
-   * set the cookie, never touch the price) is the part that must not drift between the
-   * two places a shopper can enter a code, and duplicating the markup is how it drifts.
+   * Deliberately NOT three components: the behaviour (validate upstream, let the server
+   * set the cookie, tell the shopper who they are shopping with) is the part that must
+   * not drift between the places a shopper can enter a code, and duplicating the markup
+   * is how it drifts.
    */
-  variant?: "card" | "inline";
+  variant?: "card" | "inline" | "drawer";
 }) {
   const [open, setOpen] = useState(initiallyOpen);
   const [code, setCode] = useState("");
@@ -113,32 +139,43 @@ export function ReferralCodeField({
     }
   }
 
+  // Namespaced per variant, NOT a bare "referral-code". The drawer lives in the layout
+  // and stays mounted behind /cart, so a shared id would put two of them in one document
+  // and point the cart page's <label> at the drawer's hidden input. The coupon fields
+  // already namespace themselves for exactly this reason (drawer-coupon /
+  // review-coupon-code).
+  const inputId = `referral-code-${variant}`;
+  const shell =
+    variant === "card"
+      ? "rounded-[var(--radius-card)] border border-line bg-surface p-5"
+      : variant === "drawer"
+        ? "border-t border-line px-5 py-3"
+        : "";
+
   if (!open) {
     return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="text-sm text-muted underline underline-offset-2 hover:text-foreground"
-      >
-        Have a friend&rsquo;s referral code?
-      </button>
+      <div className={variant === "drawer" ? "border-t border-line px-5 py-3" : ""}>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          aria-expanded={false}
+          className="flex w-full items-center justify-between text-left text-sm font-medium transition-colors hover:text-accent"
+        >
+          Have a friend&rsquo;s referral code?
+          <Chevron open={false} />
+        </button>
+      </div>
     );
   }
 
   return (
-    <div
-      className={
-        variant === "card"
-          ? "rounded-[var(--radius-card)] border border-line bg-surface p-5"
-          : ""
-      }
-    >
-      <label htmlFor="referral-code" className="mb-2 block text-sm font-medium">
+    <div className={shell}>
+      <label htmlFor={inputId} className="mb-2 block text-sm font-medium">
         Friend&rsquo;s referral code
       </label>
       <div className="flex gap-2">
         <input
-          id="referral-code"
+          id={inputId}
           type="text"
           value={code}
           onChange={(e) => setCode(e.target.value)}

@@ -7,6 +7,7 @@ import { formatMoney } from "@/lib/country";
 import { mediaUrl } from "@/lib/media";
 import { stashCoupon } from "@/lib/coupon-storage";
 import { OverlayPortal } from "@/components/layout/OverlayPortal";
+import { ReferralCodeField } from "@/components/checkout/ReferralCodeField";
 import type { CartLine } from "@/lib/cart-types";
 
 /** Same pen as CartButton's BagIcon (1.5 stroke, round caps). Not imported from
@@ -260,6 +261,14 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         {cart.items.length > 0 && (
           <div className="shrink-0">
             <DiscountBox />
+            {/* Under the discount box, because to a shopper both are "a code I was
+                given". This drawer's Checkout button goes straight to /checkout, so
+                without this the two fastest routes to payment — "Buy now" and this
+                button — both skipped every referral field the site had until the review
+                step. No `onApplied`: the drawer shows a raw cart subtotal and no quote,
+                so there is nothing here to redraw; the 5% appears on the next screen
+                that prices anything. */}
+            <ReferralCodeField variant="drawer" />
             <div className="border-t border-line px-5 pb-5 pt-4">
               <div className="flex items-baseline justify-between font-medium">
                 <span>Subtotal</span>

@@ -92,6 +92,52 @@ describe("CartDrawer", () => {
     expect(screen.getByText(/apply it at checkout/i)).toBeInTheDocument();
   });
 
+  it("takes a referral code, so the fastest route to checkout is not the one that hides it", async () => {
+    // This drawer's Checkout button goes straight to /checkout. Before 2026-08-28 the
+    // referral field existed only on /cart and at the review step, so the two quickest
+    // paths to payment — "Buy now" and this button — skipped every chance to enter a
+    // code until the very last screen.
+    const f = vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ valid: true, referrer_name: "Amina", customer_discount_percent: "5.00" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    const originalFetch = global.fetch;
+    global.fetch = f as unknown as typeof fetch;
+    try {
+      render(<CartDrawer open onClose={vi.fn()} />);
+
+      // Collapsed here, unlike the review step: the drawer is a browsing surface, and an
+      // open box asking for a code invites a shopper without one to go hunting.
+      fireEvent.click(screen.getByRole("button", { name: /Have a friend.s referral code\?/ }));
+      fireEvent.change(screen.getByLabelText(/Friend.s referral code/), {
+        target: { value: "amina7k3p" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+      expect(await screen.findByText(/Amina.s link/)).toBeInTheDocument();
+      expect(f).toHaveBeenCalledWith("/api/referral", expect.objectContaining({ method: "POST" }));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  it("gives the drawer's referral input its own id, since /cart renders one too", () => {
+    // The drawer lives in the layout and stays mounted behind /cart. A shared
+    // id="referral-code" would put two in one document and point the cart page's <label>
+    // at this hidden input — the same reason the coupon boxes are namespaced.
+    render(<CartDrawer open onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Have a friend.s referral code\?/ }));
+    expect(screen.getByLabelText(/Friend.s referral code/)).toHaveAttribute(
+      "id",
+      "referral-code-drawer",
+    );
+  });
+
   it("Continue Shopping and Escape both close the drawer", () => {
     const onClose = vi.fn();
     render(<CartDrawer open onClose={onClose} />);

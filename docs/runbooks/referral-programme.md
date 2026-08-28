@@ -323,6 +323,99 @@ Pinned by `place.test.ts::IGNORES a referral code supplied in the request body`.
 
 ---
 
+## Guest attribution (2026-08-28)
+
+**A guest checkout now earns the referrer a commission and takes 5% off the guest's own
+order.** Until this date `_refuse_attribution` turned away any buyer who was not
+authenticated, so a guest who typed a code got nothing and paid for nobody.
+
+**The bug that made it urgent was not the missing money, it was the lie.**
+`POST /api/referral` is a PUBLIC lookup with no idea who is asking, so it answered a guest
+"✓ You're shopping with Amina's link — that's 5% off for you" and the checkout then
+charged full price. The shop was visibly failing a promise it had just made on screen.
+
+**A guest's identity is the email and phone they type at checkout.** Both are already
+normalised by `GuestCheckoutSerializer` (lowercased / E.164), which is what makes the
+comparison against a referrer's row meaningful. Everything that already disqualified an
+attribution still does — unknown code, blocked referrer, self-referral.
+
+**An account holder's own row always wins over the new kwargs.** `attribution_code_for_
+order(code, buyer, *, email, phone)` consults them ONLY when `buyer` is anonymous. If they
+could override a real user, the self-referral guard would become an opt-out.
+
+**Where the guest identity had to be threaded, and why both:**
+
+| Path | Call site | Without it |
+|---|---|---|
+| Placement | `checkout.place_order` | a self-referring guest is attributed |
+| Preview | `checkout.services.quote` ← `GuestQuoteView` ← `guest_phone` on the serializer ← `ReviewStep`'s quote body | the review screen quotes a 5% that placement refuses, and the pay button returns `cart_changed` |
+
+**The /cart preview attributes on the code alone**, because a guest there has typed no
+contact details yet. That is deliberate: refusing until an identity exists would show no
+discount on /cart and then produce one at review, which reads as a pricing glitch. The
+only shopper affected is a self-referring guest, who sees the discount withdrawn at the
+review step — before the pay button, not at it.
+
+**`guest_phone` on `GuestQuoteRequestSerializer` never 400s.** It is a preview and the
+shopper is mid-typing; an unparseable number normalises to `""`, which matches no referrer
+— the same outcome as sending nothing. The real gate is `GuestContactMixin` at placement.
+
+**One fraud flag had to change with it.** `fraud_flags` grouped buyers by
+`order.user_id`, which is NULL for every guest — three guest orders from three unrelated
+shoppers collapsed to one key and accused an honest referrer of self-dealing. Guests are
+now keyed by `guest:{email}`, which also makes the flag mean something on that path.
+
+**Accrual needed nothing.** `accrue_for_order` works purely off `Order.referral_code` and
+never reads `order.user`, so a guest order pays exactly like an account order.
+
+Tests: `apps/referrals/tests/test_guest_attribution.py` (the rules) and
+`apps/checkout/tests/test_guest_referral_checkout.py` (the wiring, over HTTP).
+
+**Known limit, accepted:** a determined self-referrer can use a second mailbox and a
+second number. So can a determined account holder — a second account is free — so this is
+not a new weakness, and self-referral at scale is caught where it always was: `fraud_flags`
+on the payout screen, in front of a human, before any money moves.
+
+---
+
+## Where a shopper can type a code (2026-08-28)
+
+Three places, all rendering the same `ReferralCodeField` so the behaviour cannot drift:
+
+| Surface | Variant | Default state |
+|---|---|---|
+| `/cart` (`CartView`) | `card` | collapsed |
+| mini-cart (`CartDrawer`) | `drawer` | collapsed |
+| checkout review (`ReviewStep`) | `inline` | collapsed |
+
+**Collapsed everywhere, and that is Hammed's call (2026-08-28), reaffirmed** after a build
+that opened it at the review step. Most shoppers have no code, and an open box labelled
+"referral code" invites people to hunt for one they do not have — at the review step that
+means leaving a checkout they had almost finished. `ReferralCodeField` still takes
+`initiallyOpen`; nothing passes it.
+
+**Why the drawer needed one.** Its Checkout button goes straight to `/checkout`, so the
+two fastest routes to payment — "Buy now" on a PDP and this button — both skipped every
+referral field on the site until the review step.
+
+**The collapsed trigger is a chevron row**, matching `CartDrawer`'s "Got a discount code?"
+control, rather than the muted underlined sentence it used to be. Collapsed, but not hard
+to find.
+
+**It has never been removed or conditionally hidden.** `ReferralCodeField` was added once
+(`e3a800e`) and has only ever been rendered unconditionally — no login gate, no country
+gate. Confirmed live on production 2026-08-28 on `/cart` and at the checkout review step,
+desktop and mobile, as a guest. If it is ever reported missing, the render is not the
+place to look: check which SCREEN the shopper was on (review is step 5 of 5, so anyone
+abandoning earlier never reaches it) and whether they passed through `/cart` at all.
+
+**The input id is namespaced per variant** (`referral-code-drawer`, …). The drawer lives
+in the layout and stays mounted behind `/cart`, so a shared id would put two in one
+document and point the cart page's `<label>` at the drawer's hidden input — the same
+reason the coupon boxes are namespaced.
+
+---
+
 ## What is NOT built yet
 
 The customer experience is complete. The staff side is not:
@@ -333,10 +426,8 @@ The customer experience is complete. The staff side is not:
 - **No admin UI for blocking a referrer or writing an adjustment.**
 - **No `referrals.*` RBAC scopes** in `accounts/rbac.py` — they belong with the admin
   endpoints that will need them.
-- **Guests are still not attributed**, so a guest checkout earns no commission and gets no
-  5% either. The two halves are in step, which is the property worth having, but guest
-  checkout is how a lot of first orders arrive — worth revisiting. The change belongs in
-  `services._refuse_attribution`; `customer_discount_percent` is already written for it.
+- ~~**Guests are still not attributed**~~ — **BUILT 2026-08-28, see "Guest attribution"
+  below.**
 - **No commission-earned emails.** Only the two payout emails exist. A per-sale email
   would be a spam cannon from a domain whose deliverability is already fragile; a weekly
   digest is the right shape and belongs with the admin phase.
