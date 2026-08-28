@@ -119,7 +119,7 @@ class AddressSerializer(serializers.ModelSerializer):
         model = Address
         fields = [
             "id", "label", "first_name", "last_name", "phone",
-            "line1", "line2", "country_code",
+            "line1", "line2", "landmark", "country_code",
             "state_region", "area_region", "city_text", "state_text", "postcode",
             "latitude", "longitude",
             "is_default_shipping", "is_default_billing",

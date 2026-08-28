@@ -14,6 +14,10 @@ export function AddressSummary({ address }: { address: Record<string, unknown> |
     name,
     str(address, "line1"),
     str(address, "line2"),
+    // Straight after the street lines, before the locality — the order the address is
+    // read in on the ground. Absent on every non-NG order and everything placed before
+    // 2026-08-28, which `str` already handles by returning undefined.
+    str(address, "landmark"),
     [str(address, "city_text"), str(address, "state_text")].filter(Boolean).join(", "),
     str(address, "postcode"),
     str(address, "phone"),

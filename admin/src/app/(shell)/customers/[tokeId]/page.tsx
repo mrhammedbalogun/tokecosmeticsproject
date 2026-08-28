@@ -133,7 +133,7 @@ export default async function CustomerDetailPage({
                   {a.is_default_billing && " · default billing"}
                 </p>
                 <p className="mt-1">
-                  {[a.line1, a.line2, a.city, a.postcode, a.country_code]
+                  {[a.line1, a.line2, a.landmark, a.city, a.postcode, a.country_code]
                     .filter(Boolean)
                     .join(", ")}
                 </p>

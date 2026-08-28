@@ -4,6 +4,7 @@ written out per template. Takes `address` (a snapshot dict).
 {% endcomment %}{% if address.first_name or address.last_name %}{{ address.first_name }} {{ address.last_name }}<br>
 {% endif %}{{ address.line1 }}<br>
 {% if address.line2 %}{{ address.line2 }}<br>
+{% endif %}{% if address.landmark %}{{ address.landmark }}<br>
 {% endif %}{% if address.area %}{{ address.area }}<br>
 {% endif %}{% if address.state %}{{ address.state }}<br>
 {% endif %}{% if address.postcode %}{{ address.postcode }}<br>

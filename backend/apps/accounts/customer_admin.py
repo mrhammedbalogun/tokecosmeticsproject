@@ -50,8 +50,8 @@ class CustomerAddressSerializer(serializers.ModelSerializer):
         # `city` builds fine until something forces field construction — which is how this
         # reached a passing test run and was caught by the OpenAPI schema instead.
         fields = [
-            "id", "label", "line1", "line2", "city_text", "state_text", "postcode",
-            "country_code", "is_default_shipping", "is_default_billing",
+            "id", "label", "line1", "line2", "landmark", "city_text", "state_text",
+            "postcode", "country_code", "is_default_shipping", "is_default_billing",
         ]
 
 

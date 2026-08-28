@@ -123,6 +123,11 @@ export function mayTransition(
  */
 const ADDRESS_ORDER = [
   "first_name", "last_name", "company", "line1", "line2",
+  // The NG landmark ("opposite Ikeja City Mall"), straight after the street lines and
+  // before the locality — this is the line that gets a rider to the door, so a picker
+  // reading the order must see it. Absent on non-NG and pre-2026-08-28 orders; the loop
+  // below already skips missing keys.
+  "landmark",
   "area", "city", "state", "postcode", "country", "phone",
 ];
 

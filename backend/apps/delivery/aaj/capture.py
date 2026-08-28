@@ -135,7 +135,13 @@ def _receiver(order) -> tuple[dict, dict]:
     city = (snap.get("area") or snap.get("city") or canonical or "").strip()
     if len(city) < 2:
         city = canonical
-    line1 = ", ".join(p for p in (snap.get("line1"), snap.get("line2")) if p) or city
+    # The landmark rides WITH the street address rather than in a field of its own,
+    # because AAJ's payload has no landmark field and the rider reads this line. It is
+    # the whole reason the field is collected: a Nigerian street address often will not
+    # take someone to the door, and "opposite Shoprite" will. Empty for older orders.
+    line1 = ", ".join(
+        p for p in (snap.get("line1"), snap.get("line2"), snap.get("landmark")) if p
+    ) or city
     contact = {
         "name": sanitise_name(
             f"{snap.get('first_name', '')} {snap.get('last_name', '')}".strip(),

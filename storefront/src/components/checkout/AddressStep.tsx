@@ -10,10 +10,12 @@ import { detectLgaMismatch } from "@/components/address/lgaMismatch";
 import type { PlacePick } from "@/lib/googleMaps";
 import {
   fieldConfigFor,
+  needsLandmark,
   summarizeAddress,
   type Address,
   type AddressFieldErrors,
 } from "@/components/checkout/address-fields";
+import { LandmarkField } from "@/components/address/LandmarkField";
 import { PhoneField } from "@/components/ui/PhoneField";
 
 interface FormValues {
@@ -23,6 +25,7 @@ interface FormValues {
   phone: string;
   line1: string;
   line2: string;
+  landmark: string;
   city_text: string;
   state_text: string;
   postcode: string;
@@ -37,6 +40,7 @@ const EMPTY_FORM: FormValues = {
   phone: "",
   line1: "",
   line2: "",
+  landmark: "",
   city_text: "",
   state_text: "",
   postcode: "",
@@ -207,6 +211,10 @@ export function AddressStep() {
     if (form.label.trim()) payload.label = form.label.trim();
     if (form.last_name.trim()) payload.last_name = form.last_name.trim();
     if (form.line2.trim()) payload.line2 = form.line2.trim();
+    // NG only. Sent even when blank so the backend's own requirement is what refuses a
+    // missing one — a client that silently omitted the key would turn a clear field
+    // error into "this field is required" against a field the shopper never saw.
+    if (needsLandmark(country)) payload.landmark = form.landmark.trim();
     // NOT exclusive: GB/US/CA need the structured state AND city + postcode.
     if (cfg.useRegions) {
       if (form.state_region) payload.state_region = form.state_region;
@@ -271,7 +279,7 @@ export function AddressStep() {
       const body: AddressFieldErrors = await res.json().catch(() => ({}));
       setFieldErrors(body);
       const knownKeys: Array<keyof AddressFieldErrors> = [
-        "label", "first_name", "last_name", "phone", "line1", "line2",
+        "label", "first_name", "last_name", "phone", "line1", "line2", "landmark",
         "country_code", "state_region", "area_region", "city_text", "state_text", "postcode",
       ];
       if (body.detail) setFormError(body.detail);
@@ -521,6 +529,18 @@ export function AddressStep() {
               className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
             />
           </div>
+
+          {/* Immediately BEFORE the state, because that is the order the address is
+              read in on the ground: street, then the thing you turn at, then the
+              administrative area. NG only — see needsLandmark. */}
+          {needsLandmark(country) && (
+            <LandmarkField
+              idPrefix="addr"
+              value={form.landmark}
+              onChange={(v) => updateField("landmark", v)}
+              errors={fieldErrors.landmark}
+            />
+          )}
 
           {/* NOT exclusive: GB/US/CA render the structured state select AND
               city + postcode text fields (mirrors apps.core.address_rules). */}

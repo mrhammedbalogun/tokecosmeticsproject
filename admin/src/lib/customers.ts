@@ -34,6 +34,7 @@ export interface CustomerDetail extends CustomerRow {
     label: string;
     line1: string;
     line2: string;
+    landmark: string;
     city: string;
     postcode: string;
     country_code: string;

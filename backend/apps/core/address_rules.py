@@ -29,6 +29,14 @@ _BASE = {"line1", "country_code", "first_name", "phone"}
 # Countries where a postcode is mandatory.
 _POSTCODE_COUNTRIES = {"GB", "US", "CA"}
 
+# Countries where a nearby landmark is mandatory. NG only, and deliberately the
+# mirror image of _POSTCODE_COUNTRIES: these are the two ways a delivery actually
+# gets found, and a market needs one or the other rather than both. A Nigerian
+# street address frequently will not take a rider to the door — "opposite Shoprite,
+# off Ikeja bus stop" is what does — while asking a UK shopper for their nearest bus
+# stop reads as a broken form and would block a market we actively sell to.
+_LANDMARK_COUNTRIES = {"NG"}
+
 
 def required_fields_for(country_code: str) -> set[str]:
     country_code = (country_code or "").upper()
@@ -39,4 +47,6 @@ def required_fields_for(country_code: str) -> set[str]:
         fields.add("city_text")
     if country_code in _POSTCODE_COUNTRIES:
         fields.add("postcode")
+    if country_code in _LANDMARK_COUNTRIES:
+        fields.add("landmark")
     return fields

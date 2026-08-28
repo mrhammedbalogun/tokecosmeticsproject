@@ -19,6 +19,8 @@ export interface Address {
   phone?: string;
   line1: string;
   line2?: string;
+  /** A nearby bus stop / mall / junction. Required in NG only — see `needsLandmark`. */
+  landmark?: string;
   country_code: string;
   state_region?: number | null;
   area_region?: number | null;
@@ -42,6 +44,7 @@ export type AddressFieldErrors = Partial<
     | "phone"
     | "line1"
     | "line2"
+    | "landmark"
     | "country_code"
     | "state_region"
     | "area_region"
@@ -125,6 +128,21 @@ const COUNTRY_FIELD_CONFIG: Record<string, CountryFieldConfig> = {
 
 export function fieldConfigFor(countryCode: string): CountryFieldConfig {
   return COUNTRY_FIELD_CONFIG[countryCode.toUpperCase()] ?? DEFAULT_CONFIG;
+}
+
+/** Markets that ask for a nearby landmark, mirroring
+ *  `apps.core.address_rules._LANDMARK_COUNTRIES`. NG only, and deliberately the mirror
+ *  image of the postcode rule: a market gets ONE way of being found, not two. A Nigerian
+ *  street address often will not take a rider to the door and "opposite Shoprite" will,
+ *  while a GB/US/CA parcel routes on its postcode.
+ *
+ *  Kept as its own predicate rather than a CountryFieldConfig flag because it is not a
+ *  `textFields` entry — those render as a plain labelled input, and this one carries its
+ *  own help popover (see components/address/LandmarkField). */
+const LANDMARK_COUNTRIES = new Set(["NG"]);
+
+export function needsLandmark(countryCode: string): boolean {
+  return LANDMARK_COUNTRIES.has((countryCode || "").toUpperCase());
 }
 
 /** Short "line1, city" summary for address book cards and the step-2 "Change"

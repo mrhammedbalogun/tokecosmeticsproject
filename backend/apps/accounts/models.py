@@ -451,6 +451,12 @@ class Address(TimeStampedModel):
 
     line1 = models.CharField(max_length=255)
     line2 = models.CharField(max_length=255, blank=True)
+    # A nearby landmark — "opposite Shoprite", "off Ikeja bus stop". Required in NG only
+    # (core.address_rules), because that is where it does real work: a Nigerian street
+    # address is often not enough for a rider to find a door, while a GB/US/CA parcel
+    # routes on the postcode and a landmark would be noise. Blank on every row that
+    # predates this field, and on every non-NG address, so nothing may assume it is set.
+    landmark = models.CharField(max_length=120, blank=True)
     country_code = models.CharField(max_length=2)  # any ISO country (worldwide shipping)
 
     # Structured region links where region data exists (e.g. NG state + LGA).

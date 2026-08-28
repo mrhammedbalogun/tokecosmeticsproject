@@ -20,6 +20,7 @@ def test_ng_address_with_valid_state_region_is_accepted():
     lagos = Region.objects.create(country_code="NG", name="Lagos", level="state")
     s = AddressSerializer(data={
         "first_name": "Ada", "phone": "+2348012345678", "line1": "1 Allen Ave",
+        "landmark": "Opposite Ikeja City Mall",
         "country_code": "NG", "state_region": lagos.id,
     })
     assert s.is_valid(), s.errors
@@ -97,6 +98,58 @@ def test_a_new_ng_address_must_pick_an_lga_when_the_state_has_them():
 
 
 @pytest.mark.django_db
+def test_ng_address_requires_a_landmark():
+    """The rider-facing half of a Nigerian address. Rejected the same way a missing
+    postcode is rejected for GB, from the same single source of truth."""
+    lagos = Region.objects.create(country_code="NG", name="Lagos", level="state")
+    s = AddressSerializer(data={
+        "first_name": "Ada", "phone": "+2348012345678", "line1": "1 Allen Ave",
+        "country_code": "NG", "state_region": lagos.id,
+    })
+    assert not s.is_valid()
+    assert "landmark" in s.errors
+
+
+@pytest.mark.django_db
+def test_a_gb_address_needs_no_landmark():
+    """Guards the decision, not just the code: a GB parcel routes on its postcode, and
+    quietly making this global would block a live market."""
+    england = Region.objects.create(country_code="GB", name="England", level="state")
+    s = AddressSerializer(data={
+        "first_name": "Ada", "phone": "+447123456789", "line1": "1 Baker St",
+        "country_code": "GB", "state_region": england.id,
+        "city_text": "London", "postcode": "NW1 6XE",
+    })
+    assert s.is_valid(), s.errors
+    assert s.validated_data.get("landmark", "") == ""
+
+
+@pytest.mark.django_db
+def test_editing_an_old_ng_address_asks_for_the_missing_landmark(django_user_model):
+    """Hammed's ruling 2026-08-28: existing addresses keep working for repeat orders —
+    checkout snapshots them by id and never re-validates — but the next EDIT collects
+    the landmark. That is what makes this a rolling backfill rather than a wall in
+    front of returning customers."""
+    from apps.accounts.models import Address
+
+    lagos = Region.objects.create(country_code="NG", name="Lagos", level="state")
+    user = django_user_model.objects.create_user(email="old@x.com", password="pw")
+    addr = Address.objects.create(
+        user=user, line1="1 Allen Ave", country_code="NG", state_region=lagos,
+        first_name="Ada", phone="+2348012345678",
+    )  # saved before the field existed — landmark is ""
+
+    relabel = AddressSerializer(addr, data={"label": "Home"}, partial=True)
+    assert not relabel.is_valid()
+    assert "landmark" in relabel.errors
+
+    with_landmark = AddressSerializer(
+        addr, data={"label": "Home", "landmark": "Beside Allen Roundabout"}, partial=True
+    )
+    assert with_landmark.is_valid(), with_landmark.errors
+
+
+@pytest.mark.django_db
 def test_unknown_country_needs_city_but_no_postcode():
     s = AddressSerializer(data={
         "first_name": "Ada", "phone": "+33612345678", "line1": "1 Rue",
@@ -116,6 +169,8 @@ def _ng_lga():
 def _ng_payload(lagos, ikeja, **extra):
     return {
         "first_name": "Ada", "phone": "+2348012345678", "line1": "1 Allen Ave",
+        # Required for NG since 2026-08-28 — see address_rules._LANDMARK_COUNTRIES.
+        "landmark": "Opposite Ikeja City Mall",
         "country_code": "NG", "state_region": lagos.id, "area_region": ikeja.id,
         **extra,
     }
@@ -169,6 +224,7 @@ def test_address_phone_is_normalised_to_e164():
     lagos = Region.objects.create(country_code="NG", name="Lagos", level="state")
     s = AddressSerializer(data={
         "first_name": "Ada", "phone": "+234 801 234-5678", "line1": "1 Allen Ave",
+        "landmark": "Opposite Ikeja City Mall",
         "country_code": "NG", "state_region": lagos.id,
     })
     assert s.is_valid(), s.errors

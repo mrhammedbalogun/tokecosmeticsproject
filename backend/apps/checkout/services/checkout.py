@@ -51,6 +51,11 @@ def _address_snapshot(addr: Address) -> dict:
     return {
         "first_name": addr.first_name, "last_name": addr.last_name, "phone": addr.phone,
         "line1": addr.line1, "line2": addr.line2, "country_code": addr.country_code,
+        # Snapshotted like everything else here: the rider who needs "opposite Shoprite"
+        # is reading the ORDER weeks later, and the customer may have edited or deleted
+        # the address by then. Empty string for every non-NG order and every address
+        # saved before this field existed.
+        "landmark": addr.landmark,
         "state": addr.state_region.name if addr.state_region else addr.state_text,
         "area": addr.area_region.name if addr.area_region else addr.city_text,
         "postcode": addr.postcode,

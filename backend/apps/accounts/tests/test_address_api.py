@@ -21,7 +21,8 @@ def test_create_and_list_own_addresses(django_user_model):
 
     r = c.post("/api/v1/me/addresses/", {
         "label": "Home", "first_name": "Ada", "phone": "+2348012345678",
-        "line1": "1 Allen Ave", "country_code": "NG", "state_region": lagos.id,
+        "line1": "1 Allen Ave", "landmark": "Opposite Ikeja City Mall",
+        "country_code": "NG", "state_region": lagos.id,
     }, format="json")
     assert r.status_code == 201
 
@@ -29,6 +30,9 @@ def test_create_and_list_own_addresses(django_user_model):
     assert lst.status_code == 200
     assert len(lst.data) == 1
     assert lst.data[0]["label"] == "Home"
+    # Round-trips on read, so the account address book and the checkout form can both
+    # show what was saved rather than silently dropping it.
+    assert lst.data[0]["landmark"] == "Opposite Ikeja City Mall"
 
 
 @pytest.mark.django_db

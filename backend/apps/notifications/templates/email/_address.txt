@@ -12,7 +12,8 @@ frozen copy of whatever the customer typed and international addresses legitimat
 postcodes and states.
 {% endcomment %}{% if address.first_name or address.last_name %}  {{ address.first_name }} {{ address.last_name }}
 {% endif %}  {{ address.line1 }}{% if address.line2 %}
-  {{ address.line2 }}{% endif %}{% if address.area %}
+  {{ address.line2 }}{% endif %}{% if address.landmark %}
+  {{ address.landmark }}{% endif %}{% if address.area %}
   {{ address.area }}{% endif %}{% if address.state %}
   {{ address.state }}{% endif %}{% if address.postcode %}
   {{ address.postcode }}{% endif %}{% if address.country_code %}

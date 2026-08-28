@@ -188,6 +188,9 @@ function AddressCard({
         {addr.line1}
         {addr.line2 ? `, ${addr.line2}` : ""}
       </p>
+      {/* Shown so the shopper can see what the rider will be given, and spot a stale
+          landmark ("opposite the old Shoprite") on an address they saved long ago. */}
+      {addr.landmark && <p className="text-sm text-muted">{addr.landmark}</p>}
       {locality && <p className="text-sm text-muted">{locality}</p>}
       {addr.phone && <p className="text-sm text-muted">{addr.phone}</p>}
 

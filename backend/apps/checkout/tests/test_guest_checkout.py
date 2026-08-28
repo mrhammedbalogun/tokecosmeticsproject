@@ -57,7 +57,8 @@ def _guest_cart(ng, ngn, variant, qty=2):
 def _address(lagos):
     return {
         "first_name": "Ada", "last_name": "Obi", "phone": "+2348012345678",
-        "line1": "1 Guest Close", "country_code": "NG", "state_region": lagos.id,
+        "line1": "1 Guest Close", "landmark": "Opposite Ikeja City Mall",
+        "country_code": "NG", "state_region": lagos.id,
     }
 
 

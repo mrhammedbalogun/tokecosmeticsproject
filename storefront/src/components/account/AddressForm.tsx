@@ -19,9 +19,11 @@ import { PhoneField } from "@/components/ui/PhoneField";
 import type { PlacePick } from "@/lib/googleMaps";
 import {
   fieldConfigFor,
+  needsLandmark,
   type Address,
   type AddressFieldErrors,
 } from "@/components/checkout/address-fields";
+import { LandmarkField } from "@/components/address/LandmarkField";
 
 interface FormValues {
   label: string;
@@ -30,6 +32,7 @@ interface FormValues {
   phone: string;
   line1: string;
   line2: string;
+  landmark: string;
   country_code: string;
   city_text: string;
   state_text: string;
@@ -56,7 +59,7 @@ const COUNTRY_OPTIONS: Array<{ code: string; name: string }> = [
 
 const EMPTY_FORM: FormValues = {
   label: "", first_name: "", last_name: "", phone: "", line1: "", line2: "",
-  country_code: "NG", city_text: "", state_text: "", postcode: "",
+  landmark: "", country_code: "NG", city_text: "", state_text: "", postcode: "",
   state_region: undefined, area_region: undefined,
 };
 
@@ -68,6 +71,7 @@ function formFromAddress(addr: Address): FormValues {
     phone: addr.phone ?? "",
     line1: addr.line1,
     line2: addr.line2 ?? "",
+    landmark: addr.landmark ?? "",
     country_code: addr.country_code,
     city_text: addr.city_text ?? "",
     state_text: addr.state_text ?? "",
@@ -78,7 +82,7 @@ function formFromAddress(addr: Address): FormValues {
 }
 
 const KNOWN_ERROR_KEYS: Array<keyof AddressFieldErrors> = [
-  "label", "first_name", "last_name", "phone", "line1", "line2",
+  "label", "first_name", "last_name", "phone", "line1", "line2", "landmark",
   "country_code", "state_region", "area_region", "city_text", "state_text", "postcode",
 ];
 
@@ -162,6 +166,9 @@ export function AddressForm({
     setOptional(payload, "label", form.label);
     setOptional(payload, "last_name", form.last_name);
     setOptional(payload, "line2", form.line2);
+    // NG only, and sent even when blank — the backend requirement is what must produce
+    // the error, so the shopper sees it against the field they can actually fix.
+    if (needsLandmark(form.country_code)) payload.landmark = form.landmark.trim();
     // NOT exclusive: GB/US/CA send the structured state AND city + postcode.
     if (cfg.useRegions) {
       if (form.state_region) payload.state_region = form.state_region;
@@ -360,6 +367,18 @@ export function AddressForm({
           className="w-full rounded-[var(--radius-card)] border border-line bg-beige px-3 py-2 text-sm"
         />
       </div>
+
+      {/* Before the state, same as AddressStep — street, then the thing you turn at,
+          then the administrative area. NG only. The `idPrefix` differs from checkout's
+          so both forms can be mounted at once without colliding ids. */}
+      {needsLandmark(form.country_code) && (
+        <LandmarkField
+          idPrefix="addr-form"
+          value={form.landmark}
+          onChange={(v) => updateField("landmark", v)}
+          errors={fieldErrors.landmark}
+        />
+      )}
 
       {/* NOT exclusive: GB/US/CA render the structured state select AND
           city + postcode text fields (mirrors apps.core.address_rules). */}

@@ -337,4 +337,102 @@ describe("AddressStep", () => {
     expect(body.longitude).toBe("3.351490");
     expect(body.area_region).toBe(3);
   });
+
+  // --- landmark (2026-08-28) ---------------------------------------------------------
+
+  it("asks an NG shopper for a landmark, and puts it in the POST", async () => {
+    // The field that gets a rider to the door. Rendered before the State, because that
+    // is the order a Nigerian address is read in on the ground.
+    mockCart = makeCart({ country: "NG" });
+    const fetchMock = mockFetch({
+      "GET /api/addresses": { status: 200, body: [] },
+      "GET /api/regions?country=NG": {
+        status: 200,
+        body: [{ id: 1, name: "Lagos", level: "state", has_children: false }],
+      },
+      "POST /api/addresses": {
+        status: 201,
+        body: {
+          id: 9, first_name: "Ada", phone: "08000000000", line1: "12 Allen Avenue",
+          landmark: "Opposite Ikeja City Mall", country_code: "NG", state_region: 1,
+          is_default_shipping: false, is_default_billing: false,
+        },
+      },
+    });
+
+    renderHarness();
+    await waitFor(() => expect(screen.getByLabelText(/street address/i)).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "08000000000" } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "12 Allen Avenue" } });
+    fireEvent.change(screen.getByLabelText("Landmark"), {
+      target: { value: "Opposite Ikeja City Mall" },
+    });
+    await waitFor(() => expect(screen.getByRole("option", { name: "Lagos" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^state$/i), { target: { value: "1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+    await waitFor(() => expect(screen.getByTestId("completed")).toHaveTextContent("2"));
+
+    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
+    expect(JSON.parse(post[1]!.body as string).landmark).toBe("Opposite Ikeja City Mall");
+  });
+
+  it("never shows a landmark box to a GB shopper", async () => {
+    // Guards the decision, not just the code. A GB parcel routes on its postcode, and a
+    // mandatory "nearest bus stop" would be a checkout blocker in a live market.
+    mockCart = makeCart({ country: "GB" });
+    mockFetch({
+      "GET /api/addresses": { status: 200, body: [] },
+      "GET /api/regions?country=GB": {
+        status: 200,
+        body: [{ id: 11, name: "England", level: "state", has_children: false }],
+      },
+    });
+
+    renderHarness();
+
+    await waitFor(() => expect(screen.getByLabelText(/street address/i)).toBeInTheDocument());
+    expect(screen.queryByLabelText("Landmark")).toBeNull();
+    expect(screen.queryByRole("button", { name: "What is a landmark?" })).toBeNull();
+    // The field it replaces for that market is still there.
+    expect(screen.getByLabelText(/^postcode$/i)).toBeInTheDocument();
+  });
+
+  it("sends an empty landmark rather than omitting it, so the server owns the refusal", async () => {
+    // If the client dropped the key, DRF would report "this field is required" for a
+    // field the shopper was shown but whose value never left the browser — an error
+    // they cannot act on. Sending "" makes the message land on the visible input.
+    mockCart = makeCart({ country: "NG" });
+    const fetchMock = mockFetch({
+      "GET /api/addresses": { status: 200, body: [] },
+      "GET /api/regions?country=NG": {
+        status: 200,
+        body: [{ id: 1, name: "Lagos", level: "state", has_children: false }],
+      },
+      "POST /api/addresses": {
+        status: 400,
+        body: { landmark: ["This field is required for this country."] },
+      },
+    });
+
+    renderHarness();
+    await waitFor(() => expect(screen.getByLabelText("Landmark")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText(/first name/i), { target: { value: "Ada" } });
+    fireEvent.change(screen.getByLabelText(/^phone$/i), { target: { value: "08000000000" } });
+    fireEvent.change(screen.getByLabelText(/street address/i), { target: { value: "12 Allen Avenue" } });
+    await waitFor(() => expect(screen.getByRole("option", { name: "Lagos" })).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText(/^state$/i), { target: { value: "1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /save address/i }));
+
+    const post = await waitFor(() =>
+      fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!,
+    );
+    expect(JSON.parse(post[1]!.body as string)).toHaveProperty("landmark", "");
+    // And the server's complaint is shown against the field itself.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/required for this country/i);
+  });
 });

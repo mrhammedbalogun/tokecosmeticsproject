@@ -59,6 +59,10 @@ def test_the_snapshot_keys_are_what_the_templates_expect():
 
     assert produced == {
         "first_name", "last_name", "phone", "line1", "line2",
+        # The NG landmark (2026-08-28) — "opposite Ikeja City Mall". Carried so the
+        # carrier payloads can fold it into the address line they print; whether the
+        # customer-facing emails render it is decided by the templates, not here.
+        "landmark",
         "country_code", "state", "area", "postcode",
         # The pin (Plan-32b): MACHINE data for the GIG waybill (capture.py reads it
         # from the snapshot), deliberately NOT rendered in any email — coordinates

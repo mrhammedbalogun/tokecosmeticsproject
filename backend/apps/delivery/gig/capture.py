@@ -185,8 +185,14 @@ def capture_shipment(order, *, actor) -> GigShipment:
         receiver_lat, receiver_lng = snap.get("latitude"), snap.get("longitude")
         if receiver_lat is None or receiver_lng is None:
             receiver_lat, receiver_lng = float(region.latitude), float(region.longitude)
+        # Landmark sits straight after the street lines, before the area/state, because
+        # that is the order a person reads a Nigerian address in and GIG has no field
+        # of its own for it. It is why the field is collected at all — see the model.
         receiver_address = ", ".join(
-            part for part in (snap.get("line1"), snap.get("line2"), snap.get("area"), snap.get("state"))
+            part for part in (
+                snap.get("line1"), snap.get("line2"), snap.get("landmark"),
+                snap.get("area"), snap.get("state"),
+            )
             if part
         )
     receiver_name = f"{snap.get('first_name', '')} {snap.get('last_name', '')}".strip() or order.email
