@@ -382,6 +382,24 @@ def _case_notification_recipient_create(client, monkeypatch):
     ), 201
 
 
+def _case_training_create(client, monkeypatch):
+    """Authoring a training. Owner-only (`training.manage`), and the row matters for a
+    reason the other CMS writes do not share: this is the one screen whose content the
+    whole team is told to trust and act on, so "who put this video in front of staff, and
+    when" is the question an audit has to be able to answer."""
+    return client.post(
+        "/api/v1/admin/training/",
+        {
+            "title": "Packing a fragile order",
+            "description": "How to wrap glass bottles for a Lagos rider.",
+            "youtube_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "position": 1,
+            "is_published": True,
+        },
+        format="json",
+    ), 201
+
+
 def _case_page_create(client, monkeypatch):
     return client.post(
         "/api/v1/admin/pages/",
@@ -896,6 +914,11 @@ WRITE_CASES: dict[str, tuple] = {
     "ProductVideoAdminViewSet": (_case_video, "create"),
     "PriceAdminViewSet": (_case_price, "create"),
     "ProductCSVImportView": (_case_product_csv_import, "import_csv"),
+    # The training library's authoring half (2026-08-23). It shipped carrying
+    # AdminAuditMixin and audit_serializers but with no case here, so nothing had ever
+    # PROVEN a row lands — which is the exact gap this file's docstring says a
+    # declaration test cannot close.
+    "TrainingResourceAdminViewSet": (_case_training_create, "create"),
     "PageAdminViewSet": (_case_page_create, "create"),
     "BannerAdminViewSet": (_case_banner_create, "create"),
     "MediaAssetAdminViewSet": (_case_media_upload, "create"),
@@ -1016,6 +1039,11 @@ READ_ONLY_VIEWS = frozenset(
         # The partner deliveries table: GET-only, the GIG table's sibling. Read-audited
         # — declared in test_audit_guard.READ_AUDITED_VIEWS.
         "AdminPartnerShipmentListView",
+        # What staff open from the Training menu (2026-08-23): GET-only, and deliberately
+        # NOT read-audited — the titles of internal how-to videos are not PII, and a row
+        # every time somebody opens the list would bury the reads this table exists for.
+        # Authoring is the audited half, at TrainingResourceAdminViewSet above.
+        "TrainingLibraryView",
     }
 )
 
