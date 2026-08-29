@@ -123,7 +123,15 @@ export function PartnerRateCard() {
     }
   }, []);
 
+  // Mount fetch. `react-hooks/set-state-in-effect` reports the call below as a
+  // synchronous setState, which it is not: `reload` is ASYNC and every setState in it
+  // runs after `await Promise.all([...])`, i.e. in a later microtask, so none of the
+  // render cascade the rule exists to prevent can happen here. The only other way to
+  // silence it is to wrap the call in an async IIFE — behaviourally identical to this
+  // line, and exactly the sort of thing a future reader would helpfully "simplify"
+  // straight back into a build failure. The reason is recorded here instead.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     void reload();
   }, [reload]);
 
