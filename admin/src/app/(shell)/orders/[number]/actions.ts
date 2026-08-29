@@ -291,6 +291,11 @@ export async function gigCaptureAction(input: { number: string }): Promise<Write
     // exists, and the money that just left the wallet. A rider is already on the way.
     return { success: `Waybill ${result.waybill} created — ₦${result.cost} debited from the GIG wallet. A rider has been dispatched.` };
   } catch (e) {
+    // A failed capture is now part of the order's history too — the service records GIG's
+    // refusal, or the ambiguity, on the timeline — and an ambiguous one also moves the
+    // shipment. Both make the page below this panel stale, so the failure path
+    // revalidates exactly like the success path does.
+    revalidatePath(`/orders/${input.number}`);
     // capture_unconfirmed is the one answer that must never look like a plain error:
     // the wallet MAY have been debited and a rider MAY be coming. fail() preserves the
     // backend's sentence and code; the panel renders it as a warning that forbids retry.

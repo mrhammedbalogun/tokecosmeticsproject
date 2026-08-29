@@ -23,6 +23,12 @@ must pass `retry_auth=False, retries=0` and handle ambiguity themselves.
 Transport policy mirrors payments/gateways/_http.py: retry only CONNECTION
 errors (the request never reached the server); a read timeout or 5xx may have
 already acted and is never retried here.
+
+Their API sits behind a CDN (measured 2026-08-29: `server: cloudflare` in front
+of an Express origin). When that CDN cannot get a clean response out of them it
+answers for them, in HTML, about "the origin web server" — which is neither their
+API speaking nor ours. Those answers raise `GigUpstream`, never a bare GigError:
+the difference decides whether a capture is a safe retry or a money-ambiguity.
 """
 from __future__ import annotations
 
@@ -65,6 +71,26 @@ class GigUnavailable(GigError):
     a human checks with GIG before anything is retried"."""
 
 
+class GigUpstream(GigError):
+    """GIG's edge answered; GIG's API did not. The body was not their envelope —
+    an HTML error page from their CDN, or nothing at all.
+
+    Separate from GigError because for a money-moving call the two mean opposite
+    things. A GigError is their application's DECISION ("insufficient balance"):
+    nothing was created, and a retry after fixing the cause is safe. This says
+    only that their proxy could not read a clean response out of their origin —
+    which their origin may well have produced AFTER doing the work. Ambiguous,
+    exactly like a timeout, and handled the same way by capture.
+
+    Its message is deliberately OURS, not theirs. What arrives in this case is a
+    CDN's prose about "the origin web server", which — forwarded verbatim to the
+    fulfilment desk, as this integration forwards every other GIG sentence —
+    reads as if the Toke API were the broken one. Measured on TC-100147,
+    2026-08-27: an operator spent three days believing our server was down.
+    The body is logged instead, where it is a diagnostic rather than an accusation.
+    """
+
+
 @dataclass(frozen=True)
 class GigResponse:
     data: Any
@@ -92,8 +118,17 @@ def _unwrap(response: httpx.Response, *, path: str) -> GigResponse:
     try:
         envelope = response.json()
     except ValueError as exc:
-        raise GigError(
-            f"GIG returned non-JSON (HTTP {response.status_code}) for {path}",
+        # The body is read HERE or nowhere: it never travels with the exception (see
+        # GigUpstream), and container logs die on the next deploy, so this line is the
+        # one chance to see what their edge actually said. Capped, because a sustained
+        # outage otherwise writes an HTML page per attempt into the log.
+        logger.warning(
+            "gig %s -> HTTP %s, no API envelope: %s",
+            path, response.status_code, " ".join(response.text[:200].split()),
+        )
+        raise GigUpstream(
+            f"GIG's platform answered HTTP {response.status_code} without an API "
+            f"response for {path}",
             status=response.status_code,
         ) from exc
     api_id = str(envelope.get("apiId", ""))
@@ -154,7 +189,11 @@ def call(
     try:
         return _unwrap(_request(method, url, timeout=timeout, retries=retries, sleep=sleep, **kwargs), path=path)
     except GigError as exc:
-        if not (retry_auth and exc.status == 401 and not isinstance(exc, GigUnavailable)):
+        # Only their API's OWN 401 envelope means "your token expired". A 401 that
+        # arrived without an envelope came from their edge, not their auth layer, and
+        # re-logging-in to replay it would just repeat the request into the same wall.
+        if not (retry_auth and exc.status == 401
+                and not isinstance(exc, (GigUnavailable, GigUpstream))):
             raise
         cache.delete(TOKEN_CACHE_KEY)
         kwargs["headers"]["access-token"] = login()

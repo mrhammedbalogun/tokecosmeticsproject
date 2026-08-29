@@ -92,6 +92,34 @@ describe("GigPanel", () => {
     expect(screen.queryByRole("button", { name: /fetch label/i })).not.toBeInTheDocument();
   });
 
+  it("attributes GIG's refusal to GIG, and leaves our own copy unlabelled", async () => {
+    // The panel forwards the carrier's own sentence because it names the real cause —
+    // but unattributed, a sentence from GIG's infrastructure reads as a verdict from
+    // the Toke platform, which is how a Cloudflare error about "the origin web server"
+    // sent an operator hunting our own servers for three days (TC-100147).
+    const refuse = vi.fn(async () => ({
+      error: "Insufficient wallet balance.", code: "gig_rejected",
+    }));
+    const { capture } = setup(data(), DESK, refuse);
+    fireEvent.click(screen.getByRole("button", { name: /create gig waybill/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^create waybill$/i }));
+    await waitFor(() => expect(capture).toHaveBeenCalled());
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/GIG refused this waybill:/i);
+    expect(alert).toHaveTextContent(/Insufficient wallet balance\./);
+    // A refusal is retryable once the named cause is fixed, so the button stays.
+    expect(screen.getByRole("button", { name: /create gig waybill/i })).toBeInTheDocument();
+
+    // Our own sentences carry no such label — nobody attributes them to GIG.
+    document.body.innerHTML = "";
+    const denied = vi.fn(async () => ({ error: "Your role does not allow that." }));
+    setup(data(), DESK, denied);
+    fireEvent.click(screen.getByRole("button", { name: /create gig waybill/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^create waybill$/i }));
+    expect(await screen.findByRole("alert")).not.toHaveTextContent(/GIG refused/i);
+  });
+
   it("an unknown wallet balance says unknown, never zero, and the raw scan renders verbatim", () => {
     setup(data({ wallet_balance: null }, {
       status: "in_transit", waybill: "1349113095",

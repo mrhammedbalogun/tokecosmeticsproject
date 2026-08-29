@@ -169,10 +169,12 @@ class GigShipment(TimeStampedModel):
     paid us (0.00 under free_over, maybe marked-up someday). At reconciliation
     time their difference is exactly what we absorbed or earned.
 
-    `create_unconfirmed` is the timeout limbo (plan ruling 1): the capture call
-    timed out, GIG may or may not have created a waybill — and a retry could
-    debit twice and dispatch two riders, so NOTHING retries automatically. A
-    human checks with GIG (quoting `capture_api_id`) and resolves by hand.
+    `create_unconfirmed` is the ambiguity limbo (plan ruling 1): the capture call
+    came back without GIG's own answer — it timed out, or their edge answered for
+    them (client.GigUpstream) — so GIG may or may not have created a waybill, and
+    a retry could debit twice and dispatch two riders. NOTHING retries
+    automatically. A human checks with GIG (quoting `capture_api_id`, or the
+    apiId in the order timeline) and resolves by hand.
     `abandoned` = the order died before capture; terminal, costs nothing.
     """
 

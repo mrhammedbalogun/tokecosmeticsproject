@@ -1,6 +1,8 @@
 """The GIG client, against recorded sandbox behaviour (2026-08-02): single-nested
 envelope, WAF-sensitive User-Agent, apiId on every envelope, JWT cached with one
 auth-retry for reads and NONE when the caller forbids it (mutations)."""
+import logging
+
 import httpx
 import pytest
 import respx
@@ -8,7 +10,7 @@ from django.core.cache import cache
 from django.test import override_settings
 
 from apps.delivery.gig import client
-from apps.delivery.gig.client import GigError, GigResponse, GigUnavailable
+from apps.delivery.gig.client import GigError, GigResponse, GigUnavailable, GigUpstream
 
 BASE = "https://gig.test"
 
@@ -132,3 +134,48 @@ def test_login_without_token_in_payload_is_an_error():
     respx.post(f"{BASE}/login").mock(return_value=httpx.Response(200, json=_envelope({})))
     with pytest.raises(GigError, match="no access-token"):
         client.login()
+
+
+CDN_520 = (
+    "<!DOCTYPE html><html><body><h1>Error 520</h1><p>The origin web server returned an "
+    "invalid or incomplete response to Cloudflare. This typically indicates the origin "
+    "is overloaded or misconfigured.</p></body></html>"
+)
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_an_answer_that_is_not_their_envelope_is_upstream_not_a_refusal(caplog):
+    """Their CDN answering for them is not GIG refusing anything — and its prose about
+    "the origin web server" must never become the sentence a Toke operator reads."""
+    _login_route()
+    respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(520, html=CDN_520)
+    )
+    with caplog.at_level(logging.WARNING, logger="apps.delivery.gig.client"):
+        with pytest.raises(GigUpstream) as exc:
+            client.call("POST", "/capture/preshipment", json={}, retry_auth=False, retries=0)
+
+    assert exc.value.status == 520
+    assert "520" in str(exc.value) and "/capture/preshipment" in str(exc.value)
+    # Ours, not theirs: no CDN prose travels on the exception.
+    assert "origin web server" not in str(exc.value)
+    assert "Cloudflare" not in str(exc.value)
+    # But it IS recoverable — the log is the only place the body survives.
+    assert "origin web server" in caplog.text
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_a_401_without_an_envelope_never_triggers_a_relogin_replay():
+    """Re-login answers an expired token. A 401 page from their edge is not that, and
+    replaying it would only repeat the request into the same wall."""
+    cache.set(client.TOKEN_CACHE_KEY, "jwt-cached", 300)
+    login = _login_route()
+    route = respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(401, html="<html>401</html>")
+    )
+    with pytest.raises(GigUpstream):
+        client.call("GET", "/companyDetails/get")
+    assert route.call_count == 1
+    assert login.call_count == 0  # the cached token was never thrown away

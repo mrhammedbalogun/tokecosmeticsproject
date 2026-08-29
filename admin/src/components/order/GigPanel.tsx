@@ -142,8 +142,11 @@ export function GigPanel({
 
       {unconfirmed && (
         <p className="mt-3 rounded border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
-          The capture timed out. GIG may have created a waybill and debited the wallet —
-          confirm with GIG (quote apiId{" "}
+          {/* "Without an answer" covers both ways this state is reached: the call timed
+              out, or GIG's platform answered instead of GIG's API. Both leave the same
+              question — does a waybill exist? — and the same instruction. */}
+          The capture came back without an answer from GIG. They may have created a waybill
+          and debited the wallet — confirm with GIG (quote apiId{" "}
           <span className="font-mono">{shipment.capture_api_id || "in the timeline"}</span>)
           before doing anything else. Retrying blind can pay twice and dispatch two riders.
         </p>
@@ -151,7 +154,19 @@ export function GigPanel({
 
       {state.error && !unconfirmed && (
         <p className="mt-3 text-xs text-warn" role="alert">
-          {state.error}
+          {/* Whose sentence this is changes what the desk should do with it, so the panel
+              says. `gig_rejected` is GIG's own wording, forwarded verbatim because it
+              names the actual cause (a balance, a location, a field) — but unattributed
+              it reads as the Toke platform's verdict, and an unattributed sentence about
+              "the origin web server" once cost three days of chasing our own servers.
+              Everything else here is our own copy and needs no label. */}
+          {state.code === "gig_rejected" ? (
+            <>
+              <span className="font-medium">GIG refused this waybill:</span> {state.error}
+            </>
+          ) : (
+            state.error
+          )}
         </p>
       )}
       {state.success && (

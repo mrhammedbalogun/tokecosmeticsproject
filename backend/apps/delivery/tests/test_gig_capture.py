@@ -413,3 +413,193 @@ def test_capture_never_mixes_a_partial_origin_snapshot_with_env_coordinates(
     sender = jsonlib.loads(route.calls[0].request.content)["SenderDetails"]
     assert sender["SenderName"] == "Toke Cosmetics"
     assert sender["SenderLocation"] == {"Latitude": 6.556, "Longitude": 3.3888}
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_their_cdn_answering_parks_the_shipment_exactly_like_a_timeout(order, quoted,
+                                                                      django_user_model):
+    """A 520 from GIG's edge says their proxy could not read a response — not that their
+    app declined. Their app may have minted the waybill first, so this is the same
+    money-ambiguity a timeout is, and the desk must not be handed a retry button."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(None))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(
+            520,
+            html="<html><body>The origin web server returned an invalid or incomplete "
+                 "response to Cloudflare.</body></html>",
+        )
+    )
+    with pytest.raises(CaptureUnconfirmed):
+        capture_shipment(order, actor=actor)
+
+    assert route.call_count == 1
+    quoted.refresh_from_db()
+    assert quoted.status == "create_unconfirmed"
+    event = OrderEvent.objects.filter(order=order, type="gig").latest("pk")
+    assert "unconfirmed" in event.message
+    assert "520" in event.message
+    # Their CDN's prose about "the origin web server" never reaches the timeline either.
+    assert "origin web server" not in event.message
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_a_refusal_leaves_gigs_words_and_apiid_in_the_timeline(order, quoted,
+                                                              django_user_model):
+    """The failure trail. Audit rows are written on 2xx only (by design), so before this
+    a refused capture existed nowhere in the database: the desk could not say why an
+    order sat unshipped, and support had no apiId to quote GIG."""
+    actor = django_user_model.objects.get(email="cap@x.com")
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(None))
+    )
+    route = respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(
+            200,
+            json=_envelope({}, status=400, message="Insufficient wallet balance.",
+                           api_id="trace-77"),
+        )
+    )
+    with pytest.raises(client.GigError) as exc:
+        capture_shipment(order, actor=actor)
+    assert not isinstance(exc.value, (client.GigUnavailable, client.GigUpstream))
+    assert route.call_count == 1
+
+    # Their decision, so nothing happened and the shipment stays retryable.
+    quoted.refresh_from_db()
+    assert quoted.status == "quoted"
+    assert quoted.waybill == ""
+    event = OrderEvent.objects.filter(order=order, type="gig").latest("pk")
+    assert "Insufficient wallet balance." in event.message
+    assert "trace-77" in event.message
+    assert event.actor == actor
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_a_200_with_no_waybill_is_recorded_before_it_is_refused(order, quoted,
+                                                               django_user_model):
+    actor = django_user_model.objects.get(email="cap@x.com")
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(None))
+    )
+    respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope({}, api_id="trace-88"))
+    )
+    with pytest.raises(CaptureRefused) as exc:
+        capture_shipment(order, actor=actor)
+    assert exc.value.code == "no_waybill"
+    event = OrderEvent.objects.filter(order=order, type="gig").latest("pk")
+    assert "no waybill" in event.message and "trace-88" in event.message
+
+
+# --- the endpoint's own answers ------------------------------------------------------
+#
+# Service-level tests above prove what HAPPENS; these prove what the desk is TOLD, which
+# is the half that failed on TC-100147: a truthful backend can still hand the fulfilment
+# panel a sentence about "the origin web server" and send someone hunting our servers.
+
+CDN_PAGE = ("<!DOCTYPE html><html><body>The origin web server returned an invalid or "
+            "incomplete response to Cloudflare. This typically indicates the origin is "
+            "overloaded or misconfigured.</body></html>")
+
+
+@pytest.fixture
+def desk():
+    from rest_framework.test import APIClient
+
+    from apps.catalog.tests.factories_admin import staff_user
+
+    c = APIClient()
+    c.force_authenticate(user=staff_user(email="desk@toke.test"))
+    return c
+
+
+def _capture_url(order):
+    return f"/api/v1/admin/orders/{order.number}/gig/capture/"
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_endpoint_never_repeats_their_cdns_words_to_the_desk(order, quoted, desk):
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(None))
+    )
+    respx.post(f"{BASE}/capture/preshipment").mock(return_value=httpx.Response(520, html=CDN_PAGE))
+
+    response = desk.post(_capture_url(order))
+
+    assert response.status_code == 502
+    body = response.json()
+    # Ambiguous, so it must read as ambiguous: this is the one answer that must never
+    # look like an error a person would press again.
+    assert body["error"] == "capture_unconfirmed"
+    assert "origin web server" not in str(body)
+    assert "Cloudflare" not in str(body)
+    quoted.refresh_from_db()
+    assert quoted.status == "create_unconfirmed"
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_endpoint_forwards_gigs_own_refusal_with_their_trace_key(order, quoted, desk):
+    respx.get(f"{BASE}/companyDetails/get").mock(
+        return_value=httpx.Response(200, json=_company(None))
+    )
+    respx.post(f"{BASE}/capture/preshipment").mock(
+        return_value=httpx.Response(200, json=_envelope(
+            {}, status=400, message="Insufficient wallet balance.", api_id="trace-77")),
+    )
+
+    response = desk.post(_capture_url(order))
+
+    assert response.status_code == 502
+    assert response.json() == {
+        "error": "gig_rejected",
+        "detail": "Insufficient wallet balance.",
+        "api_id": "trace-77",
+    }
+    quoted.refresh_from_db()
+    assert quoted.status == "quoted"  # their decision: retryable once it is fixed
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_endpoint_says_plainly_when_nothing_was_sent_at_all(order, quoted, desk):
+    """The wallet pre-check failing is the ONE unambiguous failure — no request for a
+    waybill was ever made — so it is the one that may safely say "try again"."""
+    respx.get(f"{BASE}/companyDetails/get").mock(side_effect=httpx.ConnectError("down"))
+    capture = respx.post(f"{BASE}/capture/preshipment")
+
+    response = desk.post(_capture_url(order))
+
+    assert response.status_code == 502
+    assert response.json()["error"] == "gig_unreachable"
+    assert "nothing was sent" in response.json()["detail"]
+    assert capture.call_count == 0
+    quoted.refresh_from_db()
+    assert quoted.status == "quoted"
+
+
+def test_an_upstream_answer_escaping_the_service_is_still_never_reassuring(order, quoted,
+                                                                          desk, monkeypatch):
+    """The fence behind the fence. Today nothing can raise GigUpstream out of
+    `capture_shipment`; if a future call does, the endpoint must still refuse to tell
+    the desk that nothing happened — and still not quote their CDN."""
+    def boom(*args, **kwargs):
+        raise client.GigUpstream(
+            "GIG's platform answered HTTP 520 without an API response for /whatever",
+            status=520,
+        )
+
+    monkeypatch.setattr("apps.delivery.gig.capture.capture_shipment", boom)
+    response = desk.post(_capture_url(order))
+
+    assert response.status_code == 502
+    assert response.json()["error"] == "capture_unconfirmed"
+    assert "unknown" in response.json()["detail"]
+    assert "origin web server" not in str(response.json())

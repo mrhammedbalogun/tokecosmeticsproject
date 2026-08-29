@@ -14,6 +14,10 @@ from that:
   `create_unconfirmed`, and a HUMAN resolves it with GIG — the `apiId` logged for
   the attempt is their lookup key. Retrying a timed-out capture that actually
   succeeded would debit twice and dispatch two riders.
+- Every ending is written to the order timeline, not just the happy one. A refusal
+  is GIG's words plus their apiId; an ambiguous ending says so in those terms.
+  Without this the desk cannot answer "why is this order still unshipped?" a day
+  later, and support cannot quote GIG the trace key for the attempt that failed.
 - Success stamps the waybill onto the shipment AND onto the order's generic
   tracking fields, so every surface that already renders tracking works unchanged.
 """
@@ -48,8 +52,10 @@ class CaptureRefused(Exception):
 
 
 class CaptureUnconfirmed(Exception):
-    """The capture MAY have happened: the call timed out after reaching GIG's
-    direction. The shipment is parked in `create_unconfirmed`; nobody retries."""
+    """The capture MAY have happened: the call reached GIG's direction and came
+    back without their API's answer — a timeout, or their edge answering for them
+    (GigUpstream). Either way nobody knows whether a waybill exists, so the
+    shipment is parked in `create_unconfirmed` and nobody retries."""
 
 
 def wallet_balance(*, refresh: bool = False):
@@ -258,17 +264,44 @@ def capture_shipment(order, *, actor) -> GigShipment:
         result = client.call(
             "POST", "/capture/preshipment", body, retry_auth=False, retries=0
         )
-    except client.GigUnavailable as exc:
+    except (client.GigUnavailable, client.GigUpstream) as exc:
+        # The two ambiguous answers, treated identically because they carry identical
+        # information: the request reached GIG's direction and their API never told us
+        # what it did. A read timeout can land after their app acted; an edge 5xx means
+        # their proxy could not read a response their origin may well have produced.
+        # Anything that is not their API's own answer parks HERE rather than surfacing
+        # as a plain error a person would naturally press again — which is how you pay
+        # twice and dispatch two riders.
+        cause = ("timed out" if isinstance(exc, client.GigUnavailable)
+                 else f"came back without an answer from GIG ({exc})")
         shipment.status = "create_unconfirmed"
         shipment.save(update_fields=["status", "updated_at"])
         record_event(order, "gig", actor=actor,
-                     message="Waybill capture TIMED OUT — status unconfirmed, check with GIG "
+                     message=f"Waybill capture {cause} — status unconfirmed, check with GIG "
                              "before any retry.")
         logger.error("gig capture unconfirmed for %s: %s", order.number, exc)
         raise CaptureUnconfirmed(str(exc)) from exc
+    except client.GigError as exc:
+        # Their API's own decision: nothing was created and nothing was debited, so the
+        # shipment stays `quoted` and a retry is safe once the named cause is fixed.
+        #
+        # Recorded because until this line a failed capture left NO trace in the
+        # database at all — the audit table writes on 2xx only, by design (core/audit.py),
+        # so the only evidence was an access-log status code and a container log that
+        # dies at the next deploy. TC-100147 failed five times over three days and
+        # nothing in the system could say why, or with which apiId to ask GIG.
+        record_event(order, "gig", actor=actor,
+                     message=f"GIG refused the waybill: {exc} "
+                             f"(apiId {exc.api_id or 'none given'}).")
+        logger.warning("gig capture refused for %s: %s (apiId=%s)",
+                       order.number, exc, exc.api_id)
+        raise
 
     waybill = str((result.data or {}).get("Waybill", ""))
     if not waybill:
+        record_event(order, "gig", actor=actor,
+                     message=f"GIG accepted the capture but returned no waybill "
+                             f"(apiId {result.api_id}).")
         raise CaptureRefused(
             "no_waybill", f"GIG answered without a waybill (apiId {result.api_id})."
         )
@@ -298,7 +331,10 @@ def fetch_label(shipment: GigShipment):
     try:
         result = client.call("POST", "/invoice/generate", {"Waybill": shipment.waybill})
     except client.GigError as exc:
-        if isinstance(exc, client.GigUnavailable):
+        # "Not ready" is a conclusion only their API can license. A transport failure or
+        # their edge answering for them says nothing about the parcel, and reporting
+        # either as "not ready yet" would send the bench back to a button forever.
+        if isinstance(exc, (client.GigUnavailable, client.GigUpstream)):
             raise
         logger.info("gig label not ready for %s: %s", shipment.waybill, exc)
         return None

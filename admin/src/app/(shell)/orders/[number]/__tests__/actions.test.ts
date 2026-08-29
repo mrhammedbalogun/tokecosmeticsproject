@@ -14,6 +14,7 @@ vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) 
 
 import {
   confirmReceiptAction,
+  gigCaptureAction,
   manualRefundAction,
   resolveReviewAction,
   trackingAction,
@@ -244,5 +245,36 @@ describe("resolveReviewAction", () => {
     const state = await resolveReviewAction({ number: "TC-100001" });
 
     expect(state.success).toMatch(/no money moved/i);
+  });
+});
+
+
+describe("gigCaptureAction", () => {
+  it("forwards GIG's own refusal with its code, and revalidates — the failure is history now", async () => {
+    // The backend records a refused capture on the order timeline (delivery/gig/capture.py),
+    // so the page under this panel is stale the moment the action returns. Before that
+    // record existed, a failed capture left no trace anywhere a person could read.
+    mockFetch(json(
+      { error: "gig_rejected", detail: "Insufficient wallet balance.", api_id: "trace-77" },
+      502,
+    ));
+    const state = await gigCaptureAction({ number: "TC-100001" });
+
+    expect(state).toMatchObject({
+      code: "gig_rejected",
+      error: "Insufficient wallet balance.",
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/orders/TC-100001");
+  });
+
+  it("keeps capture_unconfirmed machine-readable so the panel can forbid the retry", async () => {
+    mockFetch(json(
+      { error: "capture_unconfirmed", detail: "The capture came back without an answer from GIG." },
+      502,
+    ));
+    const state = await gigCaptureAction({ number: "TC-100001" });
+
+    expect(state.code).toBe("capture_unconfirmed");
+    expect(state.success).toBeUndefined();
   });
 });

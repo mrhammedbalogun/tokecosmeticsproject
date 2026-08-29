@@ -4,6 +4,8 @@
 a delivery price is an operational number, not a money-routing decision like the payout
 account (which is Owner-only under `settings.manage`).
 """
+import logging
+
 from django.db.models import Prefetch
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, viewsets
@@ -32,6 +34,8 @@ from apps.delivery.admin_serializers import (
     currency_mismatches,
 )
 from apps.delivery.models import DeliveryOption, SenderLocation
+
+logger = logging.getLogger(__name__)
 
 
 class DeliveryOptionAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
@@ -610,7 +614,7 @@ class AdminGigCaptureView(AdminAuditMixin, APIView):
 
     def post(self, request, number: str):
         from apps.delivery.gig.capture import CaptureRefused, CaptureUnconfirmed, capture_shipment
-        from apps.delivery.gig.client import GigError
+        from apps.delivery.gig.client import GigError, GigUnavailable, GigUpstream
         from apps.orders.models import Order
 
         order = get_object_or_404(Order, number=number)
@@ -621,11 +625,43 @@ class AdminGigCaptureView(AdminAuditMixin, APIView):
         except CaptureUnconfirmed:
             return Response(
                 {"error": "capture_unconfirmed",
-                 "detail": "The capture timed out — GIG may have created a waybill and "
-                           "debited the wallet. Check with GIG (WhatsApp) before ANY retry."},
+                 "detail": "The capture came back without an answer from GIG — they may have "
+                           "created a waybill and debited the wallet. Check with GIG "
+                           "(WhatsApp) before ANY retry."},
+                status=502,
+            )
+        except GigUpstream as exc:
+            # Unreachable today — the pre-check swallows this one and the capture call
+            # converts it — and kept as the fence for the day that stops being true.
+            # An answer from their edge NEVER licenses "nothing happened", so it gets
+            # the ambiguous wording rather than the reassuring one below, and their
+            # CDN's prose still does not reach the screen.
+            logger.error("gig capture hit an upstream answer for %s: %s", number, exc)
+            return Response(
+                {"error": "capture_unconfirmed",
+                 "detail": "GIG's platform answered instead of GIG — whether a waybill was "
+                           "created is unknown. Check with GIG (WhatsApp) before ANY retry."},
+                status=502,
+            )
+        except GigUnavailable as exc:
+            # Reaches here from the WALLET PRE-CHECK only: the capture call's own
+            # transport failures become CaptureUnconfirmed inside the service. So this
+            # branch is the unambiguous one — nothing was sent, nothing exists, and the
+            # honest instruction is "try again", not "go and ask GIG what happened".
+            logger.warning("gig capture blocked, GIG unreachable for %s: %s", number, exc)
+            return Response(
+                {"error": "gig_unreachable",
+                 "detail": "GIG could not be reached, so nothing was sent — no waybill was "
+                           "created and no money moved. Try again in a few minutes."},
                 status=502,
             )
         except GigError as exc:
+            # GIG's own sentence, forwarded verbatim (see the module note on this
+            # surface): it names the actual cause — a balance, a location, a field — and
+            # replacing it with something friendlier would delete the only information
+            # the desk can act on. `GigUpstream` never lands here: their CDN's prose
+            # about "the origin web server" is not GIG refusing anything, and it read on
+            # this panel as if OUR API were down (TC-100147, 2026-08-27).
             return Response(
                 {"error": "gig_rejected", "detail": str(exc), "api_id": exc.api_id}, status=502
             )
@@ -648,7 +684,7 @@ class AdminGigLabelView(AdminAuditMixin, APIView):
 
     def post(self, request, number: str):
         from apps.delivery.gig.capture import CaptureRefused, fetch_label
-        from apps.delivery.gig.client import GigUnavailable
+        from apps.delivery.gig.client import GigUnavailable, GigUpstream
         from apps.delivery.models import GigShipment
         from apps.orders.models import Order
 
@@ -658,8 +694,18 @@ class AdminGigLabelView(AdminAuditMixin, APIView):
             url = fetch_label(shipment)
         except CaptureRefused as exc:
             return Response({"error": exc.code, "detail": exc.detail}, status=409)
-        except GigUnavailable as exc:
-            return Response({"error": "gig_unreachable", "detail": str(exc)}, status=502)
+        except (GigUnavailable, GigUpstream) as exc:
+            # Nothing here moves money, so this is only an ergonomics call — but it is the
+            # same one the capture endpoint makes: a URL that timed out and a CDN page
+            # about "the origin web server" are both OUR side of the story to tell, not
+            # prose to paste onto the packing bench's screen. Logged, then summarised.
+            logger.warning("gig label unavailable for %s: %s", shipment.waybill, exc)
+            return Response(
+                {"error": "gig_unreachable",
+                 "detail": "GIG's API could not be reached — the label is not lost, just "
+                           "unavailable right now. Try again in a few minutes."},
+                status=502,
+            )
         if url is None:
             return Response({"ready": False,
                              "detail": "Label not generated yet — GIG produces it after the "
