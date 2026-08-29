@@ -342,3 +342,63 @@ def test_abandon_releases_quoted_and_booked_and_queues_the_booking_delete(order,
         abandon_quoted_shipment(order.pk)
     quoted.refresh_from_db()
     assert quoted.status == "created" and delay.call_count == 0
+
+
+# --- the failure trail: every ending is readable a day later ----------------------
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_a_booking_refusal_leaves_aajs_words_on_the_timeline(order, quoted, actor):
+    """AAJ has no apiId, so their sentence plus the order number is all support has to
+    go on — and the audit table records 2xx only. Without this event a refused booking
+    exists nowhere a person can read."""
+    respx.post(CREATE).mock(return_value=httpx.Response(400, json={
+        "success": False, "status": 400,
+        "message": ["receiver.contact.name must contain only letters"]}))
+    with pytest.raises(CaptureRefused) as exc:
+        capture_shipment(order, actor=actor)
+    assert exc.value.code == "create_rejected"
+
+    event = OrderEvent.objects.filter(order=order, type="aaj").latest("pk")
+    assert "must contain only letters" in event.message
+    assert "Nothing was charged" in event.message
+    assert event.actor == actor
+    quoted.refresh_from_db()
+    assert quoted.status == "quoted"  # their decision: fix the cause and retry
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_a_booking_without_an_id_is_recorded_as_unreachable(order, quoted, actor):
+    respx.post(CREATE).mock(return_value=_ok({"booking": {"totalAmount": 2392}}, http=201))
+    with pytest.raises(CaptureRefused) as exc:
+        capture_shipment(order, actor=actor)
+    assert exc.value.code == "no_booking_id"
+    assert "unreachable by id" in OrderEvent.objects.filter(order=order, type="aaj").latest("pk").message
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_a_repeat_charge_refusal_still_records_why(order, quoted, actor):
+    """The gap this closes: reconcile() records the STATE and only when it moves, so a
+    second attempt from `booked` used to leave no trace of AAJ's reason at all."""
+    respx.post(CREATE).mock(return_value=_create_resp())
+    respx.post(PROCESS).mock(return_value=httpx.Response(400, json={
+        "success": False, "message": "Credit facility cannot be charged", "status": 400}))
+    respx.get(GET_BOOKING).mock(return_value=_booking_read(paid=False))
+
+    with pytest.raises(CaptureRefused):
+        capture_shipment(order, actor=actor)
+    quoted.refresh_from_db()
+    assert quoted.status == "booked"
+    first = OrderEvent.objects.filter(order=order, type="aaj").latest("pk")
+    assert "Credit facility cannot be charged" in first.message
+    assert "bk-1" in first.message
+
+    # The re-run: same refusal, no state change — and it must STILL be readable.
+    order.refresh_from_db()
+    with pytest.raises(CaptureRefused):
+        capture_shipment(order, actor=actor)
+    second = OrderEvent.objects.filter(order=order, type="aaj").latest("pk")
+    assert second.pk != first.pk
+    assert "Credit facility cannot be charged" in second.message

@@ -13,6 +13,7 @@ const revalidatePath = vi.fn();
 vi.mock("next/cache", () => ({ revalidatePath: (p: string) => revalidatePath(p) }));
 
 import {
+  aajCaptureAction,
   confirmReceiptAction,
   gigCaptureAction,
   manualRefundAction,
@@ -276,5 +277,20 @@ describe("gigCaptureAction", () => {
 
     expect(state.code).toBe("capture_unconfirmed");
     expect(state.success).toBeUndefined();
+  });
+});
+
+
+describe("aajCaptureAction", () => {
+  it("revalidates on a refusal too — the backend just wrote it onto the timeline", async () => {
+    mockFetch(json(
+      { error: "create_rejected", detail: "AAJ refused the booking: name must contain only letters." },
+      409,
+    ));
+    const state = await aajCaptureAction({ number: "TC-100001" });
+
+    expect(state.code).toBe("create_rejected");
+    expect(state.error).toMatch(/AAJ refused the booking/);
+    expect(revalidatePath).toHaveBeenCalledWith("/orders/TC-100001");
   });
 });

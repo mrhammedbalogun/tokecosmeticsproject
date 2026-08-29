@@ -336,6 +336,10 @@ export async function aajCaptureAction(input: { number: string }): Promise<Write
     revalidatePath(`/orders/${input.number}`);
     return { success: `AAJ shipment ${result.tracking_id} created — ₦${result.cost} charged to the AAJ account (booking ${result.booking_id}). Print the label and hand the parcel to AAJ.` };
   } catch (e) {
+    // Same reason as the GIG lane: a failed capture now writes AAJ's refusal (or the
+    // reconciled truth) onto the order timeline, and an ambiguous one also moves the
+    // shipment — so the page below this panel is stale whichever way it ended.
+    revalidatePath(`/orders/${input.number}`);
     // Two answers must never read as plain errors: `process_disabled` (the booking
     // exists, nothing charged — the kill-switch) and `capture_unconfirmed` (money MAY
     // have moved). fail() keeps the backend's code so the panel renders each honestly.

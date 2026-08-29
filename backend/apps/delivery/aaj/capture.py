@@ -21,6 +21,12 @@ AAJ's booking is two calls and the money sits in the second:
    The poll (tracking.py) re-runs the same read for `create_unconfirmed` rows, so a
    transient AAJ blip heals itself without anyone pressing anything.
 
+Every ending is written to the order timeline, not just the happy one: AAJ's own
+words for a refusal, the reconciled truth for an ambiguity. Audit rows are written
+on 2xx only (by design), so the timeline is the only place a failed booking exists
+after the container log rolls — and AAJ has no `apiId`, so their message plus the
+booking id IS the lookup key their support has.
+
 `AAJ_PROCESS_ENABLED` is the kill-switch on step 2: the sandbox cannot rehearse
 the charge, so production runs its first booking with this off, a human checks
 the DUE booking in AAJ's portal, and the runbook flips it on.
@@ -269,12 +275,21 @@ def _create_booking(shipment: AajShipment, *, actor) -> None:
         raise CaptureRefused("create_timeout", f"AAJ did not answer: {exc}. Nothing was charged; retry.")
     except client.AajError as exc:
         # A validation refusal (a name AAJ's rules reject, an address field): nothing
-        # exists at AAJ, nothing charged. Surfaced verbatim so the desk can fix the cause.
+        # exists at AAJ, nothing charged. Surfaced verbatim so the desk can fix the cause —
+        # and RECORDED for the same reason the GIG lane records its refusals: the audit
+        # table writes on 2xx only (core/audit.py), so without this line the reason lives
+        # in a container log that dies at the next deploy, and a day later nobody can say
+        # why the order is still unbooked.
+        record_event(order, "aaj", actor=actor,
+                     message=f"AAJ refused the booking: {exc}. Nothing was charged.")
         raise CaptureRefused("create_rejected", f"AAJ refused the booking: {exc}. Nothing was charged.")
     data = result.data or {}
     booking = data.get("booking") or {}
     booking_id = str(booking.get("_id") or booking.get("id") or "")
     if not booking_id:
+        record_event(order, "aaj", actor=actor,
+                     message="AAJ accepted the booking but returned no booking id — nothing "
+                             "was charged, and any booking it made is unreachable by id.")
         raise CaptureRefused("no_booking_id", "AAJ answered without a booking id.")
     quote = data.get("quote") or {}
     raw_cost = quote.get("total", booking.get("totalAmount"))
@@ -430,6 +445,13 @@ def _process_booking(shipment: AajShipment, *, actor) -> None:
     if outcome == "created":
         return
     if outcome == "booked":
+        # reconcile() writes the STATE ("confirmed unpaid, safe to retry") and only when
+        # the state actually moved — so on a re-run from `booked` it writes nothing at
+        # all. The REASON is this line's job, and the reason is the half a person acts
+        # on: "Credit facility cannot be charged" is a call to AAJ, not a retry.
+        record_event(order, "aaj", actor=actor,
+                     message=f"AAJ refused the charge on booking {shipment.booking_id}: "
+                             f"{failure}. Nothing was charged (verified against AAJ's records).")
         raise CaptureRefused(
             "process_refused",
             f"AAJ refused the charge: {failure}. Nothing was charged; fix the account/"
