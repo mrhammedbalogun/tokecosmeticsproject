@@ -710,6 +710,13 @@ AAJ_SENDER_POSTAL_CODE = env("AAJ_SENDER_POSTAL_CODE", default="100001")
 # real test. Off = capture stops after the free create-booking step with a clear
 # refusal; the runbook flips it on after one controlled live booking.
 AAJ_PROCESS_ENABLED = env.bool("AAJ_PROCESS_ENABLED", default=False)
+# Push tracking (Plan-43b). AAJ's dashboard takes a webhook URL and issues an
+# `aaj_`-prefixed signing key, but publishes no scheme for it — so the TOKEN is
+# ours (a random string in the URL we paste there, the credential that makes the
+# endpoint usable today) and the SIGNING KEY is theirs (verified when a signature
+# header appears, which is also how we learn their scheme). See aaj/webhook.py.
+AAJ_WEBHOOK_TOKEN = env("AAJ_WEBHOOK_TOKEN", default="")
+AAJ_WEBHOOK_SIGNING_KEY = env("AAJ_WEBHOOK_SIGNING_KEY", default="")
 
 # --- Google Places: homepage reviews header refresh (runbooks/google-apis-setup.md) ---
 # The SERVER key (IP-locked to the VPS, Places API (New) only) — never the browser key

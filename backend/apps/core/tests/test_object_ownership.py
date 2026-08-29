@@ -62,6 +62,10 @@ OBJECT_ROUTES: dict[str, tuple[str, str]] = {
     "api/v1/cms/pages/<slug:slug>/": (PUBLIC, "published pages only; a draft 404s"),
     "api/v1/webhooks/<str:gateway>/": (
         PUBLIC, "the gateway NAME, not an object id — authenticated by signature"),
+    "api/v1/webhooks/aaj/<str:token>/": (
+        PUBLIC, "not an object id at all: the segment IS the credential (AAJ's dashboard "
+                "accepts a URL and nothing else), compared in constant time and paired "
+                "with signature verification when AAJ sends one — aaj/webhook.py"),
     # --- the delivery-partner portal (Plan-39) ---
     "api/v1/partner/^zones/(?P<pk>[^/.]+)/$": (
         OWNED, "get_queryset() filters to request.user.delivery_partner — one partner "

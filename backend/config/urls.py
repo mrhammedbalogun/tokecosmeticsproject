@@ -20,7 +20,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from apps.core.views import healthz
-from apps.delivery.views import GigWebhookView
+from apps.delivery.views import AajWebhookView, GigWebhookView
 
 urlpatterns = [
     path("django-admin/", admin.site.urls),
@@ -42,6 +42,11 @@ urlpatterns = [
     # MUST precede payments.urls: its `webhooks/<str:gateway>/` would otherwise
     # swallow /webhooks/gig/ and 404 it as an unknown payment gateway.
     path("api/v1/webhooks/gig/", GigWebhookView.as_view(), name="gig-webhook"),
+    # AAJ's dashboard takes a URL and nothing else, so the secret rides IN the path
+    # (apps/delivery/aaj/webhook.py explains why, and what it costs). Same placement
+    # rule as GIG's: before payments.urls, whose `webhooks/<str:gateway>/` would
+    # otherwise swallow it as an unknown gateway.
+    path("api/v1/webhooks/aaj/<str:token>/", AajWebhookView.as_view(), name="aaj-webhook"),
     path("api/v1/", include("apps.payments.urls")),
     path("api/v1/", include("apps.orders.urls")),
     path("api/v1/cms/", include("apps.cms.urls")),
