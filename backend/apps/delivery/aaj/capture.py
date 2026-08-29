@@ -27,6 +27,12 @@ on 2xx only (by design), so the timeline is the only place a failed booking exis
 after the container log rolls — and AAJ has no `apiId`, so their message plus the
 booking id IS the lookup key their support has.
 
+Collection (`collectionMode`) is who moves the parcel from OUR shop to AAJ: a rider
+comes to us (PICKUP, our arrangement) or staff carry it to an AAJ centre (DROPOFF).
+The block is UNDOCUMENTED in AAJ's Postman collection — it appears only in a
+get-booking response — and was measured against the live API on 2026-08-29; see
+`collection_mode()`. It does not move the price.
+
 `AAJ_PROCESS_ENABLED` is the kill-switch on step 2: the sandbox cannot rehearse
 the charge, so production runs its first booking with this off, a human checks
 the DUE booking in AAJ's portal, and the runbook flips it on.
@@ -40,11 +46,14 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from datetime import datetime, time, timedelta
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
+from django.utils.timezone import now as django_now
 
 from apps.core.models import Region
 from apps.delivery.aaj import client
@@ -202,6 +211,62 @@ def _sender(shipment: AajShipment) -> tuple[dict, dict]:
     return contact, address
 
 
+def _pickup_date(now=None) -> datetime:
+    """The day we ask AAJ's rider for, as an aware UTC datetime at the window's start.
+
+    Same day when the capture happens before the cut-off, otherwise tomorrow; Sunday is
+    pushed to Monday. Reasoned in LAGOS time (`STAFF_DISPLAY_TIMEZONE`) because "is it
+    still morning?" is a question about where the shop and the rider are, not about UTC.
+    Nigeria is UTC+1 with no DST, so a daytime Lagos hour never lands on a different UTC
+    calendar date — the day AAJ reads is the day the packer meant whichever way they
+    parse it.
+
+    AAJ validates NONE of this (measured 2026-08-29: a `pickupDate` of 2020-01-01 was
+    accepted with a 201), so a wrong date here is silent. Hence the Sunday push and the
+    cut-off live in code rather than in a hope about their side.
+    """
+    lagos = ZoneInfo(settings.STAFF_DISPLAY_TIMEZONE)
+    local = (now or django_now()).astimezone(lagos)
+    day = local.date()
+    if local.hour >= settings.AAJ_PICKUP_CUTOFF_HOUR:
+        day += timedelta(days=1)
+    if day.weekday() == 6:  # Sunday — no rider; ask for Monday
+        day += timedelta(days=1)
+    start = time.fromisoformat(settings.AAJ_PICKUP_WINDOW_FROM)
+    return datetime.combine(day, start, tzinfo=lagos).astimezone(ZoneInfo("UTC"))
+
+
+def collection_mode(now=None) -> dict:
+    """`collectionMode` for create-booking — who moves the parcel from OUR shop to AAJ.
+
+    UNDOCUMENTED: AAJ's Postman collection shows this block only inside a get-booking
+    response, never in the create-booking request. Measured against the live API on
+    2026-08-29: create-booking accepts it and echoes it back, `collectionType` takes
+    exactly PICKUP or DROPOFF (their spelling), `pickupDetails` is optional but its
+    `pickupTimeRange` is required once `pickupDetails` is present, and the total is
+    unchanged at ₦5,100 either way — so switching collection never re-prices a customer
+    who was quoted through `/quote`.
+
+    Whether AAJ ACTS on it — dispatches a rider — is not something their API can tell
+    us; that is confirmed with AAJ, and until it is, staff should not assume a rider is
+    coming. `AAJ_COLLECTION_TYPE=DROPOFF` reverts to staff carrying parcels in.
+    """
+    kind = (settings.AAJ_COLLECTION_TYPE or "PICKUP").strip().upper()
+    if kind != "PICKUP":
+        return {"collectionType": "DROPOFF"}
+    stamp = _pickup_date(now).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    return {
+        "collectionType": "PICKUP",
+        "pickupDetails": {
+            "pickupDate": stamp,
+            "pickupTimeRange": {
+                "from": settings.AAJ_PICKUP_WINDOW_FROM,
+                "to": settings.AAJ_PICKUP_WINDOW_TO,
+            },
+        },
+    }
+
+
 def booking_body(shipment: AajShipment) -> dict:
     order = shipment.order
     receiver_contact, receiver_address = _receiver(order)
@@ -232,6 +297,7 @@ def booking_body(shipment: AajShipment) -> dict:
             "accountNumber": settings.AAJ_ACCOUNT_NUMBER,
             "transaction": {"generateTransaction": True, "method": settings.AAJ_PAYMENT_METHOD},
         },
+        "collectionMode": collection_mode(),
         "carrier": "AAJ",
         "serviceType": "DOMESTIC",
         "deliveryMode": "DOOR_STEP",

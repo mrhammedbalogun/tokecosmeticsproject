@@ -693,8 +693,29 @@ AAJ_API_KEY = env("AAJ_API_KEY", default="")
 # `payments.accountNumber` on every booking — AAJ's number for our account. Charged at
 # process-booking time (create-booking is free) via CREDIT_FACILITY (post-paid) or
 # WALLET (prepaid); which one AAJ enabled for us is a commercial fact, hence a setting.
+# WALLET is the default because that is what AAJ enabled for account 848331 (confirmed
+# by Hammed 2026-08-29, reversing an earlier assumption of CREDIT_FACILITY). The method
+# is baked into the booking record at create-booking, so changing this setting does NOT
+# re-point an existing booking — delete it and create afresh.
 AAJ_ACCOUNT_NUMBER = env("AAJ_ACCOUNT_NUMBER", default="")
-AAJ_PAYMENT_METHOD = env("AAJ_PAYMENT_METHOD", default="CREDIT_FACILITY")
+AAJ_PAYMENT_METHOD = env("AAJ_PAYMENT_METHOD", default="WALLET")
+# How the parcel LEAVES us. AAJ collects from our shop ("PICKUP", Hammed 2026-08-29)
+# rather than staff carrying it to an AAJ centre ("DROPOFF" — their spelling, no
+# underscore; anything else is refused by their validator). An env var, not a constant,
+# so a day AAJ cannot send a rider is a flip and a restart rather than a deploy.
+# MEASURED 2026-08-29: `collectionMode` is undocumented in AAJ's Postman collection —
+# it appears only in a get-booking RESPONSE — but create-booking accepts and echoes it,
+# and the price is IDENTICAL either way (₦5,100 on the same parcel), so this choice
+# never re-prices a customer. NOTE: `deliveryType` is NOT this axis; their validator
+# takes only DROP_OFF or SIGNATURE_REQUIRED there (it is the receiver's signature flag).
+AAJ_COLLECTION_TYPE = env("AAJ_COLLECTION_TYPE", default="PICKUP")
+# The window offered to AAJ's rider, in Lagos time, and the hour after which a capture
+# asks for TOMORROW instead of today. AAJ has published no cut-off, no lead time and no
+# working days; these are our defensible defaults until they answer, and AAJ's API does
+# NOT validate the date (measured: a 2020 pickupDate was accepted), so the guard is here.
+AAJ_PICKUP_WINDOW_FROM = env("AAJ_PICKUP_WINDOW_FROM", default="09:00")
+AAJ_PICKUP_WINDOW_TO = env("AAJ_PICKUP_WINDOW_TO", default="16:00")
+AAJ_PICKUP_CUTOFF_HOUR = env.int("AAJ_PICKUP_CUTOFF_HOUR", default=13)
 # Booking category is REQUIRED for DOMESTIC and its id is environment-specific. Empty =
 # resolve "Non Electronics" by name from get-categories (cached); set to pin one.
 AAJ_CATEGORY_ID = env("AAJ_CATEGORY_ID", default="")

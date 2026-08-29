@@ -14,6 +14,7 @@ from django.core.cache import cache
 from django.test import override_settings
 
 from apps.core.models import Country
+from apps.delivery.aaj import capture
 from apps.delivery.aaj.capture import (
     CaptureRefused,
     CaptureUnconfirmed,
@@ -32,7 +33,9 @@ SETTINGS = dict(
     AAJ_BASE_URL=BASE, AAJ_API_KEY="aaj-testkey", AAJ_ACCOUNT_NUMBER="657357",
     AAJ_PAYMENT_METHOD="CREDIT_FACILITY", AAJ_CATEGORY_ID="cat-non-electronics",
     AAJ_SENDER_EMAIL="orders@toke.test", AAJ_SENDER_POSTAL_CODE="100001",
-    AAJ_PROCESS_ENABLED=True,
+    AAJ_PROCESS_ENABLED=True, AAJ_COLLECTION_TYPE="PICKUP",
+    AAJ_PICKUP_WINDOW_FROM="09:00", AAJ_PICKUP_WINDOW_TO="16:00",
+    AAJ_PICKUP_CUTOFF_HOUR=13, STAFF_DISPLAY_TIMEZONE="Africa/Lagos",
 )
 CREATE = f"{BASE}/partner/booking/create-booking"
 PROCESS = f"{BASE}/partner/booking/process-booking/bk-1"
@@ -154,6 +157,11 @@ def test_capture_creates_then_processes_and_stamps_both_rows(order, quoted, acto
     assert sent["category"] == "cat-non-electronics"
     assert sent["customBookingId"] == "TC-900200"
     assert sent["packageInsurance"] == "FR" and sent["serviceType"] == "DOMESTIC"
+    # AAJ collects from the shop; the block is undocumented but measured-accepted, and
+    # `deliveryType` is deliberately NOT sent (their validator rejects PICKUP there).
+    assert sent["collectionMode"]["collectionType"] == "PICKUP"
+    assert sent["collectionMode"]["pickupDetails"]["pickupTimeRange"] == {"from": "09:00", "to": "16:00"}
+    assert "deliveryType" not in sent
     assert process.call_count == 1
 
 
@@ -402,3 +410,43 @@ def test_a_repeat_charge_refusal_still_records_why(order, quoted, actor):
     second = OrderEvent.objects.filter(order=order, type="aaj").latest("pk")
     assert second.pk != first.pk
     assert "Credit facility cannot be charged" in second.message
+
+
+# --- collection mode (Plan-43 follow-up, measured against AAJ 2026-08-29) -------------
+
+@override_settings(**SETTINGS)
+@pytest.mark.parametrize(
+    "lagos_clock,expected_day",
+    [
+        ("2026-09-02T09:30", "2026-09-02"),  # Wednesday morning -> today
+        ("2026-09-02T13:00", "2026-09-03"),  # at the cut-off -> tomorrow
+        ("2026-09-02T18:45", "2026-09-03"),  # evening -> tomorrow
+        ("2026-09-05T15:00", "2026-09-07"),  # Saturday past cut-off -> Sunday is pushed to Monday
+        ("2026-09-06T09:00", "2026-09-07"),  # Sunday morning -> Monday
+    ],
+)
+def test_pickup_date_respects_cutoff_and_skips_sunday(lagos_clock, expected_day):
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    lagos = ZoneInfo("Africa/Lagos")
+    stamp = capture._pickup_date(dt.fromisoformat(lagos_clock).replace(tzinfo=lagos))
+    assert stamp.strftime("%Y-%m-%d") == expected_day
+    # Lagos is UTC+1 with no DST, so a 09:00 local window start is 08:00Z on the SAME date
+    assert stamp.strftime("%H:%M") == "08:00"
+
+
+@override_settings(**SETTINGS)
+def test_collection_mode_pickup_shape():
+    block = capture.collection_mode()
+    assert block["collectionType"] == "PICKUP"
+    assert set(block["pickupDetails"]) == {"pickupDate", "pickupTimeRange"}
+    # measured: pickupTimeRange is REQUIRED once pickupDetails is present
+    assert block["pickupDetails"]["pickupTimeRange"] == {"from": "09:00", "to": "16:00"}
+    assert block["pickupDetails"]["pickupDate"].endswith("Z")
+
+
+@override_settings(**{**SETTINGS, "AAJ_COLLECTION_TYPE": "DROPOFF"})
+def test_collection_mode_dropoff_carries_no_pickup_details():
+    # AAJ's spelling has no underscore; a date on a drop-off would be meaningless
+    assert capture.collection_mode() == {"collectionType": "DROPOFF"}
