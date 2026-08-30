@@ -143,6 +143,22 @@ export function ConsentProvider({
   config: MarketingConfig;
   children: React.ReactNode;
 }) {
+  /**
+   * Is there anything to consent TO?
+   *
+   * The master switch is not the only way to be measuring nothing: a shop with tracking
+   * enabled and no channel configured loads no pixel (`TrackingScripts` needs an id) and
+   * sends no server event (`events.enqueue_purchase` iterates zero rows). Showing a
+   * banner then is pure friction on a checkout funnel — and worse, it NAMES Facebook,
+   * Instagram, TikTok, Snapchat and Google to a customer whose data none of them is
+   * receiving, which is not a true statement to put in front of someone.
+   *
+   * This is exactly the reasoning the master switch already carries, applied to the
+   * other way of ending up at zero. Caught the day Plan-44 first reached production
+   * with every channel still dark.
+   */
+  const measuring = config.tracking_enabled && config.channels.length > 0;
+
   const mounted = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const cookies = useSyncExternalStore(subscribeToCookies, cookieSnapshot, serverCookieSnapshot);
   // null = "no explicit decision about the banner yet"; the derived default applies.
@@ -157,12 +173,12 @@ export function ConsentProvider({
   }, [cookies, config.consent_version]);
 
   const consent = useMemo<ConsentState>(() => {
-    if (!mounted || !config.tracking_enabled) return DENIED;
+    if (!mounted || !measuring) return DENIED;
     return (
       storedConsent
       ?? defaultConsent(country, config.consent_required_countries, config.consent_version)
     );
-  }, [mounted, config, storedConsent, country]);
+  }, [mounted, measuring, config, storedConsent, country]);
 
   /**
    * The click ids on THIS landing, read straight out of the URL.
@@ -201,12 +217,12 @@ export function ConsentProvider({
   const ready = mounted;
   const showBanner =
     bannerOverride
-    ?? (mounted && config.tracking_enabled && storedConsent === null);
+    ?? (mounted && measuring && storedConsent === null);
 
   const value = useMemo<ConsentContextValue>(
     () => ({
       consent,
-      trackingEnabled: config.tracking_enabled,
+      trackingEnabled: measuring,
       ready,
       showBanner,
       accept: () => choose(true, true),
@@ -214,7 +230,7 @@ export function ConsentProvider({
       save: ({ analytics, marketing }) => choose(analytics, marketing),
       reopen: () => setBannerOverride(true),
     }),
-    [consent, config.tracking_enabled, ready, showBanner, choose],
+    [consent, measuring, ready, showBanner, choose],
   );
 
   return <ConsentContext.Provider value={value}>{children}</ConsentContext.Provider>;

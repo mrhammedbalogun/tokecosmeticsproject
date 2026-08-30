@@ -159,6 +159,28 @@ describe("a fresh ad click", () => {
   });
 });
 
+describe("a shop that is measuring nothing", () => {
+  it("asks nothing when tracking is on but no channel is configured", async () => {
+    // The state Plan-44 SHIPPED in: every channel dark. No pixel loads and no server
+    // event sends, so a banner would be friction on the funnel — and it would name five
+    // platforms to a customer whose data none of them is receiving.
+    setCountry("GB");
+    renderBanner({ ...CONFIG, channels: [] });
+
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("--"));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("asks as soon as a channel is switched on", async () => {
+    setCountry("GB");
+    renderBanner();
+
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: /cookie choices/i })).toBeInTheDocument(),
+    );
+  });
+});
+
 describe("the master switch", () => {
   it("asks nothing when the shop is not measuring anything", async () => {
     setCountry("GB");
