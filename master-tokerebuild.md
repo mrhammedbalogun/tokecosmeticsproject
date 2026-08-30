@@ -1586,6 +1586,15 @@ PAYSTACK_SECRET_KEY= / PAYSTACK_PUBLIC_KEY=
 FLUTTERWAVE_SECRET_KEY= / FLUTTERWAVE_PUBLIC_KEY= / FLUTTERWAVE_VERIF_HASH=
 STRIPE_SECRET_KEY= / STRIPE_PUBLISHABLE_KEY= / STRIPE_WEBHOOK_SECRET=
 PAYPAL_CLIENT_ID= / PAYPAL_CLIENT_SECRET= / PAYPAL_MODE=sandbox|live
+META_CAPI_ACCESS_TOKEN= / TIKTOK_EVENTS_ACCESS_TOKEN= / SNAPCHAT_CAPI_ACCESS_TOKEN= / GA4_API_SECRET=
+                                # Plan-44 conversion APIs. PIXEL IDS ARE NOT HERE —
+                                # they are public and live in the DB, edited from the
+                                # admin's Advert tracking screen.
+META_GRAPH_API_VERSION=v25.0    # Meta retires versions on their own schedule
+GA4_DEBUG_ENDPOINT=false        # true VALIDATES AND DISCARDS every GA4 server event
+GOOGLE_ADS_DM_CREDENTIALS_B64=  # base64 of the Data Manager service-account JSON key
+                                # (Plan-44b). The customer + conversion action ids are
+                                # NOT secrets and live on the admin screen.
 FRONTEND_URL=https://tokecosmetics.com
 ADMIN_URL=https://backend.tokecosmetics.com
 SENTRY_DSN=
