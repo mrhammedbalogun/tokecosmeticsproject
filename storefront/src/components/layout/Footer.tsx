@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { NewsletterForm } from "@/components/layout/NewsletterForm";
 import { SOCIAL_LINKS } from "@/lib/social-links";
+import { CookieChoicesLink } from "@/components/consent/CookieChoicesLink";
 
 /** Section 15: the large premium footer. Four link columns + a newsletter block,
  * social icons, payment logos and a legal strip. Server Component (no client JS
@@ -150,9 +151,18 @@ export function Footer() {
       <div className="border-t border-[#262626]">
         {/* The year renders at REQUEST time (this is a Server Component on a dynamic
             page), so on 1 January it advances by itself — no deploy, no stale build. */}
-        <p className="wrap py-5 text-center text-xs text-[#7d7973]">
-          © Toke Cosmetics {new Date().getFullYear()}. All Rights Reserved.
-        </p>
+        <div className="wrap flex flex-wrap items-center justify-center gap-x-4 gap-y-2 py-5 text-xs text-[#7d7973]">
+          {/* `text-center` stays ON THE PARAGRAPH, not just on the flex row: Footer.test
+              asserts it there, pinning Hammed's 2026-08-05 ruling about how this line
+              closes the footer. The row around it is new (the cookie link had to go
+              somewhere reachable from every page) and must not quietly retire that pin. */}
+          <p className="text-center">© Toke Cosmetics {new Date().getFullYear()}. All Rights Reserved.</p>
+          {/* Plan-44. Withdrawing consent has to be as easy as granting it, which means
+              a route back to the same three switches from every page — not a buried
+              paragraph in the privacy policy. Renders nothing when tracking is switched
+              off store-wide. */}
+          <CookieChoicesLink className="underline transition-colors hover:text-white" />
+        </div>
       </div>
     </footer>
   );

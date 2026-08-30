@@ -8,6 +8,13 @@ import {
   REFERRAL_PARAM,
   normalizeReferralCode,
 } from "@/lib/referral";
+import {
+  CLICK_ID_COOKIE,
+  CLICK_ID_MAX_AGE,
+  CONSENT_COOKIE,
+  clickIdsFromUrl,
+  marketingGrantedInCookie,
+} from "@/lib/consent";
 
 // Shared with the POST /api/country route handler so the seeded default and an explicit user
 // choice are stored with identical flags. `country` is deliberately NOT httpOnly — client UI
@@ -34,6 +41,20 @@ const REFERRAL_COOKIE_OPTIONS = {
   sameSite: "lax" as const,
   path: "/",
   maxAge: REFERRAL_COOKIE_MAX_AGE,
+  secure: process.env.NODE_ENV === "production",
+};
+
+// Ad click ids (Plan-44). NOT httpOnly, unlike the referral cookie above, and the
+// difference is the point: `tc_ref` decides who gets paid, so page JavaScript must never
+// be able to write it. This one carries `?fbclid=` and its three siblings, decides
+// nothing, and MUST be writable from the browser — a visitor in a consent-required
+// region has their click ids held in memory until they accept, and the accept happens in
+// the browser (see components/consent/ConsentProvider.tsx).
+const CLICK_ID_COOKIE_OPTIONS = {
+  httpOnly: false,
+  sameSite: "lax" as const,
+  path: "/",
+  maxAge: CLICK_ID_MAX_AGE,
   secure: process.env.NODE_ENV === "production",
 };
 
@@ -99,6 +120,37 @@ export async function proxy(req: NextRequest) {
   // excluded characters (0/1/I/O) are exactly the ones people mistype from a printed
   // card, and a mistyped card must land on the shop rather than an error page. The
   // cookie is only set when the code survives normalisation.
+  // ── AD CLICK IDS (Plan-44) ──────────────────────────────────────────────────────
+  //
+  // `?fbclid=`, `?ttclid=`, `?ScCid=`, `?gclid=` land here on the FIRST navigation from
+  // an ad and nowhere else. Capturing them ourselves is the biggest match-quality win
+  // available to the server-side integration: the vendors' own cookies are written by
+  // their JavaScript, which an ad blocker — or a visitor who has not consented yet —
+  // stops from ever running. Our proxy sees the parameter regardless.
+  //
+  // ADDITIVE TO THE REFERRAL CAPTURE BELOW, and deliberately kept apart from it: this
+  // reads different parameters, writes a different cookie, and touches neither
+  // `tc_ref` nor `normalizeReferralCode`. The 2026-08-15 bogus-`?ref=` clobber came
+  // from attribution logic reaching across itself, and it is not going to happen twice.
+  //
+  // WHERE THE CONSENT DECISION IS *NOT* MADE: here. The proxy only asks the one
+  // question it can answer without a network call — "does a stored cookie already grant
+  // marketing?". Whether an unanswered visitor is in an opt-out or a consent-required
+  // country is decided by `ConsentProvider`, which has the backend's country list.
+  // Duplicating that list here is exactly the kind of copy that goes stale the day
+  // Hammed edits it in the admin.
+  // A visitor who has NOT yet answered gets nothing stored here. Their click ids are
+  // still recoverable: `ConsentProvider` reads them straight out of `location.search`
+  // on the landing page and persists them if and when consent is granted. Storing first
+  // and deleting on refusal is the "set the cookie then ask" pattern PECR prohibits.
+  //
+  // That split is also what keeps this proxy out of `cookies()`/`headers()` territory in
+  // the render tree: handing the ids to a Server Component would make every page in the
+  // shop dynamically rendered, which is a real cost for a catalogue that lives on ISR.
+  const clickIds = clickIdsFromUrl(req.nextUrl.searchParams);
+  const hasClickIds = Object.keys(clickIds).length > 0;
+  const mayStoreClickIds = marketingGrantedInCookie(req.cookies.get(CONSENT_COOKIE)?.value);
+
   const rawShortCode = shortLinkCode(req.nextUrl.pathname);
   const isShortLink = rawShortCode !== "";
   const referral = normalizeReferralCode(rawShortCode)
@@ -125,6 +177,12 @@ export async function proxy(req: NextRequest) {
   // the same link re-clicked — stay zero-round-trip on a hook that runs every
   // navigation. On lookup failure the STORED code survives: an unverifiable new claim
   // must not destroy a verified old one.
+  if (hasClickIds && mayStoreClickIds) {
+    // LAST CLICK WINS, as it does for referrals: an ad click that brings a visitor back
+    // is the one that earned the visit, and the 90 days restart from it.
+    res.cookies.set(CLICK_ID_COOKIE, JSON.stringify(clickIds), CLICK_ID_COOKIE_OPTIONS);
+  }
+
   if (referral) {
     const stored = req.cookies.get(REFERRAL_COOKIE)?.value ?? "";
     const contested = stored !== "" && stored !== referral;

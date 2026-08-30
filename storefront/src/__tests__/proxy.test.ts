@@ -103,3 +103,54 @@ describe("proxy account gate", () => {
     expect(res.cookies.get("country")?.value).toBe("NG");
   });
 });
+
+describe("proxy ad click ids (Plan-44)", () => {
+  function landing(query: string, cookie = "") {
+    return proxy(new NextRequest(`http://localhost:3000/${query}`, {
+      headers: cookie ? { cookie } : {},
+    }));
+  }
+
+  const GRANTED = `tc_consent=${encodeURIComponent(JSON.stringify({ v: 1, a: 1, m: 1 }))}`;
+  const REFUSED = `tc_consent=${encodeURIComponent(JSON.stringify({ v: 1, a: 0, m: 0 }))}`;
+
+  it("stores the click id for a visitor who has already consented", async () => {
+    const res = await landing("?fbclid=FBCLICK&ttclid=TTCLICK", GRANTED);
+    const stored = JSON.parse(decodeURIComponent(res.cookies.get("tc_clk")!.value));
+    expect(stored.fbclid).toBe("FBCLICK");
+    expect(stored.ttclid).toBe("TTCLICK");
+    expect(typeof stored.ts).toBe("number");
+  });
+
+  it("stores NOTHING for a visitor who has not answered yet", async () => {
+    // Storing first and deleting on refusal is the "set the cookie then ask" pattern
+    // PECR exists to prohibit. The provider recovers the id from location.search.
+    const res = await landing("?fbclid=FBCLICK");
+    expect(res.cookies.get("tc_clk")).toBeUndefined();
+  });
+
+  it("stores nothing for a visitor who refused", async () => {
+    const res = await landing("?fbclid=FBCLICK", REFUSED);
+    expect(res.cookies.get("tc_clk")).toBeUndefined();
+  });
+
+  it("sets no click cookie on an ordinary navigation", async () => {
+    const res = await landing("", GRANTED);
+    expect(res.cookies.get("tc_clk")).toBeUndefined();
+  });
+
+  it("does not disturb the referral cookie", async () => {
+    // The 2026-08-15 bogus-?ref= clobber came from attribution logic reaching across
+    // itself. Click-id capture is additive and touches neither tc_ref nor its
+    // normaliser — a landing with BOTH must still set the referral cookie correctly.
+    const res = await landing("?ref=AMINA7K3P&fbclid=FBCLICK", GRANTED);
+    expect(res.cookies.get("tc_ref")?.value).toBe("AMINA7K3P");
+    expect(res.cookies.get("tc_clk")).toBeDefined();
+  });
+
+  it("leaves a referral-only landing with no click cookie at all", async () => {
+    const res = await landing("?ref=AMINA7K3P", GRANTED);
+    expect(res.cookies.get("tc_ref")?.value).toBe("AMINA7K3P");
+    expect(res.cookies.get("tc_clk")).toBeUndefined();
+  });
+});
