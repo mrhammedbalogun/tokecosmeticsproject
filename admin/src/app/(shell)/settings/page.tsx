@@ -56,6 +56,15 @@ const SECTIONS = [
     scopes: ["settings.manage", "products.manage"],
   },
   {
+    href: "/settings/marketing",
+    title: "Advert tracking",
+    blurb: "The pixels and conversion APIs for Meta, TikTok, Snapchat and Google, and who is asked for consent.",
+    // Owner-only, beside Payments and Audit rather than beside the delivery prices: the
+    // consent country list is a legal position, and a pixel id decides which ad account
+    // receives the shop's customer data.
+    scopes: ["settings.manage"],
+  },
+  {
     href: "/settings/audit",
     title: "Audit log",
     blurb: "Every write on the admin surface, and the reads that touch personal data.",
