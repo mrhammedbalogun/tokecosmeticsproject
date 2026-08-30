@@ -20,6 +20,7 @@ import { ReviewList } from "@/components/product/ReviewList";
 import { RelatedProducts } from "@/components/product/RelatedProducts";
 import { RecentlyViewed } from "@/components/product/RecentlyViewed";
 import { RecentlyViewedTracker } from "@/components/product/RecentlyViewedTracker";
+import { ViewContentTracker } from "@/components/product/ViewContentTracker";
 
 type Params = Promise<{ slug: string }>;
 
@@ -116,6 +117,18 @@ export default async function ProductPage({ params }: { params: Params }) {
       <div className="mx-auto max-w-3xl">
         <PdpAccordions product={product} />
       </div>
+      {/* Plan-44: ViewContent for the ad platforms. Reads the FIRST priced variant
+          rather than the selected one — the selection lives in `PdpProvider`, a
+          client boundary this server component is outside of, and a landing on a
+          product page is one view of that product however the picker moves afterwards. */}
+      {product.variants.find((v) => v.price) && (
+        <ViewContentTracker
+          sku={product.variants.find((v) => v.price)!.sku}
+          name={product.name}
+          price={Number(product.variants.find((v) => v.price)!.price!.amount)}
+          currency={product.variants.find((v) => v.price)!.price!.currency}
+        />
+      )}
       <RecentlyViewedTracker entry={{
         slug, name: product.name,
         image: mediaUrl(product.images[0]?.url ?? null),

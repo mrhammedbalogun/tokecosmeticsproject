@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { isJustSoldOut, useCart } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
+import { newEventId, track } from "@/lib/tracking/events";
 
 /** One-click Add on a landing card (approved design). Single-variant products add
  * their default variant and open the drawer — the shortest path from homepage to
@@ -15,10 +16,20 @@ export function CardAddButton({
   variantId,
   name,
   slug,
+  sku,
+  price,
+  currency,
 }: {
   variantId: number | null;
   name: string;
   slug: string;
+  /** Plan-44: the AddToCart the ad platforms see. The SKU is the id the product feed
+   * and the server-side event also use — one vocabulary, or dynamic retargeting shows
+   * nothing. `from_price` is the card's own displayed price, which for a single-variant
+   * product (the only kind this button adds) IS that variant's price. */
+  sku?: string | null;
+  price?: string | null;
+  currency?: string;
 }) {
   const { addItem } = useCart();
   const router = useRouter();
@@ -35,6 +46,17 @@ export function CardAddButton({
     setBusy(true);
     try {
       await addItem.mutateAsync({ variantId, quantity: 1 });
+      // After the mutation resolves, never before: an add that then failed on stock is
+      // not a conversion.
+      if (sku && price && currency) {
+        track({
+          name: "add_to_cart",
+          eventId: newEventId(),
+          currency,
+          value: Number(price),
+          items: [{ sku, name, price: Number(price), quantity: 1 }],
+        });
+      }
       openCartDrawer();
     } catch (err) {
       if (isJustSoldOut(err)) {

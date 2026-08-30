@@ -13,6 +13,9 @@ import { AddressSummary } from "@/components/orders/AddressBlock";
 import { OrderItems } from "@/components/orders/OrderItems";
 import { StatusChip } from "@/components/orders/StatusChip";
 import { OrderTotals } from "@/components/orders/OrderTotals";
+import { PurchaseTracker } from "@/components/checkout/PurchaseTracker";
+import { getMarketingConfig } from "@/lib/marketing";
+import { purchaseValue } from "@/lib/tracking/value";
 
 type Params = Promise<{ number: string }>;
 
@@ -49,9 +52,20 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
     );
   }
   const copy = confirmationCopy({ gateway: order.payment_gateway, status: order.status });
+  const marketing = await getMarketingConfig();
 
   return (
     <section className="mx-auto max-w-3xl px-4 py-10">
+      {/* Plan-44. The browser half of the Purchase event — the server half fires from the
+          paid transition whether or not the customer ever reaches this page. Both send
+          the order number as their event id, which is how the platforms dedupe them. */}
+      <PurchaseTracker
+        orderNumber={order.number}
+        currency={order.currency}
+        value={purchaseValue(order)}
+        items={order.items}
+        config={marketing}
+      />
       <h1 className="font-display text-2xl">Thank you — your order is confirmed</h1>
       <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
         <span>

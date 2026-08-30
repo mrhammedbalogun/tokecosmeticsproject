@@ -95,6 +95,9 @@ export function ProductCard({
                   variantId={product.default_variant_id}
                   name={product.name}
                   slug={product.slug}
+                  sku={product.default_sku}
+                  price={product.from_price}
+                  currency={product.currency}
                 />
               )}
             </div>
@@ -121,6 +124,9 @@ export function ProductCard({
                   variantId={product.default_variant_id}
                   name={product.name}
                   slug={product.slug}
+                  sku={product.default_sku}
+                  price={product.from_price}
+                  currency={product.currency}
                 />
               )}
             </div>

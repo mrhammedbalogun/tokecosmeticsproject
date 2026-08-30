@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useCart } from "@/hooks/useCart";
+import { InitiateCheckoutTracker } from "@/components/checkout/InitiateCheckoutTracker";
 import { CheckoutProvider, useCheckout } from "@/components/checkout/CheckoutContext";
 import { StepShell } from "@/components/checkout/StepShell";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
@@ -87,6 +88,9 @@ export function CheckoutFlow() {
 
   return (
     <CheckoutProvider>
+      {/* Plan-44: InitiateCheckout, once per cart. Below the empty-cart gate on purpose —
+          an empty cart is not a checkout anybody started. */}
+      <InitiateCheckoutTracker cart={cart} />
       <div className="mt-8 grid gap-8 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <CheckoutSteps />

@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { REFERRAL_COOKIE, normalizeReferralCode } from "@/lib/referral";
+import { buildMarketingBlob } from "@/lib/tracking/attribution";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -50,7 +51,8 @@ export async function POST(req: Request) {
   // returning a spurious cart_not_active. Fall back to minting one server-side for
   // any caller that doesn't send one. Never forward it in the upstream body — it's
   // a header concern only.
-  const { idempotency_key: clientKey, referral_code: _ignored, ...upstreamBody } = body;
+  const { idempotency_key: clientKey, referral_code: _ignored,
+          marketing: _ignoredMarketing, ...upstreamBody } = body;
   const idempotencyKey = typeof clientKey === "string" && clientKey ? clientKey : randomUUID();
   // Referral attribution is read from the httpOnly cookie HERE and never from the
   // request body — a client-supplied `referral_code` is destructured out above and
@@ -61,10 +63,24 @@ export async function POST(req: Request) {
   // Re-normalised rather than trusted: the cookie is ours, but a value that survived a
   // format change (or a hand-edited dev jar) should be dropped, not forwarded.
   const referralCode = normalizeReferralCode(jar.get(REFERRAL_COOKIE)?.value);
+  // Ad attribution + the consent it was collected under (Plan-44), snapshotted onto the
+  // order. It has to happen HERE: payment confirmation runs off a gateway webhook with
+  // no browser, no cookie jar and no client IP behind it — the same reason the referral
+  // code above is stamped at placement rather than resolved later.
+  //
+  // Assembled server-side rather than accepted from the request body, because the
+  // consent record is the part that has to be defensible; a client-supplied
+  // `marketing` key would be the browser asserting its own lawful basis. The backend
+  // treats it as untrusted regardless — see apps/marketing/capture.py.
+  const marketing = buildMarketingBlob({
+    jar,
+    headers: req.headers,
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://tokecosmetics.com",
+  });
   try {
     const out = await fetchWithAuth<Record<string, unknown>>("/checkout/", {
       method: "POST", country,
-      body: { ...upstreamBody, referral_code: referralCode },
+      body: { ...upstreamBody, referral_code: referralCode, marketing },
       headers: { "Idempotency-Key": idempotencyKey },
     });
     // Guest 201: the token becomes an httpOnly cookie and leaves the payload (see

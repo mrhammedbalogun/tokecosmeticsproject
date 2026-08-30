@@ -6,12 +6,26 @@ import { isJustSoldOut, useCart } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
 import { usePdp } from "@/components/product/PdpContext";
 import { BUYNOW_INTENT_KEY } from "@/lib/buynow-intent";
+import { newEventId, track } from "@/lib/tracking/events";
 
 /** Amazon-pattern pair (Decision 14): Buy Now = primary (straight to checkout),
  * Add to Cart = secondary (opens the drawer). Guest Buy Now goes straight to
  * checkout too since Plan-38 (guest checkout) — the BFF adds to the guest cart, no
  * login detour. The 401→stash-intent→/login branch below is kept as a fallback for
  * an authed session that expires mid-click, not the guest path any more. */
+/** One shape for both buttons, so Buy Now and Add to Cart can never report an add
+ * differently. */
+function trackAdd(variant: { sku: string; name: string; price: { amount: string; currency: string } | null }, qty: number) {
+  if (!variant.price) return;
+  track({
+    name: "add_to_cart",
+    eventId: newEventId(),
+    currency: variant.price.currency,
+    value: Number(variant.price.amount) * qty,
+    items: [{ sku: variant.sku, name: variant.name, price: Number(variant.price.amount), quantity: qty }],
+  });
+}
+
 export function BuyButtons() {
   const { variant, qty } = usePdp();
   const { addItem } = useCart();
@@ -26,6 +40,10 @@ export function BuyButtons() {
     setBusy("add"); setError(null);
     try {
       await addItem.mutateAsync({ variantId: variant.id, quantity: qty });
+      // Plan-44: AFTER the mutation resolves, never before. An AddToCart reported for an
+      // add that then failed on stock is a conversion the shop never had, and it is the
+      // event the ad platforms use to find "people who add to cart".
+      trackAdd(variant, qty);
       openCartDrawer();
     } catch (err) {
       if (isJustSoldOut(err)) {
@@ -66,6 +84,20 @@ export function BuyButtons() {
       // for 30s, so without this checkout would trust a stale empty cart and render
       // "Your cart is empty" — the shipped bug that retired the express cart.
       queryClient.setQueryData(["cart"], await res.json());
+      // Buy Now IS an add to cart followed by a checkout, and both halves are reported:
+      // the ad platforms model the funnel, and a Buy Now that only reported the second
+      // step would make the funnel look like it leaks at the first.
+      trackAdd(variant, qty);
+      track({
+        name: "initiate_checkout",
+        eventId: newEventId(),
+        currency: variant.price?.currency ?? "",
+        value: Number(variant.price?.amount ?? 0) * qty,
+        items: [{
+          sku: variant.sku, name: variant.name,
+          price: Number(variant.price?.amount ?? 0), quantity: qty,
+        }],
+      });
       router.push("/checkout");
     } catch {
       setError("Buy Now is unavailable right now — try Add to Cart.");
