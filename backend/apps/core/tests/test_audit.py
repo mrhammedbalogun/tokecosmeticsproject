@@ -874,6 +874,22 @@ def _case_tax_country(client, monkeypatch):
     ), 200
 
 
+def _case_marketing_settings(client, monkeypatch):
+    return client.patch(
+        "/api/v1/admin/marketing/settings/", {"tracking_enabled": False}, format="json"
+    ), 200
+
+
+def _case_marketing_channel(client, monkeypatch):
+    # The list request is what seeds the five channel rows (`ensure_channel_rows`), so
+    # it has to happen before the PATCH can find one — the same shape the admin screen
+    # itself uses.
+    client.get("/api/v1/admin/marketing/channels/")
+    return client.patch(
+        "/api/v1/admin/marketing/channels/meta/", {"pixel_id": "1234567890"}, format="json"
+    ), 200
+
+
 WRITE_CASES: dict[str, tuple] = {
     # Self-service, but still a write worth a row: it changes what a stolen laptop is
     # worth. Revoking zero devices is a success (the state the caller wanted is true).
@@ -939,6 +955,13 @@ WRITE_CASES: dict[str, tuple] = {
     # and for the same reason (a RetrieveUpdateAPIView PATCH has no DRF action name).
     "BusinessDecisionsView": (_case_business_decisions, "update"),
     "TaxCountryAdminViewSet": (_case_tax_country, "partial_update"),
+    # Plan-44. Both leave a row for the same reason the tax screens above do: one
+    # decides whether the shop is measuring at all and whose consent is asked for first,
+    # the other decides which ad account receives the shop's customer data. `update` for
+    # the singleton view and `partial_update` for the viewset, same as the pair above and
+    # for the same reason (a RetrieveUpdateAPIView PATCH has no DRF action name).
+    "MarketingSettingsView": (_case_marketing_settings, "update"),
+    "MarketingChannelAdminViewSet": (_case_marketing_channel, "partial_update"),
     "CouponAdminViewSet": (_case_coupon_create, "create"),
     "DeliveryOptionAdminViewSet": (_case_delivery_option_create, "create"),
     "RegionAdminViewSet": (_case_region_patch, "partial_update"),
@@ -1044,6 +1067,11 @@ READ_ONLY_VIEWS = frozenset(
         # every time somebody opens the list would bury the reads this table exists for.
         # Authoring is the audited half, at TrainingResourceAdminViewSet above.
         "TrainingLibraryView",
+        # Plan-44's conversion outbox: GET-only, and READ-audited rather than
+        # write-audited (test_audit_guard.py declares it). It stores the body actually
+        # sent to each ad platform — hashed customer identifiers, plus a raw IP and user
+        # agent for Meta — so opening it is a PII read, and there is no write to record.
+        "ConversionEventAdminViewSet",
     }
 )
 

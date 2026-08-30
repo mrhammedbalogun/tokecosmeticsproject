@@ -144,6 +144,12 @@ MATRIX: list[Row] = [
     # Tax settings (Plan-37) sit with the money config: they change what customers pay.
     Row("TaxSettingsView", "get", "/api/v1/admin/tax/settings/", _OWNER),
     Row("TaxCountryAdminViewSet", "get", "/api/v1/admin/tax/countries/", _OWNER),
+    # Advert tracking (Plan-44) sits with the money config, not with the delivery
+    # prices: the consent country list is a legal position, and a pixel id decides which
+    # ad account receives the shop's customer data.
+    Row("MarketingSettingsView", "get", "/api/v1/admin/marketing/settings/", _OWNER),
+    Row("MarketingChannelAdminViewSet", "get", "/api/v1/admin/marketing/channels/", _OWNER),
+    Row("ConversionEventAdminViewSet", "get", "/api/v1/admin/marketing/events/", _OWNER),
     # Business Decisions (2026-08-27) is money config too, but deliberately one notch
     # WIDER than the tax screens above it — the Manager sets the referral percentages.
     Row("BusinessDecisionsView", "get", "/api/v1/admin/business-decisions/", _MANAGERS),

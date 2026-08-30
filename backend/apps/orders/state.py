@@ -80,6 +80,7 @@ def _effects_for(to_status: str):
     from apps.delivery import partners as partner_shipments
     from apps.delivery.aaj import shipments as aaj_shipments
     from apps.delivery.gig import shipments as gig_shipments
+    from apps.marketing import events as marketing_events
     from apps.orders import emails
 
     return {
@@ -98,7 +99,17 @@ def _effects_for(to_status: str):
         # Belt as well as braces: `enqueue_staff_order_paid` swallows its own exceptions
         # (see orders/emails.py), so ordering is the second line of defence, not the only
         # one. Do not rely on either alone — add new effects AFTER the customer's.
-        "processing": (emails.enqueue_order_confirmation, emails.enqueue_staff_order_paid),
+        # THIRD, AND THIRD ON PURPOSE: `marketing_events.enqueue_purchase` is the ONLY
+        # reliable purchase signal the ad platforms get. The browser-side pixel fires on
+        # the confirmation page, and a customer whose gateway settles slowly — or who
+        # simply closes the tab on Paystack's page — never renders one. Both are ordinary
+        # here, because `confirm_payment` runs off a webhook.
+        #
+        # It goes AFTER both emails per the ordering rule above, and it also swallows its
+        # own exceptions (see its docstring). A Meta outage must not cost a paying
+        # customer their confirmation email, and neither belt nor braces is trusted alone.
+        "processing": (emails.enqueue_order_confirmation, emails.enqueue_staff_order_paid,
+                       marketing_events.enqueue_purchase),
         "shipped": (emails.enqueue_shipped,),
         # The partner stamp comes AFTER the customer's email (see the ordering note
         # above): `mark_delivered` is a one-row UPDATE that can hardly fail, but if

@@ -53,6 +53,10 @@ urlpatterns = [
     # The public store locator (Plan-42). Anonymous; `/stores/places/` is the
     # country -> state -> LGA cascade, `/stores/` the results.
     path("api/v1/stores/", include("apps.stores.urls")),
+    # Which pixels the storefront should load, and the consent policy to apply before
+    # loading them (Plan-44). Anonymous and public: everything it returns is already
+    # visible in the page source. Credentials are NEVER served here.
+    path("api/v1/marketing/", include("apps.marketing.urls")),
     # The delivery-partner portal (Plan-39). Its own prefix, deliberately not under
     # /admin/ (whose surface guard pins AdminJWTAuthentication exactly): partner
     # tokens carry their own audience and open only this surface.
@@ -72,6 +76,7 @@ urlpatterns = [
     path("api/v1/admin/", include("apps.shipping.admin_urls")),
     path("api/v1/admin/", include("apps.reviews.admin_urls")),
     path("api/v1/admin/", include("apps.notifications.admin_urls")),
+    path("api/v1/admin/", include("apps.marketing.admin_urls")),
     # Public: the confirmation page an external notification recipient lands on.
     path("api/v1/notifications/", include("apps.notifications.urls")),
     # OpenAPI schema + docs

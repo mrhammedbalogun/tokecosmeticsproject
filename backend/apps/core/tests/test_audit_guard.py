@@ -87,6 +87,11 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     "PayoutQueueViewSet": "unmasked bank account numbers — the highest-value read on the admin surface",
     "ReferrerListView": "every referrer, their contact details and what they have earned — a list of people and what they are worth",
     "ReferrerAdjustmentsView": "one referrer's hand-written balance corrections, each with a staff reason attached",
+    # Plan-44. The conversion outbox stores the body that was actually sent to an ad
+    # platform: hashed customer identifiers on every row, and for Meta a raw IP address
+    # and user agent. It is the one marketing endpoint that serves personal data, which
+    # is why the settings and channel screens beside it are NOT read-audited.
+    "ConversionEventAdminViewSet": "the sent payloads: hashed customer identifiers, plus a raw IP and user agent for Meta",
     # The GIG deliveries table's sibling for couriers with no API. Same reason,
     # verbatim: customer name and phone on every row, paginated bulk PII.
     "AdminPartnerShipmentListView": "the partner deliveries table: customer name and phone on every row",

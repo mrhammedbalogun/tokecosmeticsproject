@@ -57,6 +57,13 @@ INSTALLED_APPS = [
     # `delivery`: an active `delivery.SenderLocation` is a live GIG shipping origin,
     # and a directory of distributors must never be able to become one.
     "apps.stores",
+    # Ad-platform measurement (Plan-44): the pixels' configuration, the consent and
+    # click-id snapshot an order carries, and the outbox of conversion events owed to
+    # Meta, TikTok, Snapchat and Google. Its own app rather than a corner of `analytics`:
+    # `analytics` answers questions FOR the shop out of its own database and never talks
+    # to anyone, while this one sends customer data to third parties. Those two things
+    # should not share a permission boundary or a code review.
+    "apps.marketing",
     "apps.shipping",
     "apps.wishlist",
     "apps.reviews",
@@ -757,6 +764,46 @@ STOREFRONT_BASE_URL = env("STOREFRONT_BASE_URL", default="http://localhost:3000"
 # Must match REVALIDATE_SECRET in the storefront's environment.
 REVALIDATE_SECRET = env("REVALIDATE_SECRET", default="")
 
+# --- Ad-platform measurement (Plan-44) ---
+#
+# PIXEL IDS ARE NOT HERE. They are public (every page's HTML carries them) and they are
+# edited from the admin's Marketing screen, so they live in the database. What lives here
+# is the half that must never reach a browser: the server-side credentials, each of which
+# can write conversion events into the shop's ad account.
+#
+# Same shape and same reasoning as the payment gateway keys above — see
+# `apps/marketing/credentials.py`, which is the single place that maps a channel to the
+# variables it needs and reports the missing ones to the admin screen.
+#
+# The cost, stated because it is real: switching a channel on needs an edit to
+# `.env.prod` and a container restart, not just an admin toggle.
+META_CAPI_ACCESS_TOKEN = env("META_CAPI_ACCESS_TOKEN", default="")
+TIKTOK_EVENTS_ACCESS_TOKEN = env("TIKTOK_EVENTS_ACCESS_TOKEN", default="")
+SNAPCHAT_CAPI_ACCESS_TOKEN = env("SNAPCHAT_CAPI_ACCESS_TOKEN", default="")
+GA4_API_SECRET = env("GA4_API_SECRET", default="")
+
+# Google Ads server-side (Plan-44b) is the odd one: not a bearer token but a whole
+# service-account JSON key, base64-encoded because a PEM private key contains newlines
+# and an env file does not carry them.
+#
+# BASE64 IN .env.prod RATHER THAN A MOUNTED FILE, deliberately. The API container takes
+# its entire configuration from `env_file: /opt/tokecosmetics/.env.prod` and mounts only
+# static, media and the migration paths — a key file would need a NEW volume mount, i.e.
+# a compose edit, a deploy, and a second place a secret lives. One more line in a file
+# that is already mode 0600, already holds every gateway key and is already backed up
+# needs none of that. See `apps/marketing/channels/google_ads.py`.
+GOOGLE_ADS_DM_CREDENTIALS_B64 = env("GOOGLE_ADS_DM_CREDENTIALS_B64", default="")
+
+# Meta retires Graph API versions on their own schedule, and the day one is retired
+# every conversion event stops. An env variable means that outage is fixed by an edit
+# and a restart rather than by a release. v25.0 is a version Meta documents today.
+META_GRAPH_API_VERSION = env("META_GRAPH_API_VERSION", default="v25.0")
+
+# Routes GA4 server events to `/debug/mp/collect`, which VALIDATES and DISCARDS them.
+# Useful for one afternoon of setup and catastrophic if left on — GA4 receives nothing
+# while every event reports success. Off unless explicitly set.
+GA4_DEBUG_ENDPOINT = env.bool("GA4_DEBUG_ENDPOINT", default=False)
+
 # --- Celery ---
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default=REDIS_URL)
 CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=REDIS_URL)
@@ -815,6 +862,13 @@ CELERY_BEAT_SCHEDULE = {
     "check-aaj-states": {
         "task": "apps.delivery.tasks.check_aaj_states",
         "schedule": 86400.0,  # daily — the state-code table prices every AAJ order
+    },
+    # The IP address and user agent an attribution snapshot keeps for ad-platform
+    # matching stop being needed once the last attribution window closes. Daily, because
+    # the retention window is measured in days.
+    "purge-marketing-attribution-pii": {
+        "task": "apps.marketing.tasks.purge_attribution_pii",
+        "schedule": 86400.0,
     },
     "mature-referral-commissions": {
         "task": "apps.referrals.tasks.mature_commissions",

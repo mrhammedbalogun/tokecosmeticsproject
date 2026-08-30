@@ -223,6 +223,19 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # standing exfiltration channel with the ergonomics of a settings toggle. Filed
     # beside the payout bank account rather than beside the delivery prices.
     "NotificationRecipientAdminViewSet": "settings.manage",
+    # --- marketing: the ad pixels and the conversion outbox (Plan-44) ------------
+    # Owner-only, and filed beside the payout account rather than beside the delivery
+    # prices, for two reasons. `consent_required_countries` decides whose consent is
+    # asked for before a tracking cookie is set, which is a legal position like the tax
+    # screens next door. And a pixel id decides which ad account receives the shop's
+    # customer data — pointing it at the wrong dataset breaks nothing visibly, it just
+    # sends the customer list somewhere else.
+    "MarketingSettingsView": "settings.manage",
+    "MarketingChannelAdminViewSet": "settings.manage",
+    # The outbox stores the body actually sent to each platform: hashed customer
+    # identifiers on every row, and a raw IP and user agent for Meta. Read-audited for
+    # that reason (test_audit_guard.py declares it), which the two rows above are not.
+    "ConversionEventAdminViewSet": "settings.manage",
     # --- inventory ---------------------------------------------------------------
     # Warehouses are where stock physically is, and `serves_countries` on one of them
     # decides whether a market can be sold to at all. Same scope as the stock it holds.

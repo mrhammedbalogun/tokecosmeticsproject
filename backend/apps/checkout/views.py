@@ -314,6 +314,17 @@ class CheckoutView(APIView):
         # because a cookie moved between the two attempts. Left out, the first attempt's
         # attribution simply wins, which is both the safer failure and the fairer answer.
         referral_code = request.data.get("referral_code", "")
+        # Ad attribution + consent (Plan-44). OUT of the hashed payload for exactly the
+        # reason `referral_code` above is: it is volatile by design — a pixel cookie can
+        # be written between a lost 201 and its retry — and hashing it would refuse a
+        # legitimate retry as "key reused" because a tracking cookie moved. Like the
+        # referral code, the first attempt's attribution simply wins.
+        #
+        # Unlike the referral code, it is read from the BODY rather than a cookie,
+        # because the pixel cookies it carries are written by vendor JavaScript and the
+        # storefront's BFF is the only thing that can read them. It decides nothing
+        # about money; `marketing.capture` documents that trust boundary in full.
+        marketing = request.data.get("marketing")
         request_hash = hash_payload(payload)
 
         # Idempotency identity. Authed: the user id (unforgeable). Guest: the cart
@@ -367,6 +378,7 @@ class CheckoutView(APIView):
                 guest_email=guest["guest_email"] if guest else "",
                 guest_phone=guest["guest_phone"] if guest else "",
                 guest_address=build_unsaved_address(guest["address"]) if guest else None,
+                marketing=marketing,
             )
         except CheckoutError as exc:
             body = {"error": exc.code, "detail": exc.detail, **exc.extra}

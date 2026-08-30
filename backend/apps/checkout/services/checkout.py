@@ -82,7 +82,7 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
                 notes: str = "", expected_total=None, gig_centre_id=None,
                 pickup_store_id=None,
                 referral_code: str = "", guest_email: str = "", guest_phone: str = "",
-                guest_address=None) -> CheckoutResult:
+                guest_address=None, marketing: dict | None = None) -> CheckoutResult:
     """Place an order for an authenticated customer OR a guest (Plan-38).
 
     Guest path: ``user=None`` with ``guest_email``/``guest_phone`` (validated +
@@ -277,6 +277,18 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
         # A creation, not a transition — there is no prior status to move from, so this
         # opens the timeline directly rather than going through the state machine.
         record_event(order, "placed", actor=user, message=f"{chosen['name']} to {country.code}")
+
+        # Ad attribution + consent, snapshotted (Plan-44). Born with the order for the
+        # same reason `ShippingQuote` and `GigShipment` are: the click ids, the pixel
+        # cookies and the consent answer exist only in THIS request. Payment confirmation
+        # runs off a gateway webhook with no browser behind it, so anything not written
+        # down here is gone by the time there is a sale to report.
+        #
+        # Never raises — see `marketing.capture.record_attribution`, which opens its own
+        # savepoint precisely so a bad blob cannot cost the order.
+        from apps.marketing.capture import record_attribution
+
+        record_attribution(order, marketing)
         if chosen["quote_required"]:
             # Born at placement, in the same transaction as the order: the awaiting_quote
             # queue is how staff learn this order needs a freight quote at all. Created
