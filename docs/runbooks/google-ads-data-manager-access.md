@@ -242,10 +242,11 @@ Then restart the API container so it picks the variable up.
 > **Tell me when it is in place; do not tell me what is in it.** I never need to read it,
 > and the moment it appears in a transcript it has to be rotated.
 >
-> **Then delete the JSON from your Desktop.** It has done its job. It is currently at
-> `C:\Users\Hammed\Desktop\TokeCosmeticsDev\GoogleAds\` — outside any git repo, so it
-> was never at risk of being committed, but an unencrypted credential on the Desktop is
-> still a credential on the Desktop.
+> **Then delete the JSON.** It has done its job. Since the 2026-08-30 workspace move it
+> lives at `~/projects/TokeCosmeticsDev/GoogleAds/` (WSL), with the original still on the
+> old `C:\Users\Hammed\Desktop\TokeCosmeticsDev\GoogleAds\` copy until that is cleaned up.
+> Both are outside any git repo, so neither was ever at risk of being committed — but an
+> unencrypted credential sitting on disk is still an unencrypted credential.
 
 ---
 
