@@ -52,11 +52,27 @@ export async function saveMarketingChannelAction(input: {
   test_event_code: string;
 }): Promise<MarketingSaveState> {
   // Friendlier inline messages only; the serializer is the real boundary.
-  if (input.is_enabled && !input.pixel_id.trim()) {
+  //
+  // ── WHAT "ADDRESSED" MEANS PER CHANNEL ──────────────────────────────────────────
+  //
+  // This used to demand a `pixel_id` for ANY enabled channel, which silently blocked a
+  // legitimate setup: Google Ads running SERVER-SIDE ONLY, addressed by its customer id
+  // and conversion action id, with no browser tag configured yet. Meta, TikTok, Snapchat
+  // and GA4 address both halves with the same id, so for them the old rule was right —
+  // it was only ever wrong for Google.
+  const browserNeedsId = input.browser_enabled;
+  // Google's server half has its own address; every other channel's does not.
+  const serverNeedsPixelId = input.server_enabled && input.code !== "google_ads";
+  if (input.is_enabled && !input.pixel_id.trim() && (browserNeedsId || serverNeedsPixelId)) {
     return {
       fieldErrors: {
         pixel_id: "A channel cannot be switched on without an ID — the tag would load and do nothing.",
       },
+    };
+  }
+  if (input.is_enabled && !input.browser_enabled && !input.server_enabled) {
+    return {
+      message: "Switched on with both halves off sends nothing. Turn on the pixel, the server events, or both.",
     };
   }
   if (input.code === "google_ads" && input.server_enabled
