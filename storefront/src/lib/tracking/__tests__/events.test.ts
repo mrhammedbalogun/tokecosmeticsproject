@@ -3,11 +3,14 @@
  * breaking the shop.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { track, trackGoogleAdsConversion } from "@/lib/tracking/events";
+import { type TrackedEvent, track, trackGoogleAdsConversion } from "@/lib/tracking/events";
 
 const ITEM = { sku: "SKU-1", name: "Radiance Serum", price: 2500, quantity: 2 };
 
-function baseEvent(name: "purchase" | "add_to_cart" = "purchase") {
+/** Annotated as `TrackedEvent` rather than `as const`: the const assertion made `items`
+ * readonly, which does not satisfy the mutable `TrackedItem[]` the real signature takes.
+ * vitest does not typecheck, so it passed at runtime and only `tsc` ever saw it. */
+function baseEvent(name: "purchase" | "add_to_cart" = "purchase"): TrackedEvent {
   return {
     name,
     eventId: "TC-100147",
@@ -15,7 +18,7 @@ function baseEvent(name: "purchase" | "add_to_cart" = "purchase") {
     value: 5000,
     items: [ITEM],
     ...(name === "purchase" ? { orderNumber: "TC-100147" } : {}),
-  } as const;
+  };
 }
 
 beforeEach(() => {
