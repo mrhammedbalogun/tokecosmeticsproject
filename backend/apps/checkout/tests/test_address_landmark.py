@@ -6,7 +6,6 @@ neither of which has a landmark field of its own — so it is folded into the st
 address line they actually print.
 """
 import pytest
-from decimal import Decimal
 
 from apps.accounts.models import Address
 from apps.checkout.services.checkout import _address_snapshot

@@ -9,7 +9,6 @@ from apps.migration_wp.transform_orders import (
     GATEWAY_NAMES,
     NUMBER_PREFIX,
     REVENUE_STATUSES_MIRROR,
-    UNPAID_ON_HOLD_STATUS,
     address_snapshot,
     map_status,
     money,

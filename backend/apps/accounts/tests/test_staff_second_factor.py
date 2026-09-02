@@ -284,9 +284,7 @@ def test_trust_is_issued_only_when_asked_for_and_alongside_a_real_code(owner):
 
 
 def test_totp_logins_can_earn_trust_too(owner, monkeypatch):
-    import time
 
-    import pyotp
 
     from apps.accounts.tests.test_staff_totp import Clock
 

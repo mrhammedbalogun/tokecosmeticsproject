@@ -1,11 +1,19 @@
 """Sender-origin selection (Plan-34 slice 1): nearest active row wins, ties are
 deterministic, inactive rows never ship, and an empty table degrades to the
 `GIG_SENDER_*` settings — byte-for-byte the pre-Plan-34 behaviour."""
-import pytest
-from django.test import override_settings
+from decimal import Decimal
 
+import httpx
+import pytest
+import respx
+from django.core.cache import cache
+from django.test import override_settings
+from django.utils import timezone
+
+from apps.core.models import Country, Currency, Region
 from apps.delivery.gig.origins import SETTINGS_ORIGIN_ID, select_origin, settings_origin
-from apps.delivery.models import SenderLocation
+from apps.delivery.gig.quotes import quote_home_delivery
+from apps.delivery.models import GigLga, SenderLocation
 
 pytestmark = pytest.mark.django_db
 
@@ -77,17 +85,6 @@ def test_snapshot_shape_is_the_capture_contract():
 
 
 # --- Slice 2: the origin flows through quoting --------------------------------------
-
-import httpx
-import respx
-from decimal import Decimal
-
-from django.core.cache import cache
-from django.utils import timezone
-
-from apps.core.models import Country, Currency, Region
-from apps.delivery.gig.quotes import quote_home_delivery
-from apps.delivery.models import GigLga
 
 BASE = "https://gig.test"
 GIG_SETTINGS = dict(

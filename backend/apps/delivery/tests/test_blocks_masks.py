@@ -15,7 +15,6 @@ from apps.delivery.factories import DeliveryOptionFactory
 from apps.delivery.models import (
     DeliveryBlock,
     DeliveryFeeMask,
-    DeliveryOption,
     DeliveryPartner,
     PartnerZone,
 )
@@ -197,7 +196,7 @@ def test_mask_is_kobo_exact_half_up():
 def test_mask_names_one_service_and_inactive_masks_are_ignored():
     ng = _ng()
     masked = _ng_option(ng, name="Masked", price=Decimal("1000"))
-    plain = _ng_option(ng, name="Plain", price=Decimal("1000"))
+    _ng_option(ng, name="Plain", price=Decimal("1000"))
     off = _ng_option(ng, name="Off", price=Decimal("1000"))
     DeliveryFeeMask.objects.create(service_code=f"option:{masked.pk}", percent=Decimal("10"))
     DeliveryFeeMask.objects.create(

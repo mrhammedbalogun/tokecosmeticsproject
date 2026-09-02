@@ -511,7 +511,7 @@ def test_unverified_login_claims_nothing(django_user_model):
     ng, ngn, variant, lagos, opt = _world()
     order, _ = _placed_guest_order(lagos, opt, ng, ngn, variant)
 
-    user = django_user_model.objects.create_user(
+    django_user_model.objects.create_user(
         email="guest@example.com", password="pw12345!x",
     )  # email_verified_at is None: registering a victim's address earns nothing
     r = APIClient().post("/api/v1/auth/token/",

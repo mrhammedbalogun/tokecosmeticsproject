@@ -42,7 +42,7 @@ def test_call_logs_in_once_caches_token_and_sends_user_agent():
         return_value=httpx.Response(200, json=_envelope([{"StationId": 4}]))
     )
     first = client.call("GET", "/localstations/get")
-    second = client.call("GET", "/localstations/get")
+    client.call("GET", "/localstations/get")  # second call: must reuse the token
     assert isinstance(first, GigResponse)
     assert first.data == [{"StationId": 4}]
     assert first.api_id == "api-123"

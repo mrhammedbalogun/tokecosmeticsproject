@@ -4,7 +4,6 @@ the waybill and wallet debit are reconciliation facts, not order state."""
 from decimal import Decimal
 
 import pytest
-from django.utils import timezone
 
 from apps.core.models import Country
 from apps.delivery.gig.shipments import abandon_quoted_shipment, create_quoted_shipment

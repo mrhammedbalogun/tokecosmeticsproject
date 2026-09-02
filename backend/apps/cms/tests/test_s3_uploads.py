@@ -4,11 +4,16 @@
 writes `backups/` — the only off-box copies of the database. Every delete and copy-source
 in this feature goes through `assert_incoming`, so these cases are the seatbelt.
 """
+from unittest.mock import patch
+
+import boto3
 import pytest
+from moto import mock_aws
 
 from apps.cms.s3_uploads import (
     INCOMING_PREFIX, LIBRARY_PREFIX, UnsafeKeyError,
-    assert_incoming, library_key_for, new_incoming_key,
+    assert_incoming, discard_incoming, head_incoming, library_key_for,
+    mint_video_post, new_incoming_key, publish_incoming, read_incoming_head,
 )
 
 
@@ -70,11 +75,6 @@ def test_library_key_refuses_a_non_incoming_source():
     with pytest.raises(UnsafeKeyError):
         library_key_for("backups/postgres/dump.sql.gz")
 
-
-import boto3
-from moto import mock_aws
-
-from apps.cms.s3_uploads import head_incoming, mint_video_post, read_incoming_head
 
 BUCKET = "test-bucket"
 
@@ -141,11 +141,6 @@ def test_every_s3_helper_refuses_a_backups_key(s3):
             fn("backups/postgres/dump.sql.gz")
     with pytest.raises(UnsafeKeyError):
         mint_video_post("backups/postgres/dump.sql.gz", max_bytes=10)
-
-
-from unittest.mock import patch
-
-from apps.cms.s3_uploads import discard_incoming, publish_incoming
 
 
 def test_publish_copies_into_the_library_and_sets_our_own_content_type(s3):

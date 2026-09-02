@@ -169,7 +169,8 @@ def test_two_banners_can_share_one_asset(client):
     second = Banner.objects.create(title="Tile 2", placement="concern")
     for b in (first, second):
         assert client.patch(f"{BANNERS}{b.id}/", {"image_asset": a["id"]}, format="json").status_code == 200
-    first.refresh_from_db(); second.refresh_from_db()
+    first.refresh_from_db()
+    second.refresh_from_db()
     assert first.image.name == second.image.name
 
 
@@ -192,7 +193,8 @@ def test_seed_registers_and_binds_pre_library_artwork(client):
     assert MediaAsset.objects.count() == 1
     a = MediaAsset.objects.get()
     assert a.kind == "image" and a.file.name == banner.image.name
-    banner.refresh_from_db(); twin.refresh_from_db()
+    banner.refresh_from_db()
+    twin.refresh_from_db()
     assert banner.image_asset_id == a.id and twin.image_asset_id == a.id
 
     call_command("seed_media_library")  # idempotent

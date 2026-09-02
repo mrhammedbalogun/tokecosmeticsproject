@@ -12,9 +12,9 @@ from apps.carts.services import (
     remove_item,
     set_quantity,
 )
+from apps.catalog.models import ProductVariant
 
 OUT_OF_STOCK = {"detail": "This item just sold out.", "code": "out_of_stock"}
-from apps.catalog.models import ProductVariant
 
 
 class _CartBase(APIView):

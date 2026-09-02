@@ -64,7 +64,6 @@ def test_the_pin_must_be_inside_nigeria(client):
 
 
 def test_delete_is_refused_once_a_shipment_was_quoted_from_the_row(client):
-    from django.utils import timezone
 
     from apps.core.models import Country
     from apps.delivery.models import GigShipment

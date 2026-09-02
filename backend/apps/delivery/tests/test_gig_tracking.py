@@ -76,7 +76,8 @@ def test_movement_ships_the_order_and_dlp_delivers_it(django_capture_on_commit_c
     sent = jsonlib.loads(route.calls[0].request.content)
     assert sorted(sent["Waybill"]) == ["WB-A", "WB-B"]  # the measured batch shape
 
-    moving.refresh_from_db(); arriving.refresh_from_db()
+    moving.refresh_from_db()
+    arriving.refresh_from_db()
     assert moving.status == "in_transit"
     assert moving.order.status == "shipped"
     assert moving.last_scan["Status"] == "MAHD"  # newest by DateTime, verbatim
@@ -137,8 +138,6 @@ def test_wallet_alert_fires_on_the_crossing_only_and_rearms_on_recovery():
     # `DEFAULT_FROM_EMAIL`, which had no inbox. This test is about the CROSSING logic,
     # not about who hears it, so it needs one subscriber to have anything to count.
     from apps.notifications.models import NotificationRecipient
-
-    from django.utils import timezone
 
     NotificationRecipient.objects.create(
         event="delivery.gig_wallet_low", email="ops@x.com", confirmed_at=timezone.now()
