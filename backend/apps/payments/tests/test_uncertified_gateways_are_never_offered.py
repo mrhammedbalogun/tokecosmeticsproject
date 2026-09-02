@@ -59,7 +59,14 @@ def test_paystack_stays_active_it_is_the_one_certified_gateway():
     assert CountryPaymentGateway.objects.filter(gateway="paystack", is_active=True).exists()
 
 
-def test_ng_offers_paystack_and_bank_transfer(ng_bank_account):
+def test_ng_offers_paystack_and_bank_transfer(settings, ng_bank_account):
+    """The key is set HERE, not inherited from the environment.
+
+    Being offered turns on configuredness, so a test that leaves the key to
+    ambient env passes on a developer machine (whose .env carries a test key)
+    and fails in CI, which sets none — which is exactly what it did.
+    """
+    settings.PAYSTACK_SECRET_KEY = "sk_test_x"
     assert _offered(_country("NG")) == ["paystack", "bank_transfer"]
 
 
