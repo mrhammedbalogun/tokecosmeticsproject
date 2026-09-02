@@ -31,6 +31,19 @@ from apps.payments.models import Payment, Refund
 PREFIX = "SEED-"
 
 
+def _purge_seeded():
+    """Delete the seeded rows in FK-safe order.
+
+    `Payment.order` and `Refund.payment` are both PROTECT, so deleting the orders
+    first raises ProtectedError as soon as one seeded refund exists — which made this
+    command un-re-runnable after its own first successful run.
+    """
+    orders = Order.objects.filter(number__startswith=PREFIX)
+    Refund.objects.filter(payment__order__in=orders).delete()
+    Payment.objects.filter(order__in=orders).delete()
+    return orders.delete()
+
+
 class Command(BaseCommand):
     help = "Seed migration-shaped orders for report verification. Refuses on real data."
 
@@ -39,7 +52,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         if options["clear"]:
-            deleted, _ = Order.objects.filter(number__startswith=PREFIX).delete()
+            deleted, _ = _purge_seeded()
             self.stdout.write(self.style.SUCCESS(f"Removed {deleted} seeded rows."))
             return
 
@@ -50,7 +63,7 @@ class Command(BaseCommand):
                 "into real history — run against an empty or already-seeded database."
             )
 
-        Order.objects.filter(number__startswith=PREFIX).delete()
+        _purge_seeded()
         now = timezone.now()
         ng, gb = Country.objects.get(code="NG"), Country.objects.get(code="GB")
         ngn, gbp = Currency.objects.get(code="NGN"), Currency.objects.get(code="GBP")
@@ -93,6 +106,9 @@ class Command(BaseCommand):
                 payment = Payment.objects.create(
                     order=order, gateway="bank_transfer", purpose="goods",
                     status="succeeded", amount=order.grand_total, currency=ngn,
+                    # `idempotency_key` is unique with no default, so leaving it unset
+                    # gave every payment "" and collided on the SECOND refunded order.
+                    idempotency_key=f"{PREFIX}pay-{order.number}",
                 )
                 Refund.objects.create(
                     payment=payment, amount=order.grand_total / 2, status="succeeded",
