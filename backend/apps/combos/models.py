@@ -36,8 +36,18 @@ class Combo(TimeStampedModel):
     # Rich HTML, nh3-sanitised on the way in exactly like Product.description.
     description = models.TextField(blank=True)
     short_description = models.TextField(blank=True)
+    # UNDER `catalog/`, like every other upload in this project, and that is not
+    # cosmetic. The bucket is PRIVATE — the nightly Postgres dumps live in it under
+    # `backups/` — so CloudFront reaches it through an Origin Access Control whose policy
+    # is deliberately scoped to `catalog/*` and nothing else (see the storage block in
+    # `config/settings/base.py`). An object written anywhere else uploads perfectly, is
+    # listed perfectly, and then 403s at the CDN.
+    #
+    # This shipped as `upload_to="combos/"` and did exactly that: the first real combo's
+    # featured image was a broken thumbnail in the admin. `apps/cms` had already been
+    # through it, which is why its banners live at `catalog/cms-banners/` and not `cms/`.
     image = models.ImageField(
-        upload_to="combos/", blank=True, null=True, max_length=IMAGE_PATH_MAX
+        upload_to="catalog/combos/", blank=True, null=True, max_length=IMAGE_PATH_MAX
     )
     status = models.CharField(max_length=10, choices=STATUS, default="draft")
     is_featured = models.BooleanField(default=False)
