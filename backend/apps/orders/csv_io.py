@@ -13,7 +13,7 @@ from apps.orders.models import Order
 
 COLUMNS = [
     "number", "status", "review_reason", "placed_at", "email", "country", "currency",
-    "subtotal", "discount_total", "referral_discount_total", "shipping_total",
+    "subtotal", "discount_total", "referral_discount_total", "combo_discount_total", "shipping_total",
     "tax_total", "grand_total",
     "delivery_option_name", "tracking_carrier", "tracking_number", "source",
 ]
@@ -39,6 +39,7 @@ def export_orders_csv() -> str:
                 # Its own column, so the row still reconciles in a spreadsheet:
                 # subtotal - discount - referral discount + delivery (+ tax) = grand total.
                 "referral_discount_total": order.referral_discount_total,
+                "combo_discount_total": order.combo_discount_total,
                 "shipping_total": order.shipping_total,
                 "tax_total": order.tax_total,
                 "grand_total": order.grand_total,

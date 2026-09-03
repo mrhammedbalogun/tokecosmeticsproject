@@ -175,6 +175,12 @@ def _case_collection(client, monkeypatch):
     ), 201
 
 
+def _case_combo(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/combos/", {"name": "Glow Kit", "slug": "glow-kit"}, format="json"
+    ), 201
+
+
 def _case_variant(client, monkeypatch):
     product = ProductFactory(slug="p-variant")
     return client.post(
@@ -921,6 +927,7 @@ WRITE_CASES: dict[str, tuple] = {
     "BrandAdminViewSet": (_case_brand, "create"),
     "TagAdminViewSet": (_case_tag, "create"),
     "CollectionAdminViewSet": (_case_collection, "create"),
+    "ComboAdminViewSet": (_case_combo, "create"),
     "ProductVariantAdminViewSet": (_case_variant, "create"),
     # `partial_update`, not `create` and not `update`: the only writes this viewset
     # exposes are PATCH and DELETE, and the mixin prefers the DRF ACTION NAME over the
@@ -1038,6 +1045,10 @@ READ_ONLY_VIEWS = frozenset(
         "AdminRefundsOwedView",
         "StockMovementListView",
         "ProductCSVExportView",
+        # The combo builder's product box: GET-only, and NOT read-audited. It returns
+        # catalogue rows with no personal data in them and fires on every keystroke of a
+        # search field; a row per keystroke would bury the ones that matter.
+        "ComboProductSearchView",
         # Both GET-only. Their read rows are driven in
         # apps/orders/tests/test_admin_order_export_and_invoice.py.
         "AdminOrderCSVExportView",

@@ -63,6 +63,13 @@ def invoice_context(order) -> dict:
         ],
         "subtotal": money(order.subtotal),
         "discount_total": money(order.discount_total) if order.discount_total else "",
+        # What the order's bundles took off. Its own line for the reason the referral one
+        # below has its own: "why is this cheaper than the products add up to" has to be
+        # answerable from the document itself, and three reasons folded into one number
+        # answer nothing. "" when there was none, which is what the template keys off.
+        "combo_discount_total": (
+            money(order.combo_discount_total) if order.combo_discount_total else ""
+        ),
         # Its own line, never folded into `discount_total`: an invoice is the document a
         # customer reconciles against, and "why is this cheaper than the products" has to
         # be answerable from the page itself.

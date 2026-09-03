@@ -41,6 +41,11 @@ export const NAV_ITEMS: NavItem[] = [
   // editing a product, and `activeHref` does longest-prefix matching, so nesting it under
   // `/products/…` would highlight Products while the categories page was on screen.
   { label: "Categories", href: "/categories", scopes: ["products.manage"] },
+  // Curated bundles (2026-09-02). Its own item rather than a link inside Products for
+  // the reason Categories has one: building a combo is a different job from editing a
+  // product, and `activeHref` does longest-prefix matching — nesting it under
+  // `/products/…` would light up Products while the builder was on screen.
+  { label: "Combos", href: "/combos", scopes: ["products.manage"] },
   { label: "Inventory", href: "/inventory", scopes: ["products.manage"] },
   // The public store locator's directory (Plan-42). `products.manage` for the same
   // reason Pickup locations is: it is a list of physical shops maintained by whoever

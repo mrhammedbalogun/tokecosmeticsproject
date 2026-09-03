@@ -44,6 +44,8 @@ OBJECT_ROUTES: dict[str, tuple[str, str]] = {
         OWNED, "get_object_or_404(request.user.wishlist_items, variant__sku=sku)"),
     "api/v1/cart/items/<int:variant_id>/": (
         OWNED, "the cart is resolved from the user or an unguessable X-Cart-Id UUID"),
+    "api/v1/cart/combos/<int:group_id>/": (
+        OWNED, "get_object_or_404(CartComboGroup, pk=..., cart=<the caller's own cart>)"),
     # --- personal: addressed by an order number a customer knows and may share ---
     "api/v1/orders/<str:number>/": (OWNED, "queryset filtered to request.user"),
     "api/v1/orders/<str:number>/invoice.pdf": (
@@ -59,6 +61,8 @@ OBJECT_ROUTES: dict[str, tuple[str, str]] = {
         OWNED, "answers only from request.user's own orders and review; the slug names a public product"),
     "api/v1/collections/<slug:slug>/": (
         PUBLIC, "a merchandising grouping; the slug names no person"),
+    "api/v1/combos/<slug:slug>/": (
+        PUBLIC, "a merchandising grouping over public catalogue rows; the slug names no person"),
     "api/v1/cms/pages/<slug:slug>/": (PUBLIC, "published pages only; a draft 404s"),
     "api/v1/webhooks/<str:gateway>/": (
         PUBLIC, "the gateway NAME, not an object id — authenticated by signature"),

@@ -9,6 +9,9 @@ export interface Totals {
    * so a cached quote payload from before 2026-08-27 still renders — the summary treats
    * a missing value exactly as it treats "0.00" and draws no row. */
   referral_discount?: string;
+  /** What the order's combos took off the subtotal. Optional: absent on payloads cached
+   *  from before combos shipped. */
+  combo_discount?: string;
   referral_discount_percent?: string;
   tax: string; grand_total: string; currency: string;
   /** The market's name for its tax line ("VAT", "Sales Tax"). Optional so cached/old

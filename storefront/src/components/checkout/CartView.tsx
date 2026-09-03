@@ -9,6 +9,7 @@ import { couponMessage } from "@/lib/coupon-messages";
 import { COUPON_STORAGE_KEY } from "@/lib/coupon-storage";
 import { ReferralCodeField } from "@/components/checkout/ReferralCodeField";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
+import { CartComboCard } from "@/components/checkout/CartComboCard";
 import type { Totals } from "@/lib/checkout";
 
 
@@ -28,7 +29,7 @@ type QuoteState =
  * silent mount fetch and the user's own action, and means a guest never sees a
  * coupon error/note before they've touched the field. */
 export function CartView() {
-  const { cart, isLoading, setQty } = useCart();
+  const { cart, isLoading, setQty, setComboQty } = useCart();
   const [quote, setQuote] = useState<QuoteState>({ status: "idle" });
   const [applying, setApplying] = useState(false);
   const [couponInput, setCouponInput] = useState("");
@@ -39,6 +40,14 @@ export function CartView() {
   // The shopper can re-Apply to recompute the discount.
   function changeQty(variantId: number, quantity: number) {
     setQty.mutate({ variantId, quantity });
+    setQuote({ status: "idle" });
+  }
+
+  /** Same rule for a bundle: resizing one changes the subtotal AND the combo saving, so
+   *  an applied coupon's totals stop being the truth. Drop back to subtotal-only rather
+   *  than show a stale Total beside a live Subtotal. */
+  function changeComboQty(groupId: number, quantity: number) {
+    setComboQty.mutate({ groupId, quantity });
     setQuote({ status: "idle" });
   }
 
@@ -100,7 +109,9 @@ export function CartView() {
     return <p className="mt-8 text-muted">Loading your cart…</p>;
   }
 
-  if (cart.items.length === 0) {
+  const combos = cart.combos ?? [];
+
+  if (cart.items.length === 0 && combos.length === 0) {
     return (
       <div className="mt-10 rounded-[var(--radius-card)] border border-line bg-surface p-10 text-center">
         <p className="text-muted">Your cart is empty.</p>
@@ -119,6 +130,14 @@ export function CartView() {
   return (
     <div className="mt-8 grid gap-8 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-4">
+        {combos.map((combo) => (
+          <CartComboCard
+            key={combo.group_id}
+            combo={combo}
+            currency={cart.currency}
+            onQuantity={(quantity) => changeComboQty(combo.group_id, quantity)}
+          />
+        ))}
         {cart.items.map((line) => (
           <div
             key={line.id}
@@ -234,7 +253,17 @@ export function CartView() {
         <ReferralCodeField onApplied={requoteAfterReferral} />
 
         <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
-          <OrderSummary totals={totals} fallbackSubtotal={cart.subtotal} currency={cart.currency} />
+          {/* `cart.total` is the goods net of any bundle saving — the same figure the
+              quote's `subtotal - combo_discount` produces, so the fallback and the real
+              summary agree. `fallbackComboSaving` is what draws the saving row before a
+              quote exists (a guest never gets one: the quote endpoint is authed-only). */}
+          <OrderSummary
+            totals={totals}
+            fallbackSubtotal={cart.subtotal}
+            fallbackComboSaving={cart.combo_discount}
+            fallbackTotal={cart.total}
+            currency={cart.currency}
+          />
         </div>
 
         <p className="text-center text-xs text-muted">Secure checkout</p>

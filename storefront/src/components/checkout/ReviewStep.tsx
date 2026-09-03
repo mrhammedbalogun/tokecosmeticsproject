@@ -418,7 +418,13 @@ export function ReviewStep() {
       )}
 
       <div className="border-t border-line pt-4">
-        <OrderSummary totals={totals} fallbackSubtotal={cart.subtotal} currency={cart.currency} />
+        <OrderSummary
+          totals={totals}
+          fallbackSubtotal={cart.subtotal}
+          fallbackComboSaving={cart.combo_discount}
+          fallbackTotal={cart.total}
+          currency={cart.currency}
+        />
       </div>
 
       {placeError && (

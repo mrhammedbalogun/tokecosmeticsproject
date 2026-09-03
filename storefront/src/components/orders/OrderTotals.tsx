@@ -9,6 +9,7 @@ type OrderMoney = Pick<
   | "currency" | "subtotal" | "discount_total" | "shipping_total" | "tax_total"
   | "tax_label" | "grand_total_display"
   | "referral_discount_total" | "referral_discount_percent"
+  | "combo_discount_total"
 >;
 
 export function OrderTotals({ order }: { order: OrderMoney }) {
@@ -18,6 +19,16 @@ export function OrderTotals({ order }: { order: OrderMoney }) {
         <dt className="text-muted">Subtotal</dt>
         <dd>{formatMoney(order.subtotal, order.currency)}</dd>
       </div>
+      {/* First of the three discount lines, matching the order they come off in
+          `compute_totals` — and matching the confirmation email and the invoice, so a
+          customer holding all three documents sees one story. Absent, not zero, on every
+          order placed before the column existed. */}
+      {(order.combo_discount_total ?? "0.00") !== "0.00" && (
+        <div className="flex justify-between gap-4">
+          <dt className="text-muted">Combo saving</dt>
+          <dd>−{formatMoney(order.combo_discount_total!, order.currency)}</dd>
+        </div>
+      )}
       {order.discount_total !== "0.00" && (
         <div className="flex justify-between gap-4">
           <dt className="text-muted">Discount</dt>

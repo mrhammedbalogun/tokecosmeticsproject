@@ -292,6 +292,7 @@ def test_the_inclusive_market_commission_base_matches_that_order():
         subtotal = t.subtotal
         discount_total = t.discount
         referral_discount_total = t.referral_discount
+        combo_discount_total = t.combo_discount
         tax_total = t.tax
         delivery_tax_total = t.delivery_tax
         country = ng

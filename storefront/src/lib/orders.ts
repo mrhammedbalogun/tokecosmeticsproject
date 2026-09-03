@@ -30,6 +30,9 @@ export interface OrderDetail {
   /** The referred customer's discount (2026-08-27) and the rate it was given at, both
    * snapshotted on the order. Optional for orders placed before the columns existed. */
   referral_discount_total?: string;
+  /** What this order's combos took off the subtotal. Absent on orders placed before
+   *  combos shipped, which is every order before 2026-09-02. */
+  combo_discount_total?: string;
   referral_discount_percent?: string;
   /** The market's name for the tax line ("VAT", "Sales Tax"); serializer default keeps
    * it present on every order. */

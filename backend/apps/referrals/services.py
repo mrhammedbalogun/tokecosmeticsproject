@@ -365,8 +365,13 @@ def commission_base(order) -> Decimal:
     published "10% of net sales". Pinned by
     `test_accrual.py::test_the_referred_customers_discount_comes_out_of_the_commission_base`.
 
-    `referral_discount_total` is 0 for every order placed before the column existed, so
-    old orders compute exactly as they always did.
+    THE COMBO SAVING COMES OUT TOO (2026-09-02), by the same rule and for the same
+    reason: a bundle sold at 10% off is goods sold for less, so the referrer earns their
+    percentage of the bundle price and not of the list price of its parts. It is the
+    first thing off, matching `compute_totals`.
+
+    `referral_discount_total` and `combo_discount_total` are 0 for every order placed
+    before their columns existed, so old orders compute exactly as they always did.
 
     Returns 0.00 rather than a negative number if a discount somehow exceeds the goods —
     it cannot today (both discounts clamp to what is left of the subtotal) but a
@@ -374,6 +379,7 @@ def commission_base(order) -> Decimal:
     """
     net = (
         Decimal(order.subtotal)
+        - Decimal(order.combo_discount_total)
         - Decimal(order.discount_total)
         - Decimal(order.referral_discount_total)
     )

@@ -29,6 +29,7 @@ and Hammed widened it to the floor the same day — pruning a variant is catalog
 day-work, and the guards that prevent real damage (`ProductVariantAdminViewSet.
 perform_destroy`: last-variant refusal, default promotion) hold for every role.
 """
+from django.db.models import ProtectedError
 from django.http import StreamingHttpResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import exceptions, viewsets
@@ -41,6 +42,7 @@ from rest_framework.views import APIView
 from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope, scopes_for_user
 from apps.core.audit import AdminAuditMixin
+from apps.catalog.combo_guards import combos_holding
 from apps.catalog.csv_io import export_products_csv
 from apps.catalog.tasks import import_products_csv_task
 
@@ -154,7 +156,14 @@ class ProductAdminViewSet(AdminBaseViewSet):
                 "Deleting a product requires the products.delete scope, which only "
                 "the Owner holds. Archive it instead if it should stop selling."
             )
-        return super().destroy(request, *args, **kwargs)
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError as exc:
+            # A product delete cascades to its variants, and `ComboItem.variant` is
+            # PROTECT — so a product inside a live bundle raises here. Unhandled that is
+            # a 500 with a psycopg traceback; what the Owner needs is the list of combos
+            # to empty first. See `apps/catalog/combo_guards.py`.
+            raise exceptions.ValidationError({"detail": combos_holding(exc, "product")}) from exc
 
     @action(
         detail=True,
@@ -219,7 +228,14 @@ class ProductVariantAdminViewSet(AdminBaseViewSet):
                 }
             )
         was_default = instance.is_default
-        instance.delete()
+        try:
+            instance.delete()
+        except ProtectedError as exc:
+            # `ComboItem.variant` is PROTECT on purpose: a variant vanishing out of a
+            # live bundle would leave it selling a smaller box at the same price. The
+            # refusal is the feature — this only turns it from a 500 into a sentence
+            # naming the combos to edit.
+            raise exceptions.ValidationError({"detail": combos_holding(exc, "variant")}) from exc
         if was_default:
             # `api_serializers.py:101` would fall back to the first variant anyway;
             # promoting it makes the fallback the recorded truth. Same transaction as

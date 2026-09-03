@@ -48,6 +48,12 @@ export interface OrderItem {
   unit_price_display: string;
   line_total_display: string;
   image_url: string | null;
+  /** The bundle this line came out of, snapshotted at placement. "" for an ordinary
+   *  line, which is every line placed before combos shipped. `combo_group` is a per-order
+   *  counter (1, 2, 3…) separating two DIFFERENT bundles that share a component — without
+   *  it, a packer cannot tell which box a line belongs in. */
+  combo_name?: string;
+  combo_group?: number | null;
 }
 
 /** One move the ENDPOINT will accept, with the scope it needs. Not the raw state machine —
@@ -73,6 +79,9 @@ export interface OrderDetail {
    * Optional: orders placed before the columns existed carry neither. */
   referral_discount_total?: string;
   referral_discount_percent?: string;
+  /** What this order's combos took off (2026-09-02). Optional: absent on every order
+   *  placed before the column existed. */
+  combo_discount_total?: string;
   shipping_total: string;
   tax_total: string;
   /** The market's name for the tax line ("VAT", "Sales Tax"); optional so older
@@ -155,6 +164,12 @@ export function totalRows(
   const rows: { label: string; value: string; strong?: boolean }[] = [
     { label: "Subtotal", value: order.subtotal },
   ];
+  // First of the three, matching the order they come off in `compute_totals` and the
+  // order the customer's own invoice and confirmation email print them in — support and
+  // the customer must be reading the same document.
+  if (Number(order.combo_discount_total ?? 0) !== 0) {
+    rows.push({ label: "Combo saving", value: `−${order.combo_discount_total}` });
+  }
   if (Number(order.discount_total) !== 0) {
     rows.push({ label: "Discount", value: `−${order.discount_total}` });
   }

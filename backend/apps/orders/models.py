@@ -54,6 +54,20 @@ class Order(TimeStampedModel):
     # Plan-29 Amendment 2(b).
     referral_discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     referral_discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    # What this order's COMBOS took off (2026-09-02). A third discount column rather than
+    # a share of `discount_total`, for the reason the referral one is separate: the three
+    # answer different questions on a receipt and in a report — "you used a code", "you
+    # came through a friend", "you bought the bundle" — and a shop that cannot tell how
+    # much bundling cost it cannot decide whether to keep bundling.
+    #
+    # A REAL price reduction like the other two, so it leaves the tax base in
+    # `compute_totals` and the referrer's commission base in
+    # `referrals.services.commission_base`. It comes off FIRST of the three: the bundle
+    # price is a property of the goods, so a coupon discounts what the bundle costs.
+    #
+    # The per-item breakdown lives on `OrderItem.combo_name`/`combo_group` — this is only
+    # the money.
+    combo_discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     shipping_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     tax_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     # The slice of `tax_total` attributable to delivery (0 unless the market has
@@ -192,6 +206,22 @@ class OrderItem(models.Model):
     image_path = models.CharField(max_length=500, blank=True)
     # {"UK Warehouse": 3, "Lagos HQ": 2} — written by inventory.commit_sale via mark_paid.
     fulfillment_warehouses = models.JSONField(default=dict)
+
+    # Which bundle this line came out of, snapshotted (2026-09-02). "" for an ordinary
+    # line, which is every line placed before combos existed.
+    #
+    # A NAME, NOT AN FK, for the same reason `product_name` beside it is a name: the
+    # order document has to keep explaining itself after the combo is renamed, retired or
+    # deleted. `combo_group` is a small per-order counter (1, 2, 3…) that separates two
+    # DIFFERENT bundles in one order — without it, an order containing two combos that
+    # share a component cannot be grouped back into boxes on the packing slip.
+    #
+    # The line's `unit_price` is still the component's FULL price. The bundle's saving is
+    # one number on the order (`Order.combo_discount_total`), never smeared across these
+    # rows: smearing it would make every line total a rounded fiction that does not
+    # reconcile against the catalogue.
+    combo_name = models.CharField(max_length=255, blank=True)
+    combo_group = models.PositiveSmallIntegerField(null=True, blank=True)
 
     def __str__(self) -> str:
         return f"{self.quantity}× {self.product_name} ({self.order_id})"

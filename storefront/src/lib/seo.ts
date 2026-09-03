@@ -3,6 +3,7 @@
  * Money in JSON-LD is the API string verbatim (never recomputed). */
 import type { Metadata } from "next";
 import { mediaUrl } from "@/lib/media";
+import type { ComboDetail } from "@/lib/combos";
 import type { ProductDetail } from "@/lib/catalog";
 import { SOCIAL_LINKS } from "@/lib/social-links";
 
@@ -157,6 +158,54 @@ export function productJsonLd(product: ProductDetail, path: string): Record<stri
           ratingValue: product.rating_avg, reviewCount: product.rating_count,
         } }
       : {}),
+  };
+}
+
+/**
+ * A combo as schema.org, and it is a `Product` with an `offers` — NOT an `ItemList`.
+ *
+ * The distinction matters for what search engines do with it. An `ItemList` is a page
+ * ABOUT several things; a combo is ONE thing a shopper buys at one price, and marking it
+ * as a list would forfeit the price, availability and rich-result eligibility that make a
+ * bundle worth listing at all. The contents ride along as `isRelatedTo`, which is the
+ * property for "this product contains/relates to these products" and costs nothing when
+ * ignored.
+ *
+ * `highPrice`/`lowPrice` have no place here either: there is exactly one price.
+ */
+export function comboJsonLd(combo: ComboDetail, path: string): Record<string, any> {
+  const url = absoluteUrl(path);
+  const pricing = combo.pricing;
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: combo.name,
+    url,
+    description:
+      stripHtml(combo.short_description) ||
+      combo.seo_description ||
+      stripHtml(combo.description) ||
+      undefined,
+    image: [mediaUrl(combo.image), ...combo.items.map((i) => mediaUrl(i.image))].filter(
+      Boolean,
+    ),
+    ...(pricing
+      ? {
+          offers: {
+            "@type": "Offer",
+            url,
+            price: pricing.amount,
+            priceCurrency: pricing.currency,
+            availability: combo.in_stock ? AVAILABILITY.in : AVAILABILITY.out,
+          },
+        }
+      : {}),
+    isRelatedTo: combo.items.map((item) => ({
+      "@type": "Product",
+      name: item.product_name,
+      url: absoluteUrl(`/product/${item.product_slug}`),
+      sku: item.sku,
+    })),
   };
 }
 

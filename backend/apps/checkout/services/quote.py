@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
+from apps.combos.services import cart_combo_discount
 from apps.referrals.services import attribution_code_for_order, customer_discount_percent
 
 
@@ -40,13 +41,14 @@ def quote(cart, country, *, user=None, email="", phone="", coupon_code="",
     placement reads the cookie, and the `expected_total` guard turns any disagreement into
     a refusal rather than a cheap order."""
     lines = _lines(cart)
+    combo_discount = cart_combo_discount(cart, country)
     # Captured BEFORE the coupon block, which rebinds `email` to the user's own address
     # when there is a user. Attribution wants the GUEST's details specifically, and
     # reading a rebound variable further down is exactly the kind of quiet coupling that
     # breaks the next time these two blocks are reordered.
     guest_email, guest_phone = ("", "") if user is not None else (email, phone)
     # Subtotal first — validate_coupon's min-spend (min_not_met) check needs it.
-    base = compute_totals(lines, country)  # no coupon, no delivery
+    base = compute_totals(lines, country, combo_discount=combo_discount)  # no coupon, no delivery
     coupon = None
     coupon_result = {"ok": True}
     if coupon_code:
@@ -55,8 +57,12 @@ def quote(cart, country, *, user=None, email="", phone="", coupon_code="",
         # the real checkout never disagree about whether a coupon applies.
         product_ids = {v.product_id for v, _ in lines}
         email = user.email if user is not None else email
+        # The POST-BUNDLE goods figure, matching `place_order`: a min-spend must be met
+        # by what the customer actually pays for the goods, not by the list price of
+        # parts they bought at a discount.
         v = validate_coupon(
-            coupon_code, base.subtotal, country, user=user, email=email, item_product_ids=product_ids
+            coupon_code, base.subtotal - base.combo_discount, country, user=user,
+            email=email, item_product_ids=product_ids
         )
         if v.ok:
             coupon = v.coupon
@@ -70,12 +76,16 @@ def quote(cart, country, *, user=None, email="", phone="", coupon_code="",
     )
     totals = compute_totals(
         lines, country, delivery_amount=delivery_amount, coupon=coupon,
-        referral_discount_percent=referral_percent,
+        referral_discount_percent=referral_percent, combo_discount=combo_discount,
     )
     return {
         "totals": {
             "subtotal": str(totals.subtotal),
             "discount": str(totals.discount),
+            # What the order's bundles took off. Its own row so the summary can say
+            # "Combo saving" rather than leaving the customer to reconcile three
+            # reductions folded into one number.
+            "combo_discount": str(totals.combo_discount),
             "referral_discount": str(totals.referral_discount),
             # The RATE, so the summary can label the row "Referral discount (5%)" rather
             # than leaving a bare number the customer has to reverse-engineer.

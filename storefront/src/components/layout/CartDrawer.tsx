@@ -8,6 +8,7 @@ import { mediaUrl } from "@/lib/media";
 import { stashCoupon } from "@/lib/coupon-storage";
 import { OverlayPortal } from "@/components/layout/OverlayPortal";
 import { ReferralCodeField } from "@/components/checkout/ReferralCodeField";
+import { CartComboCard } from "@/components/checkout/CartComboCard";
 import type { CartLine } from "@/lib/cart-types";
 
 /** Same pen as CartButton's BagIcon (1.5 stroke, round caps). Not imported from
@@ -150,8 +151,18 @@ function DiscountBox({ onDone }: { onDone?: () => void }) {
 }
 
 export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { cart, setQty } = useCart();
-  const count = cart.items.reduce((n, l) => n + l.quantity, 0);
+  const { cart, setQty, setComboQty } = useCart();
+  const combos = cart.combos ?? [];
+  // Combo components count too — a bag holding one 3-product combo is not "0 items".
+  // They are in `combos[].items`, never in `cart.items`, so the two sums never overlap.
+  const count =
+    cart.items.reduce((n, l) => n + l.quantity, 0) +
+    combos.reduce((n, c) => n + c.items.reduce((m, l) => m + l.quantity, 0), 0);
+  const empty = cart.items.length === 0 && combos.length === 0;
+  const comboSaving = cart.combo_discount ?? "0.00";
+  // What the goods actually cost. `?? cart.subtotal` covers a payload cached from before
+  // the field existed, where subtotal WAS the net figure.
+  const payable = cart.total ?? cart.subtotal;
 
   // Escape closes it. A drawer that only closes by clicking a 20px ✕ or the scrim is
   // a trap for keyboard users, and the scrim isn't focusable.
@@ -194,7 +205,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
         </header>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5">
-          {cart.items.length === 0 ? (
+          {empty ? (
             <div className="py-16 text-center">
               <BagIcon className="mx-auto h-10 w-10 text-line" />
               <p className="mt-3 text-muted">Your cart is empty.</p>
@@ -207,6 +218,19 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
               </Link>
             </div>
           ) : (
+            <>
+              {combos.map((combo) => (
+                <CartComboCard
+                  key={combo.group_id}
+                  combo={combo}
+                  currency={cart.currency}
+                  onQuantity={(quantity) =>
+                    setComboQty.mutate({ groupId: combo.group_id, quantity })
+                  }
+                  onNavigate={onClose}
+                  compact
+                />
+              ))}
             <ul>
               {cart.items.map((l) => {
                 const img = mediaUrl(l.image);
@@ -255,10 +279,11 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 );
               })}
             </ul>
+            </>
           )}
         </div>
 
-        {cart.items.length > 0 && (
+        {!empty && (
           <div className="shrink-0">
             <DiscountBox />
             {/* Under the discount box, because to a shopper both are "a code I was
@@ -270,9 +295,25 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
                 that prices anything. */}
             <ReferralCodeField variant="drawer" />
             <div className="border-t border-line px-5 pb-5 pt-4">
+              {comboSaving !== "0.00" && (
+                <>
+                  <div className="flex items-baseline justify-between text-sm text-muted">
+                    <span>Items</span>
+                    <span className="tabular-nums">
+                      {formatMoney(cart.subtotal, cart.currency)}
+                    </span>
+                  </div>
+                  <div className="mb-1 flex items-baseline justify-between text-sm text-accent">
+                    <span>Combo saving</span>
+                    <span className="tabular-nums">
+                      −{formatMoney(comboSaving, cart.currency)}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="flex items-baseline justify-between font-medium">
                 <span>Subtotal</span>
-                <span className="tabular-nums">{formatMoney(cart.subtotal, cart.currency)}</span>
+                <span className="tabular-nums">{formatMoney(payable, cart.currency)}</span>
               </div>
               <p className="mt-1 text-xs text-muted">Delivery &amp; taxes calculated at checkout.</p>
 
@@ -285,7 +326,7 @@ export function CartDrawer({ open, onClose }: { open: boolean; onClose: () => vo
               >
                 <BagIcon />
                 Checkout
-                <span className="tabular-nums">{formatMoney(cart.subtotal, cart.currency)}</span>
+                <span className="tabular-nums">{formatMoney(payable, cart.currency)}</span>
               </Link>
               <button
                 type="button"

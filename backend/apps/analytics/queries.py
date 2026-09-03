@@ -24,6 +24,22 @@ built before that import is wrong the moment it runs.
 2. **Never mix currencies.** Every figure here is returned PER CURRENCY and the caller
    renders them side by side. A single "revenue" number that silently dropped GBP orders
    would be worse than showing two. Today production is NGN-only; Plan-23 changes that.
+
+── ONE KNOWN IMPRECISION, WRITTEN DOWN RATHER THAN DISCOVERED ──────────────────────
+
+`top_products` and `sales_by_category` sum `OrderItem.line_total`, which is the LIST
+price of the line. Every discount this shop gives is an ORDER-level column —
+`discount_total` (coupon), `referral_discount_total`, and since 2026-09-02
+`combo_discount_total` — so those two reports sit ABOVE what was actually collected, by
+the discounts on the orders in the window. The headline figures (`revenue_totals`,
+`revenue_by_day`, customer lifetime value) are `Order.grand_total` and are exact.
+
+This is not new and it is not a combo bug — it has been true of every coupon order since
+launch. It is written here because COMBOS make it routine: a bundle carries a discount by
+definition, so the gap stops being an occasional coupon and becomes a standing 10% on
+every combo order. Closing it means allocating an order-level discount back across the
+lines (proportionally, by line share), which changes the coupon and referral numbers too
+— a reporting decision for the shop owner, not a refactor to slip in.
 """
 from __future__ import annotations
 

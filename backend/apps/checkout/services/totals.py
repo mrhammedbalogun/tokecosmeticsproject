@@ -18,6 +18,11 @@ def q2(amount: Decimal) -> Decimal:
 @dataclass(frozen=True)
 class Totals:
     subtotal: Decimal
+    # What the bundles in this order take off the subtotal (Combos, 2026-09-02). Its own
+    # field for the same reason `referral_discount` is: the receipt has to be able to say
+    # "Combo saving" rather than folding three unrelated reasons into one number nobody
+    # can reconcile. Comes off FIRST — see the ordering note in compute_totals.
+    combo_discount: Decimal
     discount: Decimal
     # The referred customer's own discount, kept apart from `discount` so the cart, the
     # invoice and the confirmation email can each name it — see Order.referral_discount_total.
@@ -68,6 +73,7 @@ def compute_totals(
     delivery_amount=Decimal("0.00"),
     coupon=None,
     referral_discount_percent=Decimal("0.00"),
+    combo_discount=Decimal("0.00"),
 ) -> Totals:
     """items = iterable of (ProductVariant, qty). delivery_amount already resolved by
     the caller (via apps.delivery). coupon must be pre-validated (validate_coupon).
@@ -78,6 +84,20 @@ def compute_totals(
     buyer's identity and their order history, none of which this function has or wants.
     Passing 0 (the default) is what every non-referred order does, and keeps this function
     byte-identical to its pre-2026-08-27 behaviour.
+
+    `combo_discount` is what the order's bundles save against their components' list
+    prices, resolved by the caller — `apps.combos.services.resolve_combo_price` via
+    `cart_combo_discount` is the only thing that should — because it needs the cart's
+    combo GROUPS, which `items` has already flattened away into bare (variant, qty) pairs.
+    Passing 0 (the default) is what every combo-free order does, and keeps this function
+    byte-identical to its pre-2026-09-02 behaviour.
+
+    THE THREE DISCOUNTS COME OFF IN ORDER, each from what the one above it left:
+    combo, then coupon, then referral. Combo is first because it is the only one that is
+    a property of the GOODS rather than of the shopper — the bundle costs what it costs
+    before anybody types a code — so a 20%-off coupon discounts the bundle price, not the
+    list price of its parts. The alternative (coupon on the list total) would let a
+    combo plus a coupon pay the customer to shop.
 
     Tax is charged only when BOTH switches are on — the store-wide master
     (`StoreSettings.charge_tax`) and the market's own (`Country.charge_tax`). When
@@ -97,9 +117,15 @@ def compute_totals(
         subtotal += q2(resolved.amount) * qty
     subtotal = q2(subtotal)
 
-    discount = _coupon_discount(coupon, subtotal)
+    # Clamped to the subtotal: a saving larger than the goods is impossible today (a
+    # combo's price is floored at 0 and capped at its components' total) but a negative
+    # goods figure would propagate into the tax base and the commission base, and neither
+    # is a place to discover an impossible number.
+    combo_discount = min(q2(combo_discount), subtotal)
+    goods = subtotal - combo_discount
+    discount = _coupon_discount(coupon, goods)
     referral_discount = _referral_discount(
-        Decimal(str(referral_discount_percent)), subtotal - discount
+        Decimal(str(referral_discount_percent)), goods - discount
     )
 
     delivery = q2(delivery_amount)
@@ -110,7 +136,7 @@ def compute_totals(
     # reductions — the customer is paying less for the goods, so less tax is due on them.
     # A tender (store credit, commission spent at checkout) would have to be subtracted
     # AFTER tax instead, or the shop would under-declare VAT on goods sold at full price.
-    taxable = subtotal - discount - referral_discount
+    taxable = goods - discount - referral_discount
     # The delivery fee joins the tax base only where the market says so (UK VAT
     # applies to shipping; NG practice does not).
     taxed_delivery = delivery if (rate and country.tax_applies_to_delivery) else Decimal("0.00")
@@ -130,6 +156,7 @@ def compute_totals(
 
     return Totals(
         subtotal=subtotal,
+        combo_discount=combo_discount,
         discount=discount,
         referral_discount=referral_discount,
         # Echoed back so the order can snapshot the rate it was actually given, and so a

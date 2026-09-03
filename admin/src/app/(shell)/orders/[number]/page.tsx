@@ -80,6 +80,11 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
   const scopes = meResult.status === "fulfilled" ? (meResult.value?.scopes ?? []) : [];
   const gig = gigResult.status === "fulfilled" && gigResult.value?.shipment ? gigResult.value : null;
   const aaj = aajResult.status === "fulfilled" && aajResult.value?.shipment ? aajResult.value : null;
+  // How many DIFFERENT bundles this order carries, so the per-line badge stays quiet on
+  // the ordinary single-combo order and only numbers the boxes when there are two.
+  const comboGroupCount = new Set(
+    order.items.map((i) => i.combo_group).filter((g): g is number => Boolean(g)),
+  ).size;
 
   return (
     <div>
@@ -119,6 +124,16 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
                     )}
                     <span className="ml-2 font-mono text-xs text-muted">{item.sku}</span>
                     <span className="ml-2 text-muted">× {item.quantity}</span>
+                    {/* Which box this line goes in. The number is only shown when the
+                        order carries more than one bundle — on the common single-combo
+                        order it would be noise, and on a two-combo order that shares a
+                        component it is the only thing that tells a packer them apart. */}
+                    {item.combo_name && (
+                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent">
+                        {item.combo_name}
+                        {comboGroupCount > 1 && item.combo_group ? ` #${item.combo_group}` : ""}
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 tabular-nums">{item.line_total_display}</span>
                 </li>

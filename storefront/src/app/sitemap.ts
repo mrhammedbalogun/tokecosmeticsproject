@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
 import { flattenCategories, getCategoryTree, getProducts } from "@/lib/catalog";
 import { getPages } from "@/lib/cms";
+import { getCombos } from "@/lib/combos";
 import { MORE_LINKS } from "@/lib/site-pages";
 import { absoluteUrl } from "@/lib/seo";
 import { DEFAULT_COUNTRY } from "@/lib/country";
@@ -16,7 +17,18 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const entries: MetadataRoute.Sitemap = [
     { url: absoluteUrl("/"), changeFrequency: "daily", priority: 1 },
     { url: absoluteUrl("/products"), changeFrequency: "daily", priority: 0.9 },
+    { url: absoluteUrl("/combo"), changeFrequency: "weekly", priority: 0.8 },
   ];
+
+  // Combos (2026-09-02). Unpaginated by design — the endpoint returns the whole curated
+  // handful — and a failure costs the sitemap those URLs, never the whole file, which is
+  // the posture every fetch in here takes.
+  for (const combo of await getCombos(DEFAULT_COUNTRY).catch(() => [])) {
+    entries.push({
+      url: absoluteUrl(`/combo/${combo.slug}`),
+      changeFrequency: "weekly", priority: 0.7,
+    });
+  }
 
   // The `More` menu's pages (2026-08-16). Static code routes, so unlike the CMS block
   // below there is no fetch to fail and no published/draft distinction — if the link is

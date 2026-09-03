@@ -53,6 +53,7 @@ export function MobileNav({
             <ul className="grid gap-3">
               <li><Link href="/" onClick={() => setOpen(false)} className="font-medium hover:text-accent">Home</Link></li>
               <li><Link href="/products" onClick={() => setOpen(false)} className="font-medium hover:text-accent">All Products</Link></li>
+              <li><Link href="/combo" onClick={() => setOpen(false)} className="font-medium hover:text-accent">Combos</Link></li>
               <li><Link href="/skin-quiz" onClick={() => setOpen(false)} className="font-medium hover:text-accent">Skin Quiz</Link></li>
               {/* The desktop header's `More` dropdown, flattened. A drawer has vertical
                   room a nav bar does not, so these are listed under a heading rather than

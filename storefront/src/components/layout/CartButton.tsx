@@ -29,7 +29,14 @@ export function CartButton() {
   const [open, setOpen] = useState(false);
   const { cart } = useCart();
   useEffect(() => onCartDrawerOpen(() => setOpen(true)), []);
-  const count = cart.items.reduce((n, l) => n + l.quantity, 0);
+  // Combo components count too. They live in `cart.combos[].items` and never in
+  // `cart.items` (the two lists are disjoint by construction), so nothing is doubled.
+  const count =
+    cart.items.reduce((n, l) => n + l.quantity, 0) +
+    (cart.combos ?? []).reduce(
+      (n, c) => n + c.items.reduce((m, l) => m + l.quantity, 0),
+      0,
+    );
   return (
     <>
       <button

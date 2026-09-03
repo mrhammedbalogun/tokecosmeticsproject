@@ -37,16 +37,41 @@ function Row({
 export function OrderSummary({
   totals,
   fallbackSubtotal,
+  fallbackComboSaving,
+  fallbackTotal,
   currency,
 }: {
   totals: Totals | null;
   fallbackSubtotal: string;
+  /** The cart's own combo saving, for the pre-quote view a guest always sees. Optional:
+   *  a payload cached from before combos existed simply has none. */
+  fallbackComboSaving?: string;
+  /** `fallbackSubtotal` net of that saving — what the goods cost. */
+  fallbackTotal?: string;
   currency: string;
 }) {
   if (!totals) {
+    const saving = fallbackComboSaving ?? "0.00";
+    if (saving === "0.00") {
+      return (
+        <div className="space-y-2">
+          <Row label="Subtotal" value={fallbackSubtotal} currency={currency} />
+          <p className="text-xs text-muted">Delivery &amp; taxes calculated at checkout.</p>
+        </div>
+      );
+    }
     return (
       <div className="space-y-2">
-        <Row label="Subtotal" value={fallbackSubtotal} currency={currency} />
+        <Row label="Items" value={fallbackSubtotal} currency={currency} />
+        <Row label="Combo saving" value={saving} currency={currency} neg />
+        <div className="mt-2 border-t border-line pt-2">
+          <Row
+            label="Subtotal"
+            value={fallbackTotal ?? fallbackSubtotal}
+            currency={currency}
+            strong
+          />
+        </div>
         <p className="text-xs text-muted">Delivery &amp; taxes calculated at checkout.</p>
       </div>
     );
@@ -55,6 +80,13 @@ export function OrderSummary({
   return (
     <div className="space-y-2">
       <Row label="Subtotal" value={totals.subtotal} currency={currency} />
+      {/* The bundles' saving, first of the three discounts because it comes off first
+          (see `compute_totals`) and because it is the only one that is a property of the
+          goods rather than of the shopper. `?? "0.00"` covers a quote payload cached
+          from before the field existed. */}
+      {(totals.combo_discount ?? "0.00") !== "0.00" && (
+        <Row label="Combo saving" value={totals.combo_discount!} currency={currency} neg />
+      )}
       {totals.discount !== "0.00" && (
         <Row label="Discount" value={totals.discount} currency={currency} neg />
       )}

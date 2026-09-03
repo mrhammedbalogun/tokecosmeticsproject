@@ -60,8 +60,23 @@ class PaymentMethodsView(APIView):
 
 
 def _cart_lines(cart):
-    """[(variant, qty)] for a cart, prefetching variants."""
+    """[(variant, qty)] for a cart, prefetching variants. Combo components included —
+    they are ordinary lines carrying a group (apps/carts/models.py)."""
     return [(i.variant, i.quantity) for i in cart.items.select_related("variant").all()]
+
+
+def _goods_subtotal(cart, country) -> Decimal:
+    """What the goods actually cost after any bundle saving — the figure the delivery
+    engine's free-shipping thresholds must be judged against.
+
+    Quoting against the components' LIST total would give free delivery to an order that
+    never reached the threshold, which is a real cost per order rather than a display bug.
+    """
+    from apps.combos.services import cart_combo_discount
+
+    lines = _cart_lines(cart)
+    totals = compute_totals(lines, country, combo_discount=cart_combo_discount(cart, country))
+    return totals.subtotal - totals.combo_discount
 
 
 class DeliveryOptionsView(APIView):
@@ -73,8 +88,11 @@ class DeliveryOptionsView(APIView):
         lines = _cart_lines(cart)
         if not lines:
             raise ValidationError("Cart is empty.")
-        totals = compute_totals(lines, request.country)
-        return Response(priced_options_for_address(address, lines, totals.subtotal, request.country))
+        return Response(
+            priced_options_for_address(
+                address, lines, _goods_subtotal(cart, request.country), request.country
+            )
+        )
 
 
 class GigCentresView(APIView):
@@ -114,7 +132,7 @@ class QuoteView(APIView):
         if v.get("address_id") and v.get("delivery_option_id"):
             address = get_object_or_404(Address, pk=v["address_id"], user=request.user)
             lines = _cart_lines(cart)
-            totals = compute_totals(lines, request.country)
+            goods = _goods_subtotal(cart, request.country)
             # Same non-authoritative posture as below: an unknown/inactive centre id
             # just means the pickup row prices to the nearest centre (or is omitted).
             centre = None
@@ -125,7 +143,7 @@ class QuoteView(APIView):
                     gig_centre_id=v["gig_centre_id"], is_active=True
                 ).first()
             opts = priced_options_for_address(
-                address, lines, totals.subtotal, request.country, pickup_centre=centre
+                address, lines, goods, request.country, pickup_centre=centre
             )
             chosen = next(
                 (o for o in opts
@@ -178,8 +196,11 @@ class GuestDeliveryOptionsView(APIView):
         if not lines:
             raise ValidationError("Cart is empty.")
         address = build_unsaved_address(v["address"])
-        totals = compute_totals(lines, request.country)
-        return Response(priced_options_for_address(address, lines, totals.subtotal, request.country))
+        return Response(
+            priced_options_for_address(
+                address, lines, _goods_subtotal(cart, request.country), request.country
+            )
+        )
 
 
 class GuestGigCentresView(APIView):
@@ -223,7 +244,7 @@ class GuestQuoteView(APIView):
         if v.get("address") and v.get("delivery_option_id"):
             address = build_unsaved_address(v["address"])
             lines = _cart_lines(cart)
-            totals = compute_totals(lines, request.country)
+            goods = _goods_subtotal(cart, request.country)
             centre = None
             if v.get("gig_centre_id") is not None:
                 from apps.delivery.models import GigCentre
@@ -232,7 +253,7 @@ class GuestQuoteView(APIView):
                     gig_centre_id=v["gig_centre_id"], is_active=True
                 ).first()
             opts = priced_options_for_address(
-                address, lines, totals.subtotal, request.country, pickup_centre=centre
+                address, lines, goods, request.country, pickup_centre=centre
             )
             chosen = next(
                 (o for o in opts

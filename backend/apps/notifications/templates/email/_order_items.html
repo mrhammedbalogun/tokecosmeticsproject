@@ -66,6 +66,10 @@ nothing says what it is until you have read three rows of it.
   {% endfor %}
   <tr><td colspan="2" style="padding:12px 12px 3px 0;color:#6b6862;">Subtotal</td>
       <td align="right" style="padding:12px 0 3px;white-space:nowrap;">{{ subtotal }}</td></tr>
+  {% if combo_discount_total %}
+  <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Combo saving</td>
+      <td align="right" style="padding:3px 0;white-space:nowrap;color:#1c7a3e;">&minus;&nbsp;{{ combo_discount_total }}</td></tr>
+  {% endif %}
   {% if discount_total %}
   <tr><td colspan="2" style="padding:3px 12px 3px 0;color:#6b6862;">Discount</td>
       <td align="right" style="padding:3px 0;white-space:nowrap;color:#1c7a3e;">&minus;&nbsp;{{ discount_total }}</td></tr>

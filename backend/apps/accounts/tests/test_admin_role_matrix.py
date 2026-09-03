@@ -88,6 +88,10 @@ MATRIX: list[Row] = [
     Row("PriceAdminViewSet", "get", "/api/v1/admin/prices/", _MANAGERS),
     Row("ProductCSVExportView", "get", "/api/v1/admin/products/export.csv", _MANAGERS),
     Row("ProductCSVImportView", "post", "/api/v1/admin/products/import.csv", _MANAGERS),
+    # --- combos: same floor as the catalogue. A bundle is a shelf decision with a
+    # price on it, and the people who set prices are the people who build bundles.
+    Row("ComboAdminViewSet", "get", "/api/v1/admin/combos/", _MANAGERS),
+    Row("ComboProductSearchView", "get", "/api/v1/admin/combos/product-search/", _MANAGERS),
     # --- referrals: reading the queue means reading a customer's bank account, which
     # Support needs to answer "where is my commission?"; deciding a request does not.
     # Marking one PAID carries its own scope even though Manager holds that too — the

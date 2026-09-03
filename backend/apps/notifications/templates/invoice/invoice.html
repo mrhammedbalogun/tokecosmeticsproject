@@ -80,6 +80,7 @@
 
   <table class="totals">
     <tr><td>Subtotal</td><td class="r">{{ subtotal }}</td></tr>
+    {% if combo_discount_total %}<tr><td>Combo saving</td><td class="r">-{{ combo_discount_total }}</td></tr>{% endif %}
     {% if discount_total %}<tr><td>Discount</td><td class="r">-{{ discount_total }}</td></tr>{% endif %}
     {% if referral_discount_total %}<tr><td>Referral discount{% if referral_discount_percent %} ({{ referral_discount_percent }}%){% endif %}</td><td class="r">-{{ referral_discount_total }}</td></tr>{% endif %}
     <tr><td>Delivery</td><td class="r">{{ shipping_total }}</td></tr>

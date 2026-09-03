@@ -45,6 +45,12 @@ INSTALLED_APPS = [
     "apps.analytics",
     "apps.cms",
     "apps.catalog",
+    # Combos (2026-09-02): curated bundles of catalogue variants sold at one price.
+    # Its own app rather than a corner of `catalog` because a combo is not a product —
+    # it has no SKU and no stock of its own, and filing it beside `Product` is how
+    # somebody eventually gives it both. It owns only the curation and the price; the
+    # goods stay catalogue variants, which is what keeps inventory honest.
+    "apps.combos",
     "apps.pricing",
     "apps.inventory",
     "apps.search",

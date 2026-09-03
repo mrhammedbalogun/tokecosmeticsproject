@@ -34,6 +34,8 @@ urlpatterns = [
     path("api/v1/meta/", include("apps.core.urls")),
     path("api/v1/meta/", include("apps.delivery.urls")),
     path("api/v1/", include("apps.catalog.api_urls")),
+    # Combos (2026-09-02): the public /combo listing and detail pages.
+    path("api/v1/", include("apps.combos.api_urls")),
     path("api/v1/", include("apps.reviews.urls")),
     path("api/v1/", include("apps.newsletter.urls")),
     path("api/v1/", include("apps.search.urls")),
@@ -64,6 +66,7 @@ urlpatterns = [
     path("api/v1/admin/", include("apps.accounts.admin_urls")),
     path("api/v1/admin/", include("apps.core.admin_urls")),
     path("api/v1/admin/", include("apps.catalog.admin_urls")),
+    path("api/v1/admin/", include("apps.combos.admin_urls")),
     path("api/v1/admin/", include("apps.cms.admin_urls")),
     path("api/v1/admin/", include("apps.inventory.admin_urls")),
     path("api/v1/admin/", include("apps.payments.admin_urls")),

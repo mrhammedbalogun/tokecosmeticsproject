@@ -51,6 +51,12 @@ export async function Header() {
             All Products
           </Link>
           <CategoryDropdown categories={categories.map(({ name, slug }) => ({ name, slug }))} />
+          {/* Top-level rather than inside `More` (2026-09-02): a combo is something to
+              BUY, and every other buying route in this bar is top-level. Filing it with
+              the policy pages is how it stays unvisited. */}
+          <Link href="/combo" className="text-sm hover:text-accent">
+            Combos
+          </Link>
           <Link href="/skin-quiz" className="text-sm hover:text-accent">
             Skin Quiz
           </Link>

@@ -19,6 +19,7 @@ from apps.catalog.images import variant_image_path
 from apps.catalog.services import sellable_in
 from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
+from apps.combos.services import cart_combo_discount
 from apps.delivery.carriers import priced_options_for_address
 from apps.delivery.services import option_id_matches
 from apps.inventory.services import InsufficientStock, reserve
@@ -124,9 +125,21 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
         cart = Cart.objects.select_for_update().filter(pk=cart_id, user=user).first()
         if cart is None or cart.status != "active":
             raise CheckoutError("cart_not_active", "Cart is not active.")
-        lines = [(i.variant, i.quantity) for i in cart.items.select_related("variant__product").all()]
+        # EVERY line, combo components included — they are ordinary CartItem rows
+        # carrying a `combo_group`, precisely so that reservation, delivery quoting and
+        # OrderItem need no combo special case. The `combo_group` is read only to label
+        # the order's items and to price the bundles; the goods themselves are the same
+        # (variant, qty) pairs they have always been.
+        cart_items = list(
+            cart.items.select_related("variant__product", "combo_group__combo").all()
+        )
+        lines = [(i.variant, i.quantity) for i in cart_items]
         if not lines:
             raise CheckoutError("cart_empty", "Cart is empty.")
+        # What the bundles take off, resolved from the cart's GROUPS (which `lines` has
+        # flattened away). Resolved here rather than trusted from the client for the same
+        # reason the delivery price is: it is money.
+        combo_discount = cart_combo_discount(cart, country)
 
         if user is not None:
             address = Address.objects.filter(pk=address_id, user=user).first()
@@ -158,7 +171,12 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
             centre = GigCentre.objects.filter(gig_centre_id=gig_centre_id, is_active=True).first()
             if centre is None:
                 raise CheckoutError("centre_invalid", "That pickup centre is not available.")
-        subtotal_preview = compute_totals(lines, country).subtotal
+        # Post-bundle goods, because this feeds the free-shipping thresholds in
+        # `priced_options_for_address` and the coupon's min-spend check. Quoting either
+        # against the components' LIST total would hand out free delivery (or accept a
+        # "spend ₦50,000" coupon) on an order that never reached the threshold.
+        preview = compute_totals(lines, country, combo_discount=combo_discount)
+        subtotal_preview = preview.subtotal - preview.combo_discount
         options = priced_options_for_address(
             address, lines, subtotal_preview, country, pickup_centre=centre
         )
@@ -238,7 +256,7 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
 
         totals = compute_totals(
             lines, country, delivery_amount=delivery_amount, coupon=coupon,
-            referral_discount_percent=referral_percent,
+            referral_discount_percent=referral_percent, combo_discount=combo_discount,
         )
 
         if expected_total is not None and Decimal(str(expected_total)) != totals.grand_total:
@@ -246,8 +264,19 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
                                 extra={"totals": _totals_dict(totals)})
 
         number = next_order_number()
+        # AGGREGATED BY VARIANT, and this is load-bearing rather than tidy. Since combos
+        # (2026-09-02) one variant can legitimately appear on two lines — bought on its
+        # own AND inside a bundle — and `inventory.reserve` is idempotent PER REFERENCE:
+        # its second call under the same order number sees an existing reservation
+        # movement and returns without holding anything. Reserving line by line would
+        # therefore hold stock for the first appearance only and silently oversell the
+        # rest. One call per variant, for the summed quantity, is the whole fix.
+        wanted: dict[int, tuple] = {}
+        for variant, qty in lines:
+            existing = wanted.get(variant.pk)
+            wanted[variant.pk] = (variant, (existing[1] if existing else 0) + qty)
         try:
-            for variant, qty in lines:
+            for variant, qty in wanted.values():
                 reserve(variant, qty, country, reference=number)
         except InsufficientStock as exc:
             raise CheckoutError("insufficient_stock", str(exc)) from exc
@@ -258,6 +287,7 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
             phone=user.phone if user is not None else guest_phone,
             country=country, currency=country.currency, status="pending_payment",
             subtotal=totals.subtotal, discount_total=totals.discount,
+            combo_discount_total=totals.combo_discount,
             referral_discount_total=totals.referral_discount,
             referral_discount_percent=totals.referral_discount_percent,
             shipping_total=totals.delivery, tax_total=totals.tax,
@@ -317,10 +347,21 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
             from apps.delivery.partners import create_partner_shipment
 
             create_partner_shipment(order, chosen, charged=totals.delivery)
-        for variant, qty in lines:
+        # Stable 1-based numbering for the order's bundles, so a packing slip can put two
+        # different combos in two different boxes even when they share a component.
+        group_numbers = {
+            group_id: n
+            for n, group_id in enumerate(
+                dict.fromkeys(i.combo_group_id for i in cart_items if i.combo_group_id), start=1
+            )
+        }
+        for item in cart_items:
+            variant, qty = item.variant, item.quantity
             rp = resolve_price(variant, country)
             OrderItem.objects.create(
                 order=order, variant=variant, product_name=variant.product.name,
+                combo_name=item.combo_group.combo.name if item.combo_group_id else "",
+                combo_group=group_numbers.get(item.combo_group_id),
                 variant_name=", ".join(f"{k}: {v}" for k, v in (variant.option_values or {}).items()),
                 sku=variant.sku, unit_price=rp.amount, line_total=(rp.amount * qty), quantity=qty,
                 # A SNAPSHOT, like `product_name` and `sku` beside it. The field has
@@ -535,6 +576,7 @@ def _totals_dict(t) -> dict:
     how a customer ends up looking at a summary whose rows do not add up to its total."""
     return {
         "subtotal": str(t.subtotal), "discount": str(t.discount), "delivery": str(t.delivery),
+        "combo_discount": str(t.combo_discount),
         "referral_discount": str(t.referral_discount),
         "referral_discount_percent": str(t.referral_discount_percent),
         "tax": str(t.tax), "grand_total": str(t.grand_total), "currency": t.currency,

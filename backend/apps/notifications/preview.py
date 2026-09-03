@@ -42,6 +42,7 @@ _ORDER = {
     # some real orders.
     "referral_discount_total": "₦1,250.00",
     "referral_discount_percent": "5",
+        "combo_discount_total": "₦2,000.00",
     "grand_total": "₦25,000.00",
     "currency": "NGN",
     "country": "Nigeria",

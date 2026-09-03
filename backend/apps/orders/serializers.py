@@ -42,8 +42,12 @@ class OrderItemSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = OrderItem
+        # `combo_name`/`combo_group` let the order page and the packing slip draw the
+        # bundle back together — the line prices stay the components' own, and the money
+        # the bundle saved is one number on the order (`combo_discount_total`).
         fields = ("product_name", "variant_name", "sku", "quantity", "unit_price",
-                  "line_total", "unit_price_display", "line_total_display", "image_url")
+                  "line_total", "unit_price_display", "line_total_display", "image_url",
+                  "combo_name", "combo_group")
 
     def get_image_url(self, item) -> str:
         # Snapshot first, live fallback for orders placed before the snapshot existed —
@@ -114,7 +118,7 @@ class OrderSerializer(_BaseOrderSerializer):
         model = Order
         fields = ("number", "status", "placed_at", "email", "phone", "currency",
                   "country",
-                  "subtotal", "discount_total",
+                  "subtotal", "discount_total", "combo_discount_total",
                   "referral_discount_total", "referral_discount_percent",
                   "shipping_total", "tax_total",
                   "tax_label", "grand_total", "grand_total_display", "delivery_option_name",
@@ -267,6 +271,7 @@ class AdminOrderSerializer(_BaseOrderSerializer):
         model = Order
         fields = ("number", "status", "review_reason", "placed_at", "email", "phone",
                   "user_email", "country", "currency", "subtotal", "discount_total",
+                  "combo_discount_total",
                   "referral_discount_total", "referral_discount_percent",
                   "shipping_total", "tax_total", "tax_label", "grand_total", "grand_total_display",
                   "delivery_option_name", "pickup_store", "shipping_address", "billing_address",

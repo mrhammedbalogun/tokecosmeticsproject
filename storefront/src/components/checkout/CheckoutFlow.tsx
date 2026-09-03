@@ -97,7 +97,13 @@ export function CheckoutFlow() {
         </div>
         <div className="lg:sticky lg:top-24 lg:self-start">
           <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5">
-            <OrderSummary totals={null} fallbackSubtotal={cart.subtotal} currency={cart.currency} />
+            <OrderSummary
+              totals={null}
+              fallbackSubtotal={cart.subtotal}
+              fallbackComboSaving={cart.combo_discount}
+              fallbackTotal={cart.total}
+              currency={cart.currency}
+            />
           </div>
         </div>
       </div>

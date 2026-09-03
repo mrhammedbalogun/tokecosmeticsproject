@@ -27,8 +27,12 @@ export function purchaseValue(order: OrderDetail): number {
   const subtotal = Number(order.subtotal ?? 0);
   const discount = Number(order.discount_total ?? 0);
   const referral = Number(order.referral_discount_total ?? 0);
-  const value = subtotal - discount - referral;
-  // Never negative: both discounts clamp to the subtotal on the backend, but a value
+  // A bundle saving is a real price reduction like the other two, so the goods value an
+  // ad platform is told about is net of it. Reporting the list price of parts the
+  // customer did not pay for would inflate every combo order's ROAS.
+  const combo = Number(order.combo_discount_total ?? 0);
+  const value = subtotal - combo - discount - referral;
+  // Never negative: all three discounts clamp to the subtotal on the backend, but a value
   // below zero is not something to forward to an ad platform.
   return value > 0 ? Number(value.toFixed(2)) : 0;
 }

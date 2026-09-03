@@ -171,6 +171,12 @@ ADMIN_SURFACE: dict[str, str | None] = {
     "ReferrerAdjustmentsView": "referrals.view",
     "BlockReferrerView": "referrals.manage",
     "CreateAdjustmentView": "referrals.manage",
+    # --- combos: curated bundles, priced. Same scope as the catalogue and for the
+    # same reason: a bundle is a shelf decision with a price on it. The product-search
+    # box is its own class because the builder needs variants and per-market prices in
+    # one response, which the products list does not carry.
+    "ComboAdminViewSet": "products.manage",
+    "ComboProductSearchView": "products.manage",
     # --- catalog: everything here writes the product catalogue -------------------
     "ProductAdminViewSet": "products.manage",
     "CategoryAdminViewSet": "products.manage",

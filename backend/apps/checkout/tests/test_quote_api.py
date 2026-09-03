@@ -22,10 +22,14 @@ class TestQuoteApi:
         assert res.status_code == 200
         t = res.data["totals"]
         assert set(t) == {
-            "subtotal", "discount", "referral_discount", "referral_discount_percent",
+            "subtotal", "discount", "combo_discount",
+            "referral_discount", "referral_discount_percent",
             "delivery", "tax", "tax_label", "grand_total", "currency",
         }
         assert t["discount"] == "0.00" and t["delivery"] == "0.00"
+        # A cart with no bundle in it quotes exactly as it always did — the row is
+        # present and zero, and the storefront draws it only when it is not.
+        assert t["combo_discount"] == "0.00"
         # No referral cookie was forwarded, so the referred-customer discount is absent
         # rather than zero-rated. An un-referred quote must look exactly as it always did.
         assert t["referral_discount"] == "0.00" and t["referral_discount_percent"] == "0.00"
