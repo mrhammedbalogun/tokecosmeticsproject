@@ -71,6 +71,34 @@ def annotate_min_price(queryset, country):
     return queryset.annotate(min_price=Subquery(cheapest))
 
 
+def annotate_priced_variant_count(queryset, country):
+    """Annotate `priced_variant_count`: how many active variants the shopper can
+    actually buy in this country — i.e. how many options they have to choose between.
+
+    The storefront card uses it to decide between "Add to Cart" (one option, nothing to
+    choose) and "Choose Option" (several — send them to the PDP to pick), so it has to
+    agree with `resolve_price`: a variant is purchasable there iff ANY price row exists
+    for the currency scoped to this country or to no country. No time window is applied,
+    deliberately — resolve_price's last two fallbacks ignore windows too, so a variant
+    whose sale window has closed still resolves to its plain price and is still an
+    option. Filtering by window here would undercount exactly those.
+    """
+    from django.db.models import Count
+
+    return queryset.annotate(
+        priced_variant_count=Count(
+            "variants",
+            filter=Q(variants__is_active=True)
+            & Q(variants__prices__currency=country.currency)
+            & (
+                Q(variants__prices__country=country)
+                | Q(variants__prices__country__isnull=True)
+            ),
+            distinct=True,
+        )
+    )
+
+
 def annotate_in_stock(queryset, country):
     """Annotate `has_stock`: does any active variant have positive availability in
     this country? One stock row with quantity > reserved is equivalent to

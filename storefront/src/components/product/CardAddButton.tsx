@@ -5,10 +5,13 @@ import { isJustSoldOut, useCart } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
 import { newEventId, track } from "@/lib/tracking/events";
 
-/** One-click Add on a landing card (approved design). Single-variant products add
- * their default variant and open the drawer — the shortest path from homepage to
- * cart. Multi-variant products (no default_variant_id) route to the PDP instead:
- * silently picking a shade for someone is worse than one extra click.
+/** One-click Add on a card. Only ever rendered for a product with ONE purchasable
+ * variant: ProductCard.CardAction sends variable products to the PDP with "Choose
+ * Option" instead. The comment that used to sit here claimed multi-variant products
+ * arrived with `variantId === null` — they never did (the API's default_variant_id is
+ * simply the first active variant), which is how one-click Add ended up quietly buying
+ * whichever size the importer happened to list first. The null branch below is kept for
+ * a product with no active variants at all.
  *
  * Inside the card's <Link>, so every event must stop propagation or the card
  * navigation swallows the click. */

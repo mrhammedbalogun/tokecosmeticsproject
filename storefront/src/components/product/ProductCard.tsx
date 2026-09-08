@@ -23,6 +23,38 @@ function SoldOutTag() {
   );
 }
 
+/** Replaces Add to Cart when the product offers a choice (2026-09-08). One-click Add
+ * on a variable product added whichever variant the API called default — so a shopper
+ * who never opened the product bought the 500g because it happened to be first. The
+ * whole card is already a link to the PDP, so this is a <span>, not a button: it takes
+ * the same tap the card takes and needs no JavaScript to do it. */
+function ChooseOptionTag() {
+  return (
+    <span className="whitespace-nowrap rounded-full border border-line bg-surface px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] transition-colors group-hover:border-accent group-hover:bg-accent group-hover:text-surface">
+      Choose Option
+    </span>
+  );
+}
+
+/** Sold Out > Choose Option > Add to Cart. `purchasable_variant_count` is optional: an
+ * old cached payload (the API caches cards for 60 s) has no such field, and assuming
+ * one option there keeps the pre-existing behaviour for that minute rather than
+ * pushing every card on the page to the PDP. */
+function CardAction({ product }: { product: ProductCardData }) {
+  if (product.in_stock === false) return <SoldOutTag />;
+  if ((product.purchasable_variant_count ?? 1) > 1) return <ChooseOptionTag />;
+  return (
+    <CardAddButton
+      variantId={product.default_variant_id}
+      name={product.name}
+      slug={product.slug}
+      sku={product.default_sku}
+      price={product.from_price}
+      currency={product.currency}
+    />
+  );
+}
+
 function brandLabel(slug: string): string {
   return slug
     .split("-")
@@ -88,18 +120,7 @@ export function ProductCard({
               ) : (
                 <span />
               )}
-              {product.in_stock === false ? (
-                <SoldOutTag />
-              ) : (
-                <CardAddButton
-                  variantId={product.default_variant_id}
-                  name={product.name}
-                  slug={product.slug}
-                  sku={product.default_sku}
-                  price={product.from_price}
-                  currency={product.currency}
-                />
-              )}
+              <CardAction product={product} />
             </div>
           </div>
         ) : (
@@ -117,18 +138,7 @@ export function ProductCard({
               ) : (
                 <span />
               )}
-              {product.in_stock === false ? (
-                <SoldOutTag />
-              ) : (
-                <CardAddButton
-                  variantId={product.default_variant_id}
-                  name={product.name}
-                  slug={product.slug}
-                  sku={product.default_sku}
-                  price={product.from_price}
-                  currency={product.currency}
-                />
-              )}
+              <CardAction product={product} />
             </div>
           </div>
         )}

@@ -1,10 +1,16 @@
 /**
- * Per-axis view of a product's variants, for the two-axis picker.
+ * Per-axis view of a product's variants, for the multi-axis picker.
  *
  * A two-axis product (e.g. Size × Colour) used to render one pill per VARIANT, so 4 sizes
  * × 3 colours became 12 pills reading "1l · red", "1l · blue", … A shopper thinks in
  * axes — pick a size, pick a colour — so `VariantPicker` renders one selector per axis
- * and uses `pickVariant` to land on the concrete variant behind the combination.
+ * and the PDP resolves the concrete variant from the answers.
+ *
+ * NOTE (2026-09-08): `pickVariant` used to live here — it landed a click on SOME variant
+ * carrying the chosen value even when the rest of the selection could not be honoured,
+ * which meant choosing a size silently chose a colour too. Nothing picks FOR the shopper
+ * any more; see PdpContext.select, which keeps the answers that still fit and un-answers
+ * the ones that don't.
  */
 import type { Variant } from "@/lib/catalog";
 
@@ -39,38 +45,27 @@ export function variantAxes(variants: Variant[]): VariantAxis[] {
   return axes;
 }
 
+/** Does this variant carry every one of these option values? A partial selection
+ * matches every variant that agrees on the axes answered so far. */
+export function variantMatches(variant: Variant, selections: Record<string, string>): boolean {
+  return Object.entries(selections).every(
+    ([axis, value]) => optionValue(variant, axis) === value,
+  );
+}
+
+/** Every variant agreeing with the (possibly partial) selection. */
+export function variantsMatching(
+  variants: Variant[],
+  selections: Record<string, string>,
+): Variant[] {
+  return variants.filter((v) => variantMatches(v, selections));
+}
+
 /** The variant matching every selection exactly, or null — combos can be missing
  * (a product need not offer every size in every colour). */
 export function matchVariant(
   variants: Variant[],
   selections: Record<string, string>,
 ): Variant | null {
-  return (
-    variants.find((v) =>
-      Object.entries(selections).every(([axis, value]) => optionValue(v, axis) === value),
-    ) ?? null
-  );
-}
-
-/**
- * Where choosing `value` on `axis` lands, holding the other current selections when that
- * exact combination exists. When it doesn't, the other axes give way rather than the
- * click doing nothing: prefer an in-stock priced variant with the chosen value, then any
- * priced one, then any — mirroring `initialVariant`'s preference order.
- */
-export function pickVariant(
-  variants: Variant[],
-  current: Record<string, string>,
-  axis: string,
-  value: string,
-): Variant | null {
-  const exact = matchVariant(variants, { ...current, [axis]: value });
-  if (exact) return exact;
-  const withValue = variants.filter((v) => optionValue(v, axis) === value);
-  return (
-    withValue.find((v) => v.in_stock && v.price !== null) ??
-    withValue.find((v) => v.price !== null) ??
-    withValue[0] ??
-    null
-  );
+  return variants.find((v) => variantMatches(v, selections)) ?? null;
 }

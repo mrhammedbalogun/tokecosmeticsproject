@@ -110,6 +110,16 @@ describe("WishlistGrid", () => {
     expect(screen.getByText(/not available in your region/i)).toBeInTheDocument();
   });
 
+  it("swaps Add to Cart for a Choose Option link when the product has options", () => {
+    // Add to Cart here has always added the product's DEFAULT variant, which on a
+    // variable product need not be the size the shopper saved.
+    mockFetch({});
+    renderGrid([item({ product: product({ purchasable_variant_count: 3 }) })]);
+    expect(screen.queryByRole("button", { name: "Add to Cart" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Choose Option" }))
+      .toHaveAttribute("href", "/product/shea-butter-cream");
+  });
+
   it("Remove DELETEs /api/wishlist/{sku}, then re-GETs, and the card disappears", async () => {
     const f = mockFetch({
       "DELETE /api/wishlist/TOKE-SHEA": { status: 204, body: null },

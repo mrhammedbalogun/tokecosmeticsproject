@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { matchVariant, pickVariant, variantAxes } from "@/lib/variant-axes";
+import { matchVariant, variantAxes, variantsMatching } from "@/lib/variant-axes";
 import type { Variant } from "@/lib/catalog";
 
 let nextId = 1;
@@ -43,26 +43,13 @@ describe("matchVariant", () => {
   });
 });
 
-describe("pickVariant", () => {
-  it("holds the other axes when the exact combination exists", () => {
-    const picked = pickVariant(grid, { Size: "1l", Colour: "blue" }, "Size", "2l");
-    expect(picked?.id).toBe(grid[3].id);
+describe("variantsMatching", () => {
+  it("narrows to the variants agreeing with a partial selection", () => {
+    expect(variantsMatching(grid, { Size: "1l" }).map((v) => v.option_values.Colour))
+      .toEqual(["red", "blue"]);
   });
-  it("falls back to an in-stock priced variant when the combination is missing", () => {
-    // 3l only exists in orange; choosing it must land somewhere sellable.
-    const sparse = [...grid, v({ Size: "3l", Colour: "orange" })];
-    const picked = pickVariant(sparse, { Size: "1l", Colour: "red" }, "Size", "3l");
-    expect(picked?.option_values).toEqual({ Size: "3l", Colour: "orange" });
-  });
-  it("prefers priced over unpriced in the fallback", () => {
-    const sparse = [
-      v({ Size: "5l", Colour: "red" }, { priced: false }),
-      v({ Size: "5l", Colour: "blue" }, { in_stock: false }),
-    ];
-    const picked = pickVariant(sparse, { Colour: "green" }, "Size", "5l");
-    expect(picked?.option_values.Colour).toBe("blue");
-  });
-  it("returns null when no variant carries the value", () => {
-    expect(pickVariant(grid, {}, "Size", "9l")).toBeNull();
+  it("returns every variant for an empty selection, none for an unknown value", () => {
+    expect(variantsMatching(grid, {})).toHaveLength(4);
+    expect(variantsMatching(grid, { Size: "9l" })).toEqual([]);
   });
 });

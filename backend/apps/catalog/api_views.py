@@ -15,6 +15,7 @@ from apps.catalog.services import (
     CATALOG_CACHE_TTL,
     annotate_in_stock,
     annotate_min_price,
+    annotate_priced_variant_count,
     catalog_cache_key,
 )
 
@@ -71,6 +72,8 @@ class ProductListView(CatalogCacheMixin, generics.ListAPIView):
         # "hide until priced": drop rows with no resolvable price in this currency.
         qs = qs.filter(min_price__isnull=False)
         qs = annotate_in_stock(qs, country)
+        # How many options the card should offer (Add to Cart vs Choose Option).
+        qs = annotate_priced_variant_count(qs, country)
 
         p = self.request.query_params
         if p.get("category"):

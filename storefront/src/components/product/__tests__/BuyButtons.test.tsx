@@ -10,11 +10,18 @@ const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
 
 // A priced, in-stock selection; qty 2 proves the quantity travels with the request.
+// `pdp` is reassignable so one test can put the buy box back in the "nothing chosen
+// yet" state the PDP now opens in.
+const promptChoice = vi.fn();
+let pdp: Record<string, unknown> = {};
+const READY = {
+  variant: { id: 7, in_stock: true, price: "4900.00" },
+  qty: 2,
+  status: "ready",
+  promptChoice,
+};
 vi.mock("@/components/product/PdpContext", () => ({
-  usePdp: () => ({
-    variant: { id: 7, in_stock: true, price: "4900.00" },
-    qty: 2,
-  }),
+  usePdp: () => pdp,
 }));
 
 /** The cart Django hands back after buy-now adds the item to the STANDARD cart. */
@@ -55,6 +62,8 @@ function renderButtons() {
 }
 
 beforeEach(() => {
+  pdp = { ...READY };
+  promptChoice.mockClear();
   push.mockClear();
   refresh.mockClear();
   sessionStorage.clear();
@@ -149,5 +158,46 @@ describe("BuyButtons — Add to Cart", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(/just sold out/i),
     );
     expect(refresh).toHaveBeenCalled();
+  });
+});
+
+describe("BuyButtons — nothing chosen yet", () => {
+  const CHOOSE = { variant: null, qty: 1, status: "choose", promptChoice };
+
+  it("refuses both buttons, asks for the choice, and touches no network", async () => {
+    pdp = { ...CHOOSE };
+    const f = mockFetch(() => new Response(JSON.stringify(CART_WITH_ITEM), { status: 200 }));
+    renderButtons();
+
+    fireEvent.click(screen.getByRole("button", { name: "Buy Now" }));
+    expect(promptChoice).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Please choose an option above to continue.",
+    );
+    expect(push).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add to Cart" }));
+    expect(promptChoice).toHaveBeenCalledTimes(2);
+    // The only calls are useCart's own GET — no buy-now POST, no cart add, and so
+    // no add_to_cart reported for a sale that never happened.
+    expect(
+      f.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "POST"),
+    ).toEqual([]);
+  });
+
+  it("leaves the buttons live rather than disabled, so the tap can explain itself", () => {
+    pdp = { ...CHOOSE };
+    mockFetch(() => new Response(JSON.stringify(CART_WITH_ITEM), { status: 200 }));
+    renderButtons();
+    expect(screen.getByRole("button", { name: "Buy Now" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add to Cart" })).toBeEnabled();
+  });
+
+  it("disables both when nothing on the product is sold here", () => {
+    pdp = { variant: null, qty: 1, status: "unavailable", promptChoice };
+    mockFetch(() => new Response(JSON.stringify(CART_WITH_ITEM), { status: 200 }));
+    renderButtons();
+    expect(screen.getByRole("button", { name: "Buy Now" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add to Cart" })).toBeDisabled();
   });
 });

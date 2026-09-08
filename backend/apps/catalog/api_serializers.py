@@ -70,13 +70,15 @@ class ProductListSerializer(serializers.ModelSerializer):
     hover_image = serializers.SerializerMethodField()
     default_variant_id = serializers.SerializerMethodField()
     default_sku = serializers.SerializerMethodField()
+    purchasable_variant_count = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = ["name", "slug", "brand", "is_featured", "from_price", "currency",
                   "image", "hover_image", "default_variant_id", "default_sku",
-                  "in_stock", "rating_avg", "rating_count"]
+                  "purchasable_variant_count", "in_stock", "rating_avg",
+                  "rating_count"]
 
     def get_in_stock(self, obj):
         # Fast path: list-style views annotate has_stock (see annotate_in_stock).
@@ -110,8 +112,18 @@ class ProductListSerializer(serializers.ModelSerializer):
         first = obj.images.all()[:1]
         return first[0].image.url if first else None
 
+    def _active_variants(self, obj):
+        # Cached on the instance: three serializer methods below want this list, and on
+        # the wishlist path (which serializes a lone Product with no `variants`
+        # prefetch) each `obj.variants.all()` would otherwise be its own query.
+        cached = getattr(obj, "_active_variants_cache", None)
+        if cached is None:
+            cached = [v for v in obj.variants.all() if v.is_active]
+            obj._active_variants_cache = cached
+        return cached
+
     def _default_variant(self, obj):
-        variants = [v for v in obj.variants.all() if v.is_active]
+        variants = self._active_variants(obj)
         if not variants:
             return None
         return next((v for v in variants if v.is_default), variants[0])
@@ -123,6 +135,27 @@ class ProductListSerializer(serializers.ModelSerializer):
     def get_default_sku(self, obj):
         v = self._default_variant(obj)
         return v.sku if v else None
+
+    def get_purchasable_variant_count(self, obj):
+        """How many options the shopper has to choose between, in THIS country.
+
+        The card reads it to decide between "Add to Cart" (one option — nothing to
+        choose) and "Choose Option" (several — send them to the PDP to pick), so it
+        must count what the PDP would let them pick: variants that resolve to a price
+        here. Counting every active variant instead would show "Choose Option" on a
+        product that offers this market a single size.
+
+        Fast path: list-style views annotate it in SQL (see
+        annotate_priced_variant_count). The fallback is for the wishlist, which
+        serializes a lone Product and can afford a resolve_price per variant.
+        """
+        annotated = getattr(obj, "priced_variant_count", None)
+        if annotated is not None:
+            return annotated
+        country = self.context["request"].country
+        return sum(
+            1 for v in self._active_variants(obj) if resolve_price(v, country) is not None
+        )
 
     def get_hover_image(self, obj):
         imgs = list(obj.images.all()[:2])
@@ -159,14 +192,22 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         return [{"url": v.asset.file.url} for v in obj.videos.all()]
 
     def get_related(self, obj):
-        from apps.catalog.services import annotate_in_stock, annotate_min_price, sellable_in
+        from apps.catalog.services import (
+            annotate_in_stock,
+            annotate_min_price,
+            annotate_priced_variant_count,
+            sellable_in,
+        )
 
         country = self.context["request"].country
         sellable = [p for p in obj.related.all() if sellable_in(p, country)]
         pks = [p.pk for p in sellable]
-        qs = annotate_in_stock(
-            annotate_min_price(Product.objects.filter(pk__in=pks), country), country
-        ).prefetch_related("images").select_related("brand")
+        qs = annotate_priced_variant_count(
+            annotate_in_stock(
+                annotate_min_price(Product.objects.filter(pk__in=pks), country), country
+            ),
+            country,
+        ).prefetch_related("images", "variants").select_related("brand")
         return ProductListSerializer(qs, many=True, context=self.context).data
 
 

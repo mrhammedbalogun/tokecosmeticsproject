@@ -9302,6 +9302,7 @@ export interface components {
             readonly hover_image: string;
             readonly default_variant_id: string;
             readonly default_sku: string;
+            readonly purchasable_variant_count: string;
             readonly in_stock: string;
             /** Format: decimal */
             rating_avg?: string;

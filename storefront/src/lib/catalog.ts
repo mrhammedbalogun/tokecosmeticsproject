@@ -13,6 +13,11 @@ export interface ProductCard {
   currency: string;
   image: string | null; hover_image: string | null;   // relative /media URLs
   default_variant_id: number | null; default_sku: string | null;
+  /** How many variants the shopper can buy in this country — i.e. how many options
+   *  they have to choose between. >1 means the card must send them to the PDP to
+   *  pick rather than adding one for them. Optional: missing (old cached payload,
+   *  the API caches cards for 60 s) = assume one, the pre-existing behaviour. */
+  purchasable_variant_count?: number;
   in_stock?: boolean;             // optional: missing (old cached payloads) = assume in stock
   rating_avg: string;             // "4.50"
   rating_count: number;

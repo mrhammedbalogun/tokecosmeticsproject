@@ -148,7 +148,19 @@ function WishlistCard({
     <div>
       <ProductCard product={product} />
       <div className="mt-2 space-y-2">
-        {product.default_variant_id !== null ? (
+        {(product.purchasable_variant_count ?? 1) > 1 ? (
+          /* Same rule as the listing card: a product with options is chosen on the
+             PDP, never picked on the shopper's behalf. The wishlist row is keyed by
+             the sku that was saved, but Add to Cart here has always used the
+             product's DEFAULT variant — so on a variable product it could add a
+             different size from the one the shopper saved. */
+          <Link
+            href={`/product/${product.slug}`}
+            className="block w-full rounded-full bg-accent px-3 py-2 text-center text-sm text-surface transition-colors hover:bg-accent-strong"
+          >
+            Choose Option
+          </Link>
+        ) : product.default_variant_id !== null ? (
           <button
             type="button"
             onClick={() => onAddToBag(product.default_variant_id!)}

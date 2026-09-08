@@ -61,10 +61,37 @@ describe("ProductCard", () => {
     expect(screen.queryByRole("button", { name: /add .* to cart/i })).toBeNull();
   });
 
-  it("keeps the Add to Cart button when in_stock is missing (old cached payloads)", () => {
+  it("keeps the Add to Cart button when in_stock and the option count are missing (old cached payloads)", () => {
     renderCard(<ProductCard product={make()} />);
     expect(screen.getByRole("button", { name: /add .* to cart/i })).toBeInTheDocument();
     expect(screen.queryByText("Sold Out")).toBeNull();
+  });
+
+  it("swaps Add to Cart for Choose Option when the product has options, in both variants", () => {
+    // The complaint this fixes: one-click Add on a variable product bought whichever
+    // variant the API listed first, so shoppers checked out on the wrong size.
+    const { rerender } = renderCard(
+      <ProductCard product={make({ purchasable_variant_count: 3 })} />,
+    );
+    expect(screen.getByText("Choose Option")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add .* to cart/i })).toBeNull();
+    rerender(<ProductCard product={make({ purchasable_variant_count: 3 })} compact />);
+    expect(screen.getByText("Choose Option")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /add .* to cart/i })).toBeNull();
+  });
+
+  it("keeps one-click Add when there is only one option to buy", () => {
+    renderCard(<ProductCard product={make({ purchasable_variant_count: 1 })} />);
+    expect(screen.getByRole("button", { name: /add .* to cart/i })).toBeInTheDocument();
+    expect(screen.queryByText("Choose Option")).toBeNull();
+  });
+
+  it("Sold Out outranks Choose Option", () => {
+    renderCard(
+      <ProductCard product={make({ in_stock: false, purchasable_variant_count: 3 })} />,
+    );
+    expect(screen.getByText("Sold Out")).toBeInTheDocument();
+    expect(screen.queryByText("Choose Option")).toBeNull();
   });
 
   it("shows the gold Bestseller badge only for featured products", () => {

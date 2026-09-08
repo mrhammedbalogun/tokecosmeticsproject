@@ -26,16 +26,35 @@ function trackAdd(variant: { sku: string; name: string; price: { amount: string;
   });
 }
 
+/** Nothing is chosen yet and something IS on offer. The buttons stay live rather than
+ * greying out: a dead button on a phone gives no tap feedback and no reason, so a
+ * shopper who missed the picker just presses harder. Pressing sends the focus back to
+ * the axis still owed (PdpContext.promptChoice) and says why right here, where the
+ * thumb already is — the picker is further up the box, so the message has to be in
+ * both places. No tracking fires on a refused press: it is not an add-to-cart. */
 export function BuyButtons() {
-  const { variant, qty } = usePdp();
+  const { variant, qty, status, promptChoice } = usePdp();
   const { addItem } = useCart();
   const queryClient = useQueryClient();
   const router = useRouter();
   const [busy, setBusy] = useState<"buy" | "add" | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const disabled = !variant || !variant.in_stock || variant.price === null;
+  const [asked, setAsked] = useState(false);
+  const owed = status === "choose";
+  const disabled = !owed && (!variant || !variant.in_stock || variant.price === null);
+
+  /** True when the press was refused for want of a choice — the caller must stop.
+   * The nudge is rendered from `owed && asked`, so answering the picker clears it
+   * without anyone having to remember to. */
+  function refusedForChoice(): boolean {
+    if (!owed) return false;
+    promptChoice();
+    setAsked(true);
+    return true;
+  }
 
   async function addToCart() {
+    if (refusedForChoice()) return;
     if (!variant) return;
     setBusy("add"); setError(null);
     try {
@@ -56,6 +75,7 @@ export function BuyButtons() {
   }
 
   async function buyNow() {
+    if (refusedForChoice()) return;
     if (!variant) return;
     setBusy("buy"); setError(null);
     try {
@@ -115,6 +135,11 @@ export function BuyButtons() {
         className="w-full rounded-full border border-accent py-3.5 font-medium text-accent transition-colors hover:bg-accent/5 disabled:opacity-50">
         {busy === "add" ? "Adding…" : "Add to Cart"}
       </button>
+      {owed && asked && (
+        <p role="alert" className="text-sm text-red-700">
+          Please choose an option above to continue.
+        </p>
+      )}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     </div>
   );
