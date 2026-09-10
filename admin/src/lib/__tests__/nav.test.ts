@@ -49,7 +49,7 @@ describe("the sidebar renders only what the scopes allow", () => {
       "Dashboard", "Orders", "Deliveries", "Products", "Categories",
       // Combos (2026-09-02) — `products.manage` too: a bundle is a shelf decision with a
       // price on it, and the people who set prices build the bundles.
-      "Combos",
+      "Combo Deals",
       "Inventory",
       // The store directory (Plan-42) — `products.manage`, the same scope Pickup
       // locations carries, because both are lists of physical shops kept by whoever

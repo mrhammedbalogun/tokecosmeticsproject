@@ -201,7 +201,7 @@ export function ComboEditor({
             href="/combos"
             className="text-xs text-muted underline-offset-2 hover:underline"
           >
-            ← Combos
+            ← Combo Deals
           </Link>
           <h1 className="mt-2 text-lg font-semibold tracking-tight">{values.name}</h1>
           <p className="mt-1 text-sm text-muted">

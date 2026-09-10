@@ -8,7 +8,7 @@ import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { absoluteUrl, breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = pageMetadata({
-  title: "Combos",
+  title: "Combo Deals",
   description:
     "Curated sets of Toke Cosmetics favourites, boxed together and priced below what the products cost on their own.",
   path: "/combo",
@@ -16,7 +16,7 @@ export const metadata: Metadata = pageMetadata({
 
 const CRUMBS = [
   { name: "Home", path: "/" },
-  { name: "Combos", path: "/combo" },
+  { name: "Combo Deals", path: "/combo" },
 ];
 
 /**
@@ -58,7 +58,7 @@ export default async function ComboIndexPage() {
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">
           Buy the set, keep the change
         </p>
-        <h1 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">Combos</h1>
+        <h1 className="mt-2 font-display text-3xl leading-tight sm:text-4xl">Combo Deals</h1>
         <p className="mt-3 text-muted">
           Routines we put together ourselves — the products that work best beside each
           other, boxed as one and priced below what they cost separately. Everything
@@ -68,7 +68,7 @@ export default async function ComboIndexPage() {
 
       {combos.length === 0 ? (
         <p className="mt-10 rounded-[var(--radius-card)] border border-dashed border-line bg-surface p-10 text-center text-muted">
-          No combos are running right now. Check back soon.
+          No combo deals are running right now. Check back soon.
         </p>
       ) : (
         <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

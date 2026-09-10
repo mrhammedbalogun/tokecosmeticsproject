@@ -45,7 +45,7 @@ export const NAV_ITEMS: NavItem[] = [
   // the reason Categories has one: building a combo is a different job from editing a
   // product, and `activeHref` does longest-prefix matching — nesting it under
   // `/products/…` would light up Products while the builder was on screen.
-  { label: "Combos", href: "/combos", scopes: ["products.manage"] },
+  { label: "Combo Deals", href: "/combos", scopes: ["products.manage"] },
   { label: "Inventory", href: "/inventory", scopes: ["products.manage"] },
   // The public store locator's directory (Plan-42). `products.manage` for the same
   // reason Pickup locations is: it is a list of physical shops maintained by whoever

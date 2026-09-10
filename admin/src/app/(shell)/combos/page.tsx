@@ -6,7 +6,7 @@ import { ApiError } from "@/lib/api";
 import { comboQueryString, isComboStatus, STATUSES, type ComboPage } from "@/lib/combos";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Combos" };
+export const metadata: Metadata = { title: "Combo Deals" };
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -54,7 +54,7 @@ export default async function CombosPage({ searchParams }: { searchParams: Searc
     <div>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Combos</h1>
+          <h1 className="text-lg font-semibold tracking-tight">Combo Deals</h1>
           <p className="mt-1 text-sm text-muted">
             Products sold together at one price. They appear on{" "}
             <span className="font-mono text-xs">/combo</span> when set to Active.
@@ -118,7 +118,7 @@ export default async function CombosPage({ searchParams }: { searchParams: Searc
                 page={page}
                 total={data.count}
                 buildQuery={(p) => comboQueryString({ search, status, page: p })}
-                label="Combos"
+                label="Combo Deals"
               />
             </div>
           )}

@@ -21,7 +21,7 @@ export default async function NewComboPage() {
   return (
     <div>
       <Link href="/combos" className="text-xs text-muted underline-offset-2 hover:underline">
-        ← Combos
+        ← Combo Deals
       </Link>
 
       <h1 className="mt-2 text-lg font-semibold tracking-tight">New combo</h1>

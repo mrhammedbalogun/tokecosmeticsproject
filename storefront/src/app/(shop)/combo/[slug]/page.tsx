@@ -70,7 +70,7 @@ export default async function ComboPage({ params }: { params: Params }) {
   const pricing = combo.pricing;
   const crumbs = [
     { name: "Home", path: "/" },
-    { name: "Combos", path: "/combo" },
+    { name: "Combo Deals", path: "/combo" },
     { name: combo.name, path: `/combo/${slug}` },
   ];
   const unitCount = combo.items.reduce((n, item) => n + item.quantity, 0);

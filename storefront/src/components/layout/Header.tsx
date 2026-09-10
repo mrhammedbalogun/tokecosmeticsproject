@@ -55,7 +55,7 @@ export async function Header() {
               BUY, and every other buying route in this bar is top-level. Filing it with
               the policy pages is how it stays unvisited. */}
           <Link href="/combo" className="text-sm hover:text-accent">
-            Combos
+            Combo Deals
           </Link>
           <Link href="/skin-quiz" className="text-sm hover:text-accent">
             Skin Quiz
