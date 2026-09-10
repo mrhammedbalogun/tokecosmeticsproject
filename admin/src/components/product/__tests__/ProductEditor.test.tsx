@@ -481,27 +481,44 @@ describe("ProductEditor", () => {
     expect(screen.getByText("Shop By Skin Concerns")).toBeInTheDocument();
   });
 
-  it("keeps a heading tickable when the product is already filed there", () => {
-    // Otherwise the assignment is invisible AND unremovable: the product shows on the
-    // group page with no control anywhere to take it off.
-    setup({ categories: [3] });
-
-    expect(screen.getByRole("checkbox", { name: /Shop By Skin Concerns/ })).toBeChecked();
-  });
-
-  it("leaves hidden categories out of the picker", () => {
-    // The menu rework retired 26 of production's 40 categories. Listed, they sorted first
-    // — they lose their parents when retired — and pushed every assignable one out of the
-    // scroll box, on the exact screen whose job is filing products into the new menu.
-    setup();
-
-    expect(screen.queryByRole("checkbox", { name: "Men Care" })).toBeNull();
-  });
-
-  it("still shows a hidden category the product is IN, so it can be removed", () => {
+  it("offers the shop menu and nothing else", () => {
+    // Retired categories are gone from the list entirely — including one this product is
+    // still in. Production has ALL 69 products filed in at least one retired category and
+    // some in sixteen, so an "unless it is ticked" exception is not an exception: it puts
+    // a wall of struck-through dead ends on every product. Reported 2026-09-10.
     setup({ categories: [4] });
 
-    expect(screen.getByRole("checkbox", { name: "Men Care" })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: "Men Care" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Skincare" })).toBeInTheDocument();
+  });
+
+  it("says so when a product is filed outside the menu, and offers to fix it", () => {
+    // Hidden is not the same as gone: the assignment is real, it is saved back untouched,
+    // and a product filed where nobody can see it needs SOME control. One line, not a
+    // list — and the heading case lands here too.
+    setup({ categories: [3, 4] });
+
+    // Scoped to the line itself: "Shop By Skin Concerns" also appears above it as the
+    // group label, which is the whole reason the label is kept visible.
+    const line = screen.getByText(/not in the menu/).closest("p") as HTMLElement;
+    expect(line).toHaveTextContent("Men Care");
+    expect(line).toHaveTextContent("Shop By Skin Concerns");
+    expect(line).toHaveTextContent(/Also filed in 2 categories/);
+  });
+
+  it("keeps quiet when every assignment is in the menu", () => {
+    setup({ categories: [1] });
+
+    expect(screen.queryByText(/not in the menu/)).toBeNull();
+  });
+
+  it("removing the strays leaves the menu assignments alone", () => {
+    setup({ categories: [1, 4] });
+
+    fireEvent.click(screen.getByRole("button", { name: /Remove it/ }));
+
+    expect(screen.queryByText(/not in the menu/)).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Skincare" })).toBeChecked();
   });
 
   // --- Content tab (task 4) ---------------------------------------------------------

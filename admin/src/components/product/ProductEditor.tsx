@@ -984,7 +984,11 @@ export function ProductEditor({
         </p>
       )}
 
-      <div className="mt-6">
+      {/* `pb-4`: the Save bar below is `sticky bottom-0` and OVERLAPS whatever sits at the
+          bottom of the tab, which on Details is the last row or two of the category list.
+          Noticed while checking that list fits — the box was not clipping it, the button
+          bar was sitting on it. */}
+      <div className="mt-6 pb-4">
         {tab === "details" && (
           <DetailsPanel
             values={values}

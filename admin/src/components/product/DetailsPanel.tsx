@@ -36,22 +36,42 @@ export function DetailsPanel({
   tags,
 }: PanelProps & { categories: CategoryRef[]; tags: TagRef[] }) {
   /**
-   * What the picker offers. HIDDEN CATEGORIES ARE LEFT OUT unless this product is already
-   * in one.
+   * The picker offers THE SHOP MENU AND NOTHING ELSE — every visible category a product
+   * can actually be filed under.
    *
-   * Not cosmetic: the 2026-09-10 menu rework retired 26 of production's 40 categories
-   * (deactivated, not deleted, so their old assignments survive). Listed, they came FIRST
-   * — they lost their parents, so they sort as roots — and pushed all twelve assignable
-   * ones out of a 224px scroll box. The job this control exists for is filing products
-   * into the new menu, and it was showing a wall of struck-through dead ends instead.
+   * The 2026-09-10 rework retired 26 of production's 40 categories (deactivated, not
+   * deleted, so their old assignments survive). The first cut of this filter kept a
+   * retired row visible when the product was still in it, so the assignment stayed
+   * removable. That was wrong at production's scale: ALL 69 products are in at least one
+   * retired category and some are in sixteen, so the exception was not an exception — it
+   * put a wall of struck-through dead ends on every product, which is what Hammed
+   * reported on 2026-09-10. Leftover assignments are surfaced as one line below the box
+   * instead (`strays`), which handles the same need without the noise.
    *
-   * A hidden category is also not a place a product can usefully go: the storefront's tree
-   * endpoint only returns active rows, so ticking one files the product nowhere. The
-   * already-ticked exception is what keeps such an assignment removable.
+   * A retired category is also not a place a product can usefully go: the storefront's
+   * tree endpoint returns active rows only, so ticking one files the product nowhere.
    */
-  const pickable = categories.filter(
-    (category) => category.is_active || values.categories.includes(category.id),
+  const pickable = categories.filter((category) => category.is_active);
+
+  /**
+   * Assignments the picker cannot show a checkbox for — a retired category, or a menu
+   * heading like "Shop By Skin Concerns" that no longer accepts products.
+   *
+   * Surfaced rather than hidden, because it is real state: the rows stay in
+   * `values.categories` and are saved back untouched, so a product is never silently
+   * un-filed by opening its editor. What it must not be is INVISIBLE and unmanageable —
+   * that is a product filed somewhere nobody can see or undo.
+   */
+  const strays = categories.filter(
+    (category) =>
+      values.categories.includes(category.id) &&
+      (!category.is_active || category.is_assignable === false),
   );
+
+  const clearStrays = () => {
+    const stray = new Set(strays.map((c) => c.id));
+    onChange("categories", values.categories.filter((id) => !stray.has(id)));
+  };
 
   const toggle = (list: number[], id: number) =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
@@ -140,9 +160,11 @@ export function DetailsPanel({
         <p className="mt-1 text-xs text-muted">
           Where this product appears in the shop menu. Tick as many as fit.
         </p>
-        {/* Taller than the Tags box beside it: the menu is fourteen rows (twelve
-            shelves and two headings) and a 224px window showed half of them. */}
-        <div className="mt-1 max-h-80 overflow-y-auto rounded border border-line bg-surface p-2">
+        {/* Taller than the Tags box beside it, and tall enough for the WHOLE menu:
+            fourteen rows — twelve shelves and two headings — is ~390px, and any window
+            shorter than that hides the bottom of a list that now has a fixed, known
+            length. The cap stays so a shop with thirty categories still scrolls. */}
+        <div className="mt-1 max-h-[30rem] overflow-y-auto rounded border border-line bg-surface p-2">
           {pickable.length === 0 ? (
             <p className="p-2 text-xs text-muted">No categories yet.</p>
           ) : (
@@ -154,12 +176,10 @@ export function DetailsPanel({
               // tick, whereas a heading reads as the thing it is and orients the four
               // choices below it.
               const ticked = values.categories.includes(category.id);
-              // …unless this product is already filed on the heading, in which case it
-              // keeps its checkbox so the assignment can be UNDONE. Hiding it would leave
-              // the product showing on a group page with no control anywhere to take it
-              // off — the trap `rebuild_shop_menu` clears once, and that a later
-              // heading-flip would recreate.
-              if (category.is_assignable === false && !ticked) {
+              // A heading is ALWAYS a label, even when this product is filed on one: the
+              // `strays` line below is what makes that assignment removable, so the list
+              // itself stays a clean set of choices.
+              if (category.is_assignable === false) {
                 return (
                   <p
                     key={category.id}
@@ -182,19 +202,29 @@ export function DetailsPanel({
                     onChange={() => onChange("categories", toggle(values.categories, category.id))}
                     className="h-4 w-4 rounded border-line"
                   />
-                  <span className={category.is_active ? "" : "text-muted line-through"}>
-                    {category.name}
-                    {category.is_assignable === false && (
-                      <span className="ml-1 text-xs text-warn">
-                        — a heading; untick to remove
-                      </span>
-                    )}
-                  </span>
+                  <span>{category.name}</span>
                 </label>
               );
             })
           )}
         </div>
+        {strays.length > 0 && (
+          <p className="mt-2 text-xs text-muted">
+            Also filed in {strays.length}{" "}
+            {strays.length === 1 ? "category" : "categories"} that{" "}
+            {strays.length === 1 ? "is" : "are"} not in the menu (
+            {strays.map((c) => c.name).join(", ")}) — shoppers cannot see{" "}
+            {strays.length === 1 ? "it" : "them"}.{" "}
+            <button
+              type="button"
+              onClick={clearStrays}
+              className="underline hover:text-foreground"
+            >
+              Remove {strays.length === 1 ? "it" : "them"}
+            </button>{" "}
+            (takes effect on Save.)
+          </p>
+        )}
         <Error message={errors.categories} />
       </fieldset>
 

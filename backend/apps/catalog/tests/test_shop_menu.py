@@ -21,7 +21,7 @@ from apps.catalog.factories import (
     ProductVariantFactory,
 )
 from apps.catalog.management.commands.rebuild_shop_menu import MENU
-from apps.catalog.models import Category
+from apps.catalog.models import Category, Product
 from apps.catalog.services import category_subtree_slugs
 from apps.core.models import Country
 from apps.orders.models import Order, OrderItem
@@ -457,3 +457,79 @@ def test_rebuild_repoints_a_homepage_tile_whose_category_moved():
     assert untouched.cta_url == "/"
     # And a slug that did NOT move is not rewritten, whatever the placement.
     assert unrelated.cta_url == "/category/hair-care"
+
+
+# ── purging the links the rebuild deliberately left behind ──────────────────────────────
+
+
+@pytest.mark.django_db
+def test_purge_is_a_dry_run_unless_asked():
+    from django.core.management import call_command
+
+    retired = CategoryFactory(slug="men-care", is_active=False)
+    product = _priced("beard-oil", categories=[retired])
+
+    call_command("purge_retired_category_links", verbosity=0)
+
+    assert product.categories.filter(pk=retired.pk).exists()
+
+
+@pytest.mark.django_db
+def test_purge_drops_retired_and_heading_links_only():
+    """The rebuild leaves these on purpose (a wrong call is then undone with a checkbox),
+    and production showed the cost: all 69 products carried at least one, some sixteen,
+    none of them actionable in the admin."""
+    from django.core.management import call_command
+
+    retired = CategoryFactory(slug="men-care", is_active=False)
+    heading = CategoryFactory(slug="shop-by-skin-tone", is_assignable=False)
+    shelf = CategoryFactory(slug="hair-care")
+    product = _priced("shea-shampoo", categories=[retired, heading, shelf])
+
+    call_command("purge_retired_category_links", "--apply", verbosity=0)
+
+    assert list(product.categories.values_list("slug", flat=True)) == ["hair-care"]
+
+
+@pytest.mark.django_db
+def test_purge_leaves_a_product_with_no_menu_category_alone_rather_than_inventing_one():
+    """It still appears in All Products and in search — it is simply on no shelf, which is
+    a filing job for a person, not something to paper over here."""
+    from django.core.management import call_command
+
+    retired = CategoryFactory(slug="uncategorized", is_active=False)
+    product = _priced("orphan-product", categories=[retired])
+
+    call_command("purge_retired_category_links", "--apply", verbosity=0)
+
+    assert product.categories.count() == 0
+    assert Product.objects.filter(pk=product.pk).exists()
+
+
+@pytest.mark.django_db
+def test_purge_prints_a_restorable_record_of_what_it_removed():
+    from io import StringIO
+
+    from django.core.management import call_command
+
+    retired = CategoryFactory(slug="men-care", is_active=False)
+    _priced("beard-oil", categories=[retired])
+
+    out = StringIO()
+    call_command("purge_retired_category_links", "--apply", stdout=out)
+
+    # The run's own output is the backup — the docstring's restore snippet reads these.
+    assert "LINK beard-oil men-care" in out.getvalue()
+
+
+@pytest.mark.django_db
+def test_purge_is_idempotent():
+    from django.core.management import call_command
+
+    retired = CategoryFactory(slug="men-care", is_active=False)
+    product = _priced("beard-oil", categories=[retired, CategoryFactory(slug="hair-care")])
+
+    call_command("purge_retired_category_links", "--apply", verbosity=0)
+    call_command("purge_retired_category_links", "--apply", verbosity=0)
+
+    assert list(product.categories.values_list("slug", flat=True)) == ["hair-care"]
