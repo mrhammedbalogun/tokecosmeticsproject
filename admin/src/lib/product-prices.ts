@@ -35,6 +35,10 @@ export interface PriceRow {
   currency: string;
   country: string | null;
   amount: string;
+  /** The "was" price. A REDUCTION ONLY WHEN IT IS HIGHER than `amount` — the WordPress
+   *  import wrote the regular price in here on every variant it touched, so most
+   *  non-null values in production are equal to `amount` and mean nothing. */
+  compare_at_amount: string | null;
   starts_at: string | null;
   ends_at: string | null;
 }
@@ -59,8 +63,8 @@ export interface VariantRow {
 }
 
 export type Cell =
-  | { state: "editable"; price: PriceRow | null; amount: string }
-  | { state: "locked"; price: PriceRow | null; amount: string; reason: string };
+  | { state: "editable"; price: PriceRow | null; amount: string; compareAt: string }
+  | { state: "locked"; price: PriceRow | null; amount: string; compareAt: string; reason: string };
 
 export interface GridRow {
   variant: VariantRow;
@@ -120,9 +124,14 @@ export function buildPriceGrid(
       const plain = rows.find(isPlain) ?? null;
       const reason = lockReason(rows);
 
+      // An import artefact (`compare_at == amount`) is shown as BLANK rather than as a
+      // was-price: it is not a promotion, the storefront ignores it, and pre-filling the
+      // box with it would invite somebody to "fix" a sale that was never running.
+      const was = plain?.compare_at_amount ?? "";
+      const reduced = was && Number(was) > Number(plain?.amount ?? 0) ? was : "";
       cells[currency] = reason
-        ? { state: "locked", price: plain, amount: plain?.amount ?? "", reason }
-        : { state: "editable", price: plain, amount: plain?.amount ?? "" };
+        ? { state: "locked", price: plain, amount: plain?.amount ?? "", compareAt: reduced, reason }
+        : { state: "editable", price: plain, amount: plain?.amount ?? "", compareAt: reduced };
     }
 
     return { variant, cells };
@@ -163,4 +172,32 @@ export function amountChanged(cell: Cell, typed: string): boolean {
   if (!typed.trim()) return false;
   if (!current) return true;
   return Number(typed) !== Number(current);
+}
+
+/**
+ * Whether a typed was-price is worth sending. Unlike `validateAmount`, BLANK IS MEANINGFUL
+ * here — it ends a promotion — so this compares against what the cell shows rather than
+ * treating empty as "leave alone".
+ */
+export function compareAtChanged(cell: Cell, typed: string): boolean {
+  const shown = cell.compareAt;
+  const value = typed.trim();
+  if (!value) return shown !== "";
+  if (!shown) return true;
+  return Number(value) !== Number(shown);
+}
+
+/** What the was-price box will not accept. `null` = fine (including blank, which clears). */
+export function validateCompareAt(raw: string, amount: string): string | null {
+  const value = raw.trim();
+  if (!value) return null;
+  if (value.includes(",")) return "Use a dot for decimals, and no thousands separator.";
+  if (!/^\d+(\.\d{1,2})?$/.test(value)) return "Enter an amount like 1500 or 1500.00.";
+  if (Number(value) <= 0) return "A was-price must be more than zero.";
+  // Same refusal as the server action, said before the round trip: at or below the price
+  // there is no reduction, and the product would reach the Promo page with nothing to show.
+  if (amount.trim() && Number(value) <= Number(amount)) {
+    return "Higher than the price, or there is no reduction.";
+  }
+  return null;
 }

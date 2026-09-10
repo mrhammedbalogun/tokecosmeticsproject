@@ -65,6 +65,13 @@ const product = (overrides: Partial<ProductDetail> = {}): ProductDetail => ({
 const CATEGORIES: CategoryRef[] = [
   { id: 1, name: "Skincare", slug: "skincare", parent: null, is_active: true, sort_order: 0 },
   { id: 2, name: "Cleansers", slug: "cleansers", parent: 1, is_active: true, sort_order: 0 },
+  // A menu heading and a retired row — production has three of the first and 26 of the
+  // second after the 2026-09-10 rework, and the picker treats each differently.
+  {
+    id: 3, name: "Shop By Skin Concerns", slug: "shop-by-skin-concerns", parent: null,
+    is_active: true, is_assignable: false, sort_order: 0,
+  },
+  { id: 4, name: "Men Care", slug: "men-care", parent: null, is_active: false, sort_order: 0 },
 ];
 const TAGS: TagRef[] = [{ id: 5, name: "bestseller", slug: "bestseller" }];
 const COUNTRIES: CountryRef[] = [
@@ -168,6 +175,7 @@ const priceRow = (
   country: null,
   amount,
   starts_at: null,
+  compare_at_amount: null,
   ends_at: null,
   ...extra,
 });
@@ -462,6 +470,38 @@ describe("ProductEditor", () => {
 
     expect(screen.getByRole("checkbox", { name: "Skincare" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Cleansers" })).toBeChecked();
+  });
+
+  it("shows a menu heading as a label, not something to tick", () => {
+    // "Shop By Skin Concerns" gathers Acne, Dry Skin and the rest; no product belongs to
+    // the grouping itself. It is kept VISIBLE because it orients the rows under it.
+    setup();
+
+    expect(screen.queryByRole("checkbox", { name: /Shop By Skin Concerns/ })).toBeNull();
+    expect(screen.getByText("Shop By Skin Concerns")).toBeInTheDocument();
+  });
+
+  it("keeps a heading tickable when the product is already filed there", () => {
+    // Otherwise the assignment is invisible AND unremovable: the product shows on the
+    // group page with no control anywhere to take it off.
+    setup({ categories: [3] });
+
+    expect(screen.getByRole("checkbox", { name: /Shop By Skin Concerns/ })).toBeChecked();
+  });
+
+  it("leaves hidden categories out of the picker", () => {
+    // The menu rework retired 26 of production's 40 categories. Listed, they sorted first
+    // — they lose their parents when retired — and pushed every assignable one out of the
+    // scroll box, on the exact screen whose job is filing products into the new menu.
+    setup();
+
+    expect(screen.queryByRole("checkbox", { name: "Men Care" })).toBeNull();
+  });
+
+  it("still shows a hidden category the product is IN, so it can be removed", () => {
+    setup({ categories: [4] });
+
+    expect(screen.getByRole("checkbox", { name: "Men Care" })).toBeChecked();
   });
 
   // --- Content tab (task 4) ---------------------------------------------------------

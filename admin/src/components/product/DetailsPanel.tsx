@@ -35,6 +35,24 @@ export function DetailsPanel({
   categories,
   tags,
 }: PanelProps & { categories: CategoryRef[]; tags: TagRef[] }) {
+  /**
+   * What the picker offers. HIDDEN CATEGORIES ARE LEFT OUT unless this product is already
+   * in one.
+   *
+   * Not cosmetic: the 2026-09-10 menu rework retired 26 of production's 40 categories
+   * (deactivated, not deleted, so their old assignments survive). Listed, they came FIRST
+   * — they lost their parents, so they sort as roots — and pushed all twelve assignable
+   * ones out of a 224px scroll box. The job this control exists for is filing products
+   * into the new menu, and it was showing a wall of struck-through dead ends instead.
+   *
+   * A hidden category is also not a place a product can usefully go: the storefront's tree
+   * endpoint only returns active rows, so ticking one files the product nowhere. The
+   * already-ticked exception is what keeps such an assignment removable.
+   */
+  const pickable = categories.filter(
+    (category) => category.is_active || values.categories.includes(category.id),
+  );
+
   const toggle = (list: number[], id: number) =>
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
@@ -119,27 +137,62 @@ export function DetailsPanel({
 
       <fieldset className="lg:col-span-1">
         <legend className="text-xs text-muted">Categories</legend>
-        <div className="mt-1 max-h-56 overflow-y-auto rounded border border-line bg-surface p-2">
-          {categories.length === 0 ? (
+        <p className="mt-1 text-xs text-muted">
+          Where this product appears in the shop menu. Tick as many as fit.
+        </p>
+        {/* Taller than the Tags box beside it: the menu is fourteen rows (twelve
+            shelves and two headings) and a 224px window showed half of them. */}
+        <div className="mt-1 max-h-80 overflow-y-auto rounded border border-line bg-surface p-2">
+          {pickable.length === 0 ? (
             <p className="p-2 text-xs text-muted">No categories yet.</p>
           ) : (
-            categories.map((category) => (
-              <label
-                key={category.id}
-                className="flex items-center gap-2 py-0.5 text-sm"
-                style={{ paddingLeft: `${categoryDepth(category, categories) * 16}px` }}
-              >
-                <input
-                  type="checkbox"
-                  checked={values.categories.includes(category.id)}
-                  onChange={() => onChange("categories", toggle(values.categories, category.id))}
-                  className="h-4 w-4 rounded border-line"
-                />
-                <span className={category.is_active ? "" : "text-muted line-through"}>
-                  {category.name}
-                </span>
-              </label>
-            ))
+            pickable.map((category) => {
+              const indent = `${categoryDepth(category, categories) * 16}px`;
+              // A MENU HEADING — "Shop By Skin Concerns" — gathers the rows under it and
+              // holds no products itself. Rendered as a label, not a disabled checkbox: a
+              // greyed-out box invites clicking and says nothing about why it will not
+              // tick, whereas a heading reads as the thing it is and orients the four
+              // choices below it.
+              const ticked = values.categories.includes(category.id);
+              // …unless this product is already filed on the heading, in which case it
+              // keeps its checkbox so the assignment can be UNDONE. Hiding it would leave
+              // the product showing on a group page with no control anywhere to take it
+              // off — the trap `rebuild_shop_menu` clears once, and that a later
+              // heading-flip would recreate.
+              if (category.is_assignable === false && !ticked) {
+                return (
+                  <p
+                    key={category.id}
+                    style={{ paddingLeft: indent }}
+                    className="pt-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted"
+                  >
+                    {category.name}
+                  </p>
+                );
+              }
+              return (
+                <label
+                  key={category.id}
+                  className="flex items-center gap-2 py-0.5 text-sm"
+                  style={{ paddingLeft: indent }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={ticked}
+                    onChange={() => onChange("categories", toggle(values.categories, category.id))}
+                    className="h-4 w-4 rounded border-line"
+                  />
+                  <span className={category.is_active ? "" : "text-muted line-through"}>
+                    {category.name}
+                    {category.is_assignable === false && (
+                      <span className="ml-1 text-xs text-warn">
+                        — a heading; untick to remove
+                      </span>
+                    )}
+                  </span>
+                </label>
+              );
+            })
           )}
         </div>
         <Error message={errors.categories} />

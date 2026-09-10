@@ -116,7 +116,12 @@ export function ProductCard({
             <h3 className="truncate text-[13px] font-semibold leading-tight">{product.name}</h3>
             <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
               {product.from_price ? (
-                <PriceTag amount={product.from_price} currency={product.currency} from />
+                <PriceTag
+                  amount={product.from_price}
+                  compareAt={product.compare_at ?? null}
+                  currency={product.currency}
+                  from
+                />
               ) : (
                 <span />
               )}
@@ -134,7 +139,12 @@ export function ProductCard({
             <ReviewStars rating={product.rating_avg} count={product.rating_count} />
             <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
               {product.from_price ? (
-                <PriceTag amount={product.from_price} currency={product.currency} from />
+                <PriceTag
+                  amount={product.from_price}
+                  compareAt={product.compare_at ?? null}
+                  currency={product.currency}
+                  from
+                />
               ) : (
                 <span />
               )}

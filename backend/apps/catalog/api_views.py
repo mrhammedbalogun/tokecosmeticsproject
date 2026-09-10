@@ -1,5 +1,8 @@
+from datetime import timedelta
+
 from django.core.cache import cache as _cache
 from django.db.models import Prefetch, Q
+from django.utils import timezone
 from rest_framework import generics, permissions
 from rest_framework.response import Response
 
@@ -16,7 +19,10 @@ from apps.catalog.services import (
     annotate_in_stock,
     annotate_min_price,
     annotate_priced_variant_count,
+    annotate_units_sold,
     catalog_cache_key,
+    category_subtree_slugs,
+    filter_on_sale,
 )
 
 
@@ -49,8 +55,15 @@ ORDERING = {
     "newest": "-published_at",
     "price_asc": "min_price",
     "price_desc": "-min_price",
-    "best_selling": "-published_at",  # PLAN-10: real best-selling from order data
+    # Real units sold, as of 2026-09-10 — it stood in as `-published_at` from Plan-10
+    # until the "Best Sellers" nav item made the lie load-bearing. Needs the
+    # `units_sold` annotation, which `get_queryset` adds only for this ordering.
+    "best_selling": "-units_sold",
 }
+
+# How far back "best selling" looks. A quarter: long enough that a quiet fortnight does
+# not reshuffle the shelf, short enough that the list is about the current catalogue.
+BEST_SELLER_WINDOW_DAYS = 90
 
 
 class ProductListView(CatalogCacheMixin, generics.ListAPIView):
@@ -77,7 +90,9 @@ class ProductListView(CatalogCacheMixin, generics.ListAPIView):
 
         p = self.request.query_params
         if p.get("category"):
-            qs = qs.filter(categories__slug=p["category"])
+            # The category AND everything under it, so a grouping row ("Shop By Skin
+            # Concerns") lists its children's products instead of an empty page.
+            qs = qs.filter(categories__slug__in=category_subtree_slugs(p["category"]))
         if p.get("brand"):
             qs = qs.filter(brand__slug=p["brand"])
         if p.get("tag"):
@@ -92,8 +107,20 @@ class ProductListView(CatalogCacheMixin, generics.ListAPIView):
             term = p["q"]
             qs = qs.filter(Q(name__icontains=term) | Q(short_description__icontains=term))
         # in_stock filter is a no-op until PLAN-06 inventory exists.
+        # Promo: only products carrying a live reduced price in THIS market.
+        if p.get("on_sale") in ("1", "true", "True"):
+            qs = filter_on_sale(qs, country)
 
         ordering = ORDERING.get(p.get("ordering", "newest"), "-published_at")
+        if ordering == "-units_sold":
+            # Annotated only here: it is a correlated subquery over 7,000+ order items,
+            # and the other three orderings have no use for it.
+            since = timezone.now() - timedelta(days=BEST_SELLER_WINDOW_DAYS)
+            qs = annotate_units_sold(qs, since=since)
+            # `-published_at` breaks ties, so the unsold tail is newest-first rather than
+            # alphabetical — a page of "best sellers" that runs out of sales should read
+            # as a shop, not as an index.
+            return qs.order_by("-units_sold", "-published_at", "name").distinct()
         return qs.order_by(ordering, "name").distinct()
 
 

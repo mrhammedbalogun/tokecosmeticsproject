@@ -24,6 +24,7 @@ export interface PriceWriteResult {
     currency: string;
     country: string | null;
     amount: string;
+    compare_at_amount: string | null;
     starts_at: string | null;
     ends_at: string | null;
   };
@@ -53,9 +54,13 @@ export async function savePriceAction(input: {
   variantId: number;
   currency: string;
   amount: string;
+  /** The "was" price. "" CLEARS it (ending a promotion), which is why the parameter is a
+   *  string rather than `string | null` — undefined means "leave it alone", and the two
+   *  are different requests. */
+  compareAt?: string;
   productSlug: string;
 }): Promise<PriceWriteResult> {
-  const { priceId, variantId, currency, amount } = input;
+  const { priceId, variantId, currency, amount, compareAt } = input;
 
   if (!Number.isInteger(variantId) || variantId < 1) {
     return { ok: false, error: "That variant could not be identified." };
@@ -68,6 +73,21 @@ export async function savePriceAction(input: {
   if (!/^\d+(\.\d{1,2})?$/.test(amount.trim()) || Number(amount) <= 0) {
     return { ok: false, error: "Enter an amount like 1500 or 1500.00." };
   }
+  const clearing = compareAt !== undefined && compareAt.trim() === "";
+  if (compareAt !== undefined && !clearing) {
+    if (!/^\d+(\.\d{1,2})?$/.test(compareAt.trim()) || Number(compareAt) <= 0) {
+      return { ok: false, error: "Enter a was-price like 1500 or 1500.00, or clear it." };
+    }
+    // REFUSED, not silently accepted: the storefront treats `compare_at > amount` as the
+    // definition of a promotion, so a was-price at or below the price puts the product on
+    // the Promo page with nothing struck through — an offer that is not an offer.
+    if (Number(compareAt) <= Number(amount)) {
+      return {
+        ok: false,
+        error: "A was-price has to be higher than the price, or there is no reduction.",
+      };
+    }
+  }
 
   try {
     const price = await fetchWithAuth<PriceWriteResult["price"]>(
@@ -75,8 +95,18 @@ export async function savePriceAction(input: {
       {
         method: priceId ? "PATCH" : "POST",
         body: priceId
-          ? { amount }
-          : { variant: variantId, currency, country: null, amount },
+          ? {
+              amount,
+              ...(compareAt === undefined
+                ? {}
+                : { compare_at_amount: clearing ? null : compareAt.trim() }),
+            }
+          : {
+              variant: variantId, currency, country: null, amount,
+              ...(compareAt === undefined || clearing
+                ? {}
+                : { compare_at_amount: compareAt.trim() }),
+            },
       },
     );
     // NO revalidatePath — not even for the list's "Unpriced in" column. In Next 16 a

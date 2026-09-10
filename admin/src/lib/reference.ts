@@ -23,6 +23,11 @@ export interface CategoryRef {
   slug: string;
   parent: number | null;
   is_active: boolean;
+  /** False = a MENU HEADING, e.g. "Shop By Skin Concerns": a grouping row that gathers
+   *  the categories under it and holds no products of its own. The product editor shows
+   *  it as a group label rather than a checkbox. Optional so a cached admin payload
+   *  written before the field existed still reads as assignable. */
+  is_assignable?: boolean;
   sort_order: number;
 }
 
@@ -82,13 +87,25 @@ export async function fetchAllPages<T>(
 
 /** Categories as a flat list ordered for a picker: parents before their children, each
  *  child directly under its parent. The API returns them by `sort_order, name`, which is
- *  right within a level and meaningless across levels. */
+ *  right within a level and meaningless across levels.
+ *
+ *  HIDDEN SIBLINGS SINK TO THE BOTTOM of their level. The 2026-09-10 menu rework retired
+ *  26 of production's 40 categories, and retiring one clears its parent — so they all
+ *  became roots with `sort_order: 0` and sorted AHEAD of the live menu, which then began
+ *  below 26 struck-through dead rows on the very page for editing it. Order within each
+ *  group is otherwise untouched: this is a stable partition, not a re-sort. */
 export function orderCategories(categories: CategoryRef[]): CategoryRef[] {
   const byParent = new Map<number | null, CategoryRef[]>();
   for (const c of categories) {
     const siblings = byParent.get(c.parent) ?? [];
     siblings.push(c);
     byParent.set(c.parent, siblings);
+  }
+  for (const siblings of byParent.values()) {
+    const live = siblings.filter((c) => c.is_active);
+    const hidden = siblings.filter((c) => !c.is_active);
+    siblings.length = 0;
+    siblings.push(...live, ...hidden);
   }
 
   const out: CategoryRef[] = [];

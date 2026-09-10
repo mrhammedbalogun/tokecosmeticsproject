@@ -75,6 +75,29 @@ describe("orderCategories", () => {
     expect(ordered.map((c) => c.id)).toEqual([1, 3, 2]);
   });
 
+  it("sinks hidden siblings below live ones", () => {
+    // Retiring a category clears its parent, so all 26 rows the 2026-09-10 rework retired
+    // became roots with sort_order 0 — ahead of the live menu, which then started below a
+    // wall of struck-through dead rows on the page for editing it.
+    const hidden = { ...category(1, null, "Men Care"), is_active: false };
+    const ordered = orderCategories([hidden, category(2), category(3)]);
+
+    expect(ordered.map((c) => c.id)).toEqual([2, 3, 1]);
+  });
+
+  it("does not otherwise re-sort: the API's order within a group survives", () => {
+    const ordered = orderCategories([category(3), category(1), category(2)]);
+
+    expect(ordered.map((c) => c.id)).toEqual([3, 1, 2]);
+  });
+
+  it("sinks a hidden CHILD below its live siblings, not out of its parent", () => {
+    const hiddenChild = { ...category(5, 1), is_active: false };
+    const ordered = orderCategories([category(1), hiddenChild, category(6, 1), category(2)]);
+
+    expect(ordered.map((c) => c.id)).toEqual([1, 6, 5, 2]);
+  });
+
   it("keeps an orphan rather than dropping it", () => {
     // A category whose parent was deleted is still a category somebody may need to tick.
     // Hiding it from the picker is worse than listing it last.

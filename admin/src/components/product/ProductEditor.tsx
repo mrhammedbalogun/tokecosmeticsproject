@@ -38,7 +38,7 @@ import {
 import { OptionEditor } from "@/components/product/OptionEditor";
 import { RenamePanel } from "@/components/product/RenamePanel";
 import { SingleVariantForm } from "@/components/product/SingleVariantForm";
-import { cellKey, PricesPanel } from "@/components/product/PricesPanel";
+import { cellKey, wasKey, PricesPanel } from "@/components/product/PricesPanel";
 import { SeoPanel } from "@/components/product/SeoPanel";
 import { StockAdjustModal } from "@/components/product/StockAdjustModal";
 import { VariantsPanel } from "@/components/product/VariantsPanel";
@@ -57,7 +57,9 @@ import { VIDEO_CAP_BYTES } from "@/lib/video";
 import {
   amountChanged,
   buildPriceGrid,
+  compareAtChanged,
   validateAmount,
+  validateCompareAt,
   type Cell,
   type PriceRow,
   type VariantRow,
@@ -209,6 +211,8 @@ export function ProductEditor({
     variantId: number;
     currency: string;
     amount: string;
+    /** Omitted = leave the was-price alone; "" = clear it (end the promotion). */
+    compareAt?: string;
     productSlug: string;
   }) => Promise<PriceWriteResult>;
   adjustStock: (input: {
@@ -785,6 +789,63 @@ export function ProductEditor({
 
   /** Commit on blur. Nothing is written for an untouched or unchanged cell — that would
    *  be a request and an audit row for typing nothing. */
+  /**
+   * The was-price box. Its own commit rather than a flag on `onPriceCommit`, because the
+   * two differ in the one place that matters: BLANK IS A REAL VALUE here — it ends a
+   * promotion — where a blank price means "leave it alone".
+   *
+   * Only ever a PATCH: the box is offered only on a cell that already has a price row.
+   */
+  const onWasCommit = (variantId: number, currency: string, cell: Cell) => {
+    const key = wasKey(variantId, currency);
+    const typed = priceDrafts[key];
+    if (typed === undefined || !cell.price) return;
+
+    const invalid = validateCompareAt(typed, cell.amount);
+    if (invalid) {
+      setPriceErrors((current) => ({ ...current, [key]: invalid }));
+      return;
+    }
+    if (!compareAtChanged(cell, typed)) return;
+
+    setPriceErrors((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+    setBusyCell(key);
+    startImageTransition(async () => {
+      let res: PriceWriteResult;
+      try {
+        res = await savePrice({
+          priceId: cell.price!.id,
+          variantId,
+          currency,
+          amount: cell.amount,
+          compareAt: typed.trim(),
+          productSlug: baseline.slug,
+        });
+      } catch {
+        res = { ok: false, error: UNREACHABLE };
+      }
+      setBusyCell(null);
+      if (!res.ok || !res.price) {
+        setPriceErrors((current) => ({
+          ...current,
+          [key]: res.error ?? "That was-price could not be saved.",
+        }));
+        return;
+      }
+      const saved = res.price as PriceRow;
+      setPrices((current) => [...current.filter((p) => p.id !== saved.id), saved]);
+      setPriceDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    });
+  };
+
   const onPriceCommit = (variantId: number, currency: string, cell: Cell) => {
     const key = cellKey(variantId, currency);
     const typed = priceDrafts[key];
@@ -1032,6 +1093,8 @@ export function ProductEditor({
             busyKey={busyCell}
             onDraft={onPriceDraft}
             onCommit={onPriceCommit}
+            onWasDraft={onPriceDraft}
+            onWasCommit={onWasCommit}
             onDeleteVariant={canDeleteVariants ? onVariantDelete : undefined}
             deleteBusyId={variantDeleteBusyId}
             deleteError={variantDeleteError}

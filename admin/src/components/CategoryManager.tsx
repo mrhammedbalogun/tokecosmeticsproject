@@ -71,6 +71,13 @@ export function CategoryManager({
                       Hidden
                     </span>
                   )}
+                  {category.is_assignable === false && (
+                    // Worth a badge because it changes what the row MEANS: its product
+                    // count is not a shelf's stock, it is leftovers nobody can add to.
+                    <span className="rounded border border-line px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted">
+                      Heading
+                    </span>
+                  )}
                   <span className="ml-auto text-xs text-muted">
                     {/* Product counts, because "can I safely hide this?" is the question
                         somebody actually has in front of a category tree. */}
@@ -128,6 +135,9 @@ function CategoryForm({
   const [parent, setParent] = useState(selected.parent === null ? "" : String(selected.parent));
   const [sortOrder, setSortOrder] = useState(String(selected.sort_order));
   const [isActive, setIsActive] = useState(selected.is_active);
+  // Default TRUE when the field is absent: a cached payload written before headings
+  // existed must not read as "this is a heading" and un-file the category's products.
+  const [isAssignable, setIsAssignable] = useState(selected.is_assignable !== false);
 
   return (
     <>
@@ -232,6 +242,24 @@ function CategoryForm({
                 className="h-4 w-4 rounded border-line"
               />
               Visible on the storefront
+            </label>
+
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="is_heading"
+                checked={!isAssignable}
+                onChange={(e) => setIsAssignable(!e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-line"
+              />
+              <span>
+                Menu heading only
+                <span className="mt-0.5 block text-xs text-muted">
+                  Groups the categories under it — like “Shop By Skin Concerns”. Products
+                  cannot be filed here, and its storefront page lists everything from its
+                  sub-categories instead.
+                </span>
+              </span>
             </label>
           </div>
 

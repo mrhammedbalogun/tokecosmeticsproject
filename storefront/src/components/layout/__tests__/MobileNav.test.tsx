@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 // The drawer now embeds `CountrySwitcher`, which calls `useRouter` to repaint prices
@@ -7,11 +7,20 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { MobileNav } from "@/components/layout/MobileNav";
 import type { Market } from "@/lib/country";
 import { MORE_LINKS } from "@/lib/site-pages";
+import { buildShopMenu } from "@/lib/shop-menu";
+import type { CategoryNode } from "@/lib/catalog";
 
-const CATEGORIES = Array.from({ length: 26 }, (_, i) => ({
-  name: `Category ${i}`,
-  slug: `category-${i}`,
-}));
+const node = (name: string, slug: string, children: CategoryNode[] = []): CategoryNode => ({
+  name, slug, image: null, sort_order: 0, children,
+});
+
+// 26 flat categories, matching the live catalogue this drawer was measured against, plus
+// one two-level group so the accordion is exercised.
+const MENU = buildShopMenu([
+  ...Array.from({ length: 26 }, (_, i) => node(`Category ${i}`, `category-${i}`)),
+  { ...node("Shop By Skin Concerns", "shop-by-skin-concerns", [node("Acne", "acne")]),
+    is_assignable: false },
+]);
 
 const MARKETS: Market[] = [
   {
@@ -25,7 +34,7 @@ const MARKETS: Market[] = [
 ];
 
 function drawer(markets: Market[] = MARKETS) {
-  return <MobileNav categories={CATEGORIES} markets={markets} country="NG" />;
+  return <MobileNav menu={MENU} markets={markets} country="NG" />;
 }
 
 describe("MobileNav", () => {
@@ -73,6 +82,40 @@ describe("MobileNav", () => {
     render(drawer([]));
     fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
     expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("keeps sub-menus collapsed until tapped", () => {
+    // Expanded by default is not a style choice: sixteen destinations laid out flat is
+    // the 1400px drawer the scroll test above exists because of.
+    render(drawer());
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    expect(screen.queryByRole("link", { name: "Acne" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Shop By Skin Concerns/ }));
+    expect(screen.getByRole("link", { name: "Acne" })).toBeInTheDocument();
+    // The group's own page is reachable too — the disclosure must not swallow it.
+    expect(screen.getByRole("link", { name: "All Skin Concerns" })).toHaveAttribute(
+      "href", "/category/shop-by-skin-concerns",
+    );
+  });
+
+  it("offers the computed Shop By Edit listings", () => {
+    render(drawer());
+    fireEvent.click(screen.getByRole("button", { name: "Open menu" }));
+    const disclosure = screen.getByRole("button", { name: /Shop By Edit/ });
+    fireEvent.click(disclosure);
+    // Scoped to the group's own list: "Combo Deals" is DELIBERATELY in the drawer twice —
+    // once as a top-level nav item (the 2026-09-02 decision that a combo is something to
+    // buy, so it sits with the buying routes) and once inside this group, where Hammed's
+    // menu puts it. An unscoped query would find both and fail on the ambiguity.
+    const group = within(disclosure.parentElement as HTMLElement);
+    for (const [label, href] of [
+      ["Best Sellers", "/best-sellers"],
+      ["New Arrivals", "/new-arrivals"],
+      ["Promo", "/promo"],
+      ["Combo Deals", "/combo"],
+    ] as const) {
+      expect(group.getByRole("link", { name: label })).toHaveAttribute("href", href);
+    }
   });
 
   it("closes when a More link is followed", () => {

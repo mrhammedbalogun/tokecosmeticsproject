@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   amountChanged,
   buildPriceGrid,
+  compareAtChanged,
   missingCount,
   validateAmount,
+  validateCompareAt,
   type Cell,
   type PriceRow,
   type VariantRow,
@@ -26,6 +28,7 @@ const price = (overrides: Partial<PriceRow> & { variant: number }): PriceRow => 
   currency: "NGN",
   country: null,
   amount: "5000.00",
+  compare_at_amount: null,
   starts_at: null,
   ends_at: null,
   ...overrides,
@@ -51,7 +54,9 @@ describe("buildPriceGrid", () => {
   it("leaves an unpriced cell editable and empty", () => {
     const grid = buildPriceGrid([variant(1)], [], CURRENCIES);
 
-    expect(grid[0].cells.GBP).toEqual({ state: "editable", price: null, amount: "" });
+    expect(grid[0].cells.GBP).toEqual({
+      state: "editable", price: null, amount: "", compareAt: "",
+    });
   });
 
   it("does not let one variant's price leak into another's row", () => {
@@ -207,6 +212,7 @@ describe("amountChanged", () => {
     state: "editable",
     price: id === null ? null : price({ variant: 1, id, amount }),
     amount,
+    compareAt: "",
   });
 
   it("is false for an untouched value", () => {
@@ -229,5 +235,88 @@ describe("amountChanged", () => {
 
   it("is false for a blank draft, so an emptied box writes nothing", () => {
     expect(amountChanged(editable("1500.00"), "")).toBe(false);
+  });
+});
+
+describe("the was-price", () => {
+  it("shows a real reduction", () => {
+    const grid = buildPriceGrid(
+      [variant(1)],
+      [price({ variant: 1, amount: "4000.00", compare_at_amount: "6000.00" })],
+      CURRENCIES,
+    );
+    expect(grid[0].cells.NGN.compareAt).toBe("6000.00");
+  });
+
+  it("shows NOTHING for an import artefact where the was-price equals the price", () => {
+    // The WordPress importer wrote `compare_at_amount = regular` on every variant it
+    // touched, so most non-null values in production mean "not on sale". Pre-filling the
+    // box with one would invite somebody to "fix" a promotion that was never running.
+    const grid = buildPriceGrid(
+      [variant(1)],
+      [price({ variant: 1, amount: "5000.00", compare_at_amount: "5000.00" })],
+      CURRENCIES,
+    );
+    expect(grid[0].cells.NGN.compareAt).toBe("");
+  });
+
+  it("shows nothing when the was-price is BELOW the price", () => {
+    const grid = buildPriceGrid(
+      [variant(1)],
+      [price({ variant: 1, amount: "5000.00", compare_at_amount: "3000.00" })],
+      CURRENCIES,
+    );
+    expect(grid[0].cells.NGN.compareAt).toBe("");
+  });
+});
+
+describe("validateCompareAt", () => {
+  it("accepts blank, because blank ends a promotion", () => {
+    expect(validateCompareAt("", "5000.00")).toBeNull();
+    expect(validateCompareAt("   ", "5000.00")).toBeNull();
+  });
+
+  it("refuses a was-price at or below the price", () => {
+    // The storefront's whole definition of "on promo" is compare_at > amount, so this
+    // would put the product on /promo with nothing struck through.
+    expect(validateCompareAt("5000", "5000.00")).not.toBeNull();
+    expect(validateCompareAt("4000", "5000.00")).not.toBeNull();
+    expect(validateCompareAt("6000", "5000.00")).toBeNull();
+  });
+
+  it("refuses what the price box refuses", () => {
+    expect(validateCompareAt("6,000", "5000.00")).not.toBeNull();
+    expect(validateCompareAt("abc", "5000.00")).not.toBeNull();
+    expect(validateCompareAt("0", "5000.00")).not.toBeNull();
+    expect(validateCompareAt("6000.123", "5000.00")).not.toBeNull();
+  });
+});
+
+describe("compareAtChanged", () => {
+  const cell = (compareAt: string, amount = "5000.00"): Cell => ({
+    state: "editable",
+    price: price({ variant: 1, amount, compare_at_amount: compareAt || null }),
+    amount,
+    compareAt,
+  });
+
+  it("treats CLEARING as a change, unlike the price box", () => {
+    // The asymmetry is the point: a blank price means "leave it alone", a blank was-price
+    // means "end the promotion". Reusing amountChanged here would make ending a sale
+    // impossible.
+    expect(compareAtChanged(cell("6000.00"), "")).toBe(true);
+  });
+
+  it("is false when nothing was set and nothing was typed", () => {
+    expect(compareAtChanged(cell(""), "")).toBe(false);
+  });
+
+  it("ignores a trailing-zero difference", () => {
+    expect(compareAtChanged(cell("6000.00"), "6000")).toBe(false);
+  });
+
+  it("is true for a new value", () => {
+    expect(compareAtChanged(cell(""), "6000")).toBe(true);
+    expect(compareAtChanged(cell("6000.00"), "7000")).toBe(true);
   });
 });

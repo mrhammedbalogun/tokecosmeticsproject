@@ -1,7 +1,7 @@
 "use server";
 
 /**
- * Editing a category: name, slug, parent, sort order, active.
+ * Editing a category: name, slug, parent, sort order, active, heading-or-shelf.
  *
  * WRITES IMMEDIATELY, like the other separate resources. There is no product form to lose
  * here — the page is a tree and a small form, not a seven-tab editor — so this one DOES
@@ -44,6 +44,10 @@ export async function saveCategoryAction(
   const parentRaw = field(formData, "parent");
   const sortRaw = field(formData, "sort_order");
   const isActive = formData.get("is_active") === "on";
+  // The checkbox asks the question the other way round — "menu heading only" is what an
+  // operator is deciding — so it is inverted here rather than in the markup, where a
+  // `name="is_assignable"` box that means the opposite of its label is a trap.
+  const isAssignable = formData.get("is_heading") !== "on";
 
   if (!name) return { fieldErrors: { name: "A category needs a name." } };
   if (!slug) return { fieldErrors: { slug: "A category needs a slug." } };
@@ -67,6 +71,7 @@ export async function saveCategoryAction(
         parent: parentRaw ? Number(parentRaw) : null,
         sort_order: sortRaw ? Number(sortRaw) : 0,
         is_active: isActive,
+        is_assignable: isAssignable,
       },
     });
   } catch (e) {

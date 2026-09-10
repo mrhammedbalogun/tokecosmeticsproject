@@ -17,7 +17,10 @@ class CategorySerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Category
-        fields = ["name", "slug", "image", "sort_order", "children"]
+        # `is_assignable=False` marks a MENU HEADING (see Category.is_assignable). The
+        # storefront menu needs it to render "Shop By Skin Concerns" as a group label
+        # rather than one more shoppable link among its own children.
+        fields = ["name", "slug", "image", "sort_order", "is_assignable", "children"]
 
     def get_children(self, obj):
         kids = [c for c in obj.children.all() if c.is_active]
@@ -72,10 +75,12 @@ class ProductListSerializer(serializers.ModelSerializer):
     default_sku = serializers.SerializerMethodField()
     purchasable_variant_count = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
+    compare_at = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = ["name", "slug", "brand", "is_featured", "from_price", "currency",
+                  "compare_at",
                   "image", "hover_image", "default_variant_id", "default_sku",
                   "purchasable_variant_count", "in_stock", "rating_avg",
                   "rating_count"]
@@ -104,6 +109,29 @@ class ProductListSerializer(serializers.ModelSerializer):
         dp = self.context["request"].country.currency.decimal_places
         quantum = Decimal(1).scaleb(-dp)  # dp=2 -> 0.01
         return str(Decimal(str(amount)).quantize(quantum))
+
+    def get_compare_at(self, obj):
+        """The struck-through "was" price for the card, or None when nothing is reduced.
+
+        Reads `min_price_compare_at`, annotated off the SAME price row `from_price` came
+        from (see `annotate_min_price`), so the pair the card prints is one variant's
+        before-and-after rather than two variants' prices stapled together. Deliberately
+        NOT resolved per variant: that is `resolve_price` once per variant per card, i.e.
+        ~190 queries for a 24-product page.
+
+        None unless the reduction is REAL (`compare_at > amount`). The WordPress import
+        wrote `compare_at_amount = regular` on every variant it touched, sale or not, so
+        trusting non-null here would strike a "was" price through the entire catalogue.
+        """
+        amount = getattr(obj, "min_price", None)
+        was = getattr(obj, "min_price_compare_at", None)
+        if amount is None or was is None:
+            return None
+        amount, was = Decimal(str(amount)), Decimal(str(was))
+        if was <= amount:
+            return None
+        dp = self.context["request"].country.currency.decimal_places
+        return str(was.quantize(Decimal(1).scaleb(-dp)))
 
     def get_currency(self, obj):
         return self.context["request"].country.currency.code

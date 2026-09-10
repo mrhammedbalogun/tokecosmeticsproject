@@ -10,6 +10,10 @@ export interface ProductCard {
   brand: string | null;           // the brand SLUG (SlugRelatedField), not the name
   is_featured: boolean;
   from_price: string | null;      // money string — display verbatim
+  /** The struck-through "was" price, or null when nothing is reduced. Set only when the
+   *  reduction is real and belongs to the same variant `from_price` came from — see
+   *  `ProductListSerializer.get_compare_at`. */
+  compare_at?: string | null;
   currency: string;
   image: string | null; hover_image: string | null;   // relative /media URLs
   default_variant_id: number | null; default_sku: string | null;
@@ -52,6 +56,11 @@ export interface ProductDetail {
 }
 export interface CategoryNode {
   name: string; slug: string; image: string | null; sort_order: number;
+  /** False = a MENU HEADING: a grouping row no product can be filed under ("Shop By Skin
+   *  Concerns"). Optional because the API caches category payloads for an hour, so a
+   *  response written before the field existed can still be in flight — missing means
+   *  assignable, the behaviour every category had before headings existed. */
+  is_assignable?: boolean;
   children: CategoryNode[];
 }
 export interface BrandRow { name: string; slug: string; logo: string | null; description: string }
@@ -62,11 +71,15 @@ export interface ReviewRow { rating: number; title: string; body: string; author
 export interface ProductListParams {
   category?: string; brand?: string; tag?: string; collection?: string;
   price_min?: string; price_max?: string;
+  /** "1" = only products carrying a live reduced price in this market (the Promo page).
+   *  Anything else is not sent, so a hand-edited `?on_sale=no` cannot widen the set. */
+  on_sale?: string;
   ordering?: "newest" | "price_asc" | "price_desc" | "best_selling";
   page?: number;
 }
 const LIST_KEYS: (keyof ProductListParams)[] = [
-  "category", "brand", "tag", "collection", "price_min", "price_max", "ordering", "page",
+  "category", "brand", "tag", "collection", "price_min", "price_max", "on_sale",
+  "ordering", "page",
 ];
 
 export function buildProductQuery(params: ProductListParams): string {

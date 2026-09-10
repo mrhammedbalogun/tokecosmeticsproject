@@ -3,9 +3,13 @@ import type { PlpState } from "@/components/plp/plpParams";
 import { SortSelect } from "@/components/plp/SortSelect";
 
 /** GET-method form: submitting rewrites the URL params (SSR round-trip, no JS
- * required). Hidden inputs preserve context params owned by the page (tag/collection). */
-export function FiltersBar({ base, state, brands, showBrand = true, resultCount }: {
-  base: string; state: PlpState; brands: BrandRow[]; showBrand?: boolean; resultCount: number;
+ * required). Hidden inputs preserve context params owned by the page (tag/collection).
+ *
+ * `showSort=false` for a listing whose ORDER is its identity — "Best Sellers" sorted
+ * cheapest-first is not a best-seller page, and the control would invite exactly that. */
+export function FiltersBar({ base, state, brands, showBrand = true, resultCount, showSort = true }: {
+  base: string; state: PlpState; brands: BrandRow[]; showBrand?: boolean;
+  resultCount: number; showSort?: boolean;
 }) {
   return (
     <form method="GET" action={base}
@@ -32,7 +36,7 @@ export function FiltersBar({ base, state, brands, showBrand = true, resultCount 
         <input name="price_max" type="number" min="0" step="any" defaultValue={state.price_max ?? ""}
           className="mt-1 block w-24 rounded-md border border-line px-2 py-1.5 text-sm text-foreground" />
       </label>
-      <SortSelect current={state.ordering ?? "newest"} />
+      {showSort && <SortSelect current={state.ordering ?? "newest"} />}
       <button type="submit"
         className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-surface transition-colors hover:bg-accent-strong">
         Apply

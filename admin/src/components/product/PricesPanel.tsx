@@ -27,6 +27,11 @@ export interface PricesPanelProps {
   busyKey: string | null;
   onDraft: (key: string, value: string) => void;
   onCommit: (variantId: number, currency: string, cell: Cell) => void;
+  /** The was-price box. A separate pair of handlers rather than a `field` argument on the
+   *  existing ones: the two boxes are written by different requests, and threading a
+   *  discriminator through five call sites reads worse than two names. */
+  onWasDraft: (key: string, value: string) => void;
+  onWasCommit: (variantId: number, currency: string, cell: Cell) => void;
   /** Absent = the caller may not delete variants (products.manage), so no button.
    *  Same handler as the Variants tab's — deleting here removes the VARIANT, not
    *  merely its prices (there is no "unprice" concept; blank the cell for that). */
@@ -36,6 +41,9 @@ export interface PricesPanelProps {
 }
 
 export const cellKey = (variantId: number, currency: string) => `${variantId}:${currency}`;
+/** Key for the was-price draft of the same cell. Distinct namespace, so typing in one box
+ *  cannot be read as an edit to the other. */
+export const wasKey = (variantId: number, currency: string) => `${variantId}:${currency}:was`;
 
 export function PricesPanel({
   grid,
@@ -45,6 +53,8 @@ export function PricesPanel({
   busyKey,
   onDraft,
   onCommit,
+  onWasDraft,
+  onWasCommit,
   onDeleteVariant,
   deleteBusyId,
   deleteError,
@@ -141,6 +151,15 @@ export function PricesPanel({
                           aria-label={label}
                           className={`${INPUT} cursor-not-allowed opacity-60`}
                         />
+                        {cell.compareAt && (
+                          <input
+                            type="text"
+                            value={cell.compareAt}
+                            readOnly
+                            aria-label={`${row.variant.sku} was-price in ${currency}`}
+                            className={`${INPUT} mt-1 cursor-not-allowed opacity-60`}
+                          />
+                        )}
                         <p className="mt-1 max-w-56 text-xs text-warn">{cell.reason}</p>
                       </td>
                     );
@@ -148,6 +167,9 @@ export function PricesPanel({
 
                   const draft = drafts[key] ?? cell.amount;
                   const error = errors[key];
+                  const was = wasKey(row.variant.id, currency);
+                  const wasDraft = drafts[was] ?? cell.compareAt;
+                  const wasError = errors[was];
                   return (
                     <td key={currency} className="p-3">
                       <input
@@ -173,6 +195,32 @@ export function PricesPanel({
                           <p className="mt-1 text-xs text-muted">Not priced</p>
                         )
                       )}
+
+                      {/* The was-price. Offered only once the cell HAS a price: a
+                          reduction from nothing is not a thing, and the endpoint needs
+                          the price row to hang it on. */}
+                      {cell.price && (
+                        <>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={wasDraft}
+                            onChange={(e) => onWasDraft(was, e.target.value)}
+                            onBlur={() => onWasCommit(row.variant.id, currency, cell)}
+                            disabled={busyKey === was}
+                            placeholder="was —"
+                            aria-label={`${row.variant.sku} was-price in ${currency}`}
+                            className={`${INPUT} mt-1 ${wasError ? "border-warn" : ""}`}
+                          />
+                          {wasError ? (
+                            <p className="mt-1 max-w-56 text-xs text-warn">{wasError}</p>
+                          ) : (
+                            <p className="mt-1 text-xs text-muted">
+                              {wasDraft ? "On promo" : "Was price (optional)"}
+                            </p>
+                          )}
+                        </>
+                      )}
                     </td>
                   );
                 })}
@@ -185,6 +233,11 @@ export function PricesPanel({
       <p className="mt-3 text-xs text-muted">
         A market needs a price in its currency before the product appears there at all.
         Country-specific and scheduled prices cannot be edited here.
+      </p>
+      <p className="mt-1 text-xs text-muted">
+        Set a <strong>was price</strong> above the price to put a product on the
+        storefront’s <span className="font-mono">/promo</span> page — the old price shows
+        struck through. Clear the box to end the promotion.
       </p>
     </div>
   );

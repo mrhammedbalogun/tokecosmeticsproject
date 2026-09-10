@@ -137,7 +137,8 @@ class ProductAdminSerializer(serializers.ModelSerializer):
 
 
 class CategoryAdminSerializer(serializers.ModelSerializer):
-    audit_allowlist = ("name", "slug", "parent", "is_active", "sort_order", "seo_title", "seo_description")
+    audit_allowlist = ("name", "slug", "parent", "is_active", "is_assignable", "sort_order",
+                       "seo_title", "seo_description")
 
     class Meta:
         model = Category

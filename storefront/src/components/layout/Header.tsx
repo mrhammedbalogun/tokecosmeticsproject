@@ -12,8 +12,8 @@ import { MobileNav } from "@/components/layout/MobileNav";
 import { SearchBar } from "@/components/layout/SearchBar";
 import { CategoryDropdown } from "@/components/layout/CategoryDropdown";
 import { MoreMenu } from "@/components/layout/MoreMenu";
-
-interface Category { name: string; slug: string; children: Category[] }
+import { buildShopMenu } from "@/lib/shop-menu";
+import type { CategoryNode } from "@/lib/catalog";
 
 export async function Header() {
   const jar = await cookies();
@@ -21,9 +21,13 @@ export async function Header() {
   const country = normalizeCountry(
     jar.get(COUNTRY_COOKIE)?.value, markets.map((m) => m.code),
   ) || DEFAULT_COUNTRY;
-  const categories = await apiFetch<Category[]>("/categories/", {
+  const categories = await apiFetch<CategoryNode[]>("/categories/", {
     country, next: { revalidate: 3600 },
   }).catch(() => []);
+  // Built ONCE and handed to both renderers. The desktop panel and the mobile drawer show
+  // the same menu in different shapes, and building it twice is how they start disagreeing
+  // about what is in it.
+  const menu = buildShopMenu(categories);
   const signedIn = Boolean(await getAccessToken());
 
   return (
@@ -34,15 +38,17 @@ export async function Header() {
             and it squeezed this group — logo included — to 30px on a 390px phone, so no
             logo rendered at all. Measured and screenshotted 2026-08-16. */}
         <div className="flex shrink-0 items-center gap-3">
-          <MobileNav categories={categories} markets={markets} country={country} />
+          <MobileNav menu={menu} markets={markets} country={country} />
           <Link href="/" className="site-logo flex items-center gap-2">
             <Image src="/logos/toke-logo.png" alt="Toke Cosmetics" width={96} height={56} priority />
           </Link>
         </div>
         {/* The approved artifact's menu: Home · All Products · Shop by Category ·
-            Skin Quiz · More. Categories live in the dropdown, not inline.
+            Combo Deals · Skin Quiz · More. Categories live in the dropdown, not inline.
             Blog moved INSIDE `More` on 2026-08-16 — nine supporting pages were due and a
-            flat nav of fourteen items is not a nav. See `lib/site-pages.ts`. */}
+            flat nav of fourteen items is not a nav. See `lib/site-pages.ts`.
+            Shop by Category became a two-level PANEL on 2026-09-10 — see
+            `lib/shop-menu.ts` for what is in it and where each part comes from. */}
         <nav className="hidden items-center gap-6 lg:flex">
           <Link href="/" className="text-sm hover:text-accent">
             Home
@@ -50,7 +56,7 @@ export async function Header() {
           <Link href="/products" className="text-sm hover:text-accent">
             All Products
           </Link>
-          <CategoryDropdown categories={categories.map(({ name, slug }) => ({ name, slug }))} />
+          <CategoryDropdown entries={menu} />
           {/* Top-level rather than inside `More` (2026-09-02): a combo is something to
               BUY, and every other buying route in this bar is top-level. Filing it with
               the policy pages is how it stays unvisited. */}

@@ -1,6 +1,47 @@
 import type { NextConfig } from "next";
 import { CSP_HEADER_NAME, REPORT_ONLY, buildCsp, frameAncestorsPolicy } from "./src/lib/csp";
 
+// ── RETIRED CATEGORY URLS (the Shop by Category rework, 2026-09-10) ────────────────────
+//
+// `manage.py rebuild_shop_menu` renamed some categories and merged others away, so slugs
+// that Google has indexed no longer resolve. `core.Redirect` — the table that handles
+// every other legacy URL — cannot serve these: it is read by the ROOT catch-all
+// (`app/[...slug]`), and `/category/[slug]` is a real route that renders notFound()
+// long before any catch-all is reached.
+//
+// ONLY GENUINE EQUIVALENTS ARE LISTED. "Men Care" and "Skincare Sets" left the menu with
+// no successor, and pointing them at /products would be a soft 404 — Google treats a
+// redirect to an unrelated page as one, and a shopper following an old link to a shelf
+// that no longer exists is better served by an honest 404 than by being dropped into the
+// full catalogue. Those simply 404.
+const LEGACY_CATEGORY_REDIRECTS = [
+  // Renamed in place: the row kept its products and took a new slug.
+  ["baby-care", "/category/baby-kids-care"],
+  ["facials", "/category/facial-care"],
+  ["travel-size", "/category/travel-sizes"],
+  ["shop-by-skin-concern", "/category/shop-by-skin-concerns"],
+  // Merged away: duplicates whose products moved onto the row that survived.
+  ["baby-care-shop-by-category", "/category/baby-kids-care"],
+  ["kids", "/category/baby-kids-care"],
+  ["kids-care", "/category/baby-kids-care"],
+  ["hair-care-shop-by-category", "/category/hair-care"],
+  ["skin-care-2", "/category/skin-care"],
+  ["facial-set", "/category/facial-care"],
+  ["travel-size-shop-by-category", "/category/travel-sizes"],
+  ["travel-size-shop-by-edit", "/category/travel-sizes"],
+  // The old WordPress "shop by edit" categories, now computed listings of their own.
+  ["best-sellers", "/best-sellers"],
+  ["new-arrivals", "/new-arrivals"],
+  ["promo", "/promo"],
+  ["promo-2", "/promo"],
+  ["combo-Deals", "/combo"],
+  ["shop-all", "/products"],
+].map(([slug, destination]) => ({
+  source: `/category/${slug}`,
+  destination,
+  permanent: true,
+}));
+
 const nextConfig: NextConfig = {
   // ── LEGACY WORDPRESS MEDIA ────────────────────────────────────────────────────────
   //
@@ -25,6 +66,7 @@ const nextConfig: NextConfig = {
         destination: "https://old.tokecosmetics.com/wp-content/:path*",
         permanent: true,
       },
+      ...LEGACY_CATEGORY_REDIRECTS,
     ];
   },
   images: {

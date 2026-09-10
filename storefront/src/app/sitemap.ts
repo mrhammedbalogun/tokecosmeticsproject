@@ -3,6 +3,7 @@ import { flattenCategories, getCategoryTree, getProducts } from "@/lib/catalog";
 import { getPages } from "@/lib/cms";
 import { getCombos } from "@/lib/combos";
 import { MORE_LINKS } from "@/lib/site-pages";
+import { SHOP_EDITS } from "@/lib/shop-edits";
 import { absoluteUrl } from "@/lib/seo";
 import { DEFAULT_COUNTRY } from "@/lib/country";
 
@@ -19,6 +20,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: absoluteUrl("/products"), changeFrequency: "daily", priority: 0.9 },
     { url: absoluteUrl("/combo"), changeFrequency: "weekly", priority: 0.8 },
   ];
+
+  // "Shop By Edit" (2026-09-10). Static routes over live queries, so daily: the contents
+  // of /best-sellers and /promo change without anybody publishing anything. Derived from
+  // the same registry the pages and the menu read, so a fourth edit cannot ship
+  // unlisted — which is what happened to the CMS pages twice.
+  for (const edit of Object.values(SHOP_EDITS)) {
+    entries.push({
+      url: absoluteUrl(`/${edit.slug}`),
+      changeFrequency: "daily", priority: 0.8,
+    });
+  }
 
   // Combos (2026-09-02). Unpaginated by design — the endpoint returns the whole curated
   // handful — and a failure costs the sitemap those URLs, never the whole file, which is

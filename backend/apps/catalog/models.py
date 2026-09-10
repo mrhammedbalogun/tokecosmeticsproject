@@ -29,6 +29,17 @@ class Category(TimeStampedModel):
         upload_to="catalog/categories/", blank=True, null=True, max_length=IMAGE_PATH_MAX
     )
     is_active = models.BooleanField(default=True)
+    # Can a PRODUCT be filed under this category? (2026-09-10, the Shop by Category
+    # rework.) False makes the row a MENU HEADING — "Shop By Skin Concerns" groups Acne,
+    # Dry Skin, Oily Skin and Hyperpigmentation, and no product belongs to the grouping
+    # itself. Two things read it: the admin product editor drops non-assignable rows from
+    # its picker, and the storefront menu renders them as group labels.
+    #
+    # A FLAG RATHER THAN "has children", which was the tempting derivation: a category is
+    # allowed to hold products AND sub-categories (Skin Care could grow a Cleansers child
+    # tomorrow without its 33 products becoming unfilable), so heading-ness is a decision
+    # somebody makes, not a shape the tree happens to have.
+    is_assignable = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
     legacy_wp_id = models.IntegerField(null=True, blank=True, db_index=True)
     seo_title = models.CharField(max_length=255, blank=True)
