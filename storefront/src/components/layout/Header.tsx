@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { getMarkets, COUNTRY_COOKIE, DEFAULT_COUNTRY, normalizeCountry } from "@/lib/country";
-import { apiFetch } from "@/lib/api";
 import { getAccessToken } from "@/lib/session";
 import { CountrySwitcher } from "@/components/layout/CountrySwitcher";
 import { CartButton } from "@/components/layout/CartButton";
@@ -13,7 +12,7 @@ import { SearchBar } from "@/components/layout/SearchBar";
 import { CategoryDropdown } from "@/components/layout/CategoryDropdown";
 import { MoreMenu } from "@/components/layout/MoreMenu";
 import { buildShopMenu } from "@/lib/shop-menu";
-import type { CategoryNode } from "@/lib/catalog";
+import { getCategoryTree, type CategoryNode } from "@/lib/catalog";
 
 export async function Header() {
   const jar = await cookies();
@@ -21,9 +20,12 @@ export async function Header() {
   const country = normalizeCountry(
     jar.get(COUNTRY_COOKIE)?.value, markets.map((m) => m.code),
   ) || DEFAULT_COUNTRY;
-  const categories = await apiFetch<CategoryNode[]>("/categories/", {
-    country, next: { revalidate: 3600 },
-  }).catch(() => []);
+  // `getCategoryTree`, not a bare `apiFetch`: this fetch had its own untagged one-hour
+  // cache, so `revalidateTag("catalog")` — which every other catalogue read honours —
+  // could not reach the MENU. After the 2026-09-10 rebuild the category pages updated at
+  // once and the nav above them kept offering the old categories, which is the failure
+  // this shape cannot have.
+  const categories = await getCategoryTree(country).catch(() => [] as CategoryNode[]);
   // Built ONCE and handed to both renderers. The desktop panel and the mobile drawer show
   // the same menu in different shapes, and building it twice is how they start disagreeing
   // about what is in it.
