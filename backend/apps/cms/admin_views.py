@@ -77,6 +77,21 @@ class BannerAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
     queryset = Banner.objects.prefetch_related("countries").all()
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["placement", "is_active"]
+    # UNPAGINATED, deliberately (2026-09-11). Both consumers — /home-content and
+    # /content/affiliates — do not LIST banners, they MAP them onto fixed placement
+    # slots, so a banner that falls off page 1 does not appear later in a table, it
+    # simply cannot be edited. That is what happened: the shop passed 24 banners, the
+    # default page size, and the Back-to-School hero (last under `ordering = ["sort",
+    # "-created_at"]`) vanished from the admin while still running on the homepage.
+    # Paging the clients instead would have been the wrong fix — neither has anywhere
+    # to put a pager — and `page_size` is not an accepted query parameter, so they
+    # could not have asked for more even if they wanted to.
+    #
+    # Safe because this set is BOUNDED BY THE HOMEPAGE: a banner exists to fill one of
+    # ~14 placements, most of which hold 3 or 4 tiles. It is 26 rows today and its
+    # ceiling is tens. If banners ever become a long-lived archive rather than the
+    # live homepage's contents, give the clients a real pager and put this back.
+    pagination_class = None
 
 
 class MediaAssetAdminViewSet(

@@ -98,3 +98,24 @@ def test_banner_image_mode_accepts_artwork():
     )
     banner.full_clean()
     assert banner.image_mode == "artwork"
+
+
+@pytest.mark.django_db
+def test_the_admin_banner_list_is_not_cut_off_at_a_page():
+    """Regression, 2026-09-11: the shop passed 24 banners — the default page size — and
+    the newest hero silently stopped appearing in the admin while still running on the
+    live homepage. /home-content maps banners onto fixed slots and has no pager, so a
+    banner on page 2 is not "further down the list", it is uneditable."""
+    from apps.catalog.tests.factories_admin import staff_user
+
+    for i in range(30):
+        Banner.objects.create(title=f"Banner {i}", placement="hero", sort=i)
+
+    client = APIClient()
+    client.force_authenticate(user=staff_user())
+    r = client.get("/api/v1/admin/banners/")
+    assert r.status_code == 200, r.content
+    body = r.json()
+    # A bare list, not {count, next, results} — both clients already accept either.
+    assert isinstance(body, list), body
+    assert len(body) == 30
