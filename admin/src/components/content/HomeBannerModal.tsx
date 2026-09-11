@@ -50,6 +50,13 @@ import { LOOP_WARN_BYTES, VIDEO_CAP_BYTES, fileSizeMb as videoSizeMb } from "@/l
 const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
 
+/** How this placement will FIT a finished artwork, which decides what the upload check
+ * should warn about. Only a box that can be pinned to the artwork's own ratio contains;
+ * a tile whose shape the homepage grid fixes still crops, in either mode. */
+function artworkFit(spec: PlacementSpec, mode: "overlay" | "artwork"): "cover" | "contain" {
+  return mode === "artwork" && spec.artworkMeans === "whole" ? "contain" : "cover";
+}
+
 type MediaKind = "image" | "mobile_image" | "video";
 
 /** What should happen to one media slot on Save: nothing, replace with `file`, attach
@@ -119,6 +126,10 @@ export function HomeBannerModal({
   );
   /** "this file will be cropped by N%" per slot, measured when the file is chosen. */
   const [cropNote, setCropNote] = useState<Partial<Record<MediaKind, string>>>({});
+  /** The chosen files themselves, so the note can be RE-measured when the mode changes:
+   * the same file is cropped in one mode and letterboxed in the other, and a warning
+   * left over from the mode you were in a moment ago is worse than none. */
+  const [cropSource, setCropSource] = useState<Partial<Record<MediaKind, File>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -138,6 +149,24 @@ export function HomeBannerModal({
   useEffect(() => {
     firstFieldRef.current?.focus();
   }, []);
+
+  // Re-measure every staged file when the mode changes: the same picture is cropped in
+  // one mode and letterboxed in the other, so a note from the previous mode is a lie.
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      const notes: Partial<Record<MediaKind, string>> = {};
+      for (const [kind, file] of Object.entries(cropSource)) {
+        if (!file) continue;
+        const note = await cropWarning(file, spec.aspect, artworkFit(spec, imageMode));
+        if (note) notes[kind as MediaKind] = note;
+      }
+      if (live) setCropNote(notes);
+    })();
+    return () => {
+      live = false;
+    };
+  }, [imageMode, cropSource, spec]);
 
   useEffect(() => {
     // One document listener owns Escape for both layers: two stacked listeners cannot
@@ -194,7 +223,8 @@ export function HomeBannerModal({
     // Measured on the ORIGINAL, not the downscale: downscaling preserves the ratio, and
     // the ratio is the whole question. A finished artwork is never cropped by the
     // storefront, so there is nothing to warn about.
-    const note = imageMode === "artwork" ? null : await cropWarning(file, spec.aspect);
+    setCropSource((c) => ({ ...c, [kind]: file }));
+    const note = await cropWarning(file, spec.aspect, artworkFit(spec, imageMode));
     setCropNote((n) => ({ ...n, [kind]: note ?? undefined }));
   };
 
@@ -424,8 +454,8 @@ export function HomeBannerModal({
                 <span>
                   A photo
                   <span className="block text-[11px] text-muted">
-                    The shop writes the headline, eyebrow and button over it, and crops it
-                    to fill the slide. Leave room for the text on one side.
+                    The shop writes its own words over it and crops it to fill the space.
+                    Leave room for the text on one side.
                   </span>
                 </span>
               </label>
@@ -440,21 +470,35 @@ export function HomeBannerModal({
                 <span>
                   Finished artwork
                   <span className="block text-[11px] text-muted">
-                    Already has its own words and button in the picture. The shop shows it
-                    whole, never crops it, and writes nothing on top — so the Headline here
-                    is used only for the slide tab, and the Button link makes the whole
-                    picture clickable.
+                    {spec.artworkMeans === "whole" ? (
+                      <>
+                        Already has its own words and button in the picture. The shop shows
+                        it <strong>whole</strong>, never crops it, and writes nothing on
+                        top — so the Headline here is used only for the slide tab, and the
+                        Button link makes the whole picture clickable.
+                      </>
+                    ) : (
+                      <>
+                        Already has its own words in the picture, so the shop writes no
+                        heading, paragraph or button over it and the whole tile becomes
+                        clickable. This tile is a <strong>fixed shape</strong> set by the
+                        homepage layout, so it is still cropped to fill —{" "}
+                        {spec.guide.replace(/\.$/, "")}. The Headline here stays as the
+                        tile&rsquo;s name for screen readers.
+                      </>
+                    )}
                   </span>
                 </span>
               </label>
             </div>
-            {imageMode === "artwork" && !values.cta_url.trim() && (
+            {imageMode === "artwork" && !values.cta_url.trim() && !spec.builtInLink && (
               <p role="status" className="mt-2 rounded border border-warn/30 bg-warn/5 p-2 text-warn">
                 No Button link. A painted button that does nothing when tapped is worse
                 than none — give this slide a link so the whole picture is clickable.
               </p>
             )}
             {imageMode === "artwork" &&
+              spec.artworkMeans === "whole" &&
               !banner?.mobile_image &&
               !media.mobile_image.file &&
               !media.mobile_image.asset && (

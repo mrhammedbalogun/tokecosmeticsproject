@@ -141,9 +141,8 @@ export function specRatio(aspect: string): number | null {
 }
 
 /**
- * How much of a chosen image the storefront will have to crop away to fill a slot of
- * `aspect`, or null when there is nothing to say (no spec shape, an undecodable file, a
- * ratio within tolerance).
+ * What a chosen image will look like in a slot of `aspect`, or null when there is
+ * nothing to say (no spec shape, an undecodable file, a ratio within tolerance).
  *
  * WHY THIS EXISTS (2026-09-10): the Back-to-School hero was authored 1698×926 and
  * dropped into a slot the guide has always described as 1920×1080. Nothing anywhere
@@ -151,25 +150,46 @@ export function specRatio(aspect: string): number | null {
  * banner had lost its logo off the top and its "Shop Now" off the bottom. A sentence at
  * pick time is the only place this is cheap to catch.
  *
- * 2% tolerance: below that the crop is a couple of pixels and saying so is noise.
+ * `fit` is the placement's `artworkMeans` (2026-09-11), because the consequence of a
+ * mismatch is not the same in both: a box pinned to the artwork's ratio LETTERBOXES,
+ * a box whose shape the grid fixes CROPS. Saying "cropped" where the truth is "blurred
+ * bands" teaches the marketer to distrust the warning.
+ *
+ * 2% tolerance: below that the difference is a couple of pixels and saying so is noise.
  */
-export async function cropWarning(file: File, aspect: string): Promise<string | null> {
+export async function cropWarning(
+  file: File,
+  aspect: string,
+  fit: "cover" | "contain" = "cover",
+): Promise<string | null> {
   const want = specRatio(aspect);
   if (!want) return null;
   const dims = await imageSize(file);
   if (!dims) return null;
   const got = dims.w / dims.h;
   if (Math.abs(got - want) / want < 0.02) return null;
+
+  const shape = aspect === "aspect-video" ? "16:9" : `${want.toFixed(2)}:1`;
+  const wider = got > want;
+  const pct = Math.round((wider ? 1 - want / got : 1 - got / want) * 100);
+  const head = `This image is ${dims.w}×${dims.h} and the slot is ${shape}. `;
+
+  if (fit === "contain") {
+    // Nothing is cropped here — the box moves to meet the picture — so the cost is
+    // empty space, and the sentence has to say so or it reads as a false alarm.
+    return (
+      head +
+      `Nothing will be cropped, but about ${pct}% of the slot will be blurred filler ` +
+      `${wider ? "above and below it" : "down each side"}. Re-export it to fit the slot ` +
+      `and that disappears.`
+    );
+  }
   // Cover fits the LONGER side and trims the other, so the loss is on one axis only.
-  const lost =
-    got > want
-      ? { pct: 1 - want / got, edge: "the left and right edges" }
-      : { pct: 1 - got / want, edge: "the top and bottom" };
   return (
-    `This image is ${dims.w}×${dims.h}. The slot is ${aspect === "aspect-video" ? "16:9" : want.toFixed(2) + ":1"}, ` +
-    `so about ${Math.round(lost.pct * 100)}% of ${lost.edge} will be cropped off. ` +
-    `Fine for a photo with room to spare — but if this artwork has text, a logo or a ` +
-    `button near that edge, re-export it to fit the slot.`
+    head +
+    `About ${pct}% of ${wider ? "the left and right edges" : "the top and bottom"} will ` +
+    `be cropped off. Fine for a photo with room to spare — but if this artwork has text, ` +
+    `a logo or a button near that edge, re-export it to fit the slot.`
   );
 }
 

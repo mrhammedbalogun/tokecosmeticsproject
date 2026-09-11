@@ -177,14 +177,14 @@ export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
                 className="scale-110 object-cover blur-2xl md:hidden"
               />
             )}
-            {slide.artwork && slide.image && (
+            {slide.artwork && (slide.image || slide.mobileImage) && (
               <Image
-                src={slide.image}
+                src={(slide.image ?? slide.mobileImage)!}
                 alt=""
                 aria-hidden
                 fill
                 sizes="100vw"
-                className={`scale-110 object-cover blur-2xl ${slide.mobileImage ? "hidden md:block" : ""}`}
+                className={`scale-110 object-cover blur-2xl ${slide.image && slide.mobileImage ? "hidden md:block" : ""}`}
               />
             )}
             {slide.video && slide.videoMode === "click" ? (
@@ -228,9 +228,11 @@ export function HeroSlider({ banners }: { banners: CmsBanner[] }) {
                   className={`hidden ${fit} md:block`}
                 />
               </>
-            ) : slide.image ? (
+            ) : slide.image || slide.mobileImage ? (
+              // `|| mobileImage`: a banner with ONLY a phone image used to fall past
+              // this branch and render the empty gradient — a blank hero.
               <Image
-                src={slide.image}
+                src={(slide.image ?? slide.mobileImage)!}
                 alt=""
                 fill
                 priority={i === 0}

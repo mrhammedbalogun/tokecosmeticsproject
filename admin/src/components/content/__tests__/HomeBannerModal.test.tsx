@@ -133,7 +133,37 @@ describe("HomeBannerModal video uploads", () => {
 });
 
 describe("HomeBannerModal image mode (the 2026-09-10 crop fix)", () => {
-  const HERO_WITH_MODE = { ...SPEC, imageMode: true } as PlacementSpec;
+  // Mirrors the real hero spec: its box is pinned to the artwork's ratio, and a hero
+  // slide has no destination of its own.
+  const HERO_WITH_MODE = {
+    ...SPEC,
+    imageMode: true,
+    artworkMeans: "whole",
+    builtInLink: false,
+  } as PlacementSpec;
+  // …and a grid tile, whose shape the homepage fixes and which always has somewhere to go.
+  const TILE_WITH_MODE = {
+    ...SPEC,
+    value: "trio",
+    guide: "Image/video 900×1200 (3:4 portrait).",
+    aspect: "aspect-[3/4]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
+  } as PlacementSpec;
+
+  function renderTile() {
+    return render(
+      <HomeBannerModal
+        spec={TILE_WITH_MODE}
+        banner={null}
+        presetSort={0}
+        heading="Collections · Tile 1"
+        countryOptions={[]}
+        onClose={() => {}}
+      />,
+    );
+  }
 
   function renderHero(banner: BannerRow | null = null) {
     return render(
@@ -163,6 +193,22 @@ describe("HomeBannerModal image mode (the 2026-09-10 crop fix)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Save/ }));
     await waitFor(() => expect(saveBannerAction).toHaveBeenCalled());
     expect(saveBannerAction.mock.calls[0][0]).toMatchObject({ image_mode: "artwork" });
+  });
+
+  it("tells a fixed-shape tile the truth: it is still cropped to fill", () => {
+    renderTile();
+    fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
+    expect(screen.getByText(/fixed shape/)).toBeInTheDocument();
+    // The hero's promise — shown whole, never cropped — must NOT be made here.
+    expect(screen.queryByText(/never crops it/)).toBeNull();
+  });
+
+  it("does not nag a tile about a missing link: it has a destination of its own", () => {
+    renderTile();
+    fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
+    expect(screen.queryByText(/No Button link/)).toBeNull();
+    // Nor about a phone crop: a tile that fills its slot has no thin-strip problem.
+    expect(screen.queryByText(/No Phone image/)).toBeNull();
   });
 
   it("warns that a finished artwork with no link is a dead painted button", () => {

@@ -25,12 +25,38 @@ export interface PlacementSpec {
    * ALSO the shape the upload check measures a chosen file against. */
   aspect: string;
   /**
-   * Does this placement's storefront component honour `image_mode`? Only the hero does
-   * today (`storefront/src/components/home/HeroSlider.tsx`). A control that appears
-   * where nothing reads it is worse than no control, so the editor shows the choice only
-   * where it is true — add it here when a tile learns to read the field, not before.
+   * Does this placement's storefront component honour `image_mode`? A control that
+   * appears where nothing reads it is worse than no control, so the editor shows the
+   * choice only where it is true — add it here when a tile learns to read the field,
+   * not before.
+   *
+   * NOT offered on `category` or `concern` (2026-09-11): their only overlay is the
+   * label, and that label is the ONLY accessible name the tile's link has — every tile
+   * image renders `alt=""`. Suppressing it would ship links a screen reader announces as
+   * nothing. Nor on `feature_nature`/`feature_collection`, whose boxes have no height of
+   * their own below `lg` — the text block IS the height, so removing it collapses the
+   * tile to nothing. Nor on the two affiliate slots, which have no text to suppress and
+   * would need their boxes pinned first.
    */
   imageMode?: boolean;
+  /**
+   * What "Finished artwork" actually DOES here, which is not the same everywhere:
+   *
+   * "whole" — the box is pinned to the artwork's own ratio, so nothing is ever cropped
+   *   (the hero, whose section is `aspect-[16/9]`). Off-ratio artwork gets thin bands.
+   * "uncaptioned" — the box's shape is fixed by the grid it sits in and cannot move to
+   *   meet the picture, so the picture still FILLS it. Artwork here means only "the shop
+   *   writes no headline, paragraph or button over it". The crop check therefore stays
+   *   live and load-bearing for these.
+   */
+  artworkMeans?: "whole" | "uncaptioned";
+  /**
+   * Does the tile still have somewhere to go when the CMS link is blank? Every grid tile
+   * carries a built-in destination (`/products?collection=…`); a hero slide does not.
+   * Drives whether the editor nags about a missing link in artwork mode, where the whole
+   * picture becomes the link.
+   */
+  builtInLink?: boolean;
   /**
    * Fixed tile count (the storefront maps CMS banners onto exactly this many slots,
    * in sort order) or null for as-many-as-you-like (hero slides, news items).
@@ -79,6 +105,8 @@ export const PLACEMENTS: PlacementSpec[] = [
     media: true,
     aspect: "aspect-video",
     imageMode: true,
+    artworkMeans: "whole",
+    builtInLink: false,
     slots: null,
     defaults: [{ subtitle: "Premium African skincare", title: "Healthy Skin Begins Here." }],
   },
@@ -129,6 +157,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[7/5]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 1,
     defaults: [
       {
@@ -180,6 +211,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[12/11]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 1,
     defaults: [
       {
@@ -204,6 +238,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[12/11]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 1,
     defaults: [
       {
@@ -228,6 +265,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[12/11]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 1,
     defaults: [
       {
@@ -251,6 +291,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[13/9]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 1,
     defaults: [
       {
@@ -273,6 +316,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[3/4]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 3,
     defaults: [
       {

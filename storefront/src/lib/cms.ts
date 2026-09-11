@@ -66,7 +66,11 @@ export interface CmsBanner {
    * own logo, headline and button, so the site shows it whole and adds nothing. */
   image_mode: "overlay" | "artwork";
   tagline: string;
-  placement: "hero" | "strip" | "category";
+  /** One of `Banner.PLACEMENT_CHOICES` — 14 values, not the three this once named.
+   * Left as a plain string rather than a union the backend can add to without anyone
+   * here noticing: `bannersFor()` already takes any placement, and a stale union that
+   * looks authoritative is worse than one that does not pretend. */
+  placement: string;
   sort: number;
 }
 
