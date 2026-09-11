@@ -61,6 +61,10 @@ export interface CmsBanner {
   /** "loop" autoplays silently; "click" waits for the visitor. Defaults to loop
    * server-side, so a banner from before this field behaves exactly as it always did. */
   video_mode: "loop" | "click";
+  /** "overlay" — a photo the site writes its headline over (the default, and what every
+   * banner before 2026-09-10 is). "artwork" — a finished piece that already carries its
+   * own logo, headline and button, so the site shows it whole and adds nothing. */
+  image_mode: "overlay" | "artwork";
   tagline: string;
   placement: "hero" | "strip" | "category";
   sort: number;

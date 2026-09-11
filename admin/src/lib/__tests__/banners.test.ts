@@ -3,7 +3,7 @@ import { bannerState, livePlacement, type BannerRow } from "@/lib/banners";
 
 const banner = (over: Partial<BannerRow> = {}): BannerRow => ({
   id: 1, title: "Sale", subtitle: "", image: null, mobile_image: null, video: null,
-  video_mode: "loop", tagline: "",
+  video_mode: "loop", image_mode: "overlay", tagline: "",
   cta_text: "", cta_url: "", placement: "strip", sort: 0,
   starts_at: null, ends_at: null, is_active: true, countries: [], updated_at: "",
   ...over,
@@ -35,5 +35,17 @@ describe("livePlacement", () => {
     ];
 
     expect(livePlacement(rows, "strip", now).map((b) => b.title)).toEqual(["first", "second"]);
+  });
+});
+
+describe("specRatio — the shape a placement asks for", () => {
+  it("reads both forms the placement catalogue uses", async () => {
+    const { specRatio } = await import("@/lib/image");
+    expect(specRatio("aspect-video")).toBeCloseTo(16 / 9);
+    expect(specRatio("aspect-[3/4]")).toBeCloseTo(0.75);
+    expect(specRatio("aspect-[16/7]")).toBeCloseTo(16 / 7);
+    // The news marquee has no artwork, so it has no shape to check against.
+    expect(specRatio("")).toBeNull();
+    expect(specRatio("aspect-nonsense")).toBeNull();
   });
 });

@@ -109,7 +109,7 @@ class BannerAdminSerializer(serializers.ModelSerializer):
     audit_allowlist = (
         "title", "subtitle", "tagline", "cta_text", "cta_url", "placement", "sort",
         "starts_at", "ends_at", "is_active", "countries",
-        "image", "mobile_image", "video", "video_mode",
+        "image", "mobile_image", "video", "video_mode", "image_mode",
         "image_asset", "mobile_image_asset", "video_asset",
     )
 
@@ -126,7 +126,7 @@ class BannerAdminSerializer(serializers.ModelSerializer):
         model = Banner
         fields = [
             "id", "title", "subtitle", "tagline", "image", "mobile_image", "video",
-            "video_mode", "cta_text",
+            "video_mode", "image_mode", "cta_text",
             "cta_url", "placement", "sort", "starts_at", "ends_at", "is_active",
             "countries", "is_live", "updated_at",
             "image_asset", "mobile_image_asset", "video_asset",

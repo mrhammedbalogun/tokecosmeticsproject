@@ -5,6 +5,7 @@ import type { CmsBanner } from "@/lib/cms";
 
 const base: Omit<CmsBanner, "video_url" | "video_mode" | "image"> = {
   id: 1,
+  image_mode: "overlay",
   placement: "hero",
   sort: 0,
   title: "",

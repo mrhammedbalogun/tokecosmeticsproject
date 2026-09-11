@@ -61,6 +61,9 @@ export async function saveBannerAction(input: {
   countries: string[];
   /** How an attached video plays on the storefront. */
   video_mode: "loop" | "click";
+  /** Whether the storefront writes its own headline over the image, or shows the image
+   * whole as a finished piece. Only the hero honours it (see PlacementSpec.imageMode). */
+  image_mode: "overlay" | "artwork";
 }): Promise<BannerState> {
   if (!input.title.trim()) return { fieldErrors: { title: "A banner needs a title." } };
   if (input.starts_at && input.ends_at && input.starts_at >= input.ends_at) {
@@ -80,6 +83,7 @@ export async function saveBannerAction(input: {
     is_active: input.is_active,
     countries: input.countries,
     video_mode: input.video_mode,
+    image_mode: input.image_mode,
   };
 
   let saved: { id: number };

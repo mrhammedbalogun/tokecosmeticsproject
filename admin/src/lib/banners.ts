@@ -21,8 +21,16 @@ export interface PlacementSpec {
   fields: { key: BannerField; label: string; hint?: string }[];
   /** false for the text-only news marquee. */
   media: boolean;
-  /** Tailwind aspect class matching the storefront tile, so thumbnails keep its shape. */
+  /** Tailwind aspect class matching the storefront tile, so thumbnails keep its shape.
+   * ALSO the shape the upload check measures a chosen file against. */
   aspect: string;
+  /**
+   * Does this placement's storefront component honour `image_mode`? Only the hero does
+   * today (`storefront/src/components/home/HeroSlider.tsx`). A control that appears
+   * where nothing reads it is worse than no control, so the editor shows the choice only
+   * where it is true — add it here when a tile learns to read the field, not before.
+   */
+  imageMode?: boolean;
   /**
    * Fixed tile count (the storefront maps CMS banners onto exactly this many slots,
    * in sort order) or null for as-many-as-you-like (hero slides, news items).
@@ -70,6 +78,7 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-video",
+    imageMode: true,
     slots: null,
     defaults: [{ subtitle: "Premium African skincare", title: "Healthy Skin Begins Here." }],
   },
@@ -332,6 +341,11 @@ export interface BannerRow {
   /** "loop" autoplays silently on the storefront; "click" shows the poster with a play
    * button. The server defaults to loop, so older rows behave as they always did. */
   video_mode: "loop" | "click";
+  /** "overlay" — a photo the storefront writes its own headline and button over.
+   * "artwork" — a finished piece that already carries them, so the storefront shows it
+   * whole and adds nothing. The server defaults to overlay, so older rows behave as they
+   * always did. Only placements whose spec sets `imageMode` offer the choice. */
+  image_mode: "overlay" | "artwork";
   tagline: string;
   cta_text: string;
   cta_url: string;

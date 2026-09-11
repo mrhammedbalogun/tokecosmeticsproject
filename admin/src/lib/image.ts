@@ -124,3 +124,64 @@ export async function downscaleImage(file: File): Promise<File> {
     bitmap.close();
   }
 }
+
+/**
+ * The shape a placement's spec asks for, as a plain width/height number, or null when
+ * the spec names no shape. Understands the two forms `PlacementSpec.aspect` takes:
+ * Tailwind's `aspect-video` (16/9) and an arbitrary `aspect-[w/h]`.
+ */
+export function specRatio(aspect: string): number | null {
+  if (!aspect) return null;
+  if (aspect === "aspect-video") return 16 / 9;
+  if (aspect === "aspect-square") return 1;
+  const m = /^aspect-\[(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)\]$/.exec(aspect.trim());
+  if (!m) return null;
+  const [w, h] = [Number(m[1]), Number(m[2])];
+  return h > 0 ? w / h : null;
+}
+
+/**
+ * How much of a chosen image the storefront will have to crop away to fill a slot of
+ * `aspect`, or null when there is nothing to say (no spec shape, an undecodable file, a
+ * ratio within tolerance).
+ *
+ * WHY THIS EXISTS (2026-09-10): the Back-to-School hero was authored 1698×926 and
+ * dropped into a slot the guide has always described as 1920×1080. Nothing anywhere
+ * said so — it uploaded cleanly, and the mismatch only surfaced as a homepage whose
+ * banner had lost its logo off the top and its "Shop Now" off the bottom. A sentence at
+ * pick time is the only place this is cheap to catch.
+ *
+ * 2% tolerance: below that the crop is a couple of pixels and saying so is noise.
+ */
+export async function cropWarning(file: File, aspect: string): Promise<string | null> {
+  const want = specRatio(aspect);
+  if (!want) return null;
+  const dims = await imageSize(file);
+  if (!dims) return null;
+  const got = dims.w / dims.h;
+  if (Math.abs(got - want) / want < 0.02) return null;
+  // Cover fits the LONGER side and trims the other, so the loss is on one axis only.
+  const lost =
+    got > want
+      ? { pct: 1 - want / got, edge: "the left and right edges" }
+      : { pct: 1 - got / want, edge: "the top and bottom" };
+  return (
+    `This image is ${dims.w}×${dims.h}. The slot is ${aspect === "aspect-video" ? "16:9" : want.toFixed(2) + ":1"}, ` +
+    `so about ${Math.round(lost.pct * 100)}% of ${lost.edge} will be cropped off. ` +
+    `Fine for a photo with room to spare — but if this artwork has text, a logo or a ` +
+    `button near that edge, re-export it to fit the slot.`
+  );
+}
+
+/** Natural pixel size of an image file, or null when the browser cannot decode it. */
+async function imageSize(file: File): Promise<{ w: number; h: number } | null> {
+  if (typeof createImageBitmap !== "function") return null;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const size = { w: bitmap.width, h: bitmap.height };
+    bitmap.close();
+    return size;
+  } catch {
+    return null;
+  }
+}

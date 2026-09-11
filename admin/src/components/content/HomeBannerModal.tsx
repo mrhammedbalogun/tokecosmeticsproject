@@ -42,7 +42,7 @@ import {
 } from "@/app/(shell)/content/media/actions";
 import { MediaLibraryModal } from "@/components/content/MediaLibraryModal";
 import type { BannerField, BannerRow, CountryOption, PlacementSpec } from "@/lib/banners";
-import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
+import { UPLOAD_CAP_BYTES, cropWarning, downscaleImage, fileSizeMb } from "@/lib/image";
 import type { MediaAssetRow } from "@/lib/media";
 import { uploadToS3 } from "@/lib/upload";
 import { LOOP_WARN_BYTES, VIDEO_CAP_BYTES, fileSizeMb as videoSizeMb } from "@/lib/video";
@@ -114,6 +114,11 @@ export function HomeBannerModal({
     video: UNTOUCHED,
   });
   const [videoMode, setVideoMode] = useState<"loop" | "click">(banner?.video_mode ?? "loop");
+  const [imageMode, setImageMode] = useState<"overlay" | "artwork">(
+    banner?.image_mode ?? "overlay",
+  );
+  /** "this file will be cropped by N%" per slot, measured when the file is chosen. */
+  const [cropNote, setCropNote] = useState<Partial<Record<MediaKind, string>>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -186,6 +191,11 @@ export function HomeBannerModal({
     const previewUrl = URL.createObjectURL(staged);
     urlsRef.current.push(previewUrl);
     setMedia((m) => ({ ...m, [kind]: { file: staged, previewUrl, asset: null, remove: false } }));
+    // Measured on the ORIGINAL, not the downscale: downscaling preserves the ratio, and
+    // the ratio is the whole question. A finished artwork is never cropped by the
+    // storefront, so there is nothing to warn about.
+    const note = imageMode === "artwork" ? null : await cropWarning(file, spec.aspect);
+    setCropNote((n) => ({ ...n, [kind]: note ?? undefined }));
   };
 
   /** A library pick — previewed straight from its hosted URL, applied on Save. */
@@ -230,6 +240,7 @@ export function HomeBannerModal({
           is_active: isActive,
           countries,
           video_mode: videoMode,
+          image_mode: imageMode,
         });
         if (!state.savedAt || !state.id) {
           setPending(false);
@@ -398,6 +409,63 @@ export function HomeBannerModal({
           ))}
         </div>
 
+        {spec.media && spec.imageMode && (
+          <fieldset className="mt-4 border-t border-line pt-4 text-xs">
+            <legend className="font-medium text-muted">What kind of image is this?</legend>
+            <div className="mt-1.5 flex flex-col gap-1.5">
+              <label className="flex items-start gap-1.5 text-sm">
+                <input
+                  type="radio"
+                  name="image_mode"
+                  checked={imageMode === "overlay"}
+                  onChange={() => setImageMode("overlay")}
+                  className="mt-1 h-4 w-4 border-line"
+                />
+                <span>
+                  A photo
+                  <span className="block text-[11px] text-muted">
+                    The shop writes the headline, eyebrow and button over it, and crops it
+                    to fill the slide. Leave room for the text on one side.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-1.5 text-sm">
+                <input
+                  type="radio"
+                  name="image_mode"
+                  checked={imageMode === "artwork"}
+                  onChange={() => setImageMode("artwork")}
+                  className="mt-1 h-4 w-4 border-line"
+                />
+                <span>
+                  Finished artwork
+                  <span className="block text-[11px] text-muted">
+                    Already has its own words and button in the picture. The shop shows it
+                    whole, never crops it, and writes nothing on top — so the Headline here
+                    is used only for the slide tab, and the Button link makes the whole
+                    picture clickable.
+                  </span>
+                </span>
+              </label>
+            </div>
+            {imageMode === "artwork" && !values.cta_url.trim() && (
+              <p role="status" className="mt-2 rounded border border-warn/30 bg-warn/5 p-2 text-warn">
+                No Button link. A painted button that does nothing when tapped is worse
+                than none — give this slide a link so the whole picture is clickable.
+              </p>
+            )}
+            {imageMode === "artwork" &&
+              !banner?.mobile_image &&
+              !media.mobile_image.file &&
+              !media.mobile_image.asset && (
+                <p role="status" className="mt-2 rounded border border-line bg-beige/40 p-2 text-muted">
+                  No Phone image. A wide banner shown whole on a phone is a thin strip —
+                  upload a tall version below and phones will use that instead.
+                </p>
+              )}
+          </fieldset>
+        )}
+
         {spec.media && (
           <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-2">
             <MediaSlot
@@ -412,6 +480,11 @@ export function HomeBannerModal({
               onRemove={() => stageRemove("image")}
               onUndo={() => unstage("image")}
             />
+            {cropNote.image && (
+              <p role="status" className="rounded border border-warn/30 bg-warn/5 p-2 text-xs text-warn sm:col-span-2">
+                {cropNote.image}
+              </p>
+            )}
             <MediaSlot
               label={spec.value === "hero" ? "Video (the image becomes its poster)" : "Video (optional — plays instead of the image)"}
               kind="video"
@@ -473,6 +546,11 @@ export function HomeBannerModal({
               onRemove={() => stageRemove("mobile_image")}
               onUndo={() => unstage("mobile_image")}
             />
+            {cropNote.mobile_image && (
+              <p role="status" className="rounded border border-warn/30 bg-warn/5 p-2 text-xs text-warn sm:col-span-2">
+                {cropNote.mobile_image}
+              </p>
+            )}
           </div>
         )}
 

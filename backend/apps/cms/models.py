@@ -168,6 +168,21 @@ class Banner(TimeStampedModel):
     CLICK = "click"
     VIDEO_MODE_CHOICES = [(LOOP, "Loop silently"), (CLICK, "Play on click")]
     video_mode = models.CharField(max_length=5, choices=VIDEO_MODE_CHOICES, default=LOOP)
+    # 2026-09-10. Two species of banner artwork had been sharing one renderer, and the
+    # second one broke on arrival: a PHOTO is shot with an empty third for the site to
+    # write its headline into, so cropping it to the container is the point; a FINISHED
+    # ARTWORK already carries its own logo, headline, body copy and button in the pixels,
+    # so cropping it destroys the message and the site's own headline lands on top of the
+    # one that is already painted there. That is exactly what the Back-to-School banner
+    # did to the homepage. OVERLAY is the default because it is what every banner before
+    # this one was — the migration must not change how the live homepage behaves.
+    OVERLAY = "overlay"
+    ARTWORK = "artwork"
+    IMAGE_MODE_CHOICES = [
+        (OVERLAY, "Photo — the site writes the headline and button over it"),
+        (ARTWORK, "Finished artwork — show it whole, the site adds no text"),
+    ]
+    image_mode = models.CharField(max_length=7, choices=IMAGE_MODE_CHOICES, default=OVERLAY)
     # Media-library bindings (2026-08-07). The FileFields above remain what the
     # storefront renders; these record WHERE the file came from when it was a library
     # pick, so "which tiles use this asset?" is a reverse relation rather than a string

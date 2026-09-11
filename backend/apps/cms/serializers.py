@@ -26,7 +26,7 @@ class PublicBannerSerializer(serializers.ModelSerializer):
         model = Banner
         fields = [
             "id", "title", "subtitle", "image", "mobile_image",
-            "cta_text", "cta_url", "video_url", "video_mode", "tagline",
+            "cta_text", "cta_url", "video_url", "video_mode", "image_mode", "tagline",
             "placement", "sort",
         ]
 

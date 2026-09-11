@@ -76,3 +76,25 @@ def test_banner_video_mode_accepts_click():
     )
     banner.full_clean()
     assert banner.video_mode == "click"
+
+
+@pytest.mark.django_db
+def test_banner_image_mode_defaults_to_overlay_and_reaches_the_wire():
+    """Every banner that predates the field is a photo the site writes over — the
+    2026-09-10 migration must not silently un-caption the live homepage."""
+    banner = Banner.objects.create(title="Hero", placement="hero", is_active=True)
+    assert banner.image_mode == "overlay"
+
+    r = APIClient().get("/api/v1/cms/homepage/")
+    assert r.status_code == 200
+    hero = next(b for b in r.json()["banners"] if b["placement"] == "hero")
+    assert hero["image_mode"] == "overlay"
+
+
+@pytest.mark.django_db
+def test_banner_image_mode_accepts_artwork():
+    banner = Banner.objects.create(
+        title="Back to School", placement="hero", is_active=True, image_mode="artwork",
+    )
+    banner.full_clean()
+    assert banner.image_mode == "artwork"

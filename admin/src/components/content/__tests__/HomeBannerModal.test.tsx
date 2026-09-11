@@ -131,3 +131,49 @@ describe("HomeBannerModal video uploads", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 });
+
+describe("HomeBannerModal image mode (the 2026-09-10 crop fix)", () => {
+  const HERO_WITH_MODE = { ...SPEC, imageMode: true } as PlacementSpec;
+
+  function renderHero(banner: BannerRow | null = null) {
+    return render(
+      <HomeBannerModal
+        spec={HERO_WITH_MODE}
+        banner={banner}
+        presetSort={0}
+        heading="Hero · Slide 1"
+        countryOptions={[]}
+        onClose={() => {}}
+      />,
+    );
+  }
+
+  it("offers the choice only where a storefront tile actually reads it", () => {
+    renderModal(); // SPEC has no imageMode
+    expect(screen.queryByText(/Finished artwork/)).toBeNull();
+    renderHero();
+    expect(screen.getByText(/Finished artwork/)).toBeInTheDocument();
+  });
+
+  it("saves the chosen mode, and defaults to the photo behaviour", async () => {
+    saveBannerAction.mockResolvedValue({ savedAt: 1, id: 7 });
+    renderHero();
+    fireEvent.change(screen.getByLabelText(/Title/), { target: { value: "Back to School" } });
+    fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Save/ }));
+    await waitFor(() => expect(saveBannerAction).toHaveBeenCalled());
+    expect(saveBannerAction.mock.calls[0][0]).toMatchObject({ image_mode: "artwork" });
+  });
+
+  it("warns that a finished artwork with no link is a dead painted button", () => {
+    renderHero();
+    fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
+    expect(screen.getByText(/No Button link/)).toBeInTheDocument();
+  });
+
+  it("nudges for a phone image, because a wide banner shown whole is a thin strip", () => {
+    renderHero();
+    fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
+    expect(screen.getByText(/No Phone image/)).toBeInTheDocument();
+  });
+});

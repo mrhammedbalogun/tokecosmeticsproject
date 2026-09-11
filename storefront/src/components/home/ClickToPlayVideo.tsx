@@ -9,17 +9,20 @@
 import Image from "next/image";
 import { useState } from "react";
 
-export function ClickToPlayVideo({ src, poster, label }: {
+export function ClickToPlayVideo({ src, poster, label, fit = "object-cover" }: {
   src: string;
   poster: string | null;
   label: string;
+  /** "object-contain" when the slide is finished artwork the caller must not crop.
+   * Defaults to cover, which is what every caller wanted before 2026-09-10. */
+  fit?: "object-cover" | "object-contain";
 }) {
   const [playing, setPlaying] = useState(false);
 
   if (playing) {
     return (
       <video
-        className="absolute inset-0 h-full w-full object-cover"
+        className={`absolute inset-0 h-full w-full ${fit}`}
         src={src}
         poster={poster ?? undefined}
         controls
@@ -32,7 +35,7 @@ export function ClickToPlayVideo({ src, poster, label }: {
   return (
     <>
       {poster ? (
-        <Image src={poster} alt="" fill sizes="100vw" className="object-cover" />
+        <Image src={poster} alt="" fill sizes="100vw" className={fit} />
       ) : (
         <div aria-hidden className="absolute inset-0 bg-black/40" />
       )}
