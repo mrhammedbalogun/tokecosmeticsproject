@@ -137,6 +137,10 @@ describe("HomeBannerModal image mode (the 2026-09-10 crop fix)", () => {
   // slide has no destination of its own.
   const HERO_WITH_MODE = {
     ...SPEC,
+    fields: [
+      { key: "title", label: "Title" },
+      { key: "cta_url", label: "Button link" },
+    ],
     imageMode: true,
     artworkMeans: "whole",
     builtInLink: false,
@@ -150,6 +154,17 @@ describe("HomeBannerModal image mode (the 2026-09-10 crop fix)", () => {
     imageMode: true,
     artworkMeans: "uncaptioned",
     builtInLink: true,
+  } as PlacementSpec;
+  // …and the tokè × natural tile, the one placement on the homepage that is not a link
+  // at all: it sets the mood beside the Glow Set (2026-09-13).
+  const MOODBOARD_WITH_MODE = {
+    ...SPEC,
+    value: "feature_nature",
+    guide: "Image/video 1200×600. This tile is not a link.",
+    aspect: "aspect-[2/1]",
+    fields: [{ key: "title", label: "Heading" }],
+    imageMode: true,
+    artworkMeans: "uncaptioned",
   } as PlacementSpec;
 
   function renderTile() {
@@ -221,5 +236,37 @@ describe("HomeBannerModal image mode (the 2026-09-10 crop fix)", () => {
     renderHero();
     fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
     expect(screen.getByText(/No Phone image/)).toBeInTheDocument();
+  });
+
+  it("promises no click on the one tile that is not a link, and does not nag for one", () => {
+    render(
+      <HomeBannerModal
+        spec={MOODBOARD_WITH_MODE}
+        banner={null}
+        presetSort={0}
+        heading="tokè × natural"
+        countryOptions={[]}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
+    expect(screen.queryByText(/becomes clickable/)).toBeNull();
+    // It has no Button link field to fill, so the dead-button warning must stay quiet.
+    expect(screen.queryByText(/No Button link/)).toBeNull();
+  });
+
+  it("names the field the marketer is looking at, not always “Heading”", () => {
+    render(
+      <HomeBannerModal
+        spec={{ ...TILE_WITH_MODE, fields: [{ key: "title", label: "Pill label" }] } as PlacementSpec}
+        banner={null}
+        presetSort={0}
+        heading="Shop-by-category · Tile 1"
+        countryOptions={[]}
+        onClose={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
+    expect(screen.getByText(/The Pill label here stays/)).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { CmsBanner } from "@/lib/cms";
-import { TileMedia, bannersFor } from "@/components/home/TileMedia";
+import { TileMedia, bannersFor, isArtwork } from "@/components/home/TileMedia";
 import { FadeUp } from "@/components/motion/Motion";
 
 /** Artifact section: three joined wide tiles. CMS "Shop-by-concern tile" banners
@@ -23,19 +23,32 @@ export function ConcernsStrip({ banners }: { banners: CmsBanner[] }) {
         </p>
         <h2 className="mt-1 font-display text-3xl md:text-4xl">Start where your skin is</h2>
         <div className="mt-8 grid gap-0.5 overflow-hidden rounded-[var(--radius-card)] md:grid-cols-3">
-          {tiles.map((tile) => (
-            <Link
-              key={tile.label}
-              href={tile.banner?.cta_url || tile.href}
-              className="group relative flex aspect-[16/7] items-center justify-center overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-            >
-              <TileMedia banner={tile.banner} tone={tile.tone} sizes="(max-width: 768px) 100vw, 33vw" />
-              <span aria-hidden className="absolute inset-0 bg-black/20" />
-              <span className="relative border-b border-surface/60 pb-1.5 text-[13px] uppercase tracking-[0.2em] text-surface transition-colors group-hover:border-leaf group-hover:text-leaf">
-                {tile.banner?.title || tile.label}
-              </span>
-            </Link>
-          ))}
+          {tiles.map((tile) => {
+            const label = tile.banner?.title || tile.label;
+            // The label IS this tile's accessible name (the image renders `alt=""`), so
+            // a finished piece keeps it as `sr-only`; only the scrim and the painted
+            // label go away.
+            const artwork = isArtwork(tile.banner);
+            return (
+              <Link
+                key={tile.label}
+                href={tile.banner?.cta_url || tile.href}
+                className="group relative flex aspect-[16/7] items-center justify-center overflow-hidden focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              >
+                <TileMedia banner={tile.banner} tone={tile.tone} sizes="(max-width: 768px) 100vw, 33vw" />
+                {!artwork && <span aria-hidden className="absolute inset-0 bg-black/20" />}
+                <span
+                  className={
+                    artwork
+                      ? "sr-only"
+                      : "relative border-b border-surface/60 pb-1.5 text-[13px] uppercase tracking-[0.2em] text-surface transition-colors group-hover:border-leaf group-hover:text-leaf"
+                  }
+                >
+                  {label}
+                </span>
+              </Link>
+            );
+          })}
         </div>
       </FadeUp>
     </section>

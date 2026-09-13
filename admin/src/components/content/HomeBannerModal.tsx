@@ -57,6 +57,13 @@ function artworkFit(spec: PlacementSpec, mode: "overlay" | "artwork"): "cover" |
   return mode === "artwork" && spec.artworkMeans === "whole" ? "contain" : "cover";
 }
 
+/** Does this placement's tile GO anywhere? Everything on the homepage does except the
+ * tokè × natural tile, which sets the mood beside the Glow Set. Artwork mode turns a
+ * tile that goes somewhere into one big link, so the editor promises that only here. */
+function isLinkable(spec: PlacementSpec): boolean {
+  return Boolean(spec.builtInLink) || spec.fields.some((f) => f.key === "cta_url");
+}
+
 type MediaKind = "image" | "mobile_image" | "video";
 
 /** What should happen to one media slot on Save: nothing, replace with `file`, attach
@@ -145,6 +152,10 @@ export function HomeBannerModal({
    */
   const savedIdRef = useRef<number | undefined>(banner?.id);
   const firstFieldRef = useRef<HTMLInputElement>(null);
+  const linkable = isLinkable(spec);
+  /** "Pill label" on a category tile, "Heading" on a section banner — the artwork note
+   * has to name the field the marketer is actually looking at. */
+  const titleFieldLabel = spec.fields.find((f) => f.key === "title")?.label ?? "Heading";
 
   useEffect(() => {
     firstFieldRef.current?.focus();
@@ -480,18 +491,19 @@ export function HomeBannerModal({
                     ) : (
                       <>
                         Already has its own words in the picture, so the shop writes no
-                        heading, paragraph or button over it and the whole tile becomes
-                        clickable. This tile is a <strong>fixed shape</strong> set by the
-                        homepage layout, so it is still cropped to fill —{" "}
-                        {spec.guide.replace(/\.$/, "")}. The Headline here stays as the
-                        tile&rsquo;s name for screen readers.
+                        heading, paragraph or button over it
+                        {linkable ? " and the whole tile becomes clickable" : ""}. This
+                        tile is a <strong>fixed shape</strong> set by the homepage layout,
+                        so it is still cropped to fill — {spec.guide.replace(/\.$/, "")}.
+                        The {titleFieldLabel} here stays as the tile&rsquo;s name for
+                        screen readers.
                       </>
                     )}
                   </span>
                 </span>
               </label>
             </div>
-            {imageMode === "artwork" && !values.cta_url.trim() && !spec.builtInLink && (
+            {imageMode === "artwork" && linkable && !values.cta_url.trim() && !spec.builtInLink && (
               <p role="status" className="mt-2 rounded border border-warn/30 bg-warn/5 p-2 text-warn">
                 No Button link. A painted button that does nothing when tapped is worse
                 than none — give this slide a link so the whole picture is clickable.

@@ -7,6 +7,8 @@ import { isArtwork } from "@/components/home/TileMedia";
 import { TrioSection } from "@/components/home/TrioSection";
 import { TikTokSection } from "@/components/home/TikTokSection";
 import { FeatureSplit } from "@/components/home/FeatureSplit";
+import { ShopByCategory } from "@/components/home/ShopByCategory";
+import { ConcernsStrip } from "@/components/home/ConcernsStrip";
 
 /**
  * `image_mode` on the homepage TILES (2026-09-11), which is not the same promise the
@@ -106,18 +108,87 @@ describe("FeatureSplit", () => {
     expect(screen.getByRole("link", { name: "Kids Term Kit" })).toBeInTheDocument();
   });
 
-  it("IGNORES artwork on the two small tiles, whose copy block is their only height", () => {
-    // TileMedia is absolutely positioned: remove the text from these and the tile
-    // collapses to zero height below `lg`. They are excluded in the admin too.
-    render(
+  it("honours artwork on the two small tiles, and gives them a shape to stand in", () => {
+    // TileMedia is absolutely positioned, so the copy block is normally these tiles'
+    // only height — below `lg` a finished piece would collapse to nothing without the
+    // placement's own 2:1 box (2026-09-13).
+    const { container } = render(
       <FeatureSplit
         banners={[
           banner({ id: 2, placement: "feature_nature", image_mode: "artwork", title: "Nature" }),
-          banner({ id: 3, placement: "feature_collection", image_mode: "artwork", title: "Naturals" }),
+          banner({
+            id: 3,
+            placement: "feature_collection",
+            image_mode: "artwork",
+            title: "Naturals",
+            cta_url: "/naturals",
+          }),
+        ]}
+      />,
+    );
+    expect(screen.queryByText("tokè × natural")).toBeNull();
+    expect(screen.queryByText("Collection")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Nature" })).toHaveClass("sr-only");
+    expect(screen.getByRole("heading", { name: "Naturals" })).toHaveClass("sr-only");
+    // The linked one is a link named by that heading; the mood tile is not a link.
+    expect(screen.getByRole("link", { name: "Naturals" })).toHaveAttribute("href", "/naturals");
+    expect(screen.queryByRole("link", { name: "Nature" })).toBeNull();
+    // Below `lg` only: measured in Chromium, a ratio still on at `lg` beats the grid's
+    // stretch and pushes the whole section from 430px to 634px.
+    expect(container.querySelectorAll(".aspect-\\[2\\/1\\].lg\\:aspect-auto")).toHaveLength(2);
+  });
+
+  it("leaves the small tiles' copy alone for an ordinary photo", () => {
+    render(
+      <FeatureSplit
+        banners={[
+          banner({ id: 2, placement: "feature_nature", title: "Nature" }),
+          banner({ id: 3, placement: "feature_collection", title: "Naturals" }),
         ]}
       />,
     );
     expect(screen.getByRole("heading", { name: "Nature" })).not.toHaveClass("sr-only");
-    expect(screen.getByRole("heading", { name: "Naturals" })).not.toHaveClass("sr-only");
+    expect(screen.getByText("tokè × natural")).toBeInTheDocument();
+  });
+});
+
+describe("ShopByCategory", () => {
+  const tile = (over: Partial<CmsBanner> = {}) =>
+    banner({ placement: "category", title: "Back to School", ...over });
+
+  it("keeps the pill for a photo", () => {
+    render(<ShopByCategory banners={[tile()]} />);
+    expect(screen.getByText("Back to School")).not.toHaveClass("sr-only");
+  });
+
+  it("hides the pill for a finished piece but keeps the link's name", () => {
+    // The pill is the ONLY accessible name the tile has — the image renders alt="" —
+    // so artwork mode moves it to sr-only rather than dropping it.
+    render(<ShopByCategory banners={[tile({ image_mode: "artwork", cta_url: "/bts" })]} />);
+    expect(screen.getByText("Back to School")).toHaveClass("sr-only");
+    expect(screen.getByRole("link", { name: "Back to School" })).toHaveAttribute("href", "/bts");
+  });
+});
+
+describe("ConcernsStrip", () => {
+  const tile = (over: Partial<CmsBanner> = {}) =>
+    banner({ placement: "concern", title: "Acne Care", ...over });
+
+  it("keeps its label and scrim for a photo", () => {
+    const { container } = render(<ConcernsStrip banners={[tile()]} />);
+    expect(screen.getByText("Acne Care")).not.toHaveClass("sr-only");
+    expect(container.querySelectorAll(".bg-black\\/20")).toHaveLength(3);
+  });
+
+  it("drops the scrim and the painted label for a finished piece", () => {
+    const { container } = render(<ConcernsStrip banners={[tile({ image_mode: "artwork" })]} />);
+    expect(screen.getByText("Acne Care")).toHaveClass("sr-only");
+    // The two untouched built-in tiles keep theirs.
+    expect(container.querySelectorAll(".bg-black\\/20")).toHaveLength(2);
+    // It still goes to the tile's built-in destination.
+    expect(screen.getByRole("link", { name: "Acne Care" })).toHaveAttribute(
+      "href",
+      "/products?q=acne",
+    );
   });
 });

@@ -30,13 +30,16 @@ export interface PlacementSpec {
    * choice only where it is true — add it here when a tile learns to read the field,
    * not before.
    *
-   * NOT offered on `category` or `concern` (2026-09-11): their only overlay is the
-   * label, and that label is the ONLY accessible name the tile's link has — every tile
-   * image renders `alt=""`. Suppressing it would ship links a screen reader announces as
-   * nothing. Nor on `feature_nature`/`feature_collection`, whose boxes have no height of
-   * their own below `lg` — the text block IS the height, so removing it collapses the
-   * tile to nothing. Nor on the two affiliate slots, which have no text to suppress and
-   * would need their boxes pinned first.
+   * Every media placement on Home Content now offers it (2026-09-13). The two
+   * objections that held four of them back are answered in the storefront rather than
+   * here: `category`/`concern` keep their label as `sr-only`, because that label is the
+   * only accessible name the tile's link has (every tile image renders `alt=""`), and
+   * the two small `feature_*` tiles — whose copy block IS their height below `lg`, since
+   * `TileMedia` is absolutely positioned — carry the placement's own 2:1 shape in
+   * artwork mode instead of collapsing.
+   *
+   * NOT offered on the two affiliate slots, which are edited at /content/affiliates,
+   * have no text to suppress, and would need their boxes pinned first.
    */
   imageMode?: boolean;
   /**
@@ -120,6 +123,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[3/4]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 4,
     defaults: [
       { title: "Best Sellers", cta_url: "/products?collection=best-sellers" },
@@ -138,6 +144,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[16/7]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 3,
     defaults: [
       { title: "Acne", cta_url: "/products?q=acne" },
@@ -181,6 +190,8 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[2/1]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
     slots: 1,
     defaults: [{ subtitle: "tokè × natural", title: "Grown from nature, proven by science" }],
   },
@@ -195,6 +206,9 @@ export const PLACEMENTS: PlacementSpec[] = [
     ],
     media: true,
     aspect: "aspect-[2/1]",
+    imageMode: true,
+    artworkMeans: "uncaptioned",
+    builtInLink: true,
     slots: 1,
     defaults: [{ subtitle: "Collection", title: "Toke Naturals", cta_url: "/products?q=natural" }],
   },

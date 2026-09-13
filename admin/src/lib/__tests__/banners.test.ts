@@ -49,3 +49,33 @@ describe("specRatio — the shape a placement asks for", () => {
     expect(specRatio("aspect-nonsense")).toBeNull();
   });
 });
+
+describe("the placement catalogue", () => {
+  /**
+   * Every media placement on /home-content offers "A photo / Finished artwork"
+   * (2026-09-13). This is the guard on the next placement someone adds: a section the
+   * marketer can upload a picture to but cannot tell the shop to stop writing over is
+   * the gap this feature closed, and it is invisible until they try it.
+   *
+   * The two affiliate slots are the deliberate exception — they are edited at
+   * /content/affiliates, have no copy to suppress, and their boxes are not pinned.
+   */
+  it("offers a photo/artwork choice on every Home Content image section", async () => {
+    const { PLACEMENTS } = await import("@/lib/banners");
+    const homeContent = PLACEMENTS.filter((p) => !p.value.startsWith("affiliate_"));
+    const withoutChoice = homeContent.filter((p) => p.media && !p.imageMode);
+    expect(withoutChoice.map((p) => p.value)).toEqual([]);
+    // The news marquee is text; it must not sprout an image control.
+    expect(homeContent.find((p) => p.value === "strip")?.imageMode).toBeUndefined();
+  });
+
+  it("says what artwork MEANS wherever it offers it — the promises differ", async () => {
+    const { PLACEMENTS } = await import("@/lib/banners");
+    for (const p of PLACEMENTS.filter((s) => s.imageMode)) {
+      expect(p.artworkMeans, p.value).toBeDefined();
+      // "Shown whole" is a promise only a box pinned to the artwork's own ratio can
+      // keep. Every other placement's shape is fixed by the homepage grid.
+      if (p.artworkMeans === "whole") expect(p.value).toBe("hero");
+    }
+  });
+});
