@@ -267,6 +267,11 @@ describe("HomeBannerModal image mode (the 2026-09-10 crop fix)", () => {
       />,
     );
     fireEvent.click(screen.getByRole("radio", { name: /Finished artwork/ }));
-    expect(screen.getByText(/The Pill label here stays/)).toBeInTheDocument();
+    // textContent, not getByText: the sentence is assembled from more than one node, and
+    // it is the SPACES BETWEEN THOSE NODES that broke in production once — see the
+    // template-string comment in HomeBannerModal. This at least pins the joined result.
+    const note = document.querySelector("fieldset")!.textContent ?? "";
+    expect(note).toContain("The Pill label here stays as the tile\u2019s name");
+    expect(note).toContain("still cropped to fill — Image/video 900×1200 (3:4 portrait).");
   });
 });

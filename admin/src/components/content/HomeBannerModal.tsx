@@ -489,14 +489,21 @@ export function HomeBannerModal({
                         Button link makes the whole picture clickable.
                       </>
                     ) : (
+                      // Template strings, not JSX prose. A space that sits between an
+                      // expression and a line break is NOT portable: SWC (the Next build)
+                      // trims it where esbuild (vitest) keeps it, so "The Heading here"
+                      // shipped to production as "The Headinghere" while every local test
+                      // rendered it correctly. No test can catch that — only not writing
+                      // it can. Caught in a prod walkthrough 2026-09-13.
                       <>
-                        Already has its own words in the picture, so the shop writes no
-                        heading, paragraph or button over it
-                        {linkable ? " and the whole tile becomes clickable" : ""}. This
-                        tile is a <strong>fixed shape</strong> set by the homepage layout,
-                        so it is still cropped to fill — {spec.guide.replace(/\.$/, "")}.
-                        The {titleFieldLabel} here stays as the tile&rsquo;s name for
-                        screen readers.
+                        {`Already has its own words in the picture, so the shop writes no heading, paragraph or button over it${
+                          linkable ? " and the whole tile becomes clickable" : ""
+                        }. This tile is a `}
+                        <strong>fixed shape</strong>
+                        {` set by the homepage layout, so it is still cropped to fill — ${spec.guide.replace(
+                          /\.$/,
+                          "",
+                        )}. The ${titleFieldLabel} here stays as the tile\u2019s name for screen readers.`}
                       </>
                     )}
                   </span>
