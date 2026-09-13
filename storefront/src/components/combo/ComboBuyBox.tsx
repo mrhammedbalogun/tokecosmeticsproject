@@ -27,7 +27,7 @@ import {
 } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
 import { ComboSavingBadge } from "@/components/combo/ComboSavingBadge";
-import type { ComboDetail } from "@/lib/combos";
+import { comboSavingPercent, type ComboDetail } from "@/lib/combos";
 import { formatMoney } from "@/lib/country";
 import { newEventId, track } from "@/lib/tracking/events";
 
@@ -45,6 +45,7 @@ export function ComboBuyBox({
   const [problem, setProblem] = useState<string | null>(null);
 
   const pricing = combo.pricing;
+  const saves = comboSavingPercent(pricing) > 0;
   // The server's own cap, so the stepper stops where the stock does instead of letting
   // somebody pick five and be told at the till.
   const max = Math.max(1, combo.max_quantity || 1);
@@ -100,16 +101,22 @@ export function ComboBuyBox({
         <p className="text-3xl font-medium">
           {formatMoney(pricing.amount, pricing.currency)}
         </p>
-        <p className="text-sm text-muted">
-          <span className="sr-only">Bought separately</span>
-          <s>{formatMoney(pricing.components_total, pricing.currency)}</s>{" "}
-          <span className="text-xs">bought separately</span>
-        </p>
+        {/* Both lines are a SAVING CLAIM, so both go when there is nothing saved — a
+            curator can pin a box at exactly what its parts cost. */}
+        {saves && (
+          <p className="text-sm text-muted">
+            <span className="sr-only">Bought separately</span>
+            <s>{formatMoney(pricing.components_total, pricing.currency)}</s>{" "}
+            <span className="text-xs">bought separately</span>
+          </p>
+        )}
       </div>
 
-      <p className="mt-1 text-sm text-accent">
-        You save {formatMoney(pricing.saving, pricing.currency)} on this box.
-      </p>
+      {saves && (
+        <p className="mt-1 text-sm text-accent">
+          You save {formatMoney(pricing.saving, pricing.currency)} on this box.
+        </p>
+      )}
 
       {combo.in_stock ? (
         <>

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import type { ComboCard as ComboCardData } from "@/lib/combos";
+import { comboSavingPercent, type ComboCard as ComboCardData } from "@/lib/combos";
 import { ComboSavingBadge } from "@/components/combo/ComboSavingBadge";
 import { formatMoney } from "@/lib/country";
 import { mediaUrl } from "@/lib/media";
@@ -27,7 +27,14 @@ export function ComboCard({
   priority?: boolean;
 }) {
   const hero = mediaUrl(combo.image);
-  const thumbs = combo.item_images.map(mediaUrl).filter((u): u is string => Boolean(u));
+  // `item_images` is optional in practice: an old cached payload predates the field, and
+  // a combo of products that have no photographs yet sends an empty list.
+  const thumbs = (combo.item_images ?? []).map(mediaUrl).filter((u): u is string => Boolean(u));
+  // Only strike the "bought separately" total when it IS more than the price. A combo
+  // pinned at its parts' price (the backend clamps a pinned amount to the component
+  // total, so equal is as far as it goes) would otherwise show two identical amounts,
+  // one of them crossed out.
+  const saves = comboSavingPercent(combo.pricing) > 0;
 
   return (
     <Link
@@ -44,6 +51,12 @@ export function ComboCard({
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
           />
+        ) : thumbs.length === 0 ? (
+          // Neither a hero nor a single component picture: name the box rather than
+          // hand the shopper an empty beige frame.
+          <div className="flex h-full items-center justify-center p-6 text-center">
+            <span className="font-display text-lg leading-snug text-muted">{combo.name}</span>
+          </div>
         ) : (
           <div className="flex h-full items-center justify-center gap-2 p-6">
             {thumbs.slice(0, 3).map((src, i) => (
@@ -57,7 +70,9 @@ export function ComboCard({
           </div>
         )}
 
-        {combo.pricing && (
+        {/* Guarded on `saves`, not just on `pricing`: the badge renders null for a
+            combo that saves nothing, and the wrapper would be left positioning air. */}
+        {combo.pricing && saves && (
           <span className="absolute left-3 top-3">
             <ComboSavingBadge pricing={combo.pricing} size="sm" />
           </span>
@@ -86,9 +101,11 @@ export function ComboCard({
       </div>
 
       <div className="p-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
-          {combo.item_count} {combo.item_count === 1 ? "product" : "products"} in one box
-        </p>
+        {combo.item_count > 0 && (
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
+            {combo.item_count} {combo.item_count === 1 ? "product" : "products"} in one box
+          </p>
+        )}
         <h3 className="mt-1 font-display text-lg leading-snug">{combo.name}</h3>
         {combo.short_description && (
           <p className="mt-1 line-clamp-2 text-sm text-muted">{combo.short_description}</p>
@@ -99,9 +116,11 @@ export function ComboCard({
             <span className="text-xl font-medium">
               {formatMoney(combo.pricing.amount, combo.pricing.currency)}
             </span>
-            <s className="text-sm text-muted">
-              {formatMoney(combo.pricing.components_total, combo.pricing.currency)}
-            </s>
+            {saves && (
+              <s className="text-sm text-muted">
+                {formatMoney(combo.pricing.components_total, combo.pricing.currency)}
+              </s>
+            )}
           </div>
         )}
 

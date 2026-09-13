@@ -101,3 +101,32 @@ export async function getCombo(slug: string, country: string) {
     next: { revalidate: COMBO_REVALIDATE, tags: ["catalog", "combos", `combo:${slug}`] },
   });
 }
+
+/** The saving a combo actually gives, as a percentage, 0 when there is none to claim.
+ *
+ *  A combo's price is a STORED AMOUNT, not a computed 10% off, so a curator can pin a box
+ *  at exactly what its parts cost — `resolve_combo_price` clamps a pinned amount to the
+ *  component total (`apps/combos/services.py`), which makes "saves nothing" reachable and
+ *  "costs more than the parts" impossible. Toke's Back-to-School Care Pack is one such
+ *  box today, and it was advertising "Save ₦0 · 0% off".
+ *
+ *  Trusts the API's `saving_percent` WHENEVER IT PARSES, zero included. It is quantized
+ *  to 2dp server-side, so a ₦1 saving on a ₦100,000 box legitimately serialises as
+ *  "0.00" — recomputing that from the amounts would resurrect it as 0.001 and put "Save
+ *  ₦1 · 0% off" back on the card. The amounts are a fallback only for a payload with no
+ *  usable field at all (an older cached build), where the alternative is dropping a real
+ *  deal. */
+export function comboSavingPercent(pricing: ComboPricing | null): number {
+  if (!pricing) return 0;
+  const stated = Number(pricing.saving_percent);
+  if (Number.isFinite(stated)) return Math.max(stated, 0);
+  const total = Number(pricing.components_total);
+  const amount = Number(pricing.amount);
+  if (!Number.isFinite(total) || !Number.isFinite(amount) || total <= 0) return 0;
+  return amount < total ? ((total - amount) / total) * 100 : 0;
+}
+
+/** "10.00" → "10", "9.5" → "9.5". Trailing zeros are noise in a badge. */
+export function formatPercent(percent: number): string {
+  return String(Number(percent.toFixed(2)));
+}
