@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { getProducts } from "@/lib/catalog";
 import { getHomepage, rowCollection } from "@/lib/cms";
+import { fetchComboIndex } from "@/lib/combos";
 import { pageMetadata, organizationJsonLd, webSiteJsonLd, DEFAULT_DESCRIPTION } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { HeroSlider } from "@/components/home/HeroSlider";
@@ -10,6 +11,7 @@ import { ShopByCategory } from "@/components/home/ShopByCategory";
 import { ConcernsStrip } from "@/components/home/ConcernsStrip";
 import { FeatureSplit } from "@/components/home/FeatureSplit";
 import { ProductRow } from "@/components/home/ProductRow";
+import { ComboRow } from "@/components/home/ComboRow";
 import { GenderSection } from "@/components/home/GenderSection";
 import { TikTokSection } from "@/components/home/TikTokSection";
 import { TrioSection } from "@/components/home/TrioSection";
@@ -33,11 +35,16 @@ export default async function HomePage() {
   // back to the slugs this page always used.
   const lovedSlug = rowCollection(homepage, "loved", "best-sellers");
   const naturalSlug = rowCollection(homepage, "natural", "new-arrivals");
-  const [bestSellers, newArrivals, men, women, babies] = await Promise.all([
+  const [bestSellers, newArrivals, combos, men, women, babies] = await Promise.all([
     collection(lovedSlug),
     getProducts({ collection: naturalSlug, ordering: "newest" }, country)
       .then((p) => p.results)
       .catch(() => []),
+    // Combo Deals. `fetchComboIndex` already turns a 404 into an empty row — that is
+    // the deploy window, when this build can be talking to an API older than itself.
+    // The extra catch covers the REST: a 500 or a timeout in the combos service must
+    // cost the homepage one promo section, not the whole page.
+    fetchComboIndex(country).catch(() => []),
     // The three feature sections read admin-curated collections and HIDE when a
     // collection is empty or missing — creating "men"/"women"/"babies" in admin is
     // what turns each section on.
@@ -49,7 +56,10 @@ export default async function HomePage() {
     <>
       <JsonLd data={organizationJsonLd()} />
       <JsonLd data={webSiteJsonLd()} />
-      {/* The approved artifact, section for section, top to bottom. */}
+      {/* The approved artifact, section for section, top to bottom — plus Combo Deals,
+          added 2026-09-13 after Best Sellers, which the artifact does not contain. It
+          sits there because a 10%-off row is a promotion and wants the first screen a
+          scroller reaches, not because the sequence had a gap. */}
       <HeroSlider banners={homepage?.banners ?? []} />
       <ShopByCategory banners={homepage?.banners ?? []} />
       <ConcernsStrip banners={homepage?.banners ?? []} />
@@ -62,6 +72,7 @@ export default async function HomePage() {
         carousel
         compact
       />
+      <ComboRow combos={combos} />
       <GenderSection
         eyebrow="New Formulas"
         title="New for Men"

@@ -102,13 +102,31 @@ export async function getCombo(slug: string, country: string) {
   });
 }
 
-/** The saving a combo actually gives, as a percentage, 0 when there is none to claim.
+/* ── The homepage promo row ──────────────────────────────────────────────────────────
  *
- *  A combo's price is a STORED AMOUNT, not a computed 10% off, so a curator can pin a box
- *  at exactly what its parts cost — `resolve_combo_price` clamps a pinned amount to the
- *  component total (`apps/combos/services.py`), which makes "saves nothing" reachable and
- *  "costs more than the parts" impossible. Toke's Back-to-School Care Pack is one such
- *  box today, and it was advertising "Save ₦0 · 0% off".
+ * The homepage row makes a PROMISE in its heading ("Save 10% when you buy the set"), so
+ * it may only carry combos that keep it. Two things disqualify a bundle from the row
+ * while leaving it perfectly visible on /combo, where the heading promises nothing:
+ * no pricing, and no saving worth stating.
+ *
+ * A no-saving combo is a real case: `resolve_combo_price` clamps a pinned amount to the
+ * component total (`apps/combos/services.py`), so a curator who pins a box at its parts'
+ * price gets a combo that saves exactly ₦0. Toke's Back-to-School Care Pack is one right
+ * now. A "deal" that saves nothing under a heading that claims 10% is worse than one
+ * fewer card — but it is a PRICING mistake, and hiding it here does not fix it.
+ *
+ * SOLD-OUT COMBOS ARE KEPT, sorted to the end. The Best Sellers row 200px above shows a
+ * "Sold Out" tag rather than hiding the product, and two adjacent rows must not treat
+ * "can't buy it" oppositely. Combos also go out of stock far more readily than products
+ * — `max_addable` is the minimum across every component, so one dud component empties
+ * the box — and with a handful of combos in the catalogue, dropping them would empty the
+ * row with nothing on the page to say why.
+ *
+ * If nothing survives, ComboRow renders nothing at all and the homepage has one section
+ * fewer.
+ */
+
+/** The advertised discount as a number, 0 when there is no deal to claim.
  *
  *  Trusts the API's `saving_percent` WHENEVER IT PARSES, zero included. It is quantized
  *  to 2dp server-side, so a ₦1 saving on a ₦100,000 box legitimately serialises as
@@ -126,7 +144,38 @@ export function comboSavingPercent(pricing: ComboPricing | null): number {
   return amount < total ? ((total - amount) / total) * 100 : 0;
 }
 
-/** "10.00" → "10", "9.5" → "9.5". Trailing zeros are noise in a badge. */
+/** The combos the homepage row may show: curator's order, sold-out last, capped. */
+export function promoCombos(combos: ComboCard[], limit = 8): ComboCard[] {
+  // `in_stock` is required by the type but can be missing from a payload cached by an
+  // older API build; assume in stock there, as the product cards do.
+  const sellable = (c: ComboCard) => c.in_stock !== false;
+  return combos
+    .filter((c) => comboSavingPercent(c.pricing) > 0)
+    .slice() // `sort` mutates, and this array is the caller's
+    .sort((a, b) => Number(sellable(b)) - Number(sellable(a)))
+    .slice(0, limit);
+}
+
+/** The discount the row's heading may claim, or null when it may claim none.
+ *
+ *  `upTo` is the whole point. Toke prices every combo at 10% off today, so the row
+ *  normally states one exact rate — but the day a curator pins one box at 15% the
+ *  heading has to stop claiming a single number without going silent about the discount
+ *  altogether, which is how a dynamic heading quietly stops selling. So: one rate when
+ *  every combo agrees EXACTLY, otherwise "up to" the best one.
+ *
+ *  Mixed rates are FLOORED, never rounded. Rounding 9.51 to "10%" overstates the offer
+ *  against the card's own badge; flooring can only ever understate it. */
+export function savingClaim(combos: ComboCard[]): { percent: number; upTo: boolean } | null {
+  const percents = combos.map((c) => comboSavingPercent(c.pricing)).filter((p) => p > 0);
+  if (percents.length === 0) return null;
+  const [first] = percents;
+  if (percents.every((p) => p === first)) return { percent: first, upTo: false };
+  const best = Math.floor(Math.max(...percents));
+  return best > 0 ? { percent: best, upTo: true } : null;
+}
+
+/** "10.00" → "10", "9.5" → "9.5". Trailing zeros are noise in a heading or a badge. */
 export function formatPercent(percent: number): string {
   return String(Number(percent.toFixed(2)));
 }
