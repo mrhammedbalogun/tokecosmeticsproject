@@ -19,6 +19,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from apps.payments.money import format_money, format_percent
+from apps.orders.gifts import order_gifts
 
 
 # No money has been collected in these states, so the document is a proforma, not an
@@ -70,6 +71,10 @@ def invoice_context(order) -> dict:
         "combo_discount_total": (
             money(order.combo_discount_total) if order.combo_discount_total else ""
         ),
+        # The free gifts this order owes. NOT a money line — a gift has no price and is
+        # not charged for — so it prints as a note rather than a row in the totals. It is
+        # on the invoice because this is the document that travels with the parcel.
+        "gifts": order_gifts(order),
         # Its own line, never folded into `discount_total`: an invoice is the document a
         # customer reconciles against, and "why is this cheaper than the products" has to
         # be answerable from the page itself.

@@ -134,6 +134,17 @@ export default async function OrderDetailPage({ params }: { params: Params }) {
                         {comboGroupCount > 1 && item.combo_group ? ` #${item.combo_group}` : ""}
                       </span>
                     )}
+                    {/* The free gift this bundle was sold with, as it was promised at
+                        checkout. It is not a stock row and not a priced line, so this
+                        badge is the ONLY thing standing between the promise and a parcel
+                        that goes out without it. Shown per line because that is where
+                        the snapshot lives; a packer reading one bundle's lines sees it
+                        beside every one of them. */}
+                    {item.combo_gift && (
+                      <span className="ml-2 rounded-full bg-warn/10 px-2 py-0.5 text-[11px] text-warn">
+                        Free gift: {item.combo_gift}
+                      </span>
+                    )}
                   </span>
                   <span className="shrink-0 tabular-nums">{item.line_total_display}</span>
                 </li>

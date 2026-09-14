@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Thumb } from "@/components/combo/ProductPicker";
-import type { ComboRow } from "@/lib/combos";
+import { rewardTypeOf, type ComboRow } from "@/lib/combos";
 
 /**
  * The list. Every column answers a question somebody actually has: which bundle is this
@@ -31,7 +31,7 @@ export function ComboTable({ rows }: { rows: ComboRow[] }) {
             <th className="px-3 py-2 font-medium">Combo</th>
             <th className="px-3 py-2 font-medium">Status</th>
             <th className="px-3 py-2 text-right font-medium">Items</th>
-            <th className="px-3 py-2 text-right font-medium">Discount</th>
+            <th className="px-3 py-2 font-medium">Reward</th>
             <th className="px-3 py-2 font-medium">Markets</th>
           </tr>
         </thead>
@@ -58,8 +58,25 @@ export function ComboTable({ rows }: { rows: ComboRow[] }) {
                 <StatusPill status={row.status} />
               </td>
               <td className="px-3 py-2 text-right tabular-nums">{row.item_count}</td>
-              <td className="px-3 py-2 text-right tabular-nums">
-                {String(Number(row.discount_percent))}%
+              {/* WHAT IT PROMISES, not just a percentage. A column reading "10%" beside
+                  a bundle that actually gives a gift is how Back-to-School went out
+                  advertising a discount of zero — the number was the default nobody had
+                  reason to look at. */}
+              <td className="px-3 py-2 text-xs">
+                {rewardTypeOf(row.reward_type) === "gift" ? (
+                  // WORDS, NOT AN EMOJI. An emoji is a font lookup, and a machine
+                  // without the glyph renders this column as a tofu box — measured.
+                  <span className="inline-flex max-w-full items-center gap-1 rounded-full bg-accent/10 px-2 py-0.5 text-accent">
+                    <span className="font-semibold">Gift</span>
+                    <span className="truncate" title={row.gift_name || undefined}>
+                      · {row.gift_name || "Free gift"}
+                    </span>
+                  </span>
+                ) : (
+                  <span className="tabular-nums">
+                    {String(Number(row.discount_percent))}% off
+                  </span>
+                )}
               </td>
               <td className="px-3 py-2 text-xs">
                 {row.markets.length === 0 ? (

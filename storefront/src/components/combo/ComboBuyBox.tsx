@@ -26,8 +26,8 @@ import {
   useCart,
 } from "@/hooks/useCart";
 import { openCartDrawer } from "@/lib/cart-ui";
-import { ComboSavingBadge } from "@/components/combo/ComboSavingBadge";
-import { comboSavingPercent, type ComboDetail } from "@/lib/combos";
+import { ComboRewardBadge } from "@/components/combo/ComboRewardBadge";
+import { comboGift, comboSavingPercent, type ComboDetail } from "@/lib/combos";
 import { formatMoney } from "@/lib/country";
 import { newEventId, track } from "@/lib/tracking/events";
 
@@ -46,6 +46,7 @@ export function ComboBuyBox({
 
   const pricing = combo.pricing;
   const saves = comboSavingPercent(pricing) > 0;
+  const gift = comboGift(combo);
   // The server's own cap, so the stepper stops where the stock does instead of letting
   // somebody pick five and be told at the till.
   const max = Math.max(1, combo.max_quantity || 1);
@@ -95,7 +96,10 @@ export function ComboBuyBox({
 
   return (
     <div className="rounded-[var(--radius-card)] border border-line bg-surface p-5 shadow-sm">
-      <ComboSavingBadge pricing={pricing} />
+      {/* The badge is the DISCOUNT's only voice on this page, so it stays. A gift's is
+          the callout below, which carries the photograph and the full name — running
+          both would print the same sentence twice, a hand's width apart. */}
+      {!gift && <ComboRewardBadge combo={combo} />}
 
       <div className="mt-3 flex flex-wrap items-baseline gap-3">
         <p className="text-3xl font-medium">
@@ -116,6 +120,28 @@ export function ComboBuyBox({
         <p className="mt-1 text-sm text-accent">
           You save {formatMoney(pricing.saving, pricing.currency)} on this box.
         </p>
+      )}
+
+      {/* THE GIFT, SPELLED OUT — not left to the badge above.
+          A gift bundle charges what its parts cost, so this panel has no saving to show
+          and no strike-through: without this block the one reason to buy the box rather
+          than the products is a pill the eye slides past. The photograph is optional and
+          the layout must hold without it, because most gifts will never have one. */}
+      {gift && (
+        <div className="mt-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-gold/50 bg-gold/10 p-3">
+          {gift.image && (
+            <span className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-2 border-surface bg-surface">
+              {/* eslint-disable-next-line @next/next/no-img-element -- CDN media, no layout shift at a fixed size */}
+              <img src={gift.image} alt="" className="h-full w-full object-cover" />
+            </span>
+          )}
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
+              Comes with this box
+            </p>
+            <p className="text-sm font-medium">{gift.name}</p>
+          </div>
+        </div>
       )}
 
       {combo.in_stock ? (

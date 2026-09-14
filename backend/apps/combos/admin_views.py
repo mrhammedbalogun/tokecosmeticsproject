@@ -97,6 +97,40 @@ class ComboAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
         combo.save(update_fields=["image", "updated_at"])
         return Response(ComboAdminSerializer(combo, context={"request": request}).data)
 
+    @action(
+        detail=True,
+        methods=["post", "delete"],
+        parser_classes=[MultiPartParser, FormParser],
+        url_path="gift-image",
+    )
+    def gift_image(self, request, slug=None):
+        """The gift's photograph — its own route, for the same multipart reason as above.
+
+        DELETE clears it, which `image` has no equivalent of and this needs: a gift is
+        swapped out every campaign, and the picture of last month's free sachet left
+        behind on a bundle now giving something else is a wrong promise rather than a
+        missing one. Clearing the FILE never clears the gift — `gift_name` is what the
+        badge prints, and a gift combo may not exist without one.
+        """
+        combo = self.get_object()
+        # Both verbs land on one viewset action, so the audit row would read
+        # "gift_image" with an empty `changes` either way — the trail could not tell
+        # "added a photo" from "took one away". `audit_action` is read after the handler
+        # returns, so setting it here is what reaches the row.
+        self.audit_action = (
+            "gift_image_remove" if request.method == "DELETE" else "gift_image_upload"
+        )
+        if request.method == "DELETE":
+            combo.gift_image = None
+            combo.save(update_fields=["gift_image", "updated_at"])
+            return Response(ComboAdminSerializer(combo, context={"request": request}).data)
+        uploaded = request.data.get("gift_image") or request.data.get("image")
+        if not uploaded:
+            return Response({"gift_image": ["No file was submitted."]}, status=400)
+        combo.gift_image = uploaded
+        combo.save(update_fields=["gift_image", "updated_at"])
+        return Response(ComboAdminSerializer(combo, context={"request": request}).data)
+
 
 class ComboProductSearchView(AdminAuditMixin, APIView):
     """The builder's product box: `?q=shea` → matching products with their variants,

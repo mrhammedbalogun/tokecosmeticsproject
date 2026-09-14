@@ -119,6 +119,25 @@ export function CartComboCard({
                   Saving {formatMoney(combo.saving, currency)}
                 </p>
               )}
+              {/* A gift bundle has no saving line, so without this the bag says nothing
+                  about why it was worth buying — the promise would vanish between the
+                  product page and the receipt. The backend blanks it when the deal ends,
+                  which is the same moment the discount stops. */}
+              {combo.gift && (
+                <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-foreground">
+                  {combo.gift.image && (
+                    // eslint-disable-next-line @next/next/no-img-element -- CDN media at a fixed size
+                    <img
+                      src={combo.gift.image}
+                      alt=""
+                      className="h-6 w-6 shrink-0 rounded-full border border-line object-cover"
+                    />
+                  )}
+                  <span className="rounded-full bg-gold px-2 py-0.5">
+                    Free gift: {combo.gift.name}
+                  </span>
+                </p>
+              )}
               <div className="mt-2 flex items-center justify-between gap-3">
                 <ComboStepper
                   name={combo.name}

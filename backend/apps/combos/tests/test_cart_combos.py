@@ -199,3 +199,37 @@ def test_withdrawing_a_combo_from_a_market_does_the_same(ng, cart, combo):
     payload = serialize_cart(cart, ng)
     assert payload["combos"][0]["ended"] is True
     assert payload["total"] == "2000.00"
+
+
+def test_the_cart_carries_a_gift_bundle_s_gift(ng, priced_variant):
+    """A gift combo saves nothing, so the cart's money columns say nothing about why it
+    was worth buying. Without this the promise made on the product page vanishes between
+    the bag and the receipt."""
+    from apps.carts.factories import CartFactory
+    from apps.carts.serializers import serialize_cart
+    from apps.carts.services import add_combo
+    from apps.combos.factories import ComboFactory, ComboItemFactory
+    from apps.combos.models import REWARD_GIFT
+
+    c = ComboFactory(reward_type=REWARD_GIFT, gift_name="Free shea butter")
+    ComboItemFactory(combo=c, variant=priced_variant("1000.00"), quantity=1)
+    cart = CartFactory(country=ng, currency=ng.currency)
+    add_combo(cart, c, 1, ng)
+
+    payload = serialize_cart(cart, ng)
+    group = payload["combos"][0]
+    assert group["gift"] == {"name": "Free shea butter", "image": None}
+    # And it is genuinely full price: no saving line to show beside it.
+    assert group["saving"] == "0.00"
+    assert payload["combo_discount"] == "0.00"
+
+
+def test_a_discount_bundle_carries_no_gift_in_the_cart(ng, combo):
+    from apps.carts.factories import CartFactory
+    from apps.carts.serializers import serialize_cart
+    from apps.carts.services import add_combo
+
+    c = combo()
+    cart = CartFactory(country=ng, currency=ng.currency)
+    add_combo(cart, c, 1, ng)
+    assert serialize_cart(cart, ng)["combos"][0]["gift"] is None

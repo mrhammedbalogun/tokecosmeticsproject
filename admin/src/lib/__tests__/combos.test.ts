@@ -5,6 +5,7 @@ import {
   orderMarkets,
   optionSummary,
   previewPricing,
+  rewardTypeOf,
   roundHalfUp,
 } from "@/lib/combos";
 
@@ -98,5 +99,41 @@ describe("optionSummary", () => {
 
   it("falls back to the variant name when there are no options", () => {
     expect(optionSummary({}, "Default")).toBe("Default");
+  });
+});
+
+describe("rewardTypeOf", () => {
+  it("reads a missing reward as a discount", () => {
+    // A rolling deploy can put this admin in front of a backend that predates the
+    // reward choice. Everything that existed then gave a percentage.
+    expect(rewardTypeOf(undefined)).toBe("discount");
+    expect(rewardTypeOf(null)).toBe("discount");
+    expect(rewardTypeOf("")).toBe("discount");
+    expect(rewardTypeOf("nonsense")).toBe("discount");
+  });
+
+  it("reads a gift as a gift", () => {
+    expect(rewardTypeOf("gift")).toBe("gift");
+  });
+});
+
+describe("previewPricing for a gift combo", () => {
+  it("is the editor's job to preview 0%, since that is what the shop will charge", () => {
+    // The panel passes 0 for a gift combo rather than the typed percentage — the value
+    // stays on the row so switching the reward back restores it. Previewing the typed
+    // rate would show a curator a price the shop is never going to charge, which is the
+    // exact mistake the reward choice exists to prevent.
+    const [row] = previewPricing(items, ["NG"], 0, {});
+    expect(row.componentsTotal).toBe(2000);
+    expect(row.amount).toBe(2000);
+    expect(row.saving).toBe(0);
+    expect(row.savingPercent).toBe(0);
+  });
+
+  it("still honours a pinned price, which is how a gift box gets a round number", () => {
+    const [row] = previewPricing(items, ["NG"], 0, { NG: "1900" });
+    expect(row.amount).toBe(1900);
+    expect(row.saving).toBe(100);
+    expect(row.pinned).toBe(true);
   });
 });

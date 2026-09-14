@@ -41,3 +41,31 @@ describe("OrderItems", () => {
     expect(screen.getByText("Body Butter")).toBeInTheDocument();
   });
 });
+
+describe("the free gift", () => {
+  const line = (over: Partial<OrderItem> = {}): OrderItem => ({
+    product_name: "Shea Butter", variant_name: "400ml", sku: "SKU-1", quantity: 1,
+    unit_price: "1000.00", line_total: "1000.00",
+    unit_price_display: "₦1,000.00", line_total_display: "₦1,000.00",
+    image_url: null, ...over,
+  });
+
+  it("names it once, however many lines the bundle had", () => {
+    // The snapshot repeats on every line of the same bundle — a four-product box carries
+    // it four times, and the customer is owed one sachet.
+    render(
+      <OrderItems
+        items={[
+          line({ sku: "A", combo_gift: "Free Kids Hair Grow Cream" }),
+          line({ sku: "B", combo_gift: "Free Kids Hair Grow Cream" }),
+        ]}
+      />,
+    );
+    expect(screen.getAllByText("Free Kids Hair Grow Cream")).toHaveLength(1);
+  });
+
+  it("says nothing for an order that was promised nothing", () => {
+    render(<OrderItems items={[line()]} />);
+    expect(screen.queryByText(/free gift/i)).toBeNull();
+  });
+});

@@ -27,9 +27,15 @@ IMAGE_PATH_MAX = 500
 # customer pays is whatever that box ends up saying (see ComboPrice).
 DEFAULT_DISCOUNT_PERCENT = 10
 
+# What a customer gets for buying the box instead of the parts. Exactly one of them, per
+# combo — see `Combo.reward_type`.
+REWARD_DISCOUNT = "discount"
+REWARD_GIFT = "gift"
+
 
 class Combo(TimeStampedModel):
     STATUS = [("draft", "Draft"), ("active", "Active"), ("archived", "Archived")]
+    REWARD_TYPES = [(REWARD_DISCOUNT, "Discount"), (REWARD_GIFT, "Free gift")]
 
     name = models.CharField(max_length=255)
     slug = models.SlugField(max_length=280, unique=True)
@@ -50,6 +56,30 @@ class Combo(TimeStampedModel):
         upload_to="catalog/combos/", blank=True, null=True, max_length=IMAGE_PATH_MAX
     )
     status = models.CharField(max_length=10, choices=STATUS, default="draft")
+    # WHY A BOX IS WORTH BUYING — a price cut, or something extra in the parcel. One or
+    # the other, never both, and that is a merchandising decision rather than a technical
+    # limit: a bundle that discounts AND gifts has two answers to "what do I get?", and
+    # the card has one badge to say it in.
+    #
+    # It is also what keeps the price honest. `discount_percent` defaults to 10, so
+    # before this existed a gift bundle built in the admin quietly gave 10% off as well —
+    # Toke's Back-to-School Care Pack was pinned to its own component total by hand to
+    # stop exactly that, which is why it shipped advertising "Save ₦0 · 0% off".
+    # `resolve_combo_price` now reads this and derives a gift combo at 0%.
+    reward_type = models.CharField(max_length=10, choices=REWARD_TYPES, default=REWARD_DISCOUNT)
+    # The gift, in the curator's words: "Free Kids Hair Grow Cream (50ml)". A NAME AND A
+    # PICTURE, NOT A VARIANT FK, decided 2026-09-13: a gift is a marketing promise and a
+    # packing instruction, not a priced line. Making it a variant would mean a ₦0 order
+    # line, a stock reservation and a share of the delivery weight — which is the whole
+    # of the checkout money path re-opened for a sachet. The cost of that choice is
+    # stated where it lands: gift stock is NOT tracked, so a gift can be promised after
+    # the shelf is empty, exactly as it is today.
+    gift_name = models.CharField(max_length=255, blank=True)
+    # Under `catalog/` like every other upload — see the note on `image` above; a file
+    # written anywhere else uploads fine and then 403s at the CDN.
+    gift_image = models.ImageField(
+        upload_to="catalog/combos/gifts/", blank=True, null=True, max_length=IMAGE_PATH_MAX
+    )
     is_featured = models.BooleanField(default=False)
     position = models.PositiveIntegerField(default=0)
     # The working default the admin's pricing panel prefills each market with, and what
@@ -70,6 +100,24 @@ class Combo(TimeStampedModel):
 
     class Meta:
         ordering = ["position", "-published_at", "name"]
+        constraints = [
+            # A gift combo with no gift named is a badge with nothing in it — the card
+            # would promise a reward the page cannot show. The admin serializer refuses
+            # it with a sentence; this is the backstop for every other way a row can be
+            # written (a shell, a data migration, a future endpoint), and it is why the
+            # storefront may treat `reward_type == "gift"` as "there IS a gift".
+            models.CheckConstraint(
+                # BLANK MEANS BLANK, whitespace included. The serializer strips before it
+                # checks, so `gift_name="   "` is refused there — but a shell or a data
+                # migration writing it would satisfy `!= ""` and leave a live card
+                # promising a reward whose name renders as nothing.
+                check=(
+                    ~models.Q(reward_type=REWARD_GIFT)
+                    | ~models.Q(gift_name__regex=r"^\s*$")
+                ),
+                name="combo_gift_reward_needs_a_gift",
+            ),
+        ]
 
     def __str__(self) -> str:
         return self.name

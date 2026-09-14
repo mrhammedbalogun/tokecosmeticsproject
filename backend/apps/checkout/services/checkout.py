@@ -19,7 +19,8 @@ from apps.catalog.images import variant_image_path
 from apps.catalog.services import sellable_in
 from apps.checkout.services.coupons import validate_coupon
 from apps.checkout.services.totals import compute_totals
-from apps.combos.services import cart_combo_discount
+from apps.combos.models import REWARD_GIFT
+from apps.combos.services import cart_combo_discount, pricing_for_cart
 from apps.delivery.carriers import priced_options_for_address
 from apps.delivery.services import option_id_matches
 from apps.inventory.services import InsufficientStock, reserve
@@ -355,12 +356,36 @@ def place_order(*, user, country, key: str, cart_id, address_id=None, delivery_o
                 dict.fromkeys(i.combo_group_id for i in cart_items if i.combo_group_id), start=1
             )
         }
+        # THE GIFT STOPS WHERE THE DISCOUNT STOPS. `pricing_for_cart` is the gate every
+        # other combo consequence goes through (`cart_combo_discount` and the cart
+        # serializer both come through it), so the gift has to come through it too.
+        # Reading `reward_type` alone was wrong in the one direction that costs money:
+        # a combo archived between add-to-cart and pay shows the shopper no gift and no
+        # saving, charges them full price — and then told the packer to put a sachet in.
+        # Resolved once per bundle rather than per line; a four-product box has four.
+        gift_by_group: dict[int, str] = {}
+        for item in cart_items:
+            group_id = item.combo_group_id
+            if not group_id or group_id in gift_by_group:
+                continue
+            group_combo = item.combo_group.combo
+            still_running = pricing_for_cart(group_combo, country) is not None
+            gift_by_group[group_id] = (
+                group_combo.gift_name
+                if still_running and group_combo.reward_type == REWARD_GIFT
+                else ""
+            )
+
         for item in cart_items:
             variant, qty = item.variant, item.quantity
             rp = resolve_price(variant, country)
             OrderItem.objects.create(
                 order=order, variant=variant, product_name=variant.product.name,
                 combo_name=item.combo_group.combo.name if item.combo_group_id else "",
+                # Read at checkout, then frozen: the combo's reward can be switched from
+                # gift to discount next week, and this order still owes the customer the
+                # gift it advertised when they paid.
+                combo_gift=gift_by_group.get(item.combo_group_id, ""),
                 combo_group=group_numbers.get(item.combo_group_id),
                 variant_name=", ".join(f"{k}: {v}" for k, v in (variant.option_values or {}).items()),
                 sku=variant.sku, unit_price=rp.amount, line_total=(rp.amount * qty), quantity=qty,

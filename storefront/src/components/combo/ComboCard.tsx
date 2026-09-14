@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
-import { comboSavingPercent, type ComboCard as ComboCardData } from "@/lib/combos";
-import { ComboSavingBadge } from "@/components/combo/ComboSavingBadge";
+import { comboGift, comboSavingPercent, type ComboCard as ComboCardData } from "@/lib/combos";
+import { ComboRewardBadge } from "@/components/combo/ComboRewardBadge";
 import { formatMoney } from "@/lib/country";
 import { mediaUrl } from "@/lib/media";
 
@@ -30,11 +30,13 @@ export function ComboCard({
   // `item_images` is optional in practice: an old cached payload predates the field, and
   // a combo of products that have no photographs yet sends an empty list.
   const thumbs = (combo.item_images ?? []).map(mediaUrl).filter((u): u is string => Boolean(u));
-  // Only strike the "bought separately" total when it IS more than the price. A combo
+  // Only strike the "bought separately" total when it IS more than the price. A gift
+  // combo charges what its parts cost, so this is normally false for one — and a combo
   // pinned at its parts' price (the backend clamps a pinned amount to the component
   // total, so equal is as far as it goes) would otherwise show two identical amounts,
   // one of them crossed out.
   const saves = comboSavingPercent(combo.pricing) > 0;
+  const gift = comboGift(combo);
 
   return (
     <Link
@@ -70,11 +72,12 @@ export function ComboCard({
           </div>
         )}
 
-        {/* Guarded on `saves`, not just on `pricing`: the badge renders null for a
-            combo that saves nothing, and the wrapper would be left positioning air. */}
-        {combo.pricing && saves && (
-          <span className="absolute left-3 top-3">
-            <ComboSavingBadge pricing={combo.pricing} size="sm" />
+        {/* Guarded on the reward rather than on `pricing`: the badge renders null for a
+            combo that rewards nothing, and the wrapper would be left positioning air.
+            `pr-14` keeps a long gift name clear of the Sold Out pill opposite. */}
+        {(gift || saves) && (
+          <span className="absolute left-3 right-3 top-3 flex pr-14">
+            <ComboRewardBadge combo={combo} size="sm" />
           </span>
         )}
         {!combo.in_stock && (
@@ -104,6 +107,7 @@ export function ComboCard({
         {combo.item_count > 0 && (
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted">
             {combo.item_count} {combo.item_count === 1 ? "product" : "products"} in one box
+            {gift && <span className="text-accent"> + a gift</span>}
           </p>
         )}
         <h3 className="mt-1 font-display text-lg leading-snug">{combo.name}</h3>

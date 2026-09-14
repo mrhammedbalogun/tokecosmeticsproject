@@ -64,6 +64,17 @@ see `apps/orders/emails.py::_staff_context` for why.
         white-space:nowrap;vertical-align:top;">{{ item.line_total }}</td>
   </tr>
   {% endfor %}
+  {# This table is headed "To pack", and a gift is the one thing on the order that no
+     other row accounts for — it has no price, no SKU and no stock line, so if it is not
+     printed here it is not packed. #}
+  {% for gift in gifts %}
+  <tr>
+    <td colspan="3" style="padding:10px 0;border-bottom:1px solid #efeae0;">
+      <span style="display:inline-block;background:#f6e6b8;color:#1a1a1a;border-radius:999px;
+        padding:4px 10px;font-size:12px;font-weight:bold;">Free gift: {{ gift }}</span>
+    </td>
+  </tr>
+  {% endfor %}
   <tr>
     <td colspan="2" style="padding:12px 12px 0 0;font-size:16px;font-weight:bold;">Total</td>
     <td align="right" style="padding:12px 0 0;font-size:16px;font-weight:bold;

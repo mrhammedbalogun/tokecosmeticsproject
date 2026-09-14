@@ -47,7 +47,7 @@ class OrderItemSerializer(serializers.ModelSerializer):
         # the bundle saved is one number on the order (`combo_discount_total`).
         fields = ("product_name", "variant_name", "sku", "quantity", "unit_price",
                   "line_total", "unit_price_display", "line_total_display", "image_url",
-                  "combo_name", "combo_group")
+                  "combo_name", "combo_gift", "combo_group")
 
     def get_image_url(self, item) -> str:
         # Snapshot first, live fallback for orders placed before the snapshot existed —

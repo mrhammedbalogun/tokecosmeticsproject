@@ -208,3 +208,144 @@ def test_two_different_combos_sharing_a_component(django_user_model, world):
     # Money: A is 2,000 of parts (-200), B is 2x3,500 (-700).
     assert order.subtotal == Decimal("9000.00")
     assert order.combo_discount_total == Decimal("900.00")
+
+
+def test_a_gift_bundle_puts_its_gift_on_the_order(django_user_model, world):
+    """The promise has to reach whoever packs the box.
+
+    A gift is not a priced line and not a stock row — it is a sentence on the storefront
+    — so if it does not land on the order, the only record that this customer was
+    promised anything is a combo row a curator can edit tomorrow. Snapshotted like
+    `combo_name` beside it, and for the same reason: the reward can be switched to a
+    discount next week and this order still owes them the gift.
+    """
+    from apps.combos.models import REWARD_GIFT
+
+    ng, wh, lagos, opt = world
+    a = _variant(ng, wh, "1000.00", 50)
+    combo = ComboFactory(
+        name="Back-to-School Pack",
+        reward_type=REWARD_GIFT,
+        gift_name="Free Kids Hair Grow Cream (50ml)",
+    )
+    ComboItemFactory(combo=combo, variant=a, quantity=2)
+
+    user = django_user_model.objects.create_user(email="gift-order@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = CartFactory(user=user, country=ng, currency=ng.currency)
+    add_combo(cart, combo, 1, ng)
+
+    order = Order.objects.get(number=_place(user, cart, addr, opt).data["order_number"])
+    assert {i.combo_gift for i in order.items.all()} == {"Free Kids Hair Grow Cream (50ml)"}
+    # A gift bundle charges what the parts cost, so there is no bundle saving to report.
+    assert order.combo_discount_total == Decimal("0.00")
+
+
+def test_a_discount_bundle_leaves_the_gift_column_empty(django_user_model, world):
+    """`combo_gift` reads "what was promised", not "which combo" — a percentage bundle
+    promises nothing extra, and a packer must not go looking for a sachet."""
+    ng, wh, lagos, opt = world
+    a = _variant(ng, wh, "1000.00", 50)
+    combo = ComboFactory(name="Glow Kit", gift_name="Left over from a past campaign")
+    ComboItemFactory(combo=combo, variant=a, quantity=1)
+
+    user = django_user_model.objects.create_user(email="plain-order@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = CartFactory(user=user, country=ng, currency=ng.currency)
+    add_combo(cart, combo, 1, ng)
+
+    order = Order.objects.get(number=_place(user, cart, addr, opt).data["order_number"])
+    assert {i.combo_gift for i in order.items.all()} == {""}
+
+
+def test_the_gift_reaches_the_paperwork(django_user_model, world):
+    """The invoice, the customer's confirmation and the staff pick list.
+
+    A gift has no price, no SKU and no stock line, so no money column on any of these
+    documents accounts for it. If it is not printed, it is not packed — and the customer
+    has no record of what they were promised.
+    """
+    from apps.combos.models import REWARD_GIFT
+    from apps.orders.emails import _context
+    from apps.orders.gifts import order_gifts
+
+    ng, wh, lagos, opt = world
+    a = _variant(ng, wh, "1000.00", 50)
+    combo = ComboFactory(name="Gift Box", reward_type=REWARD_GIFT, gift_name="Free shea butter")
+    ComboItemFactory(combo=combo, variant=a, quantity=3)
+
+    user = django_user_model.objects.create_user(email="paperwork@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = CartFactory(user=user, country=ng, currency=ng.currency)
+    add_combo(cart, combo, 1, ng)
+    order = Order.objects.get(number=_place(user, cart, addr, opt).data["order_number"])
+
+    # ONCE, not once per line: the snapshot is written on every line of the bundle.
+    assert order_gifts(order) == ["Free shea butter"]
+    assert _context(order)["gifts"] == ["Free shea butter"]
+
+
+def test_an_order_with_no_gift_promises_none(django_user_model, world):
+    ng, wh, lagos, opt = world
+    a = _variant(ng, wh, "1000.00", 50)
+    combo = ComboFactory(name="Glow Kit")
+    ComboItemFactory(combo=combo, variant=a, quantity=1)
+
+    user = django_user_model.objects.create_user(email="nogift@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = CartFactory(user=user, country=ng, currency=ng.currency)
+    add_combo(cart, combo, 1, ng)
+    order = Order.objects.get(number=_place(user, cart, addr, opt).data["order_number"])
+
+    from apps.orders.gifts import order_gifts
+
+    assert order_gifts(order) == []
+
+
+def test_an_ended_gift_bundle_owes_no_gift(django_user_model, world):
+    """The gift stops where the discount stops.
+
+    A combo archived between add-to-cart and pay earns no saving — `pricing_for_cart`
+    says no, the cart shows "This combo has ended" and the till charges full price. The
+    gift has to stop in the same breath. Reading `reward_type` alone meant the shopper
+    saw no gift and paid full price, and the packer was still told to put one in.
+    """
+    from apps.combos.models import REWARD_GIFT
+
+    ng, wh, lagos, opt = world
+    a = _variant(ng, wh, "1000.00", 50)
+    combo = ComboFactory(name="Ending Box", reward_type=REWARD_GIFT, gift_name="Free sachet")
+    ComboItemFactory(combo=combo, variant=a, quantity=2)
+
+    user = django_user_model.objects.create_user(email="ended-gift@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = CartFactory(user=user, country=ng, currency=ng.currency)
+    add_combo(cart, combo, 1, ng)
+
+    # Pulled from sale while it sat in the bag.
+    combo.status = "archived"
+    combo.save(update_fields=["status"])
+
+    order = Order.objects.get(number=_place(user, cart, addr, opt).data["order_number"])
+    assert {i.combo_gift for i in order.items.all()} == {""}
+    assert order.combo_discount_total == Decimal("0.00")
+
+
+def test_a_gift_bundle_withdrawn_from_the_market_owes_no_gift(django_user_model, world):
+    """The same rule by the other route — `available_countries` narrowed to elsewhere."""
+    from apps.combos.models import REWARD_GIFT
+
+    ng, wh, lagos, opt = world
+    a = _variant(ng, wh, "1000.00", 50)
+    combo = ComboFactory(name="UK Only Box", reward_type=REWARD_GIFT, gift_name="Free sachet")
+    ComboItemFactory(combo=combo, variant=a, quantity=1)
+
+    user = django_user_model.objects.create_user(email="withdrawn-gift@x.com", password="pw")
+    addr = Address.objects.create(user=user, line1="1 St", country_code="NG", state_region=lagos)
+    cart = CartFactory(user=user, country=ng, currency=ng.currency)
+    add_combo(cart, combo, 1, ng)
+
+    combo.available_countries.set([Country.objects.get(code="GB")])
+
+    order = Order.objects.get(number=_place(user, cart, addr, opt).data["order_number"])
+    assert {i.combo_gift for i in order.items.all()} == {""}

@@ -6,6 +6,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from apps.catalog.images import storage_url, variant_image_path
+from apps.combos.models import REWARD_GIFT
 from apps.combos.services import pricing_for_cart
 from apps.pricing.services import resolve_price
 
@@ -82,6 +83,7 @@ def _combo_group(group, country) -> dict:
     }
     if pricing is None:
         base.update(
+            gift=None,
             unit_price=None,
             line_total=str(goods),
             saving="0.00",
@@ -102,6 +104,22 @@ def _combo_group(group, country) -> dict:
         saving_percent=str(pricing.saving_percent),
         ended=False,
         unavailable=False,
+        # THE GIFT TRAVELS WITH THE BUNDLE. A gift combo saves nothing, so the cart's
+        # money columns say nothing about why it was worth buying — without this the
+        # promise made on the product page disappears between the bag and the receipt.
+        # Inside the `pricing is not None` branch deliberately: an ended bundle earns no
+        # discount and owes no gift either, and both stop in the same place.
+        # THE SAME SHAPE THE CATALOGUE SENDS (`_ComboRewardMixin._gift`), not a bare
+        # string: the bag can then show the photograph the product page showed, and one
+        # word does not mean two things depending on which endpoint answered.
+        gift=(
+            {
+                "name": combo.gift_name,
+                "image": storage_url(combo.gift_image.name) if combo.gift_image else None,
+            }
+            if combo.reward_type == REWARD_GIFT
+            else None
+        ),
     )
     return base
 

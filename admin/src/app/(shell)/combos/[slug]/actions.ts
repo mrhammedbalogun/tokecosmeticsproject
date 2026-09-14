@@ -87,6 +87,48 @@ export async function uploadComboImageAction(
   return { ok: true };
 }
 
+/**
+ * The gift's photograph. Same multipart reasoning as the featured image above, plus a
+ * REMOVE that the featured image has no equivalent of and this needs: a gift changes
+ * every campaign, and last month's sachet left behind on a bundle now giving something
+ * else is a wrong promise rather than a missing picture.
+ */
+export async function uploadComboGiftImageAction(
+  slug: string,
+  formData: FormData,
+): Promise<SaveResult> {
+  const { access } = await readAdminCookies();
+  if (!access) return { error: "Your session expired. Reload the page and sign in again." };
+  const res = await apiFetchRaw(`/admin/combos/${slug}/gift-image/`, {
+    method: "POST",
+    body: formData,
+    token: access,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    return readErrors(data);
+  }
+  revalidatePath(`/combos/${slug}`);
+  revalidatePath("/combos");
+  return { ok: true };
+}
+
+export async function removeComboGiftImageAction(slug: string): Promise<SaveResult> {
+  const { access } = await readAdminCookies();
+  if (!access) return { error: "Your session expired. Reload the page and sign in again." };
+  const res = await apiFetchRaw(`/admin/combos/${slug}/gift-image/`, {
+    method: "DELETE",
+    token: access,
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    return readErrors(data);
+  }
+  revalidatePath(`/combos/${slug}`);
+  revalidatePath("/combos");
+  return { ok: true };
+}
+
 /** The builder's product box. Returns [] rather than throwing on any failure: a search
  *  that errors should read as "nothing found", not blow up an editor holding unsaved work. */
 export async function searchProductsAction(term: string): Promise<PickerProduct[]> {

@@ -53,6 +53,9 @@ export interface OrderItem {
    *  counter (1, 2, 3…) separating two DIFFERENT bundles that share a component — without
    *  it, a packer cannot tell which box a line belongs in. */
   combo_name?: string;
+  /** The free gift that bundle promised, snapshotted at checkout. "" on every line that
+   *  is not part of a gift bundle — which is every line placed before 2026-09-13. */
+  combo_gift?: string;
   combo_group?: number | null;
 }
 

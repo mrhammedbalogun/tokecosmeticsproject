@@ -64,6 +64,15 @@ nothing says what it is until you have read three rows of it.
         vertical-align:top;">{{ item.line_total }}</td>
   </tr>
   {% endfor %}
+  {# The free gifts this order owes. ABOVE the money rows and not among them: a gift has
+     no price and is not charged for, so it is not a total to reconcile — it is a line
+     that says something else is coming in the parcel. #}
+  {% for gift in gifts %}
+  <tr><td colspan="3" style="padding:12px 0 0;">
+      <span style="display:inline-block;background:#f6e6b8;color:#1a1a1a;border-radius:999px;
+        padding:4px 10px;font-size:12px;font-weight:bold;">Free gift: {{ gift }}</span>
+    </td></tr>
+  {% endfor %}
   <tr><td colspan="2" style="padding:12px 12px 3px 0;color:#6b6862;">Subtotal</td>
       <td align="right" style="padding:12px 0 3px;white-space:nowrap;">{{ subtotal }}</td></tr>
   {% if combo_discount_total %}

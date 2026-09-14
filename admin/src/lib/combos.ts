@@ -22,6 +22,19 @@
 export const STATUSES = ["draft", "active", "archived"] as const;
 export type ComboStatus = (typeof STATUSES)[number];
 
+/** What a customer gets for buying the box: money off, or something extra in the parcel.
+ *  One or the other — a bundle that did both would have two answers to "what do I get?"
+ *  and one badge to say it in. A gift combo prices at what its parts cost, so choosing
+ *  "gift" is also what stops the house 10% being given away on top of the gift. */
+export const REWARD_TYPES = ["discount", "gift"] as const;
+export type RewardType = (typeof REWARD_TYPES)[number];
+
+/** Old payloads (a backend that predates the field) read as "discount", which is what
+ *  every combo was before the choice existed. */
+export function rewardTypeOf(value: string | undefined | null): RewardType {
+  return value === "gift" ? "gift" : "discount";
+}
+
 export function isComboStatus(value: string): value is ComboStatus {
   return (STATUSES as readonly string[]).includes(value);
 }
@@ -41,6 +54,10 @@ export interface ComboRow {
   discount_percent: string;
   image_url: string | null;
   item_count: number;
+  /** Optional: a rolling deploy can put this admin in front of a backend that predates
+   *  the reward choice. Read it through `rewardTypeOf`, never bare. */
+  reward_type?: RewardType;
+  gift_name?: string;
   /** Empty means EVERY market — see `Combo.available_countries`. */
   markets: string[];
   updated_at: string;
@@ -94,6 +111,10 @@ export interface ComboDetail {
   seo_description: string;
   published_at: string | null;
   image_url: string | null;
+  /** Optional for the same rolling-deploy reason as on `ComboRow`. */
+  reward_type?: RewardType;
+  gift_name?: string;
+  gift_image_url?: string | null;
   items: ComboItemRow[];
   prices: { country: string; amount: string }[];
   /** Per-market truth from the server; `null` for a market the combo cannot be priced in. */

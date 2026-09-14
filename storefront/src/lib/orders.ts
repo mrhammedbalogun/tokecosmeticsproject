@@ -17,6 +17,10 @@ export interface OrderItem {
   product_name: string; variant_name: string; sku: string;
   quantity: number; unit_price: string; line_total: string;
   unit_price_display: string; line_total_display: string; image_url: string | null;
+  /** The free gift the bundle this line came from promised, snapshotted at checkout.
+   *  "" on an ordinary line, and on every order placed before 2026-09-13. Repeated on
+   *  every line of the same bundle, so read it de-duplicated. */
+  combo_gift?: string;
 }
 export interface OrderDetail {
   number: string; status: string; placed_at: string; currency: string;

@@ -8,7 +8,7 @@ import { ComboContents } from "@/components/combo/ComboContents";
 import { Breadcrumbs } from "@/components/plp/Breadcrumbs";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ApiError } from "@/lib/api";
-import { getCombo, type ComboDetail } from "@/lib/combos";
+import { comboSavingPercent, getCombo, type ComboDetail } from "@/lib/combos";
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY, formatMoney } from "@/lib/country";
 import { deliveryEstimateFor } from "@/lib/delivery-estimates";
 import { mediaUrl } from "@/lib/media";
@@ -68,6 +68,7 @@ export default async function ComboPage({ params }: { params: Params }) {
 
   const hero = mediaUrl(combo.image);
   const pricing = combo.pricing;
+  const saves = comboSavingPercent(pricing) > 0;
   const crumbs = [
     { name: "Home", path: "/" },
     { name: "Combo Deals", path: "/combo" },
@@ -181,18 +182,35 @@ export default async function ComboPage({ params }: { params: Params }) {
                   </span>
                 </li>
               ))}
-              <li className="flex justify-between gap-4 border-t border-line pt-1 font-medium text-foreground">
-                <span>Bought separately</span>
-                <span className="tabular-nums">
-                  <s>{formatMoney(pricing.components_total, pricing.currency)}</s>
-                </span>
-              </li>
-              <li className="flex justify-between gap-4 font-medium text-accent">
-                <span>Combo price</span>
-                <span className="tabular-nums">
-                  {formatMoney(pricing.amount, pricing.currency)}
-                </span>
-              </li>
+              {/* TWO ROWS OR ONE, depending on whether there is a saving to show. A gift
+                  combo charges what its parts cost, so the pair became "Bought separately
+                  ₦29,600" struck through above "Combo price ₦29,600" — the same number
+                  twice, one of them crossed out, which reads as a mistake because it is
+                  one. What a gift bundle owes this table is a total, and its reward is
+                  stated in the buy panel where it belongs. */}
+              {saves ? (
+                <>
+                  <li className="flex justify-between gap-4 border-t border-line pt-1 font-medium text-foreground">
+                    <span>Bought separately</span>
+                    <span className="tabular-nums">
+                      <s>{formatMoney(pricing.components_total, pricing.currency)}</s>
+                    </span>
+                  </li>
+                  <li className="flex justify-between gap-4 font-medium text-accent">
+                    <span>Combo price</span>
+                    <span className="tabular-nums">
+                      {formatMoney(pricing.amount, pricing.currency)}
+                    </span>
+                  </li>
+                </>
+              ) : (
+                <li className="flex justify-between gap-4 border-t border-line pt-1 font-medium text-foreground">
+                  <span>Total</span>
+                  <span className="tabular-nums">
+                    {formatMoney(pricing.amount, pricing.currency)}
+                  </span>
+                </li>
+              )}
             </ol>
           )}
         </div>

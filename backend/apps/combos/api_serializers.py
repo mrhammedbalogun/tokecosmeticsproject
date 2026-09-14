@@ -8,7 +8,7 @@ place a discount claim being wrong is worse than it being absent.
 from rest_framework import serializers
 
 from apps.catalog.images import storage_url, variant_image_path
-from apps.combos.models import Combo
+from apps.combos.models import REWARD_GIFT, Combo
 from apps.combos.services import max_addable, resolve_combo_price
 
 
@@ -44,6 +44,24 @@ class ComboItemSerializer(serializers.Serializer):
         }
 
 
+class _ComboRewardMixin:
+    """`gift` — the reward, when the reward is a thing rather than a discount.
+
+    `null` for a discount combo, so the storefront never has to ask two questions to
+    decide which badge to draw. The name is guaranteed non-empty by
+    `combo_gift_reward_needs_a_gift`, so a client may treat a non-null `gift` as
+    something it can print; the image is genuinely optional and may be null.
+    """
+
+    def _gift(self, combo):
+        if combo.reward_type != REWARD_GIFT:
+            return None
+        return {
+            "name": combo.gift_name,
+            "image": storage_url(combo.gift_image.name) if combo.gift_image else None,
+        }
+
+
 class _ComboPricingMixin:
     def _pricing(self, combo):
         country = self.context["request"].country
@@ -59,7 +77,7 @@ class _ComboPricingMixin:
         }
 
 
-class ComboListSerializer(_ComboPricingMixin, serializers.ModelSerializer):
+class ComboListSerializer(_ComboRewardMixin, _ComboPricingMixin, serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     pricing = serializers.SerializerMethodField()
     item_count = serializers.SerializerMethodField()
@@ -68,11 +86,16 @@ class ComboListSerializer(_ComboPricingMixin, serializers.ModelSerializer):
     # in it, which is the one question a bundle has to answer before it is clicked.
     item_images = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
+    gift = serializers.SerializerMethodField()
 
     class Meta:
         model = Combo
         fields = ["name", "slug", "short_description", "image", "is_featured",
-                  "pricing", "item_count", "item_images", "in_stock"]
+                  "pricing", "item_count", "item_images", "in_stock", "reward_type",
+                  "gift"]
+
+    def get_gift(self, obj):
+        return self._gift(obj)
 
     def get_image(self, obj) -> str | None:
         return storage_url(obj.image.name) if obj.image else None
@@ -91,18 +114,22 @@ class ComboListSerializer(_ComboPricingMixin, serializers.ModelSerializer):
         return max_addable(obj, self.context["request"].country) > 0
 
 
-class ComboDetailSerializer(_ComboPricingMixin, serializers.ModelSerializer):
+class ComboDetailSerializer(_ComboRewardMixin, _ComboPricingMixin, serializers.ModelSerializer):
     image = serializers.SerializerMethodField()
     pricing = serializers.SerializerMethodField()
     items = serializers.SerializerMethodField()
     in_stock = serializers.SerializerMethodField()
     max_quantity = serializers.SerializerMethodField()
+    gift = serializers.SerializerMethodField()
 
     class Meta:
         model = Combo
         fields = ["name", "slug", "description", "short_description", "image",
                   "is_featured", "seo_title", "seo_description", "pricing", "items",
-                  "in_stock", "max_quantity"]
+                  "in_stock", "max_quantity", "reward_type", "gift"]
+
+    def get_gift(self, obj):
+        return self._gift(obj)
 
     def get_image(self, obj) -> str | None:
         return storage_url(obj.image.name) if obj.image else None

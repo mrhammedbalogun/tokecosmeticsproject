@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal
 
 from apps.catalog.services import sellable_in
+from apps.combos.models import REWARD_GIFT
 from apps.pricing.services import resolve_price
 
 CENT = Decimal("0.01")
@@ -113,6 +114,13 @@ def _resolve_combo_price(combo, country) -> ComboPricing | None:
     total. The pinned amount is clamped to the component total — a "combo" that costs
     MORE than buying the parts is a data-entry accident, and charging it would be the
     kind of wrongness a customer screenshots.
+
+    A GIFT COMBO DERIVES AT 0%. Its reward is the thing in the parcel, so the box costs
+    what the box costs; `discount_percent` is left alone rather than zeroed on the row,
+    so switching the reward back to Discount restores the rate the curator set. A pinned
+    price still wins for a gift combo — that is how a bundle gets a round number — and if
+    the pin happens to sit below the component total, the saving it produces is real and
+    is shown as such beside the gift.
     """
     total = components_total(combo, country)
     if total is None:
@@ -122,7 +130,7 @@ def _resolve_combo_price(combo, country) -> ComboPricing | None:
         amount = min(q2(pinned_row.amount), total)
         pinned = True
     else:
-        percent = Decimal(combo.discount_percent or 0)
+        percent = ZERO if combo.reward_type == REWARD_GIFT else Decimal(combo.discount_percent or 0)
         amount = q2(total * (Decimal("100") - percent) / Decimal("100"))
         pinned = False
     amount = max(amount, ZERO)

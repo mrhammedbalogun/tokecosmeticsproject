@@ -78,6 +78,15 @@
     </tbody>
   </table>
 
+  {% if gifts %}
+  {# Not a totals row: a gift has no price and is not charged for. It prints here because
+     this is the document that travels with the parcel, and the gift is the one thing on
+     the order that no money column can be read back from. #}
+  <p style="margin:10px 0 0;font-weight:bold;">
+    Free gift{{ gifts|pluralize }} included: {{ gifts|join:", " }}
+  </p>
+  {% endif %}
+
   <table class="totals">
     <tr><td>Subtotal</td><td class="r">{{ subtotal }}</td></tr>
     {% if combo_discount_total %}<tr><td>Combo saving</td><td class="r">-{{ combo_discount_total }}</td></tr>{% endif %}

@@ -1,3 +1,5 @@
+import type { ComboGift } from "@/lib/combos";
+
 export interface CartLine {
   id: number;
   variant_id: number;
@@ -36,6 +38,12 @@ export interface CartCombo {
   components_total: string | null;
   saving: string | null;
   saving_percent?: string;
+  /** The free gift this bundle was added with, when its reward is a gift rather than a
+   *  discount — the same `{name, image}` shape the catalogue sends, so the bag can show
+   *  the photograph the product page showed. `null` for a discount bundle, and for one
+   *  whose deal has ended: an ended bundle earns no discount and owes no gift either.
+   *  Optional: payloads cached from before the reward became a choice carry none. */
+  gift?: ComboGift | null;
   /** The DEAL has ended — archived, or withdrawn from this market. The goods are still
    *  in the bag at their own prices and will still be charged; only the discount stops.
    *  Optional: payloads cached from before the field existed carry none. */

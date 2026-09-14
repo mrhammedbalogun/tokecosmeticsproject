@@ -7,8 +7,10 @@ import { storefrontUrl } from "@/lib/env";
 import type { CountryRef } from "@/lib/reference";
 import { fetchWithAuthOrBounce, requireAdmin } from "@/lib/session";
 import {
+  removeComboGiftImageAction,
   saveComboAction,
   searchProductsAction,
+  uploadComboGiftImageAction,
   uploadComboImageAction,
 } from "./actions";
 
@@ -59,6 +61,8 @@ export default async function ComboEditorPage({ params }: { params: Params }) {
       searchProducts={searchProductsAction}
       save={saveComboAction.bind(null, slug)}
       uploadImage={uploadComboImageAction.bind(null, slug)}
+      uploadGiftImage={uploadComboGiftImageAction.bind(null, slug)}
+      removeGiftImage={removeComboGiftImageAction.bind(null, slug)}
       storefrontOrigin={storefrontUrl()}
     />
   );

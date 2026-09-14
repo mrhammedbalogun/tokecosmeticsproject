@@ -222,6 +222,13 @@ class OrderItem(models.Model):
     # reconcile against the catalogue.
     combo_name = models.CharField(max_length=255, blank=True)
     combo_group = models.PositiveSmallIntegerField(null=True, blank=True)
+    # The free gift that bundle promised, snapshotted the same way and for a harder
+    # reason (2026-09-13). A gift is not a priced line and not a stock row — it exists as
+    # a sentence on the storefront — so if the sentence does not reach the order, the
+    # only record that a customer was promised anything is a combo row a curator can edit
+    # tomorrow. THIS is what the packer reads. "" for every line that is not part of a
+    # gift bundle, which is every line placed before today.
+    combo_gift = models.CharField(max_length=255, blank=True)
 
     def __str__(self) -> str:
         return f"{self.quantity}× {self.product_name} ({self.order_id})"

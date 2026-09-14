@@ -19,6 +19,7 @@ from django.utils import timezone
 from apps.catalog.images import storage_url, variant_image_alt, variant_image_path
 from apps.notifications.staff import notify_staff
 from apps.notifications.tasks import send_email_task
+from apps.orders.gifts import order_gifts
 from apps.orders.models import Order
 from apps.orders.tokens import make_tracking_token
 from apps.payments.labels import gateway_label
@@ -87,6 +88,10 @@ def _context(order: Order) -> dict:
         "combo_discount_total": (
             money(order.combo_discount_total) if order.combo_discount_total else ""
         ),
+        # The free gifts the order owes. The customer's copy is their record of the
+        # promise; the staff copy is the pick list. Empty for an order that promised
+        # nothing, which is what both templates key off.
+        "gifts": order_gifts(order),
         # The referred customer's own discount, its own line beside the coupon's. "" when
         # there was none, which is what the template's {% if %} keys off.
         "referral_discount_total": (

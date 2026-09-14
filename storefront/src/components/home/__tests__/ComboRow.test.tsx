@@ -1,11 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import type { ReactNode } from "react";
 import { render, screen } from "@testing-library/react";
-import { ComboRow } from "@/components/home/ComboRow";
+import { ComboRow, rowTitle } from "@/components/home/ComboRow";
 import {
+  comboGift,
   comboSavingPercent,
   promoCombos,
-  savingClaim,
+  rewardClaim,
   type ComboCard as ComboCardData,
 } from "@/lib/combos";
 
@@ -32,6 +33,21 @@ function make(slug: string, over: Partial<ComboCardData> = {}): ComboCardData {
     in_stock: true,
     ...over,
   };
+}
+
+/** A gift bundle: full price for the contents, a gift in the parcel. */
+function gift(slug: string, name = "Free Kids Hair Grow Cream"): ComboCardData {
+  return make(slug, {
+    reward_type: "gift",
+    gift: { name, image: null },
+    pricing: {
+      amount: "10000.00",
+      components_total: "10000.00",
+      saving: "0.00",
+      saving_percent: "0.00",
+      currency: "NGN",
+    },
+  });
 }
 
 describe("ComboRow", () => {
@@ -63,6 +79,25 @@ describe("ComboRow", () => {
     render(<ComboRow combos={[make("a"), fifteen]} />);
     expect(
       screen.getByRole("heading", { name: "Save up to 15% when you buy the set" }),
+    ).toBeInTheDocument();
+  });
+
+  it("carries a gift combo, which saves nothing and is still a reward", () => {
+    render(<ComboRow combos={[gift("a")]} />);
+    expect(
+      screen.getByRole("heading", { name: "Every set comes with a free gift" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Free Kids Hair Grow Cream")).toBeInTheDocument();
+    // The one thing a gift bundle must NOT show: it charges what the parts cost, so
+    // there is no saving to claim and nothing to cross out.
+    expect(screen.queryByText(/% off/)).toBeNull();
+    expect(screen.queryByText(/Save ₦/)).toBeNull();
+  });
+
+  it("sells both rewards when the row holds both", () => {
+    render(<ComboRow combos={[make("a"), gift("b")]} />);
+    expect(
+      screen.getByRole("heading", { name: "Save 10% or get a free gift" }),
     ).toBeInTheDocument();
   });
 
@@ -144,9 +179,16 @@ describe("promoCombos", () => {
   });
 });
 
-describe("savingClaim", () => {
-  it("is null for an empty row", () => {
-    expect(savingClaim([])).toBeNull();
+describe("rewardClaim and rowTitle", () => {
+  it("claims nothing for an empty row", () => {
+    expect(rewardClaim([])).toEqual({ discount: null, gift: false });
+    expect(rowTitle([])).toBe("Buy the set, keep the change");
+  });
+
+  it("words every combination of rewards", () => {
+    expect(rowTitle([make("a")])).toBe("Save 10% when you buy the set");
+    expect(rowTitle([gift("a")])).toBe("Every set comes with a free gift");
+    expect(rowTitle([make("a"), gift("b")])).toBe("Save 10% or get a free gift");
   });
 
   it("states a single rate exactly, however untidy", () => {
@@ -159,7 +201,7 @@ describe("savingClaim", () => {
         currency: "NGN",
       },
     });
-    expect(savingClaim([nearly])).toEqual({ percent: 9.51, upTo: false });
+    expect(rewardClaim([nearly]).discount).toEqual({ percent: 9.51, upTo: false });
   });
 
   it("floors a mixed claim rather than rounding it past a card's own badge", () => {
@@ -174,14 +216,45 @@ describe("savingClaim", () => {
         },
       });
     // Rounding 9.51 up would head the row "10%" over a card badged "9.51% off".
-    expect(savingClaim([priced("a", "9049.00", "951.00", "9.51"), priced("b", "9200.00", "800.00", "8.00")])).toEqual({
-      percent: 9,
-      upTo: true,
-    });
+    expect(
+      rewardClaim([
+        priced("a", "9049.00", "951.00", "9.51"),
+        priced("b", "9200.00", "800.00", "8.00"),
+      ]).discount,
+    ).toEqual({ percent: 9, upTo: true });
     // "Up to" takes the BEST rate in the row, not the worst.
-    expect(savingClaim([make("a"), priced("b", "9200.00", "800.00", "8.00")])).toEqual({
-      percent: 10,
-      upTo: true,
+    expect(
+      rewardClaim([make("a"), priced("b", "9200.00", "800.00", "8.00")]).discount,
+    ).toEqual({ percent: 10, upTo: true });
+  });
+});
+
+
+describe("comboGift", () => {
+  it("is null for a discount combo, and for a payload that predates the choice", () => {
+    expect(comboGift(make("a"))).toBeNull();
+    // A backend older than this build sends no reward at all; everything that existed
+    // then gave a discount.
+    const old = make("b");
+    delete (old as Partial<ComboCardData>).reward_type;
+    expect(comboGift(old)).toBeNull();
+  });
+
+  it("names an unnamed gift rather than rendering an empty badge", () => {
+    // The database forbids this (`combo_gift_reward_needs_a_gift`), so it should never
+    // arrive — but the alternative to a fallback is a live card printing "".
+    expect(comboGift({ reward_type: "gift", gift: { name: "   ", image: null } })).toEqual({
+      name: "Free gift included",
+      image: null,
     });
+    expect(comboGift({ reward_type: "gift" })).toEqual({
+      name: "Free gift included",
+      image: null,
+    });
+  });
+
+  it("keeps the photograph when there is one", () => {
+    expect(comboGift({ reward_type: "gift", gift: { name: "Free soap", image: "/g.png" } }))
+      .toEqual({ name: "Free soap", image: "/g.png" });
   });
 });

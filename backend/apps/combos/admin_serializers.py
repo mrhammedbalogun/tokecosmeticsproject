@@ -13,7 +13,7 @@ from rest_framework import serializers
 from apps.catalog.images import storage_url, variant_image_path
 from apps.catalog.models import ProductVariant
 from apps.cms.sanitize import clean_html
-from apps.combos.models import Combo, ComboItem, ComboPrice
+from apps.combos.models import REWARD_GIFT, Combo, ComboItem, ComboPrice
 from apps.combos.services import available_in, resolve_combo_price
 from apps.core.models import Country
 from apps.pricing.services import resolve_price
@@ -81,6 +81,10 @@ class ComboAdminSerializer(serializers.ModelSerializer):
         "name", "slug", "status", "is_featured", "position", "discount_percent",
         "available_countries", "seo_title", "seo_description", "published_at",
         "items", "prices",
+        # Both belong here: which reward a bundle gives, and what the gift is, are the
+        # two edits that change what the shop PROMISES a customer. `gift_image` is left
+        # out for the same reason `image` is — an UploadedFile audits as a filename.
+        "reward_type", "gift_name",
     )
 
     # WRITTEN WHOLE, not patched line by line. The builder is one screen with a list on
@@ -90,6 +94,7 @@ class ComboAdminSerializer(serializers.ModelSerializer):
     items = ComboItemAdminSerializer(many=True, required=False)
     prices = ComboPriceAdminSerializer(many=True, required=False)
     image_url = serializers.SerializerMethodField()
+    gift_image_url = serializers.SerializerMethodField()
     # What the combo actually costs in each market TODAY, derived — the editor renders it
     # so the person setting a price is looking at the same number the storefront will
     # show, rather than at their own arithmetic.
@@ -106,12 +111,19 @@ class ComboAdminSerializer(serializers.ModelSerializer):
         fields = ["id", "name", "slug", "description", "short_description", "status",
                   "is_featured", "position", "discount_percent", "available_countries",
                   "seo_title", "seo_description", "published_at", "image", "image_url",
+                  "reward_type", "gift_name", "gift_image", "gift_image_url",
                   "items", "prices", "pricing", "live", "blockers",
                   "created_at", "updated_at"]
-        extra_kwargs = {"image": {"write_only": True, "required": False}}
+        extra_kwargs = {
+            "image": {"write_only": True, "required": False},
+            "gift_image": {"write_only": True, "required": False},
+        }
 
     def get_image_url(self, obj) -> str | None:
         return storage_url(obj.image.name) if obj.image else None
+
+    def get_gift_image_url(self, obj) -> str | None:
+        return storage_url(obj.gift_image.name) if obj.gift_image else None
 
     def get_pricing(self, obj) -> dict:
         """Per-market {components_total, amount, saving, saving_percent, pinned}, or a
@@ -169,7 +181,34 @@ class ComboAdminSerializer(serializers.ModelSerializer):
         for field in COMBO_HTML_FIELDS:
             if field in attrs:
                 attrs[field] = clean_html(attrs[field])
+        self._validate_reward(attrs)
         return attrs
+
+    def _validate_reward(self, attrs):
+        """A gift combo has to name its gift.
+
+        READ THROUGH THE INSTANCE, not out of `attrs` alone, because a PATCH sends one
+        field: flipping `reward_type` to "gift" on a combo that already has a gift named
+        is legal, and clearing `gift_name` on a combo that is already a gift combo is
+        not. Either read from `attrs` when present, else from the row as it stands.
+
+        `combo_gift_reward_needs_a_gift` enforces the same rule in Postgres; this exists
+        so a curator gets a sentence instead of a 500.
+        """
+        instance = getattr(self, "instance", None)
+
+        def current(field):
+            if field in attrs:
+                return attrs[field]
+            return getattr(instance, field, None)
+
+        if current("reward_type") == REWARD_GIFT and not (current("gift_name") or "").strip():
+            raise serializers.ValidationError({
+                "gift_name": [
+                    "Name the gift customers get with this combo — it is what the shop "
+                    "shows them in place of a discount."
+                ]
+            })
 
     def validate_items(self, value):
         """Everything the database would otherwise answer with a 500.
@@ -297,7 +336,12 @@ class ComboListAdminSerializer(serializers.ModelSerializer):
     class Meta:
         model = Combo
         fields = ["id", "name", "slug", "status", "is_featured", "position",
-                  "discount_percent", "image_url", "item_count", "markets", "updated_at"]
+                  "discount_percent", "image_url", "item_count", "markets", "updated_at",
+                  # The list is where a curator scans twenty bundles, so it has to say
+                  # what each one PROMISES — a table showing "10%" against a combo that
+                  # actually gives a gift is how Back-to-School went out advertising a
+                  # discount of zero.
+                  "reward_type", "gift_name"]
 
     def get_image_url(self, obj) -> str | None:
         return storage_url(obj.image.name) if obj.image else None

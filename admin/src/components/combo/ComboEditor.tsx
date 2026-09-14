@@ -28,11 +28,13 @@ import { ProductPicker, type PickedVariant } from "@/components/combo/ProductPic
 import {
   orderMarkets,
   previewPricing,
+  rewardTypeOf,
   STATUSES,
   type ComboDetail,
   type ComboItemRow,
   type ComboStatus,
   type PickerProduct,
+  type RewardType,
 } from "@/lib/combos";
 import { UPLOAD_CAP_BYTES, downscaleImage, fileSizeMb } from "@/lib/image";
 import type { CountryRef } from "@/lib/reference";
@@ -53,6 +55,8 @@ interface FormValues {
   is_featured: boolean;
   short_description: string;
   description: string;
+  reward_type: RewardType;
+  gift_name: string;
   discount_percent: string;
   available_countries: string[];
   seo_title: string;
@@ -67,6 +71,10 @@ function initialValues(combo: ComboDetail): FormValues {
     is_featured: combo.is_featured,
     short_description: combo.short_description,
     description: combo.description,
+    // Through the helper, never bare: a backend that predates the reward choice sends
+    // no field at all, and every combo that existed before it gave a discount.
+    reward_type: rewardTypeOf(combo.reward_type),
+    gift_name: combo.gift_name ?? "",
     // Trailing zeros off, so the box reads "10" rather than "10.00" — it is a number a
     // person types, not a money amount.
     discount_percent: String(Number(combo.discount_percent)),
@@ -82,6 +90,8 @@ export function ComboEditor({
   searchProducts,
   save,
   uploadImage,
+  uploadGiftImage,
+  removeGiftImage,
   storefrontOrigin,
 }: {
   combo: ComboDetail;
@@ -89,6 +99,8 @@ export function ComboEditor({
   searchProducts: (term: string) => Promise<PickerProduct[]>;
   save: (payload: unknown) => Promise<SaveResult>;
   uploadImage: (formData: FormData) => Promise<SaveResult>;
+  uploadGiftImage: (formData: FormData) => Promise<SaveResult>;
+  removeGiftImage: () => Promise<SaveResult>;
   storefrontOrigin: string;
 }) {
   const router = useRouter();
@@ -167,6 +179,7 @@ export function ComboEditor({
     startTransition(async () => {
       const payload = {
         ...values,
+        gift_name: values.gift_name.trim(),
         discount_percent: values.discount_percent === "" ? "0" : values.discount_percent,
         items: items.map((i, index) => ({
           variant: i.variant,
@@ -184,10 +197,14 @@ export function ComboEditor({
       if (outcome.ok) router.refresh();
     });
 
+  // A GIFT COMBO PREVIEWS AT 0%, because that is what `resolve_combo_price` will do
+  // with it. Previewing the typed percentage here would show a curator a price the shop
+  // is never going to charge — the exact class of mistake this whole change is about.
+  const rewardIsGift = values.reward_type === "gift";
   const preview = previewPricing(
     items,
     pricedMarkets,
-    Number(values.discount_percent) || 0,
+    rewardIsGift ? 0 : Number(values.discount_percent) || 0,
     pinned,
   );
   const homePreview = preview.find((p) => p.market === homeMarket);
@@ -390,10 +407,22 @@ export function ComboEditor({
 
       <Section
         n={4}
-        title="Price"
-        hint="Worked out from what's in the box. Change any market's number to fix it there."
+        title="Reward & price"
+        hint="What customers get for buying the box, and what the box costs."
       >
+        <RewardChooser
+          rewardType={values.reward_type}
+          giftName={values.gift_name}
+          giftImageUrl={combo.gift_image_url ?? null}
+          fieldError={result.fieldErrors?.gift_name}
+          onRewardType={(value) => set("reward_type", value)}
+          onGiftName={(value) => set("gift_name", value)}
+          uploadGiftImage={uploadGiftImage}
+          removeGiftImage={removeGiftImage}
+          onChanged={() => router.refresh()}
+        />
         <ComboPricingPanel
+          rewardType={values.reward_type}
           items={items}
           countries={countries}
           markets={pricedMarkets}
@@ -491,6 +520,147 @@ export function ComboEditor({
   );
 }
 
+/**
+ * Which reward this bundle gives, and — when it is a gift — what the gift is.
+ *
+ * TWO CARDS RATHER THAN A DROPDOWN. The choice changes what the panel below it means:
+ * pick Gift and the discount box stops being the price. A select hides that behind a
+ * closed list; two cards state both consequences while the curator is choosing between
+ * them, which is the only moment the explanation is worth anything.
+ *
+ * The gift NAME saves with the rest of the combo, on Save. The gift PICTURE uploads
+ * immediately on its own route, exactly like the featured image, because a file cannot
+ * ride along with the nested items array — so the panel says so out loud rather than
+ * leaving somebody to wonder whether their photograph was kept.
+ */
+function RewardChooser({
+  rewardType,
+  giftName,
+  giftImageUrl,
+  fieldError,
+  onRewardType,
+  onGiftName,
+  uploadGiftImage,
+  removeGiftImage,
+  onChanged,
+}: {
+  rewardType: RewardType;
+  giftName: string;
+  giftImageUrl: string | null;
+  fieldError?: string;
+  onRewardType: (value: RewardType) => void;
+  onGiftName: (value: string) => void;
+  uploadGiftImage: (formData: FormData) => Promise<SaveResult>;
+  removeGiftImage: () => Promise<SaveResult>;
+  onChanged: () => void;
+}) {
+  const [removing, startRemove] = useTransition();
+  const isGift = rewardType === "gift";
+
+  const card = (active: boolean) =>
+    `flex-1 cursor-pointer rounded-[var(--radius-card)] border p-3 text-left transition-colors ${
+      active ? "border-accent bg-accent/5" : "border-line bg-surface hover:border-accent/40"
+    }`;
+
+  return (
+    <div className="mb-6 max-w-3xl">
+      <p className="text-xs text-muted">What customers get</p>
+      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+        <label className={card(!isGift)}>
+          <span className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="reward_type"
+              checked={!isGift}
+              onChange={() => onRewardType("discount")}
+              className="h-4 w-4"
+            />
+            <span className="text-sm font-medium">Money off</span>
+          </span>
+          <span className="mt-1 block pl-6 text-xs text-muted">
+            The box costs less than its contents. The shop shows the saving and the
+            crossed-out total.
+          </span>
+        </label>
+
+        <label className={card(isGift)}>
+          <span className="flex items-center gap-2">
+            <input
+              type="radio"
+              name="reward_type"
+              checked={isGift}
+              onChange={() => onRewardType("gift")}
+              className="h-4 w-4"
+            />
+            <span className="text-sm font-medium">A free gift</span>
+          </span>
+          <span className="mt-1 block pl-6 text-xs text-muted">
+            The box costs what its contents cost, and something extra goes in the parcel.
+            The shop shows the gift in place of a discount.
+          </span>
+        </label>
+      </div>
+
+      {isGift && (
+        <div className="mt-3 rounded-[var(--radius-card)] border border-line bg-surface p-4">
+          <div className="grid gap-4 sm:grid-cols-[1fr_140px]">
+            <div>
+              <label className="block text-xs text-muted">
+                The gift
+                <input
+                  type="text"
+                  value={giftName}
+                  onChange={(e) => onGiftName(e.target.value)}
+                  placeholder="Free Kids Hair Grow Cream (50ml)"
+                  className={`mt-1 ${FIELD}`}
+                />
+              </label>
+              <p className="mt-1 text-xs text-muted">
+                Written exactly as customers should read it — this is the whole promise,
+                on the card, on the combo page and on the order the packer works from.
+              </p>
+              {fieldError && (
+                <p className="mt-1 text-xs text-warn">{fieldError}</p>
+              )}
+              {/* Said here rather than in a help page: the gift is a sentence and a
+                  packing instruction, not a stock row, so nothing stops it being
+                  promised after the shelf is empty. */}
+              <p className="mt-2 rounded border border-warn/30 bg-warn/5 p-2 text-xs text-warn">
+                Gift stock is not tracked. The shop will keep promising this gift until
+                you change the reward or retire the combo.
+              </p>
+            </div>
+
+            <div>
+              <ImageBox
+                label="Gift photo (optional)"
+                currentUrl={giftImageUrl}
+                upload={uploadGiftImage}
+                onUploaded={onChanged}
+              />
+              {giftImageUrl && (
+                <button
+                  type="button"
+                  disabled={removing}
+                  onClick={() =>
+                    startRemove(async () => {
+                      await removeGiftImage();
+                      onChanged();
+                    })
+                  }
+                  className="mt-1 w-full text-xs text-muted underline-offset-2 hover:underline disabled:opacity-40"
+                >
+                  {removing ? "Removing…" : "Remove photo"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Section({
   n,
   title,
@@ -525,10 +695,14 @@ function ImageBox({
   currentUrl,
   upload,
   onUploaded,
+  label = "Featured image",
 }: {
   currentUrl: string | null;
   upload: (formData: FormData) => Promise<SaveResult>;
   onUploaded: () => void;
+  /** The gift photograph reuses this box; only the caption differs, and the gift route
+   *  accepts the same multipart field name. */
+  label?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -560,7 +734,7 @@ function ImageBox({
 
   return (
     <div>
-      <p className="text-xs text-muted">Featured image</p>
+      <p className="text-xs text-muted">{label}</p>
       <div className="mt-1 overflow-hidden rounded-[var(--radius-card)] border border-line bg-surface">
         {currentUrl ? (
           // eslint-disable-next-line @next/next/no-img-element -- media comes from the API's CDN
@@ -572,7 +746,7 @@ function ImageBox({
         )}
       </div>
       <label className="mt-2 block cursor-pointer rounded border border-line bg-surface px-3 py-1.5 text-center text-xs hover:border-accent">
-        {pending ? "Uploading…" : currentUrl ? "Replace image" : "Upload image"}
+        {pending ? "Uploading…" : currentUrl ? "Replace photo" : "Upload photo"}
         <input
           type="file"
           accept="image/*"
