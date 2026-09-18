@@ -178,6 +178,56 @@ AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="")
 AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="")
 AWS_QUERYSTRING_AUTH = False  # stable unsigned URLs for product images under catalog/
 
+# Cache-Control written onto every object this app uploads through `default_storage`.
+#
+# WHY IT IS NEEDED. Measured 2026-09-13: all 51 source images behind the homepage came
+# back from CloudFront with NO Cache-Control header at all, because django-storages
+# defaults `object_parameters` to `{}` (storages/backends/s3.py, get_default_settings).
+# Nothing downstream could cache them on their own terms — not CloudFront, not a browser
+# following a raw CDN URL, and not the Open Graph / JSON-LD / email consumers that embed
+# `image.url` directly and never touch Next's image optimizer.
+#
+# SCOPE. This reaches exactly the objects `S3Storage._save` writes, and every `upload_to`
+# in this project starts with `catalog/` (catalog: categories/brands/collections/products/
+# thumbs, cms: library/cms-banners, combos: combos/gifts). It CANNOT reach
+# `backups/postgres/` — `infra/deploy/backup.sh` uploads those with a raw boto3 client,
+# not through Django storage — and it cannot reach staticfiles, which are whitenoise on
+# the local disk. So the blast radius is catalog media and nothing else.
+#
+# ── WHY THIS IS NOT `immutable`, UNLIKE apps/cms/s3_uploads.py ──────────────────────
+#
+# `PUBLISHED_CACHE_CONTROL` there is "public, max-age=31536000, immutable", and it earns
+# it: `new_incoming_key` mints `incoming/<uuid4hex>.<ext>`, so the comment above it —
+# "Keys are unique forever, so the object at one is immutable by construction" — is
+# literally true for that one flow.
+#
+# It is NOT true of an ImageField. `AWS_S3_FILE_OVERWRITE` is unset, so it is django-
+# storages' default of True, and `S3Storage.get_available_name` (s3.py:702, docstring
+# "Overwrite existing file with the same name") then returns the name UNCHANGED. Same
+# filename means same key means an overwrite in place. Production bears this out: banner
+# keys are flat and human-named (`catalog/library/toke-dryskin.png`,
+# `catalog/cms-banners/Toke-Best-Seller-Product.jpg`), none carries a hash or a collision
+# suffix, and `catalog/library/toke-family.jpg` is already shared by two Banner rows.
+#
+# Flipping `AWS_S3_FILE_OVERWRITE` to False to fix that is NOT an option either:
+# `apps/catalog/thumbnails.py` re-saves a thumbnail under a deterministic name derived
+# from its source and depends on replacing it, so a random suffix would orphan a
+# thumbnail on every regeneration.
+#
+# With bucket versioning disabled and browser caches unpurgeable, `immutable` on a key an
+# admin can overwrite means a wrong banner stays wrong for a year, and not even a hard
+# refresh recalls it. So: a year for SHARED caches (CloudFront, where an invalidation is
+# available and cheap), a day for browsers, and a week of stale-while-revalidate so the
+# expiry is never felt as latency. Vercel's optimizer is unaffected by the shorter
+# browser figure — it floors at `minimumCacheTTL`, which next.config.ts pins at 31 days.
+#
+# If catalog keys are ever made content-addressed, this becomes
+# `apps/cms/s3_uploads.py::PUBLISHED_CACHE_CONTROL` verbatim and the split disappears.
+CATALOG_CACHE_CONTROL = (
+    "public, max-age=86400, s-maxage=31536000, stale-while-revalidate=604800"
+)
+AWS_S3_OBJECT_PARAMETERS = {"CacheControl": CATALOG_CACHE_CONTROL}
+
 # Serve catalog media through a CDN hostname instead of the S3 endpoint.
 #
 # WHY THIS EXISTS. The bucket is private and must stay private: the nightly Postgres
