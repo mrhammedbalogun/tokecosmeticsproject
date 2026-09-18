@@ -1,5 +1,6 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCartMayExist } from "@/components/session/SessionProvider";
 import type { Cart } from "@/lib/cart-types";
 import { EMPTY_CART } from "@/lib/cart-types";
 
@@ -112,9 +113,39 @@ async function throwCartError(res: Response): Promise<never> {
   throw new CartRequestError(res.status, body?.code);
 }
 
+/**
+ * ── WHY THE READ IS GATED AND THE WRITES ARE NOT ────────────────────────────────────
+ *
+ * `GET /api/cart` is not a read. The BFF forwards it to Django, which MINTS a cart when
+ * the request carries no X-Cart-Id and hands back an id the route then persists — so the
+ * header rendering for a visitor who has never added anything created a database row and
+ * a cookie, for a badge that was always going to show zero. Bots and bounces included.
+ *
+ * So the query runs only when a cart can actually exist:
+ *   - signed in (their account may hold a cart built on another device), or
+ *   - a `cart_id` cookie is already set (this browser has one), or
+ *   - the cache already holds a cart.
+ *
+ * That last clause is not belt-and-braces, it is what keeps two flows honest. FIRST ADD:
+ * `addItem` writes the server's response into the cache, which flips this true, so the
+ * badge updates immediately and later refetches resume — the mutations were never gated,
+ * only the speculative read. LOGOUT: `SignOutButton` calls `router.refresh()` but does not
+ * clear the query cache, so without this the stale count would be frozen on screen with
+ * the query switched off and no way to correct itself; instead the query stays live and
+ * refetches exactly as it does today.
+ *
+ * A null context (no provider above — a standalone test) means "unknown" and fetches,
+ * which is the pre-gate behaviour.
+ */
 export function useCart() {
   const qc = useQueryClient();
-  const query = useQuery({ queryKey: KEY, queryFn: fetchCart, staleTime: 30_000 });
+  const mayExist = useCartMayExist();
+  // Read through the cache rather than `query.data`: `enabled` is an INPUT to useQuery,
+  // so it cannot depend on its output. Consumers re-render on any cache write for this
+  // key, so a mutation's setQueryData flips this on the same tick it lands.
+  const cached = qc.getQueryData<Cart>(KEY);
+  const enabled = (mayExist ?? true) || Boolean(cached);
+  const query = useQuery({ queryKey: KEY, queryFn: fetchCart, staleTime: 30_000, enabled });
 
   const setQty = useMutation({
     mutationFn: async (v: { variantId: number; quantity: number }) => {

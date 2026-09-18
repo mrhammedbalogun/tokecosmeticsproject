@@ -1,5 +1,6 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useHasSession } from "@/components/session/SessionProvider";
 
 /** One shared ["wishlist"] cache (a Set of saved skus) so every heart — product
  * cards, the PDP, the header — shows the shopper's REAL saved state and they all
@@ -24,9 +25,35 @@ async function fetchSkus(): Promise<Set<string>> {
   return new Set(data.map((i) => i.sku));
 }
 
-export function useWishlist() {
+/**
+ * The membership GET runs only for a visitor who actually has a session.
+ *
+ * WHY IT IS GATED AT ALL. Signed out, this GET is a guaranteed 401 — the BFF route
+ * refuses it before it reaches Django (app/api/wishlist/[[...sku]]/route.ts) — and the
+ * empty set the fetcher falls back to on a 401 is the same empty set the gate produces.
+ * So nothing on screen changes; one request per page simply stops being made. That
+ * matters because THIS HOOK IS EVERYWHERE: the header heart, every product card's heart,
+ * and the PDP save button all call it, and they share one `["wishlist","skus"]` key, so
+ * a single un-gated consumer is enough to make the request for the whole page.
+ *
+ * WHERE THE ANSWER COMES FROM. `SessionProvider`, mounted in `(shop)/layout.tsx`, which
+ * reads the httpOnly cookies server-side and passes down a bare boolean. Page JavaScript
+ * never sees a token — see that file for why the cookies stay unreadable.
+ *
+ * `enabled` is an explicit override that beats the context, kept so a caller which
+ * already holds the answer (the Header, which resolves it for the AccountMenu anyway)
+ * can hand it straight over. Omitted, the context decides; with no provider above, the
+ * hook behaves exactly as it did before this gate existed and fetches.
+ */
+export function useWishlist({ enabled }: { enabled?: boolean } = {}) {
   const qc = useQueryClient();
-  const query = useQuery({ queryKey: KEY, queryFn: fetchSkus, staleTime: 60_000 });
+  const hasSession = useHasSession();
+  // `??`, never `||`: an explicit `enabled: false` must win, and `false || null` would
+  // discard it. Provider absent (null) -> true, the pre-gate behaviour.
+  const active = enabled ?? hasSession ?? true;
+  const query = useQuery({
+    queryKey: KEY, queryFn: fetchSkus, staleTime: 60_000, enabled: active,
+  });
   const skus = query.data ?? new Set<string>();
 
   const toggle = useMutation({

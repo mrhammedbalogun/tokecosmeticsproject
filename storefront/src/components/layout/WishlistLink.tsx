@@ -5,7 +5,16 @@ import { useWishlist } from "@/hooks/useWishlist";
 /** Header heart → the account wishlist. Same 1.5-stroke pen as the bag icon.
  * The dot (not a count — a wishlist is a mood board, not a ledger) simply says
  * "there's something saved here". Signed-out visitors land on login via the
- * account guard, which is exactly the nudge we want. */
+ * account guard, which is exactly the nudge we want.
+ *
+ * Signed out, the membership GET is skipped entirely: it could only ever answer 401, and
+ * the dot it feeds would stay hidden either way, so the request bought nothing.
+ * Appearance is unchanged — an empty set renders exactly what a 401 rendered before.
+ *
+ * The answer normally arrives from `SessionProvider` (mounted in `(shop)/layout.tsx`).
+ * `signedIn` is an optional OVERRIDE for a caller that already holds it; it is
+ * deliberately undefined by default rather than false, so an omitted prop defers to the
+ * context instead of silently disabling a signed-in shopper's dot. */
 function HeartIcon({ filled }: { filled: boolean }) {
   return (
     <svg
@@ -23,8 +32,8 @@ function HeartIcon({ filled }: { filled: boolean }) {
   );
 }
 
-export function WishlistLink() {
-  const { skus } = useWishlist();
+export function WishlistLink({ signedIn }: { signedIn?: boolean } = {}) {
+  const { skus } = useWishlist({ enabled: signedIn });
   const hasSaves = skus.size > 0;
   return (
     <Link

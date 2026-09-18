@@ -1,9 +1,14 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CountrySwitcher } from "@/components/layout/CountrySwitcher";
 import type { Market } from "@/lib/country";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+// A STABLE refresh mock, not a fresh `vi.fn()` per call. The old inline factory made the
+// function unassertable: every `useRouter()` handed back a different spy, so nothing could
+// check whether the component had actually called it — which is the one thing the market
+// switch depends on. See the last test in this file.
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const markets: Market[] = [
   { code: "NG", name: "Nigeria", currency: { code: "NGN", symbol: "₦", decimal_places: 2 }, is_default: true, is_rest_of_world: false, area_label: "LGA" },
@@ -52,5 +57,62 @@ describe("CountrySwitcher", () => {
       <CountrySwitcher markets={markets} current="NG" className="hidden lg:flex" />,
     );
     expect(container.querySelector("label")?.className).toBe("hidden lg:flex");
+  });
+});
+
+/**
+ * THE MARKET-SWITCH CONTRACT (baselined in Task 12B, 2026-09-16).
+ *
+ * Prices, stock, banners and delivery copy are all resolved SERVER-SIDE from the `country`
+ * cookie. So switching market is two steps that only work together:
+ *
+ *     POST /api/country   writes the cookie
+ *     router.refresh()    re-runs the Server Components, which re-read it
+ *
+ * Drop the refresh and the cookie changes while every price on screen stays in the old
+ * currency until a hard reload — the shop would claim to be in CAD and quote naira.
+ *
+ * This is pinned NOW, before any static/ISR work, because `router.refresh()` is exactly
+ * what a statically rendered route cannot honour: a prerendered page has no Server
+ * Component left to re-run, so it would return the same cached HTML and the switch would
+ * silently stop working. Whoever changes the rendering mode has to come here and replace
+ * this contract deliberately (market in the URL, or client-rendered prices) rather than
+ * discover it from a customer report.
+ */
+describe("switching market refreshes the server-rendered prices", () => {
+  beforeEach(() => {
+    refresh.mockClear();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    localStorage.clear();
+  });
+
+  it("writes the cookie via POST /api/country AND refreshes the server render", async () => {
+    render(<CountrySwitcher markets={markets} current="NG" />);
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "CA" } });
+
+    await waitFor(() => expect(refresh).toHaveBeenCalled());
+
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(url).toBe("/api/country");
+    expect(init.method).toBe("POST");
+    expect(JSON.parse(init.body)).toEqual({ code: "CA" });
+  });
+
+  it("REFRESHES AFTER the cookie is written, never before", async () => {
+    // Ordering is the whole contract. Refreshing first re-renders the server with the OLD
+    // cookie, so the prices come back unchanged and the bug looks like "the switcher does
+    // nothing" rather than "the calls are in the wrong order".
+    const order: string[] = [];
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async () => {
+      order.push("cookie-write");
+      return { ok: true };
+    }));
+    refresh.mockImplementation(() => { order.push("refresh"); });
+
+    render(<CountrySwitcher markets={markets} current="NG" />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "CA" } });
+
+    await waitFor(() => expect(order).toEqual(["cookie-write", "refresh"]));
   });
 });

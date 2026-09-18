@@ -400,7 +400,23 @@ describe("ProductEditor", () => {
       expect(screen.getByText(/did not reach the server/i)).toBeInTheDocument(),
     );
     // The edit is still armed — nothing was silently lost or falsely marked saved.
-    expect(screen.getByText(/unsaved changes/i)).toBeInTheDocument();
+    //
+    // `waitFor`, NOT a bare assertion, because a failed save settles in TWO commits and
+    // this chip is gated on the second. `onSave` wraps an async function in
+    // `startTransition`, so React renders the `setResult` update while the action is
+    // still in flight (`pending` stays true through it) and only then flips `pending`
+    // false. The bar renders `dirty && !pending`, so between those two commits the
+    // banner is on screen and the chip is legitimately absent.
+    //
+    // The `waitFor` above resolves on the FIRST commit — it is driven by a
+    // MutationObserver, and adding the banner is a DOM mutation — so asserting
+    // synchronously after it was a race with the second. It usually won, and lost under
+    // CPU contention: two full-suite runs on a loaded machine failed here, both dumping a
+    // DOM with the banner present and the button still reading "Saving…" (i.e. pending
+    // === true), which is the component behaving correctly.
+    await waitFor(() =>
+      expect(screen.getByText(/unsaved changes/i)).toBeInTheDocument(),
+    );
   });
 
   it("drops a stale error as soon as the field is edited again", async () => {
@@ -1457,7 +1473,16 @@ describe("ProductEditor", () => {
 
     await waitFor(() => expect(screen.getByText("SKU: already exists.")).toBeInTheDocument());
     // Still there for a corrected retry.
-    expect(screen.getByRole("button", { name: "Create variant" })).toBeInTheDocument();
+    //
+    // `waitFor`, NOT a bare assertion, for the same two-commit reason as the save-failure
+    // test above: `submit` wraps an async function in `startTransition`, so the `setError`
+    // that paints this refusal commits while `pending` is still true, and `pending` only
+    // flips false in a SECOND commit. The button reads "Creating…" in between, so the
+    // exact name "Create variant" does not match. The `waitFor` above resolves on the
+    // first commit, leaving this line racing the second — it lost under CPU contention.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Create variant" })).toBeInTheDocument(),
+    );
   });
 
   it("passes a typed matrix weight through to the create", async () => {

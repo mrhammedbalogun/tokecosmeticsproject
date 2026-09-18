@@ -93,7 +93,12 @@ export function buildProductQuery(params: ProductListParams): string {
 }
 
 // ---------- fetchers ----------
-const CATALOG_REVALIDATE = 60; // matches the backend's own catalog cache TTL
+/** Five minutes. Raised from 60s once Django began flushing the `catalog` and
+ *  `product:<slug>` tags on every catalogue write (`apps/catalog/revalidate.py`), which
+ *  is what turns this number from the freshness MECHANISM into a backstop under it: an
+ *  edit lands immediately, and the TTL now only bounds drift the flush never reached —
+ *  stock, which is deliberately not wired, and a flush lost to an unreachable storefront. */
+const CATALOG_REVALIDATE = 300;
 
 export async function getProducts(params: ProductListParams, country: string) {
   const q = buildProductQuery(params);

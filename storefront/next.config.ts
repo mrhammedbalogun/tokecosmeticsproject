@@ -107,6 +107,44 @@ const nextConfig: NextConfig = {
     // through the optimizer — the CSP sandbox below is the backstop.
     dangerouslyAllowSVG: true,
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
+    // 31 days, up from Next 16's 4-hour default (`minimumCacheTTL`, images.md).
+    //
+    // The optimized-image TTL is the LARGER of this and the upstream's own
+    // Cache-Control, and the CloudFront objects under `catalog/` currently send no
+    // Cache-Control at all — so without this, every variant expired six times a day
+    // and Vercel re-downloaded a multi-megabyte source PNG to re-encode it. Measured
+    // 2026-09-13: `cache-control: public, max-age=14400` on every optimized image.
+    //
+    // Safe because a catalog key is immutable by construction: Django's upload_to
+    // mints a unique path per upload (the `catalog/` prefix rule), so replacing a
+    // product photo produces a NEW key and a new optimizer cache entry. There is no
+    // way to invalidate an optimized image in place (images.md § minimumCacheTTL), so
+    // the one thing this must never cover is a key that gets overwritten — and none do.
+    minimumCacheTTL: 2678400,
+    // ── HOW MANY VARIANTS ONE PICTURE IS ALLOWED TO BECOME ──────────────────────────
+    //
+    // Next's defaults are eight device widths (up to 3840) and seven image widths, and
+    // every `sizes` expressed in `vw` opts an image into the WHOLE device ladder. The
+    // measured result on 2026-09-13: the homepage declared 543 distinct (source, width)
+    // variants from 51 source images, and /products 322 from 33 — with 127 references
+    // to w=3840 on the homepage alone. Each variant is a separate transformation, a
+    // separate cache entry, and a separate URL written into both the HTML and the RSC
+    // payload (~110KB of the homepage's 377KB was optimizer URLs).
+    //
+    // 3840 and 2048 are dropped. They are only ever chosen by a 4K display or a 2x
+    // 1920 viewport; this shop's traffic is overwhelmingly Nigerian mobile, so those
+    // two widths are the most expensive encodes we can perform for the fewest people.
+    // 1920 stays, so a desktop at 2x on a 960px column is still served sharp.
+    //
+    // 32 and 48 are dropped from imageSizes. The smallest fixed slots in the app are
+    // `sizes="36px"` and `sizes="40px"` (combo thumbnails), which now resolve to 64
+    // rather than 48 at 1x — a few hundred bytes more on a thumbnail, in exchange for
+    // those slots sharing widths with everything else instead of minting their own.
+    //
+    // This narrows which candidates a browser MAY pick. It changes no layout and no
+    // `sizes` prop; every <Image> in the app already declares one.
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920],
+    imageSizes: [64, 96, 128, 256, 384],
   },
 };
 

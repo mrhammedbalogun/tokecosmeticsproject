@@ -6,6 +6,7 @@ import { PriceTag } from "@/components/product/PriceTag";
 import { ReviewStars } from "@/components/product/ReviewStars";
 import { WishlistHeart } from "@/components/product/WishlistHeart";
 import { CardAddButton } from "@/components/product/CardAddButton";
+import { CardHoverImage } from "@/components/product/CardHoverImage";
 
 /** The one product card. Hover: image swaps to hover_image (pure CSS, no JS), the
  * artwork zooms gently, and the whole card lifts — the calm, "expensive" motion
@@ -15,6 +16,10 @@ import { CardAddButton } from "@/components/product/CardAddButton";
 /** Replaces the Add to Cart button when the product has no sellable stock in the
  * shopper's country (in_stock === false; missing field = old cached payload, assume
  * in stock). Same pill dimensions as the button so card footers stay aligned. */
+/** Shared by the primary artwork and the hover artwork: they occupy the same box, so a
+ *  drift between them would mean the browser picking a different width for the swap. */
+const CARD_IMAGE_SIZES = "(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw";
+
 function SoldOutTag() {
   return (
     <span className="whitespace-nowrap rounded-full border border-line px-3.5 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">
@@ -89,22 +94,16 @@ export function ProductCard({
               alt={product.name}
               fill
               priority={priority}
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              sizes={CARD_IMAGE_SIZES}
               className={`object-cover transition-all duration-500 ease-out group-hover:scale-[1.04] ${
                 hover ? "group-hover:opacity-0" : ""
               }`}
             />
           )}
-          {hover && (
-            <Image
-              src={hover}
-              alt=""
-              aria-hidden
-              fill
-              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-              className="object-cover opacity-0 transition-all duration-500 ease-out group-hover:scale-[1.04] group-hover:opacity-100"
-            />
-          )}
+          {/* A client island purely so the hover artwork is never fetched on a device
+              that cannot hover — `opacity-0` still loads, and a phone loaded it for
+              nothing. See CardHoverImage; the card itself stays a Server Component. */}
+          {hover && <CardHoverImage src={hover} sizes={CARD_IMAGE_SIZES} />}
           {product.is_featured && (
             <span className="absolute left-3 top-3 rounded-full bg-gold px-2.5 py-0.5 text-xs font-medium tracking-wide text-foreground shadow-sm">
               Bestseller

@@ -41,10 +41,22 @@ export const NO_TRACKING: MarketingConfig = {
   channels: [],
 };
 
+/** The tag Django flushes on a Marketing-screen write (`apps/marketing/revalidate.py`).
+ *
+ * The TTL alone was never the right guarantee for this payload. `tracking_enabled` is a
+ * kill switch, `consent_required_countries` is a legal position, and a pixel id decides
+ * which ad account receives the shop's customer data — each is turned off or corrected
+ * BECAUSE something is wrong, which is the one moment "within five minutes" is not an
+ * answer. With the tag in place the switch bites on save, and the hour below is only the
+ * floor under an unreachable backend rather than the mechanism.
+ *
+ * An HOUR, up from 300s, precisely BECAUSE the tag carries the urgency now. A pixel id
+ * changes about once a year; polling for it twelve times an hour was buying nothing the
+ * flush does not already deliver instantly. */
 export async function getMarketingConfig(): Promise<MarketingConfig> {
   try {
     return await apiFetch<MarketingConfig>("/marketing/config/", {
-      next: { revalidate: 300 },
+      next: { revalidate: 3600, tags: ["marketing"] },
     });
   } catch {
     return NO_TRACKING;

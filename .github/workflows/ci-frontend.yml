@@ -7,6 +7,9 @@ on:
     paths: ["storefront/**", "admin/**", ".github/workflows/ci-frontend.yml"]
 
 jobs:
+  # Job id deliberately left as `build` even though it now lints and tests too:
+  # it is the name any branch-protection rule refers to, and renaming it would
+  # silently un-gate the checks rather than tighten them.
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -24,4 +27,32 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ matrix.app }}/package-lock.json
       - run: npm ci
-      - run: npm run build
+
+      # Cheapest check first: no build artefacts needed, so a lint error is reported
+      # in seconds instead of after a compile.
+      - name: Lint
+        run: npm run lint
+
+      # ── BUILD BEFORE TEST, AND THAT ORDER IS LOAD-BEARING ────────────────────────
+      #
+      # The obvious sequence is lint -> test -> build, and it is wrong here.
+      # `storefront/src/app/__tests__/country-market-safety.test.ts` asserts that no
+      # (shop) route was statically prerendered, and it does that by reading
+      # `.next/prerender-manifest.json` — Next's own record of what it actually did.
+      # That file is a BUILD OUTPUT. On a fresh checkout it does not exist, and the
+      # test degrades to a warning and passes.
+      #
+      # Measured on 2026-09-16: with `.next` removed, that suite reports "4 passed"
+      # while its strongest assertion never executes. Running the tests before the
+      # build would therefore reproduce exactly the hole this workflow was changed to
+      # close — a `force-static` regression that ships a green CI run.
+      #
+      # So: build first, then test against what the build produced.
+      - name: Build
+        run: npm run build
+
+      # The FULL suite, not a hand-picked subset. `vitest run` (not `vitest`) so the
+      # runner exits instead of watching, and so a non-zero exit fails the job rather
+      # than depending on vitest's CI auto-detection.
+      - name: Test
+        run: npx vitest run

@@ -3,7 +3,26 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MORE_LINKS, MORE_MENU_LABEL } from "@/lib/site-pages";
 
-const SHOP = join(process.cwd(), "src", "app", "(shop)");
+/**
+ * A shop route now lives in one of TWO groups, and which one is a RENDERING decision,
+ * not a navigational one: `(shop)` is server-rendered per request, `(static-shop)` is
+ * prerendered (Task 12D). Route groups do not appear in URLs, so `/about-us` is
+ * `/about-us` either way and the header neither knows nor cares.
+ *
+ * This test must not care either. Pinning it to one group would mean that moving a page
+ * between them — the whole mechanism of the static-rendering work — breaks a nav test
+ * for a link that still resolves perfectly, and the honest fix would look like deleting
+ * the assertion.
+ */
+const GROUPS = ["(shop)", "(static-shop)"] as const;
+
+/** Does any route group serve this path? */
+function routeExists(href: string): boolean {
+  const path = href.replace(/^\//, "");
+  return GROUPS.some((group) =>
+    existsSync(join(process.cwd(), "src", "app", group, path, "page.tsx")),
+  );
+}
 
 /**
  * The `More` menu is a list of links in one file and a set of route files in another
@@ -19,7 +38,7 @@ describe("the More menu's links all resolve to real routes", () => {
   it.each(MORE_LINKS.map((l) => [l.label, l.href] as const))(
     "%s -> %s has a page.tsx",
     (_label, href) => {
-      expect(existsSync(join(SHOP, href.replace(/^\//, ""), "page.tsx"))).toBe(true);
+      expect(routeExists(href)).toBe(true);
     },
   );
 
@@ -50,6 +69,6 @@ describe("the top-level nav items still exist too", () => {
   // Skin Quiz as well, this test does not fail — but the one above starts covering it,
   // so the route stays guarded either way.
   it.each(["skin-quiz", "products"])("/%s has a page.tsx", (slug) => {
-    expect(existsSync(join(SHOP, slug, "page.tsx"))).toBe(true);
+    expect(routeExists(`/${slug}`)).toBe(true);
   });
 });

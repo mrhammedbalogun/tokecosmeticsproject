@@ -14,12 +14,41 @@ import { MoreMenu } from "@/components/layout/MoreMenu";
 import { buildShopMenu } from "@/lib/shop-menu";
 import { getCategoryTree, type CategoryNode } from "@/lib/catalog";
 
-export async function Header() {
-  const jar = await cookies();
+/**
+ * `clientResolved` — render the header WITHOUT reading a single cookie.
+ *
+ * For the prerendered routes under `(static-shop)`. Their HTML is shared by every
+ * visitor, so the two values this component normally reads server-side cannot be baked
+ * into it: `country` would freeze one market's currency into the switcher, and
+ * `signedIn` would tell a signed-in shopper to "Sign in".
+ *
+ * Both are already CLIENT components (`CountrySwitcher`, `AccountMenu`), and both can
+ * answer for themselves — the country cookie is deliberately non-httpOnly, and the
+ * session arrives from `StaticShellProvider`. So the flag does not fork the markup or
+ * change a single class name; it only declines to answer two questions on the server and
+ * lets the components below answer them in the browser instead.
+ *
+ * ── WHAT IS STILL FETCHED HERE, AND WHY THAT IS SAFE ────────────────────────────────
+ *
+ * `getMarkets()` and `getCategoryTree()` still run. They are REVALIDATING FETCHES, not
+ * dynamic reads, so they do not opt the route out of prerendering — and both are
+ * market-invariant, which was measured rather than assumed (2026-09-16, live API, all
+ * four markets byte-identical: `/meta/countries/` and `/categories/` returned one md5
+ * each). `CategoryTreeView.get_queryset` filters on `is_active` and nothing else, so the
+ * `X-Country` header it is sent changes nothing in the response.
+ *
+ * The default is `false`, so every existing call site keeps today's behaviour exactly.
+ */
+export async function Header({ clientResolved = false }: { clientResolved?: boolean } = {}) {
   const markets = await getMarkets().catch(() => []);
-  const country = normalizeCountry(
-    jar.get(COUNTRY_COOKIE)?.value, markets.map((m) => m.code),
-  ) || DEFAULT_COUNTRY;
+  // The cookie jar is opened ONLY on the dynamic path. Calling `cookies()` at all — even
+  // discarding the result — is what makes a route dynamic, so this must stay inside the
+  // branch and must never be hoisted above it.
+  const country = clientResolved
+    ? DEFAULT_COUNTRY
+    : normalizeCountry(
+        (await cookies()).get(COUNTRY_COOKIE)?.value, markets.map((m) => m.code),
+      ) || DEFAULT_COUNTRY;
   // `getCategoryTree`, not a bare `apiFetch`: this fetch had its own untagged one-hour
   // cache, so `revalidateTag("catalog")` — which every other catalogue read honours —
   // could not reach the MENU. After the 2026-09-10 rebuild the category pages updated at
@@ -30,7 +59,7 @@ export async function Header() {
   // the same menu in different shapes, and building it twice is how they start disagreeing
   // about what is in it.
   const menu = buildShopMenu(categories);
-  const signedIn = Boolean(await getAccessToken());
+  const signedIn = clientResolved ? undefined : Boolean(await getAccessToken());
 
   return (
     <header data-site-header className="sticky top-0 z-40 border-b border-line bg-background/95 backdrop-blur">
@@ -40,7 +69,7 @@ export async function Header() {
             and it squeezed this group — logo included — to 30px on a 390px phone, so no
             logo rendered at all. Measured and screenshotted 2026-08-16. */}
         <div className="flex shrink-0 items-center gap-3">
-          <MobileNav menu={menu} markets={markets} country={country} />
+          <MobileNav menu={menu} markets={markets} country={clientResolved ? undefined : country} />
           <Link href="/" className="site-logo flex items-center gap-2">
             <Image src="/logos/toke-logo.png" alt="Toke Cosmetics" width={96} height={56} priority />
           </Link>
@@ -78,10 +107,14 @@ export async function Header() {
           {/* lg and up only — the drawer carries it below that. */}
           <CountrySwitcher
             markets={markets}
-            current={country}
+            current={clientResolved ? undefined : country}
             className="hidden items-center gap-1 text-sm lg:flex"
           />
           <AccountMenu signedIn={signedIn} />
+          {/* No prop: the wishlist gate is resolved ONCE in `(shop)/layout.tsx` and read from
+              `SessionProvider`. `signedIn` above is access-only (14 min) and right for the
+              AccountMenu chip, but it would wrongly read a live 14-day session as anonymous
+              — so it must not be the thing that gates a shopper's saves. */}
           <WishlistLink />
           <CartButton />
         </div>

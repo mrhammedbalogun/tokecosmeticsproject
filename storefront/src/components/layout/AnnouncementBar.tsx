@@ -14,8 +14,22 @@ import { ANNOUNCEMENTS } from "@/lib/home-content";
  * Items come from CMS strip banners (title + optional cta_url); the Plan-13
  * fixtures keep the bar alive when the CMS is empty or down.
  */
-export function AnnouncementBar({ items }: { items?: AnnouncementItem[] } = {}) {
-  const news = items?.length ? items : ANNOUNCEMENTS.map((text) => ({ text, url: "" }));
+export function AnnouncementBar(
+  { items, pending = false }: { items?: AnnouncementItem[]; pending?: boolean } = {},
+) {
+  /**
+   * `pending` — the answer is on its way, so show the BAR but none of its words.
+   *
+   * Only a prerendered page passes it. The fallback below is the right answer when the
+   * CMS is empty or down, but it is the wrong answer before anybody has asked: the first
+   * fixture reads "Free delivery in Nigeria on orders over ₦50,000", and baking that into
+   * HTML that is served to every market is precisely the wrong-country content that
+   * `(static-shop)` exists to avoid. The strip keeps its `min-h-9`, so filling it in a
+   * moment later moves nothing on the page.
+   */
+  const news = pending
+    ? []
+    : items?.length ? items : ANNOUNCEMENTS.map((text) => ({ text, url: "" }));
   // Two copies of the list = one seamless loop.
   const track = [...news, ...news];
   return (

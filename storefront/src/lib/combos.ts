@@ -83,7 +83,11 @@ export interface ComboDetail {
   max_quantity: number;
 }
 
-const COMBO_REVALIDATE = 60; // matches the backend's own catalog cache TTL
+/** Five minutes, matching `catalog.ts` — and for the same reason. Django flushes
+ *  `catalog`, `combos` and `combo:<slug>` on every combo write
+ *  (`apps/combos/revalidate.py`), so a curator's edit no longer waits out a TTL and this
+ *  number is only the backstop beneath the flush. */
+const COMBO_REVALIDATE = 300;
 
 export async function getCombos(country: string) {
   return apiFetch<ComboCard[]>("/combos/", {

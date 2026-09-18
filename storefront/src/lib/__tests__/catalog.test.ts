@@ -10,6 +10,7 @@ vi.mock("@/lib/api", async (importActual) => {
 import { apiFetch, ApiError } from "@/lib/api";
 import {
   buildProductQuery, fetchPlpPage, findCategory, flattenCategories,
+  getBrands, getCategoryTree, getCollection, getProduct, getProducts, getReviews,
   EMPTY_PAGE, type CategoryNode, type Paginated, type ProductCard,
 } from "@/lib/catalog";
 
@@ -91,5 +92,53 @@ describe("fetchPlpPage (shared PLP 404-swallow policy)", () => {
   it("rethrows a non-ApiError (e.g. network failure)", async () => {
     mockApiFetch.mockRejectedValueOnce(new Error("network down"));
     await expect(fetchPlpPage({}, "NG")).rejects.toThrow("network down");
+  });
+});
+
+describe("catalogue cache configuration", () => {
+  // The TTL and the tags are one decision, so they are asserted together. 300s is only
+  // affordable BECAUSE Django flushes these tags on every catalogue write
+  // (`apps/catalog/revalidate.py`); if a future change drops a tag, the number beside it
+  // silently becomes a five-minute staleness bug rather than a backstop.
+  const nextOf = () => (mockApiFetch.mock.calls[0][1] as {
+    next: { revalidate: number; tags: string[] };
+  }).next;
+
+  beforeEach(() => { mockApiFetch.mockReset(); mockApiFetch.mockResolvedValue({}); });
+
+  it("lists products for 300s under the catalog tag", async () => {
+    await getProducts({ category: "face" }, "NG");
+    expect(nextOf()).toEqual({ revalidate: 300, tags: ["catalog"] });
+  });
+
+  it("tags a product page with BOTH catalog and its own slug", async () => {
+    // Both, not one: the grid is fetched as ["catalog"] and this page as
+    // ["catalog", "product:<slug>"], so a price edit has to reach the grid as well.
+    await getProduct("glow-serum", "NG");
+    expect(nextOf()).toEqual({
+      revalidate: 300, tags: ["catalog", "product:glow-serum"],
+    });
+  });
+
+  it("keeps the product tag SPECIFIC to the slug asked for", async () => {
+    await getProduct("another-product", "NG");
+    expect(nextOf().tags).toContain("product:another-product");
+    expect(nextOf().tags).not.toContain("product:glow-serum");
+  });
+
+  it("reviews stay on their own 300s window under the product tag", async () => {
+    // Untouched by the catalogue TTL change — a different fetch with a different tag set.
+    await getReviews("glow-serum");
+    expect(nextOf()).toEqual({ revalidate: 300, tags: ["product:glow-serum"] });
+  });
+
+  it.each([
+    ["category tree", () => getCategoryTree("NG")],
+    ["brands", () => getBrands("NG")],
+    ["collection", () => getCollection("best", "NG")],
+  ])("%s keeps its hour-long window under the catalog tag", async (_name, call) => {
+    // These were never 60s and must not be dragged to 300 by the constant's change.
+    await call();
+    expect(nextOf()).toEqual({ revalidate: 3600, tags: ["catalog"] });
   });
 });

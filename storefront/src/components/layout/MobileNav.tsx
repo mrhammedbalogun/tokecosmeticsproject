@@ -26,7 +26,8 @@ export function MobileNav({
 }: {
   menu: MenuEntry[];
   markets: Market[];
-  country: string;
+  /** Undefined on a prerendered page — CountrySwitcher reads the cookie itself. */
+  country?: string;
 }) {
   const [open, setOpen] = useState(false);
   // Which groups are expanded. Sub-menus are COLLAPSED BY DEFAULT and open one at a time

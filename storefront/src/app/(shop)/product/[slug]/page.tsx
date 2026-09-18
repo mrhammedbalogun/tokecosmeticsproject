@@ -84,9 +84,25 @@ export default async function ProductPage({ params }: { params: Params }) {
   // Gate on the refresh cookie, not access (14-min lifetime) — same reasoning as
   // src/proxy.ts. A hint only: the review form's eligibility probe tells the truth.
   const signedIn = Boolean(jar.get(REFRESH_COOKIE)?.value);
-  const product = await loadProduct(slug, country);
+  // CONCURRENT, not sequential. These two share no inputs: `deliveryLineFor` needs only
+  // `country` (the cookie read above) and the access token, never anything the product
+  // returns — so awaiting them in series just stacked an authenticated round trip to the
+  // Cloudflare-fronted VPS (~300ms measured) on top of the catalogue fetch, on every
+  // signed-in product view.
+  //
+  // `Promise.all` keeps the existing failure semantics exactly. `loadProduct` is still
+  // the only one that can reject — a non-404 bubbles to the error boundary as before —
+  // while `deliveryLineFor` never throws: it catches internally and returns the generic
+  // line, so a slow or broken `/me/addresses/` still cannot take the page down.
+  //
+  // One deliberate trade: the address lookup now also fires for a slug that turns out to
+  // 404, where the old ordering short-circuited at `notFound()`. It costs one request
+  // for a signed-in visitor on a dead link, and buys the parallelism for every real view.
+  const [product, deliveryLine] = await Promise.all([
+    loadProduct(slug, country),
+    deliveryLineFor(country),
+  ]);
   if (!product) notFound();
-  const deliveryLine = await deliveryLineFor(country);
 
   const crumbs = [
     { name: "Home", path: "/" },

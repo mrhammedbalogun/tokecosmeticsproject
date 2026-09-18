@@ -79,7 +79,16 @@ describe("GigPanel", () => {
     await waitFor(() => expect(label).toHaveBeenCalledWith({ number: "TC-100001" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/not generated yet/i);
     // Still a button — not-ready is retryable, unlike capture.
-    expect(screen.getByRole("button", { name: /fetch label/i })).toBeInTheDocument();
+    //
+    // `waitFor`, NOT a bare assertion, because `run` wraps an async function in
+    // `startTransition`: React commits the `setState` that paints the alert while the
+    // action is still in flight (`pending` still true) and only flips `pending` false in
+    // a SECOND commit. The button reads "Asking GIG…" until then, so /fetch label/ does
+    // not match it. `findByRole("alert")` resolves on the first of those commits, which
+    // made the assertion below a race with the second — one it lost under CPU load.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /fetch label/i })).toBeInTheDocument(),
+    );
 
     document.body.innerHTML = "";
     setup(data({}, { status: "created", waybill: "1349113095", label_url: "https://s3.example/l.pdf" }));
