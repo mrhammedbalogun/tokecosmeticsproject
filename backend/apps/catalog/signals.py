@@ -11,6 +11,7 @@ from apps.catalog.models import (
     ProductImage,
     ProductVariant,
 )
+from apps.catalog.revalidate import notify_catalog_changed
 from apps.catalog.services import bump_catalog_cache
 from apps.pricing.models import Price
 
@@ -19,6 +20,11 @@ _WATCHED = {Product, ProductVariant, ProductImage, Category, Brand, Collection, 
 
 @receiver(post_save)
 @receiver(post_delete)
-def _invalidate_catalog_cache(sender, **kwargs):
+def _invalidate_catalog_cache(sender, instance=None, **kwargs):
     if sender in _WATCHED:
         bump_catalog_cache()
+        # The same write, flushed on the OTHER side too: `bump_catalog_cache` only reaches
+        # responses this service renders, while the storefront holds its own copy under
+        # Next's `catalog` / `product:<slug>` tags. Coalesced per transaction — see
+        # apps/catalog/revalidate.py for why that matters on an import loop.
+        notify_catalog_changed(instance)

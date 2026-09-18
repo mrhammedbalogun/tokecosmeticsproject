@@ -30,3 +30,18 @@ def _clear_cache():
     cache.clear()
     yield
     cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def _storefront_revalidation_off(settings):
+    """backend/.env carries a real REVALIDATE_SECRET for manual dev, and with it set every
+    catalogue, CMS, store, redirect and region write in this suite fires a live HTTP POST
+    at STOREFRONT_BASE_URL — hundreds of them, from tests that have nothing to do with
+    caching. (`apps/core/revalidate.py` documents discovering exactly that.)
+
+    Clearing it makes `notify_storefront` a no-op, which is also the production behaviour
+    wherever the secret is unset. Tests that assert on revalidation mock the caller
+    directly and are unaffected; `test_revalidate.py` opts back in per-test with
+    `override_settings` where it needs a secret present.
+    """
+    settings.REVALIDATE_SECRET = ""

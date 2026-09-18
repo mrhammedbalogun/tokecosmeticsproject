@@ -9,6 +9,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save
 from django.dispatch import receiver
 
 from apps.catalog.services import bump_catalog_cache
+from apps.combos.revalidate import notify_combo_changed
 from apps.combos.models import Combo, ComboItem, ComboPrice
 
 _WATCHED = {Combo, ComboItem, ComboPrice}
@@ -16,9 +17,10 @@ _WATCHED = {Combo, ComboItem, ComboPrice}
 
 @receiver(post_save)
 @receiver(post_delete)
-def _invalidate_on_write(sender, **kwargs):
+def _invalidate_on_write(sender, instance=None, **kwargs):
     if sender in _WATCHED:
         bump_catalog_cache()
+        notify_combo_changed(instance)
 
 
 @receiver(m2m_changed, sender=Combo.available_countries.through)
@@ -27,3 +29,4 @@ def _invalidate_on_market_change(sender, **kwargs):
     # without this a combo withdrawn from a market stays listed there for the TTL.
     if kwargs.get("action") in ("post_add", "post_remove", "post_clear"):
         bump_catalog_cache()
+        notify_combo_changed(kwargs.get("instance"))

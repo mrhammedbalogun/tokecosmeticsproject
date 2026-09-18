@@ -17,6 +17,8 @@ must match.
 from apps.cms.revalidate import notify_storefront
 
 STOREFRONT_TAG = "referral-terms"
+REDIRECTS_TAG = "redirects"
+REGIONS_TAG = "regions"
 
 
 def notify_decisions_changed(*_args, created: bool = False, **_kwargs) -> None:
@@ -38,3 +40,29 @@ def notify_decisions_changed(*_args, created: bool = False, **_kwargs) -> None:
     if created:
         return
     notify_storefront([STOREFRONT_TAG])
+
+
+def notify_redirects_changed(*_args, **_kwargs) -> None:
+    """Signal receiver: a legacy-URL row changed.
+
+    `storefront/src/lib/redirects.ts` caches the lookup for an HOUR under `redirects`, and
+    the root catch-all is the only thing standing between an old WordPress URL and a 404.
+    Adding a rule and waiting an hour for it to take effect reads exactly like the rule not
+    working, which is how people end up adding it twice.
+
+    Safe to wire on `post_save` despite `Redirect.hits`: that counter is incremented with a
+    queryset `update(hits=F("hits") + 1)` (apps/core/redirects.py), which fires no signal.
+    Were it a `.save()`, every redirected visitor would flush the table.
+    """
+    notify_storefront([REDIRECTS_TAG])
+
+
+def notify_regions_changed(*_args, **_kwargs) -> None:
+    """Signal receiver: a state/LGA row changed.
+
+    `/api/regions` caches for a DAY under `regions` — the longest TTL in the storefront,
+    chosen because administrative geography moves when a government redraws a boundary.
+    That TTL is only defensible with this flush behind it: without one, a newly added LGA
+    would be missing from every address form for up to 24 hours.
+    """
+    notify_storefront([REGIONS_TAG])
