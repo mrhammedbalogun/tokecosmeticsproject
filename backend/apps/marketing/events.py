@@ -126,13 +126,11 @@ def _skip_reason(order, attribution, row) -> str:
         return "channel_disabled"
     if not row.server_enabled:
         return "server_side_disabled"
-    if not row.pixel_id:
-        return "no_pixel_id"
-    if row.code == "google_ads" and not (row.server_account_id and row.server_destination_id):
-        # Google's server side is addressed separately from its browser tag: without the
-        # customer id and the conversion action id there is nowhere to send it, and the
-        # API would answer with a validation error per order rather than once.
-        return "no_server_destination"
+    # Per-channel: Meta/TikTok/Snap need the pixel id, Google needs its two server ids
+    # and NOT the pixel id. See `MarketingChannel.server_address_problem`.
+    address_problem = row.server_address_problem()
+    if address_problem:
+        return address_problem
     missing = missing_settings_for(row.code)
     if missing:
         return f"missing_credential:{','.join(missing)}"

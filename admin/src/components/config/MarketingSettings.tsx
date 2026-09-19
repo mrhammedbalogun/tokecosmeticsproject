@@ -24,6 +24,7 @@ import {
 import {
   CHANNEL_BLURB,
   PIXEL_ID_LABEL,
+  serverAddressed,
   type MarketingChannelRow,
   type MarketingSettingsRow,
   type TestEventResult,
@@ -32,18 +33,31 @@ import {
 const FIELD =
   "w-full rounded border border-line bg-surface px-2 py-1.5 text-sm focus:border-accent focus:outline-none";
 
-/** The one-line scan layer on each card: read first, edit second. */
-function summary(row: MarketingChannelRow, masterOn: boolean): string {
+/**
+ * The one-line scan layer on each card: read first, edit second.
+ *
+ * Each half reports on itself. This used to open with `if (!row.pixel_id) return "on, but
+ * no ID — nothing is loading"`, which was true for four channels and false for Google:
+ * a Google card with no `AW-` id but a configured, live-validated server half was told
+ * nothing was happening while its conversions sat in the outbox for want of that id.
+ */
+export function summary(row: MarketingChannelRow, masterOn: boolean): string {
   if (!masterOn) return "off — tracking is switched off store-wide";
   if (!row.is_enabled) return "off";
-  if (!row.pixel_id) return "on, but no ID — nothing is loading";
   const halves: string[] = [];
-  if (row.browser_enabled) halves.push("pixel");
+  if (row.browser_enabled) {
+    if (!row.pixel_id) halves.push("pixel (no ID)");
+    // Google's tag loads on the `AW-` id alone (remarketing), but a purchase only
+    // counts in the ad account with the LABEL too — `send_to: "AW-…/label"`.
+    else if (row.code === "google_ads" && !row.secondary_id) halves.push("pixel (no conversion label)");
+    else halves.push("pixel");
+  }
   if (row.server_enabled && row.has_server_side) {
-    const addressed =
-      row.code !== "google_ads" || (row.server_account_id && row.server_destination_id);
-    if (!addressed) halves.push("server (no destination)");
-    else halves.push(row.credential_configured ? "server" : "server (no credential)");
+    if (!serverAddressed(row)) {
+      halves.push(row.code === "google_ads" ? "server (no destination)" : "server (no ID)");
+    } else {
+      halves.push(row.credential_configured ? "server" : "server (no credential)");
+    }
   }
   if (halves.length === 0) return "on, but both halves are off";
   const test = row.test_event_code ? " · TEST MODE" : "";
@@ -214,7 +228,7 @@ function ChannelCard({ row, masterOn }: { row: MarketingChannelRow; masterOn: bo
           <h2 className="text-sm font-medium">{row.label}</h2>
           <p className="mt-0.5 text-xs text-muted">{CHANNEL_BLURB[row.code]}</p>
         </div>
-        <span className="text-xs text-muted">{summary({ ...row, is_enabled: enabled, pixel_id: pixelId, server_account_id: accountId, server_destination_id: destinationId, browser_enabled: browser, server_enabled: server, test_event_code: testCode }, masterOn)}</span>
+        <span className="text-xs text-muted">{summary({ ...row, is_enabled: enabled, pixel_id: pixelId, secondary_id: secondaryId, server_account_id: accountId, server_destination_id: destinationId, browser_enabled: browser, server_enabled: server, test_event_code: testCode }, masterOn)}</span>
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -343,7 +357,8 @@ function ChannelCard({ row, masterOn }: { row: MarketingChannelRow; masterOn: bo
           <button
             type="button"
             onClick={sendTest}
-            disabled={testing || !row.credential_configured || !row.pixel_id}
+            // The SAVED row, not the unsaved edits: the button tests what the server has.
+            disabled={testing || !row.credential_configured || !serverAddressed(row)}
             className="rounded border border-line px-4 py-1.5 text-sm disabled:opacity-50"
             title="Sends a real, zero-value event so you can see it arrive in the platform's console."
           >

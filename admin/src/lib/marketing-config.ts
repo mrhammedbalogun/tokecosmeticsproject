@@ -32,10 +32,35 @@ export interface MarketingChannelRow {
   credential_configured: boolean;
   /** The NAMES of the ones that are not — variable names, never values. */
   missing_settings: string[];
-  /** False for Google Ads, which has no simple server-side sender: uploading
-   * conversions to it means the Google Ads API (OAuth2 + an approved developer token).
-   * Its `server_enabled` is ignored rather than pretending to work. */
+  /** Whether the platform has a server-side sender at all. True for all five since
+   * Plan-44b moved Google Ads onto the Data Manager API. */
   has_server_side: boolean;
+}
+
+/**
+ * Does the SERVER half know where to send?
+ *
+ * Mirrors `MarketingChannel.server_address_problem` on the backend — keep the two in
+ * step. It is duplicated rather than read off the API because the card's summary runs on
+ * UNSAVED edits, which no flag from the server can describe.
+ *
+ * Meta, TikTok and Snapchat send server events to the same pixel id the browser tag
+ * uses, so for them the pixel id IS the address. Google does not: its server half is
+ * addressed by the customer id and the conversion action id and never reads the `AW-`
+ * id at all. Until 2026-09-19 the admin (and the outbox, and the test endpoint) asked
+ * every channel for a pixel id first, which refused a Google channel whose server half
+ * was fully configured and had been validated live.
+ */
+export function serverAddressed(row: {
+  code: ChannelCode;
+  pixel_id: string;
+  server_account_id: string;
+  server_destination_id: string;
+}): boolean {
+  if (row.code === "google_ads") {
+    return Boolean(row.server_account_id && row.server_destination_id);
+  }
+  return Boolean(row.pixel_id);
 }
 
 export interface TestEventResult {

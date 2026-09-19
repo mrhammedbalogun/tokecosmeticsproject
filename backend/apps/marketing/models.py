@@ -182,6 +182,45 @@ class MarketingChannel(TimeStampedModel):
     def __str__(self) -> str:
         return f"{self.get_code_display()} ({'on' if self.is_enabled else 'off'})"
 
+    def server_address_problem(self) -> str:
+        """Why the SERVER half has nowhere to send, or "" when it is addressed.
+
+        ── ONE RULE, ASKED IN THREE PLACES ─────────────────────────────────────────────
+
+        The outbox gate (`events._skip_reason`) and the admin's test button
+        (`admin_views.test_event`) both need this answer, and until 2026-09-19 each
+        worked it out for itself — wrongly, in the same way. The admin card mirrors it in
+        `serverAddressed()` (`admin/src/lib/marketing-config.ts`), which has to run on
+        UNSAVED edits and so cannot simply read a flag from here; keep the two in step. They
+        all required `pixel_id` first, which is right for Meta, TikTok and Snapchat (one
+        pixel, two halves: the server events go to the same id the browser tag uses) and
+        WRONG for Google, whose server half is addressed by the customer id and the
+        conversion action id and never reads `pixel_id` at all (see
+        `channels/google_ads.py`, where `build()` does not touch it).
+
+        The cost was measured on production: 224 purchases skipped as `no_pixel_id`
+        between 31 Aug and 18 Sep, on a channel whose credential and destination had been
+        validated live against Google — a `validateOnly` call on a real order returned
+        200. The one field it was waiting for is the one field it does not use. The test
+        button refused Google outright for the same reason, and the admin card reported
+        "no ID — nothing is loading" about a server half that was fully configured.
+
+        The test that pinned the old behaviour set `pixel_id="AW-123"` and asserted only
+        on the server ids: the author's model was "pixel_id is always set, and Google
+        needs two more". The blank-pixel case for Google was simply never considered.
+
+        Browser-side addressing is NOT this method's business — the storefront's
+        `TrackingScripts` already renders nothing for a channel without an id.
+        """
+        if self.code == "google_ads":
+            if not (self.server_account_id and self.server_destination_id):
+                # Without the customer id and the conversion action id there is nowhere
+                # to send, and the API would answer with a validation error per order
+                # rather than once.
+                return "no_server_destination"
+            return ""
+        return "" if self.pixel_id else "no_pixel_id"
+
 
 class OrderAttribution(models.Model):
     """What the browser knew when the order was placed, frozen at placement.

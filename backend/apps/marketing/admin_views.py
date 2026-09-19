@@ -119,8 +119,12 @@ class MarketingChannelAdminViewSet(
                 {"ok": False, "error": "missing_credential", "missing_settings": missing},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if not channel_row.pixel_id:
-            return Response({"ok": False, "error": "no_pixel_id"},
+        # The same question the outbox asks, so the button and the real sends cannot
+        # disagree about whether this channel is addressed. It used to test `pixel_id`,
+        # which refused Google outright — a channel whose server half does not use one.
+        address_problem = channel_row.server_address_problem()
+        if address_problem:
+            return Response({"ok": False, "error": address_problem},
                             status=status.HTTP_400_BAD_REQUEST)
 
         channel = build_channel(channel_row)

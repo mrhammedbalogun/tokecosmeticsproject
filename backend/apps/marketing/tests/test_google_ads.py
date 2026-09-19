@@ -311,3 +311,65 @@ def test_google_is_skipped_until_it_has_a_customer_and_conversion_action(setting
     ConversionEvent.objects.all().delete()
     enqueue_purchase(order.pk)
     assert ConversionEvent.objects.get(order=order).status == "pending"
+
+
+# ── THE PIXEL-ID GATE (2026-09-19) ────────────────────────────────────────────────────
+#
+# The test above sets `pixel_id="AW-123"` and was, for three weeks, the only picture of
+# Google the suite had: "pixel_id is always set, and Google needs two more". Production
+# was the other case — server ids set and validated live, no browser tag yet, so no
+# `AW-` id — and 224 purchases were skipped as `no_pixel_id` by a gate asking for the
+# one field Google's server half never reads.
+
+def test_google_sends_with_no_pixel_id_at_all(settings):
+    """Production's exact configuration on 2026-09-19."""
+    from apps.marketing.events import enqueue_purchase
+    from apps.marketing.models import ConversionEvent
+    from apps.marketing.tests.factories import (
+        attribution, channel as make_channel, enable_tracking, make_order,
+    )
+
+    settings.GOOGLE_ADS_DM_CREDENTIALS_B64 = "x"
+    enable_tracking()
+    make_channel("google_ads", pixel_id="", browser_enabled=False,
+                 server_account_id="3352855298", server_destination_id="7577766208")
+    order = make_order(user=None, email="a@b.com")
+    attribution(order)
+
+    enqueue_purchase(order.pk)
+
+    event = ConversionEvent.objects.get(order=order)
+    assert event.status == "pending", event.last_error
+
+
+def test_the_other_three_still_need_their_pixel_id(settings):
+    """The fix is per-channel, not a relaxation: for Meta the pixel id IS the server
+    address, so without one there is still nowhere to send."""
+    from apps.marketing.events import enqueue_purchase
+    from apps.marketing.models import ConversionEvent
+    from apps.marketing.tests.factories import (
+        attribution, channel as make_channel, configure, enable_tracking, make_order,
+    )
+
+    configure(settings, "meta")
+    enable_tracking()
+    make_channel("meta", pixel_id="")
+    order = make_order(user=None, email="a@b.com")
+    attribution(order)
+
+    enqueue_purchase(order.pk)
+
+    assert ConversionEvent.objects.get(order=order).last_error == "no_pixel_id"
+
+
+def test_the_address_rule_lives_in_one_place():
+    """Three callers used to derive this separately and all got it wrong together."""
+    from apps.marketing.models import MarketingChannel
+
+    google = MarketingChannel(code="google_ads", pixel_id="")
+    assert google.server_address_problem() == "no_server_destination"
+    google.server_account_id, google.server_destination_id = "3352855298", "7577766208"
+    assert google.server_address_problem() == ""
+
+    assert MarketingChannel(code="meta", pixel_id="").server_address_problem() == "no_pixel_id"
+    assert MarketingChannel(code="meta", pixel_id="123").server_address_problem() == ""

@@ -201,6 +201,49 @@ def test_the_test_event_button_refuses_before_it_can_be_misread(owner, settings)
     assert response.data["error"] == "missing_credential"
 
 
+# ── Google without a pixel id (2026-09-19) ──────────────────────────────────────────
+#
+# The test button demanded `pixel_id` before anything else, so a Google channel with its
+# server half fully configured and validated live was refused outright.
+
+@respx.mock
+def test_the_test_button_validates_google_without_a_pixel_id(owner, settings, monkeypatch):
+    from apps.marketing.channels import google_ads
+
+    settings.GOOGLE_ADS_DM_CREDENTIALS_B64 = "x"
+    monkeypatch.setattr(google_ads, "_access_token", lambda **_: "tok")
+    owner.get("/api/v1/admin/marketing/channels/")  # seed
+    MarketingChannel.objects.filter(code="google_ads").update(
+        is_enabled=True, pixel_id="",
+        server_account_id="3352855298", server_destination_id="7577766208",
+    )
+    route = respx.post(google_ads.ENDPOINT).mock(
+        return_value=httpx.Response(200, json={"requestId": "r-1"})
+    )
+
+    response = owner.post("/api/v1/admin/marketing/channels/google_ads/test-event/")
+
+    assert response.status_code == 200, response.data
+    assert response.data["ok"] is True
+    # The button must NEVER land a real purchase in a live conversion action.
+    import json
+    assert json.loads(route.calls.last.request.content)["validateOnly"] is True
+    assert response.data["validated_only"] is True
+
+
+def test_the_test_button_still_refuses_google_with_no_destination(owner, settings):
+    settings.GOOGLE_ADS_DM_CREDENTIALS_B64 = "x"
+    owner.get("/api/v1/admin/marketing/channels/")  # seed
+    MarketingChannel.objects.filter(code="google_ads").update(
+        is_enabled=True, pixel_id="AW-1", server_account_id="", server_destination_id="",
+    )
+
+    response = owner.post("/api/v1/admin/marketing/channels/google_ads/test-event/")
+
+    assert response.status_code == 400
+    assert response.data["error"] == "no_server_destination"
+
+
 # ── the public config endpoint ──────────────────────────────────────────────────────
 
 
