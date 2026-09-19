@@ -80,7 +80,10 @@ class PostgresSearchBackend:
             ).order_by("-sim")
         else:
             qs = qs.filter(name__istartswith=q).order_by("name")
-        return [{"name": p.name, "slug": p.slug} for p in qs[:limit]]
+        # `type` so the caller can tell a product suggestion from a combo one —
+        # the two slug namespaces are separate and a combo slug routed to
+        # /product/<slug> is a 404. See apps/search/views.SuggestView.
+        return [{"name": p.name, "slug": p.slug, "type": "product"} for p in qs[:limit]]
 
 
 def get_backend():

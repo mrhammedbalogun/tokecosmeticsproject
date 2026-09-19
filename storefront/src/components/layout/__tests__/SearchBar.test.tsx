@@ -70,3 +70,61 @@ describe("SearchBar autocomplete — stale-response safety", () => {
     expect(input.getAttribute("aria-expanded")).toBe("false");
   });
 });
+
+describe("SearchBar autocomplete — bundles vs products", () => {
+  it("sends a combo suggestion to /combo and a product to /product", async () => {
+    render(<SearchBar />);
+    type("glow");
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await act(async () => {
+      calls[0].resolve(jsonResponse([
+        { name: "Glow Kit", slug: "glow-kit", type: "combo" },
+        { name: "Glow Serum", slug: "glow-serum", type: "product" },
+      ]));
+    });
+
+    // The bundle is LABELLED, not distinguished by position alone: the row behaves
+    // differently once clicked and the shopper should know before they click it.
+    expect(screen.getByText("Bundle")).toBeInTheDocument();
+
+    // The bug this exists to stop: /product/glow-kit, which 404s — the two slug
+    // namespaces are separate. (One click only: the dropdown closes on selection.)
+    fireEvent.click(screen.getByRole("option", { name: /Glow Kit/ }).querySelector("button")!);
+    expect(push).toHaveBeenCalledWith("/combo/glow-kit");
+  });
+
+  it("sends a product suggestion to /product", async () => {
+    render(<SearchBar />);
+    type("glow");
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await act(async () => {
+      calls[0].resolve(jsonResponse([{ name: "Glow Serum", slug: "glow-serum", type: "product" }]));
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Glow Serum/ }).querySelector("button")!);
+    expect(push).toHaveBeenCalledWith("/product/glow-serum");
+  });
+
+  it("treats a suggestion with no type as a product (payload from an older API)", async () => {
+    render(<SearchBar />);
+    type("glow");
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await act(async () => {
+      calls[0].resolve(jsonResponse([{ name: "Glow Serum", slug: "glow-serum" }]));
+    });
+    fireEvent.click(screen.getByRole("option", { name: /Glow Serum/ }).querySelector("button")!);
+    expect(push).toHaveBeenCalledWith("/product/glow-serum");
+  });
+
+  it("keeps a combo and a product that share a slug as two separate rows", async () => {
+    render(<SearchBar />);
+    type("glow");
+    await act(async () => { vi.advanceTimersByTime(300); });
+    await act(async () => {
+      calls[0].resolve(jsonResponse([
+        { name: "Glow Kit", slug: "glow", type: "combo" },
+        { name: "Glow Serum", slug: "glow", type: "product" },
+      ]));
+    });
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
+});

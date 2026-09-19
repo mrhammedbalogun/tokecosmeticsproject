@@ -22,7 +22,10 @@ def test_suggest_returns_names_and_slugs():
     names = {s["name"] for s in r.data}
     assert "Rose Water Toner" in names and "Rose Gold Serum" in names
     assert "Charcoal Mask" not in names
-    assert all({"name", "slug"} == set(s) for s in r.data)
+    # `type` joined the row when combos became suggestible — it is what tells the
+    # storefront to link /product/<slug> rather than /combo/<slug>.
+    assert all({"name", "slug", "type"} == set(s) for s in r.data)
+    assert all(s["type"] == "product" for s in r.data)
 
 
 @pytest.mark.django_db

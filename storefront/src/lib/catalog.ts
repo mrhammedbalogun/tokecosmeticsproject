@@ -3,6 +3,7 @@
  * caching lives in the fetch data-cache — short revalidate + tags, invalidated by
  * POST /api/revalidate (Task 12). Backend also caches catalog GETs for 60 s. */
 import { apiFetch, ApiError } from "@/lib/api";
+import type { ComboCard } from "@/lib/combos";
 
 // ---------- types (mirror backend serializers; regenerate api-types for drift) ----------
 export interface ProductCard {
@@ -156,14 +157,27 @@ export interface SearchParams {
   price_min?: string; price_max?: string; in_stock?: "1";
   sort?: "price_asc" | "price_desc" | "newest"; page?: number;
 }
-export async function searchProducts(params: SearchParams, country: string) {
+/** What `/search/` answers with: a page of products, plus the bundles that match.
+ *
+ *  `combos` is OPTIONAL and rides beside `results` rather than inside it — the two have
+ *  different card shapes and different URLs (`/combo/<slug>` vs `/product/<slug>`), and
+ *  `count` counts products only. It is absent from a response served by an API build
+ *  that predates combo search (the frontends ship from a push and the backend from a
+ *  tag, so that window is real), and empty on every page after the first, where the
+ *  unpaginated bundle list would otherwise repeat itself. Read it through `?? []`. */
+export type SearchPage = Paginated<ProductCard> & { combos?: ComboCard[] };
+
+/** An empty search page — the graceful "no results" state, bundles included. */
+export const EMPTY_SEARCH_PAGE: SearchPage = { ...EMPTY_PAGE, combos: [] };
+
+export async function searchProducts(params: SearchParams, country: string): Promise<SearchPage> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) {
     if (v === undefined || v === "" || (k === "page" && Number(v) <= 1)) continue;
     qs.set(k, String(v));
   }
   // /search/ is throttled 30/min/IP — server-side calls only, never poll it.
-  return apiFetch<Paginated<ProductCard>>(`/search/?${qs.toString()}`, {
+  return apiFetch<SearchPage>(`/search/?${qs.toString()}`, {
     country, cache: "no-store",
   });
 }
