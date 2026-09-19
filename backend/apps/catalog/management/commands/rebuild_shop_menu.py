@@ -17,8 +17,10 @@ somebody re-runs it to check.
 
 NOTHING IS DELETED. Categories outside the new menu are DEACTIVATED (`is_active=False`),
 which drops them from the tree endpoint and the menu while keeping every
-product-to-category row they hold. If a decision here turns out wrong — "Men Care" was
-worth keeping, say — the fix is a checkbox, not a re-import.
+product-to-category row they hold. If a decision here turns out wrong — "Skincare Sets"
+was worth keeping, say — the fix is a checkbox, not a re-import. That is exactly what
+happened to "Men Care": retired on 2026-09-10, restored to the menu on 2026-09-18 with
+all 17 of its products still attached.
 """
 from __future__ import annotations
 
@@ -70,6 +72,11 @@ MENU: list[Node] = [
     Node("Facial Care", "facial-care",
          reuse=("facial-care", "facials"),
          merge=("facial-set",)),
+    # Retired by the 2026-09-10 run and brought back on 2026-09-18: it holds 17 products
+    # in production, all of which survived the retirement (nothing is deleted here), so
+    # reusing the row restores the shelf exactly as it was rather than re-filing it.
+    Node("Men Care", "men-care",
+         reuse=("men-care",)),
     Node("Shop By Skin Concerns", "shop-by-skin-concerns",
          reuse=("shop-by-skin-concern",), assignable=False, children=[
              Node("Acne", "acne"),

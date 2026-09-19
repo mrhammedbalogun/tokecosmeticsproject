@@ -75,15 +75,17 @@ export const categoryHref = (slug: string) => `/category/${slug}`;
  *
  * Ordering is the API's (`sort_order`, then name) and is not re-sorted here — one source
  * of truth for position, editable in the admin. "Shop By Edit" is inserted at
- * `editPosition`, counted in top-level entries, so it sits seventh as approved while
- * remaining robust if a category is added or hidden: a menu of four entries puts it last
- * rather than dropping it.
+ * `editPosition`, counted in top-level entries, so it sits eighth as approved — after
+ * Travel Sizes and before Shop By Skin Tone — while remaining robust if a category is
+ * added or hidden: a menu of four entries puts it last rather than dropping it. (It was
+ * seventh until "Men Care" returned to the tree on 2026-09-18 and pushed everything
+ * below it down one.)
  *
  * A childless HEADING is dropped rather than shown as an empty flyout — the state between
  * creating "Shop By Skin Tone" and adding the first tone to it. A childless ordinary
  * category is a plain link, which is what four of the eight entries are.
  */
-export function buildShopMenu(tree: CategoryNode[], editPosition = 6): MenuEntry[] {
+export function buildShopMenu(tree: CategoryNode[], editPosition = 7): MenuEntry[] {
   const entries: MenuEntry[] = tree.flatMap((node): MenuEntry[] => {
     const children = node.children ?? [];
     if (children.length === 0) {

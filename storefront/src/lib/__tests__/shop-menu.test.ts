@@ -14,6 +14,7 @@ const TREE: CategoryNode[] = [
   node("Hair Care", "hair-care"),
   node("Skin Care", "skin-care"),
   node("Facial Care", "facial-care"),
+  node("Men Care", "men-care"),
   node("Shop By Skin Concerns", "shop-by-skin-concerns", {
     is_assignable: false,
     children: [
@@ -44,6 +45,7 @@ describe("buildShopMenu", () => {
       "Hair Care",
       "Skin Care",
       "Facial Care",
+      "Men Care",
       "Shop By Skin Concerns",
       "Travel Sizes",
       EDIT_GROUP_LABEL,

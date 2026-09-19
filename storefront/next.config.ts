@@ -9,11 +9,12 @@ import { CSP_HEADER_NAME, REPORT_ONLY, buildCsp, frameAncestorsPolicy } from "./
 // (`app/[...slug]`), and `/category/[slug]` is a real route that renders notFound()
 // long before any catch-all is reached.
 //
-// ONLY GENUINE EQUIVALENTS ARE LISTED. "Men Care" and "Skincare Sets" left the menu with
-// no successor, and pointing them at /products would be a soft 404 — Google treats a
-// redirect to an unrelated page as one, and a shopper following an old link to a shelf
-// that no longer exists is better served by an honest 404 than by being dropped into the
-// full catalogue. Those simply 404.
+// ONLY GENUINE EQUIVALENTS ARE LISTED. "Skincare Sets" left the menu with no successor,
+// and pointing it at /products would be a soft 404 — Google treats a redirect to an
+// unrelated page as one, and a shopper following an old link to a shelf that no longer
+// exists is better served by an honest 404 than by being dropped into the full
+// catalogue. It simply 404s. ("Men Care" was in that position until 2026-09-18, when it
+// came back to the menu; /category/men-care resolves again, so it needs no entry here.)
 const LEGACY_CATEGORY_REDIRECTS = [
   // Renamed in place: the row kept its products and took a new slug.
   ["baby-care", "/category/baby-kids-care"],

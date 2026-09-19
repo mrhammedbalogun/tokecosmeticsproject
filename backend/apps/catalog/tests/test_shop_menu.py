@@ -303,9 +303,9 @@ def test_rebuild_merges_duplicates_and_retires_the_rest():
 
     keep = CategoryFactory(slug="skin-care", name="Skin Care")
     duplicate = CategoryFactory(slug="skin-care-2", name="Skin Care")
-    unwanted = CategoryFactory(slug="men-care", name="Men Care")
+    unwanted = CategoryFactory(slug="skincare-sets", name="Skincare Sets")
     only_in_duplicate = _priced("night-cream", categories=[duplicate])
-    only_in_unwanted = _priced("beard-oil", categories=[unwanted])
+    only_in_unwanted = _priced("gift-set", categories=[unwanted])
 
     call_command("rebuild_shop_menu", "--apply", verbosity=0)
 
