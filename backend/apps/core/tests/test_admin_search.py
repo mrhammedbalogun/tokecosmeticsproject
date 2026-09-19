@@ -38,6 +38,7 @@ from rest_framework.test import APIClient
 from apps.accounts.authentication import mint_admin_token_pair
 from apps.accounts.rbac import ROLES, SCOPE_GRANTS
 from apps.catalog.factories import ProductFactory, ProductVariantFactory
+from apps.combos.factories import ComboFactory, ComboItemFactory
 from apps.core.admin_search import (
     MAX_TERM_LENGTH,
     MIN_TERM_LENGTH,
@@ -56,7 +57,7 @@ pytestmark = pytest.mark.django_db
 SEARCH_URL = "/api/v1/admin/search/"
 CLIENT_IP = "203.0.113.9"
 
-# The term every fixture below is built to match, in all three sections at once. One term
+# The term every fixture below is built to match, in all four sections at once. One term
 # that hits everything is what makes the matrix assertion meaningful: a role that is
 # missing a section is missing it because of its scopes, never because nothing matched.
 TERM = "zeta"
@@ -68,13 +69,15 @@ TERM = "zeta"
 # what makes the two independent statements disagree loudly.
 EXPECTED_SECTIONS: dict[str, set[str]] = {
     # Owner holds every scope by construction (see rbac.py's import-time assertion).
-    "Owner": {"orders", "customers", "products"},
-    # Manager runs the shop: the order desk, the customer list and the catalogue.
-    "Manager": {"orders", "customers", "products"},
+    "Owner": {"orders", "customers", "products", "combos"},
+    # Manager runs the shop: the order desk, the customer list and the catalogue —
+    # bundles included, since building them is the same `products.manage` work.
+    "Manager": {"orders", "customers", "products", "combos"},
     # Support answers the phone. They hold `orders.view` and `customers.view` and NOT
-    # `products.manage`, so the catalogue section simply is not there for them — which is
-    # right: the catalogue endpoints are all `.manage` (see catalog/admin_views.py) and a
-    # search that returned products would be the read half of a scope they were denied.
+    # `products.manage`, so the catalogue sections simply are not there for them — which
+    # is right: the catalogue endpoints are all `.manage` (see catalog/admin_views.py and
+    # combos/admin_views.py) and a search that returned products or bundles would be the
+    # read half of a scope they were denied.
     "Support": {"orders", "customers"},
     # THE ONE THIS ENDPOINT WAS REDESIGNED FOR. A content editor holds `cms.manage` and
     # nothing else. Under the plan's original "staff, any scope" they would have been able
@@ -137,7 +140,7 @@ def api(owner):
 
 @pytest.fixture
 def matchable(django_user_model):
-    """One customer, one order and one product, all matching TERM and nothing else."""
+    """One customer, one order, one product and one combo, all matching TERM.""" 
     ng = Country.objects.get(code="NG")
     customer = django_user_model.objects.create_user(email=f"{TERM}@example.test")
     customer.first_name = "Zeta"
@@ -152,8 +155,16 @@ def matchable(django_user_model):
         email="someone@example.test",
     )
     product = ProductFactory(name="Zeta Cream", slug="zeta-cream")
-    ProductVariantFactory(product=product, sku="ZETA-50")
-    return {"customer": customer, "order": order, "product": product}
+    variant = ProductVariantFactory(product=product, sku="ZETA-50")
+    combo = ComboFactory(name="Zeta Bundle", slug="zeta-bundle", status="active")
+    ComboItemFactory(combo=combo, variant=variant, quantity=2)
+    return {
+        "customer": customer,
+        "order": order,
+        "product": product,
+        "variant": variant,
+        "combo": combo,
+    }
 
 
 def search(api, term=TERM, **params):
@@ -550,6 +561,56 @@ def test_a_product_matching_on_two_variants_appears_once(api):
     assert len(search(api, term="TWIN-").data["products"]) == 1
 
 
+def test_combos_match_on_name_and_slug(api, matchable):
+    rows = search(api, term="Zeta Bundle").data["combos"]
+    assert [c["slug"] for c in rows] == ["zeta-bundle"]
+    assert [c["slug"] for c in search(api, term="zeta-bun").data["combos"]] == ["zeta-bundle"]
+
+
+def test_a_combo_is_found_by_a_sku_or_product_name_it_contains(api, matchable):
+    """THE QUESTION THIS SECTION EXISTS FOR. `ComboItem.variant` is `on_delete=PROTECT`,
+    so deleting a variant inside a live bundle fails loudly and leaves the admin asking
+    WHICH bundle is holding it. Before this, that meant opening combos one at a time."""
+    assert [c["slug"] for c in search(api, term="ZETA-50").data["combos"]] == ["zeta-bundle"]
+    assert [c["slug"] for c in search(api, term="Zeta Cream").data["combos"]] == ["zeta-bundle"]
+
+
+def test_a_combo_matching_on_two_of_its_items_appears_once(api):
+    """Same failure as the product case above, one model over: two matching items would
+    return the bundle twice, and each duplicate eats one of the ten slots."""
+    product = ProductFactory(name="Twin", slug="twin-p")
+    combo = ComboFactory(name="Twin Box", slug="twin-box", status="active")
+    ComboItemFactory(
+        combo=combo, variant=ProductVariantFactory(product=product, sku="TWIN-50")
+    )
+    ComboItemFactory(
+        combo=combo,
+        variant=ProductVariantFactory(product=product, sku="TWIN-100", is_default=False),
+    )
+
+    assert len(search(api, term="TWIN-").data["combos"]) == 1
+
+
+def test_a_draft_combo_is_searchable_and_says_so(api):
+    """UNLIKE the storefront's search, which hides one. This is the admin: a bundle being
+    built is exactly what somebody is looking for when they type its name, and the row
+    carries its status so nobody mistakes it for something on sale."""
+    ComboFactory(name="Zeta Draft", slug="zeta-draft", status="draft")
+
+    rows = search(api, term="Zeta Draft").data["combos"]
+    assert [(c["slug"], c["status"]) for c in rows] == [("zeta-draft", "draft")]
+
+
+def test_the_combo_row_counts_units_and_names_what_is_inside(api, matchable):
+    row = search(api, term="Zeta Bundle").data["combos"][0]
+    assert row["item_count"] == 2, "units in the box, not rows — the item has quantity 2"
+    assert row["items"] == [{"product": "Zeta Cream", "sku": "ZETA-50"}]
+    assert "pricing" not in row and "discount_percent" not in row, (
+        "a combo has no single price: it resolves per market, so there is no honest "
+        "number to print beside the name"
+    )
+
+
 # --- 6. the audit row --------------------------------------------------------
 
 
@@ -574,7 +635,9 @@ def test_one_search_writes_one_row_carrying_the_raw_term_and_per_type_counts(api
     assert row.client_ip == CLIENT_IP
     assert row.token_jti, "the row must name WHICH login searched, not just who"
     assert row.changes["query"] == {"q": TERM}
-    assert row.changes["counts"] == {"orders": 1, "customers": 1, "products": 1}
+    assert row.changes["counts"] == {
+        "orders": 1, "customers": 1, "products": 1, "combos": 1,
+    }
 
 
 def test_the_counts_name_only_the_sections_the_caller_could_see(roles, matchable):
@@ -639,7 +702,9 @@ def test_search_terms_are_tombstoned_after_ninety_days(api, matchable):
 
     row.refresh_from_db()
     assert row.changes["query"] == {"q": REDACTED}
-    assert row.changes["counts"] == {"orders": 1, "customers": 1, "products": 1}
+    assert row.changes["counts"] == {
+        "orders": 1, "customers": 1, "products": 1, "combos": 1,
+    }
     assert row.actor_email == "owner@toke.test" and row.token_jti
 
 

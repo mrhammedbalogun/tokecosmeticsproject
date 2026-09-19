@@ -1,4 +1,4 @@
-"""Global admin search — one box, three sections, one scope check per section.
+"""Global admin search — one box, four sections, one scope check per section.
 
 WHAT THIS ENDPOINT IS FOR. The owner runs a phone-and-bank-transfer shop: a customer rings
 up quoting an order number, or an address, or half a product name, and somebody has to
@@ -66,7 +66,7 @@ having anyway, and each piece does one job:
 ── AUDIT ───────────────────────────────────────────────────────────────────────────────
 
 This is the highest-yield PII read on the surface: one parameter that reaches customers,
-orders and products at once. It uses Task 4's read-path mixin unchanged — `audit_reads`
+orders and the catalogue at once. It uses Task 4's read-path mixin unchanged — `audit_reads`
 plus the one documented hook, `audit_read_extra` — because search is not a new mechanism,
 it is the read the existing mechanism was built for.
 
@@ -88,12 +88,23 @@ The term's exposure is bounded three ways, and all three are real today:
    match, and lives out its ≤90 days.** That is a bounded, stated imperfection, and it is
    pinned by a test so nobody can quietly believe otherwise.
 
-── NO LINKS, DELIBERATELY ──────────────────────────────────────────────────────────────
+── IDENTIFIERS, NOT URLS ───────────────────────────────────────────────────────────────
 
-Results carry no URLs. Plans 17/18 build the detail pages; until then a link is a 404 with
-extra steps. The fields are inline instead, which is most of the feature anyway: "what is
-the status of TC-100123" and "which customer is this email" are answerable from this
-payload with no navigation at all.
+Results still carry no URLs, and now for a better reason than when they had nowhere to
+point. Every section's detail page exists, and the admin app links every row — but
+`/orders/[number]` is a NEXT ROUTE in a separate deployable, and an API that hard-coded it
+would have to be redeployed to rename a page. So each row carries the IDENTIFIER its page
+is addressed by (`number`, `toke_id`, `slug`) and `admin/src/lib/search.ts::resultHref`
+turns it into a route.
+
+A LINK ADDS NO REACH, which is why this needed no second thought about scopes: a section
+only appears at all when the caller holds the scope its list endpoint requires, and each
+detail page sits behind that same scope. The href can only ever point somewhere the caller
+has already been shown they may go.
+
+The inline fields stay regardless. They were the whole feature while the pages did not
+exist, and they are still the fast path: "what is the status of TC-100123" and "which
+customer is this email" are answerable from this payload with no navigation at all.
 """
 from __future__ import annotations
 
@@ -308,6 +319,62 @@ def _product_match(term: str) -> Q:
     )
 
 
+def _combo_row(combo) -> dict:
+    """NO PRICE, and that is not an omission.
+
+    A combo has no single price to show: it is resolved per market at read time, from
+    whatever its components cost there today (`apps.combos.services.resolve_combo_price`).
+    The one number stored on the row, `discount_percent`, is a working default that a
+    pinned `ComboPrice` overrides and that a gift combo ignores entirely — so printing it
+    beside a bundle name would be a figure that is frequently not what anybody pays. The
+    combo editor answers "what does it cost in NG" properly; this section answers "does it
+    exist, is it live, and what is in it".
+    """
+    items = list(combo.items.all())
+    return {
+        "name": combo.name,
+        "slug": combo.slug,
+        "status": combo.status,
+        "reward_type": combo.reward_type,
+        # UNITS in the box, not rows — 1 cleanser + 2 butters is 3. The same count the
+        # storefront card states, so the two cannot disagree about how big a box is.
+        "item_count": sum(item.quantity for item in items),
+        # A handful, like `_product_row`'s SKUs, and both halves of each on purpose: the
+        # product name is what a person recognises, the SKU is what they typed.
+        "items": [
+            {"product": item.variant.product.name, "sku": item.variant.sku}
+            for item in items[:3]
+        ],
+    }
+
+
+def _combo_match(term: str) -> Q:
+    """The bundle's own words, or a SKU or product name it contains — as a subquery.
+
+    THE CONTENTS HALF IS THE POINT. `ComboItem.variant` is `on_delete=PROTECT`, so
+    deleting a variant that sits inside a live bundle fails loudly and the admin is left
+    asking WHICH bundle is holding it — a question that previously meant opening combos
+    one at a time. Typing the SKU into this box now answers it.
+
+    A subquery rather than an `OR` across the join, for both of `_product_match`'s
+    reasons: the join side can use its index, and a bundle that matches on two of its
+    items comes back once rather than twice. The `distinct()` in `get()` would collapse
+    the duplicates, but each one would first have eaten a slot out of the ten.
+    """
+    from apps.combos.models import ComboItem
+
+    return (
+        Q(name__icontains=term)
+        | Q(slug__icontains=term)
+        | Q(
+            pk__in=ComboItem.objects.filter(
+                Q(variant__sku__icontains=term)
+                | Q(variant__product__name__icontains=term)
+            ).values("combo_id")
+        )
+    )
+
+
 # The sections, in the order they are shown. Orders and customers first because those are
 # the questions that arrive by phone; the catalogue is the one somebody browses to.
 SEARCH_SOURCES: tuple[SearchSource, ...] = (
@@ -346,6 +413,21 @@ SEARCH_SOURCES: tuple[SearchSource, ...] = (
         match=_product_match,
         row=_product_row,
         prefetch=("variants",),
+    ),
+    # Last, and beside products because it is the same question one shelf over. Gated on
+    # `products.manage` by derivation, not by choice: that is what `ComboAdminViewSet`
+    # requires, so Support — who may read orders and customers but not the catalogue —
+    # does not get bundles either, and nobody has to remember to keep the two in step.
+    #
+    # NO `prefetch` of its own. The combo admin queryset already loads `items` with the
+    # variant and product selected (it draws the same fields on its list page), so
+    # `_combo_row` costs nothing extra — and adding a second `prefetch_related("items")`
+    # here would fetch them all over again.
+    SearchSource(
+        key="combos",
+        list_view_path="apps.combos.admin_views.ComboAdminViewSet",
+        match=_combo_match,
+        row=_combo_row,
     ),
 )
 

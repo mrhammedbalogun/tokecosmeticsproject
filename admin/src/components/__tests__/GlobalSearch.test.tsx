@@ -28,16 +28,25 @@ const CUSTOMER = {
 
 const PRODUCT = { name: "Zeta Cream", slug: "zeta-cream", status: "active", skus: ["ZETA-50"] };
 
+const COMBO = {
+  name: "Zeta Bundle",
+  slug: "zeta-bundle",
+  status: "active",
+  reward_type: "discount" as const,
+  item_count: 3,
+  items: [{ product: "Zeta Cream", sku: "ZETA-50" }],
+};
+
 function panel(state: SearchState | null, isPending = false) {
   return render(<SearchPanelBody state={state} isPending={isPending} />);
 }
 
 describe("the results panel", () => {
-  it("answers the two phone questions inline, with no links to nowhere", () => {
-    // THE POINT OF THE WHOLE FRONTEND DESIGN. Plans 17/18 have not built the detail pages,
-    // so a linked result would be a 404. The status, the total and the customer are on the
-    // card instead — which is what somebody on the phone actually needs.
-    const { container } = panel({
+  it("answers the two phone questions inline, on the card itself", () => {
+    // THE POINT OF THE WHOLE FRONTEND DESIGN, and it survived the cards becoming links:
+    // the status, the total and the customer are ON the card, so the questions that arrive
+    // by phone are answered without opening anything.
+    panel({
       query: "TC-100123",
       results: { orders: [ORDER], customers: [CUSTOMER] },
     });
@@ -46,7 +55,56 @@ describe("the results panel", () => {
     expect(screen.getByText(/Pending payment · NGN 18500.00 · buyer@example.test/)).toBeInTheDocument();
     expect(screen.getByText("Ada Buyer")).toBeInTheDocument();
     expect(screen.getByText("TK-7X4KQZ")).toBeInTheDocument();
+  });
+
+  it("links every row to the detail page it is addressed by", () => {
+    panel({
+      query: "zeta",
+      results: {
+        orders: [ORDER],
+        customers: [CUSTOMER],
+        products: [PRODUCT],
+        combos: [COMBO],
+      },
+    });
+
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toEqual([
+      "/orders/TC-100123",
+      "/customers/TK-7X4KQZ",
+      "/products/zeta-cream",
+      "/combos/zeta-bundle",
+    ]);
+  });
+
+  it("renders a row with no identifier unlinked rather than pointing at the list page", () => {
+    // `/orders/` is the order QUEUE. A row with no number would quietly send somebody to a
+    // list of everything — a mis-navigation that looks like a working link.
+    const { container } = panel({ query: "zeta", results: { orders: [{ ...ORDER, number: "" }] } });
+
     expect(container.querySelectorAll("a")).toHaveLength(0);
+    expect(screen.getByText(/Pending payment/)).toBeInTheDocument();
+  });
+
+  it("tells the owner when a result was opened, so the dropdown can close", () => {
+    // The box lives in the shell topbar and survives navigation; without this the panel
+    // would hang open over the page it just opened.
+    const onNavigate = vi.fn();
+    render(
+      <SearchPanelBody
+        state={{ query: "zeta", results: { orders: [ORDER] } }}
+        isPending={false}
+        onNavigate={onNavigate}
+      />,
+    );
+
+    const link = screen.getByRole("link");
+    // jsdom cannot navigate and says so on stderr; the real router preventDefaults here
+    // too, so this is what a click looks like in the app rather than a test-only dodge.
+    link.addEventListener("click", (e) => e.preventDefault());
+    fireEvent.click(link);
+
+    expect(onNavigate).toHaveBeenCalled();
   });
 
   it("renders only the sections the response carried", () => {
@@ -74,6 +132,32 @@ describe("the results panel", () => {
     panel({ query: "zeta", results: { products: [PRODUCT] } });
 
     expect(screen.getByText(/up to 10 per section/i)).toBeInTheDocument();
+  });
+
+  it("draws a combo with its own card, not the product one", () => {
+    // Products used to be the fall-through branch, so a combo row would have been read as
+    // a product and crashed on `skus.length`. What a bundle needs said is different
+    // anyway: how many things are in the box, and which.
+    panel({ query: "zeta", results: { combos: [COMBO] } });
+
+    expect(screen.getByText("Combos")).toBeInTheDocument();
+    expect(screen.getByText("Zeta Bundle")).toBeInTheDocument();
+    expect(screen.getByText(/Active · 3 items · Zeta Cream/)).toBeInTheDocument();
+  });
+
+  it("marks a gift bundle, whose reward is not a discount", () => {
+    panel({ query: "zeta", results: { combos: [{ ...COMBO, reward_type: "gift" as const }] } });
+
+    expect(screen.getByText("Gift")).toBeInTheDocument();
+  });
+
+  it("shows a draft bundle as a draft", () => {
+    // The admin search DOES return drafts, unlike the storefront's — somebody typing a
+    // half-built bundle's name is looking for exactly that. The status is what stops it
+    // being mistaken for something on sale.
+    panel({ query: "zeta", results: { combos: [{ ...COMBO, status: "draft" }] } });
+
+    expect(screen.getByText(/^Draft · /)).toBeInTheDocument();
   });
 
   it("flags a customer inside the deletion grace window", () => {

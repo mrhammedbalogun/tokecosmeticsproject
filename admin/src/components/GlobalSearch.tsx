@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   MIN_QUERY_LENGTH,
   SEARCH_DEBOUNCE_MS,
@@ -8,19 +9,27 @@ import {
   SECTION_ORDER,
   formatMoney,
   humanStatus,
+  resultHref,
   totalResults,
   type SearchResults,
+  type SearchRow,
   type SearchState,
 } from "@/lib/search";
 
 /**
  * The topbar search box.
  *
- * WHAT IT RENDERS ARE CARDS, NOT LINKS. Plans 17/18 build the detail pages; every result
- * here carries its useful fields inline instead, so the two questions the owner actually
- * asks — "what is the status of TC-100123" and "which customer is this email" — are
- * answered without navigating anywhere and without a single 404. See `lib/search.ts` for
- * where hrefs go when those pages exist.
+ * EVERY CARD IS A LINK NOW, and still a card. The detail pages all exist — `/orders/
+ * [number]`, `/customers/[tokeId]`, `/products/[slug]`, `/combos/[slug]` — so a row that
+ * could not be opened was an answer with a dead end on it. The fields stay inline
+ * regardless: the two questions the owner actually asks — "what is the status of
+ * TC-100123" and "which customer is this email" — are still answered without navigating
+ * anywhere, and the link is for the third question. `resultHref` in `lib/search.ts` owns
+ * the routes, and returns null rather than a half-built path for a row it cannot address.
+ *
+ * CLICKING CLOSES THE PANEL. The box lives in the shell topbar and survives navigation, so
+ * without this the dropdown would be left hanging open over the page it just opened,
+ * showing results for a search the person has finished with.
  *
  * SECTIONS ARE NEVER FILTERED HERE. The response contains only the sections the caller's
  * scopes allow; this component renders what it is given. Re-deciding visibility in the
@@ -94,7 +103,7 @@ export function GlobalSearch({
   return (
     <div ref={boxRef} className="relative w-full max-w-md">
       <label htmlFor="global-search" className="sr-only">
-        Search orders, customers and products
+        Search orders, customers, products and combos
       </label>
       <input
         id="global-search"
@@ -119,7 +128,11 @@ export function GlobalSearch({
           id={listboxId}
           className="absolute left-0 right-0 z-20 mt-2 max-h-[70vh] overflow-y-auto rounded-[var(--radius-card)] border border-line bg-surface p-2 shadow-lg"
         >
-          <SearchPanelBody state={visible} isPending={isPending} />
+          <SearchPanelBody
+            state={visible}
+            isPending={isPending}
+            onNavigate={() => setOpen(false)}
+          />
         </div>
       ) : null}
     </div>
@@ -130,9 +143,13 @@ export function GlobalSearch({
 export function SearchPanelBody({
   state,
   isPending,
+  onNavigate,
 }: {
   state: SearchState | null;
   isPending: boolean;
+  /** Called when a result is opened, so the owner can close the dropdown. Optional so the
+   *  panel can be rendered on its own in a test without one. */
+  onNavigate?: () => void;
 }) {
   if (state?.error) {
     return (
@@ -172,11 +189,25 @@ export function SearchPanelBody({
               {SECTION_LABELS[key]}
             </h2>
             <ul>
-              {rows.map((row, i) => (
-                <li key={i} className="rounded px-2 py-2 hover:bg-background">
-                  <ResultCard section={key} row={row} />
-                </li>
-              ))}
+              {(rows as SearchRow[]).map((row, i) => {
+                const href = resultHref(key, row);
+                const card = <ResultCard section={key} row={row} />;
+                return (
+                  <li key={i}>
+                    {href ? (
+                      <Link
+                        href={href}
+                        onClick={onNavigate}
+                        className="block rounded px-2 py-2 hover:bg-background focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-accent"
+                      >
+                        {card}
+                      </Link>
+                    ) : (
+                      <div className="rounded px-2 py-2">{card}</div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         );
@@ -223,13 +254,40 @@ function ResultCard({ section, row }: { section: keyof SearchResults; row: unkno
       </>
     );
   }
-  const product = row as NonNullable<SearchResults["products"]>[number];
+  if (section === "products") {
+    const product = row as NonNullable<SearchResults["products"]>[number];
+    return (
+      <>
+        <p className="text-sm font-medium">{product.name}</p>
+        <p className="text-xs text-muted">
+          {humanStatus(product.status)}
+          {product.skus.length ? ` · ${product.skus.join(", ")}` : ""}
+        </p>
+      </>
+    );
+  }
+  // Products used to be the fall-through and combos must not silently inherit that: the
+  // shapes differ (a combo has no `skus`), so the products branch is now explicit and
+  // this is the only default.
+  const combo = row as NonNullable<SearchResults["combos"]>[number];
   return (
     <>
-      <p className="text-sm font-medium">{product.name}</p>
+      <p className="text-sm font-medium">
+        {combo.name}
+        {combo.reward_type === "gift" ? (
+          <span className="ml-2 rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent">
+            Gift
+          </span>
+        ) : null}
+      </p>
       <p className="text-xs text-muted">
-        {humanStatus(product.status)}
-        {product.skus.length ? ` · ${product.skus.join(", ")}` : ""}
+        {humanStatus(combo.status)} · {combo.item_count}{" "}
+        {combo.item_count === 1 ? "item" : "items"}
+        {/* What is inside, because the question that brings somebody here is usually
+            "which bundle holds this SKU" — the variant delete that just failed. */}
+        {combo.items.length
+          ? ` · ${combo.items.map((i) => i.product).join(", ")}`
+          : ""}
       </p>
     </>
   );
