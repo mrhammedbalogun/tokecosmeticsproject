@@ -40,7 +40,7 @@
  * of every consent banner on the web, and it is safe because the pixels are gated on the
  * same state: nothing loads during that window either.
  */
-import { createContext, useCallback, useContext, useMemo, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   CLICK_ID_COOKIE,
   CLICK_ID_MAX_AGE,
@@ -192,6 +192,39 @@ export function ConsentProvider({
     if (!mounted) return {};
     return clickIdsFromUrl(new URLSearchParams(window.location.search));
   }, [mounted]);
+
+  /**
+   * PERSIST THE CLICK IDS FOR A GRANT NOBODY CLICKED.
+   *
+   * `choose()` below already does this, and for two years' worth of consent-required
+   * visitors that was the whole story. It is not, and the gap was measured on production
+   * 2026-09-18: of 352 orders, click ids were captured on 66 of the 222 that recorded a
+   * grant and on **0 of the 130 that did not** — and in an opt-out market most visitors
+   * never touch the banner at all, so most Nigerian ad clicks were being thrown away.
+   * `gclid` survived on six orders in three weeks.
+   *
+   * The proxy is not the thing to change. `proxy.ts` refuses to write for a visitor with
+   * no stored cookie, and it is RIGHT to: "set the cookie then ask" is the pattern PECR
+   * prohibits, and the proxy deliberately does not know the country list (a copy of it
+   * there would go stale the day Hammed edits it in the admin). The proxy's own comment
+   * already promises this recovery — it just only ever fired on a click.
+   *
+   * So the grant is honoured wherever it comes from. `consent.marketing` is already the
+   * fully-derived answer: DENIED until mounted and measuring, the stored choice if there
+   * is one, otherwise the regional default. A consent-required visitor who has not
+   * answered reads false here and nothing is written, which is the property that matters.
+   *
+   * LAST CLICK WINS, matching `proxy.ts`: no "only if absent" guard, because a returning
+   * visitor's newer ad click is the one that earned the visit. For a visitor the proxy
+   * already served this is a harmless rewrite of the same value.
+   */
+  useEffect(() => {
+    // `mounted`, not `ready` — `ready` is declared further down and would be in its
+    // temporal dead zone here. They are the same value.
+    if (!mounted || !measuring || !consent.marketing) return;
+    if (Object.keys(pendingClickIds).length === 0) return;
+    writeCookie(CLICK_ID_COOKIE, JSON.stringify(pendingClickIds), CLICK_ID_MAX_AGE);
+  }, [mounted, measuring, consent.marketing, pendingClickIds]);
 
   const choose = useCallback(
     (analytics: boolean, marketing: boolean) => {

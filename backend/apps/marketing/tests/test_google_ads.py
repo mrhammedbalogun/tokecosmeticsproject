@@ -111,6 +111,36 @@ def test_the_transaction_id_is_the_order_number():
     assert channel().build(payload())["events"][0]["transactionId"] == "TC-100147"
 
 
+# ── CONSENT IS READ, NOT ASSERTED (2026-09-18) ────────────────────────────────────────
+#
+# This block hardcoded CONSENT_GRANTED for three weeks, under a comment claiming it came
+# from the checkout snapshot. It did not — the payload was never read. It was harmless
+# only while `_skip_reason` refused to let a non-consenting event reach an adapter, which
+# put the guarantee in a different file from the assertion. The consent-default fix moved
+# exactly that gate, so the two now have to agree here.
+
+def test_a_consenting_order_is_declared_as_consenting():
+    body = channel().build(payload(consent_marketing=True))
+    assert body["events"][0]["consent"] == {
+        "adUserData": "CONSENT_GRANTED", "adPersonalization": "CONSENT_GRANTED",
+    }
+
+
+def test_a_non_consenting_order_is_declared_as_denied_rather_than_granted():
+    body = channel().build(payload(consent_marketing=False))
+    assert body["events"][0]["consent"] == {
+        "adUserData": "CONSENT_DENIED", "adPersonalization": "CONSENT_DENIED",
+    }
+
+
+def test_consent_defaults_to_denied_when_nothing_set_it():
+    # An adapter reached by a path that forgot to populate the field must assert the
+    # DENIAL. Costing a match is recoverable; asserting a consent nobody gave is not.
+    assert channel().build(ConversionPayload(
+        event_name=PURCHASE, event_id="TC-1", event_time=1700000000,
+    ))["events"][0]["consent"]["adUserData"] == "CONSENT_DENIED"
+
+
 def test_encoding_is_declared_as_hex_because_our_hashes_are_hex():
     # Declaring BASE64 with hex values is accepted by the API and matches nobody.
     assert channel().build(payload())["encoding"] == "HEX"

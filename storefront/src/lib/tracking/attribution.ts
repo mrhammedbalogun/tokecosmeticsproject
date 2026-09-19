@@ -19,8 +19,37 @@
  * reaches it from this BFF rather than from the browser. Every ad platform's match
  * quality depends on the real one, so it is read from the platform's own forwarding
  * header and passed along explicitly.
+ *
+ * ── AN ABSENT CONSENT COOKIE IS NOT A REFUSAL ───────────────────────────────────────
+ *
+ * This file used to read `consent.m === 1` off the cookie and stop there, which meant a
+ * missing cookie recorded a decline. In a consent-required region that is right. In an
+ * opt-out region it is simply false: `ConsentProvider` grants marketing by default
+ * there and loads the pixels, and it never writes a cookie until the visitor actually
+ * clicks something. Measured on production 2026-09-18: 130 of 352 orders recorded a
+ * refusal, and 108 of those 130 carried `_fbp`/`_ttp`/`_scid` — cookies that only exist
+ * when the marketing scripts ran. They were not refusals.
+ *
+ * So the default is computed here, from the same `defaultConsent` the provider uses and
+ * the same country list the backend serves. ONE rule, two readers.
+ *
+ * ── WHY THE FIX IS NOT "WRITE THE COOKIE ON AN IMPLIED GRANT" ───────────────────────
+ *
+ * That is the obvious repair and it is a trap. `decodeConsent` reports ANY stored cookie
+ * as `status: "explicit"`, and `ConsentProvider` hides the banner on
+ * `storedConsent !== null` — so writing a cookie nobody chose would make the banner
+ * vanish unclicked. The visitor would lose the prompt AND we would record a choice they
+ * never made: worse on both counts. The implied state therefore stays uncookied, and is
+ * re-derived wherever it is needed.
  */
-import { CLICK_ID_COOKIE, CONSENT_COOKIE } from "@/lib/consent";
+import {
+  CLICK_ID_COOKIE,
+  CONSENT_COOKIE,
+  DENIED,
+  decodeConsent,
+  defaultConsent,
+} from "@/lib/consent";
+import type { MarketingConfig } from "@/lib/marketing";
 
 /** The vendors' own cookies, mapped to the short keys the backend stores. */
 const PIXEL_COOKIES: Record<string, string> = {
@@ -31,7 +60,15 @@ const PIXEL_COOKIES: Record<string, string> = {
 };
 
 export interface MarketingBlob {
-  consent: { marketing: boolean; analytics: boolean; version: number };
+  consent: {
+    marketing: boolean;
+    analytics: boolean;
+    version: number;
+    /** "explicit" — the visitor chose. "implied" — no choice yet, in a region whose
+     * regime is opt-out. The backend stores it verbatim; see the field comment on
+     * `marketing.OrderAttribution.consent_status` for why the distinction is kept. */
+    status: "explicit" | "implied";
+  };
   click_ids: Record<string, string | number>;
   pixel_cookies: Record<string, string>;
   client_ip: string;
@@ -67,12 +104,41 @@ export function buildMarketingBlob({
   jar,
   headers,
   siteUrl,
+  country,
+  config,
 }: {
   jar: JarLike;
   headers: Headers;
   siteUrl: string;
+  /** The visitor's market, from the same `country` cookie `ConsentProvider` reads. */
+  country: string;
+  /** The live consent policy. `consent_required_countries` is a backend field precisely
+   * so that adding Nigeria under the NDPA is an admin edit — reading it here rather than
+   * hardcoding a list is what keeps that promise true on this path too. */
+  config: MarketingConfig;
 }): MarketingBlob {
-  const consent = parseJson(jar.get(CONSENT_COOKIE)?.value);
+  // ── IS THERE ANYTHING TO CONSENT TO? ─────────────────────────────────────────────
+  //
+  // The SAME gate `ConsentProvider` applies before it will report anything but DENIED,
+  // and it has to be here too or the two readers disagree in exactly the case that
+  // matters. `NO_TRACKING` — what `getMarketingConfig` returns when the API is
+  // unreachable — carries an EMPTY `consent_required_countries`, and an empty list makes
+  // `consentRequired` false for every country on earth. Deriving a default from it would
+  // hand every visitor an implied grant at the precise moment we know least about them.
+  // Fail closed, as the config's own docstring says it intends to.
+  const measuring = config.tracking_enabled && config.channels.length > 0;
+
+  // `decodeConsent`, not a bare JSON read: it also returns null for a choice given
+  // against an OLDER consent version, which is a visitor the provider is currently
+  // re-asking. Treating that stale answer as an explicit choice — which the old
+  // `consent.m === 1` did — records a consent to a channel list that has since changed.
+  const stored = measuring
+    ? decodeConsent(jar.get(CONSENT_COOKIE)?.value, config.consent_version)
+    : null;
+  const consent = !measuring
+    ? DENIED
+    : (stored
+       ?? defaultConsent(country, config.consent_required_countries, config.consent_version));
   const clickIds = parseJson(jar.get(CLICK_ID_COOKIE)?.value);
 
   const pixelCookies: Record<string, string> = {};
@@ -88,9 +154,10 @@ export function buildMarketingBlob({
 
   return {
     consent: {
-      marketing: consent.m === 1,
-      analytics: consent.a === 1,
-      version: typeof consent.v === "number" ? consent.v : 0,
+      marketing: consent.marketing,
+      analytics: consent.analytics,
+      version: consent.version,
+      status: consent.status,
     },
     click_ids: clickIds as Record<string, string | number>,
     pixel_cookies: pixelCookies,

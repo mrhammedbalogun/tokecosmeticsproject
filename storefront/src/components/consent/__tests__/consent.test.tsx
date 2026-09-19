@@ -157,6 +157,46 @@ describe("a fresh ad click", () => {
     await waitFor(() => expect(readCookie("tc_consent")).not.toBe(""));
     expect(readCookie("tc_clk")).toBe("");
   });
+
+  // ── THE 2026-09-18 GAP ────────────────────────────────────────────────────────────
+  //
+  // Both cases above end in a CLICK. In an opt-out market most visitors never click
+  // anything, and `proxy.ts` will not store for a visitor with no consent cookie — so
+  // the ad click was simply lost. Measured on production: click ids on 0 of the 130
+  // orders that recorded no grant, and `gclid` on six orders in three weeks.
+  it("is stored for an opt-out visitor who never touches the banner", async () => {
+    setCountry("NG");
+    window.history.replaceState({}, "", "/?gclid=GCLICK");
+    renderBanner();
+
+    await waitFor(() => expect(readCookie("tc_clk")).not.toBe(""));
+    expect(JSON.parse(readCookie("tc_clk")).gclid).toBe("GCLICK");
+    // The banner is still up: an implied grant is the ABSENCE of a choice, and storing
+    // the click id must not be mistaken for having made one.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(readCookie("tc_consent")).toBe("");
+  });
+
+  it("is NOT stored for an unanswered visitor where consent must be asked first", async () => {
+    // The PECR property. GB is on the consent-required list, so the ids stay in memory
+    // until the visitor actually grants — "set the cookie then ask" is the pattern the
+    // proxy's own comment refuses, and this path must not reintroduce it.
+    setCountry("GB");
+    window.history.replaceState({}, "", "/?gclid=GCLICK");
+    renderBanner();
+
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    expect(readCookie("tc_clk")).toBe("");
+  });
+
+  it("is NOT stored when the shop is measuring nothing", async () => {
+    setCountry("NG");
+    window.history.replaceState({}, "", "/?gclid=GCLICK");
+    renderBanner({ ...CONFIG, channels: [] });
+
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("--"));
+    expect(readCookie("tc_clk")).toBe("");
+  });
 });
 
 describe("a shop that is measuring nothing", () => {

@@ -216,6 +216,30 @@ class OrderAttribution(models.Model):
     consent_analytics = models.BooleanField(default=False)
     consent_version = models.PositiveIntegerField(default=0)
 
+    # ── HOW THAT CONSENT WAS ARRIVED AT ─────────────────────────────────────────────
+    #
+    # `consent_marketing` alone cannot tell a granted choice from a granted DEFAULT, and
+    # the two are not the same fact. Outside the consent-required list the shop runs
+    # opt-out by design (Plan-44 section 4: "everywhere else: banner shown, tracking
+    # on"), so a Nigerian visitor who never touches the banner has genuinely granted
+    # marketing — the lawful basis is the regional regime, not a click.
+    #
+    # Recording only the boolean cost us the ability to say WHY afterwards, which is the
+    # one question a regulator asks. It also cost us the events themselves: the
+    # storefront could not write a cookie for an implied grant without making the banner
+    # vanish unclicked (`decodeConsent` reports any stored cookie as "explicit"), so the
+    # blob reported False and `_skip_reason` dropped ~37% of orders as refusals that
+    # never happened.
+    #
+    #   explicit  the visitor chose, and the cookie records the choice.
+    #   implied   no choice yet, in a region whose regime is opt-out.
+    #   ""        unknown — every row written before this column existed.
+    #
+    # The empty default is deliberate: backfilling the 352 existing rows to "implied"
+    # would assert a lawful basis for orders nobody recorded one for.
+    CONSENT_STATUSES = [("explicit", "Explicit choice"), ("implied", "Implied by region")]
+    consent_status = models.CharField(max_length=16, choices=CONSENT_STATUSES, blank=True)
+
     # {"fbclid": "...", "ttclid": "...", "sccid": "...", "gclid": "..."} — the ad click
     # that brought them, captured by the storefront proxy from the landing URL.
     click_ids = models.JSONField(default=dict, blank=True)

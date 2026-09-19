@@ -112,6 +112,9 @@ def purchase_payload(order, attribution=None) -> ConversionPayload:
         contents=_contents(order),
         user=_user_signals(order, attribution),
         ga_client_id=(attribution.pixel_cookies.get("ga", "") if attribution else ""),
+        # Read here, not in the adapter: see the field's comment in `payloads.py`. A
+        # missing snapshot is a denial, which is also what `_skip_reason` decides.
+        consent_marketing=bool(attribution.consent_marketing if attribution else False),
     )
 
 

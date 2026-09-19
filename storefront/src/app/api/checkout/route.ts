@@ -12,6 +12,7 @@ import {
 import { COUNTRY_COOKIE, DEFAULT_COUNTRY } from "@/lib/country";
 import { REFERRAL_COOKIE, normalizeReferralCode } from "@/lib/referral";
 import { buildMarketingBlob } from "@/lib/tracking/attribution";
+import { getMarketingConfig } from "@/lib/marketing";
 
 function json(data: unknown, status = 200) {
   return new Response(JSON.stringify(data), {
@@ -72,10 +73,21 @@ export async function POST(req: Request) {
   // consent record is the part that has to be defensible; a client-supplied
   // `marketing` key would be the browser asserting its own lawful basis. The backend
   // treats it as untrusted regardless — see apps/marketing/capture.py.
+  //
+  // The config is read because an ABSENT consent cookie is not a refusal: outside the
+  // consent-required list the shop runs opt-out, so the default has to be derived from
+  // the same country list `ConsentProvider` uses rather than assumed. It costs nothing —
+  // `getMarketingConfig` is the hour-long, tag-flushed Data Cache fetch the root layout
+  // already performs on every render, so this is a cache hit. On an unreachable API it
+  // returns NO_TRACKING, which `buildMarketingBlob` treats as "nothing to consent to"
+  // and records as a refusal; see the gate there for why that is not the automatic
+  // reading of an empty country list.
   const marketing = buildMarketingBlob({
     jar,
     headers: req.headers,
     siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://tokecosmetics.com",
+    country,
+    config: await getMarketingConfig(),
   });
   try {
     const out = await fetchWithAuth<Record<string, unknown>>("/checkout/", {

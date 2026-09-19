@@ -101,3 +101,16 @@ class ConversionPayload:
     # for a webhook-driven purchase, in which case the adapter synthesises one — see
     # `channels/ga4.py`, which explains what that costs.
     ga_client_id: str = ""
+
+    # ── THE CONSENT THIS EVENT IS BEING SENT UNDER ──────────────────────────────────
+    #
+    # Only Google asks us to state it in the body (`consent.adUserData` /
+    # `adPersonalization`); the other three infer it from the fact that we sent at all.
+    # It rides on the payload rather than being read from the attribution row inside the
+    # adapter, because an adapter that reaches back into the ORM is an adapter that
+    # cannot be tested against a fixture.
+    #
+    # Defaults to False — the same direction `_skip_reason` fails in. An adapter reached
+    # by a path that forgot to set this asserts a DENIAL, which costs a match; the
+    # opposite default would assert a consent nobody gave.
+    consent_marketing: bool = False

@@ -89,3 +89,38 @@ def test_a_second_snapshot_for_the_same_order_does_not_break_the_transaction(ord
         record_attribution(order, {"consent": {"marketing": True}})
         # The proof: the transaction is still usable afterwards.
         assert OrderAttribution.objects.filter(order=order).count() == 1
+
+
+# ── THE CONSENT STATUS (2026-09-18) ────────────────────────────────────────────────────
+#
+# `consent_marketing` alone could not tell a granted CHOICE from a granted DEFAULT, and
+# the storefront had no honest way to report the second — so it reported a refusal, and
+# ~37% of production orders were dropped by `_skip_reason` as refusals that never
+# happened. The status is the audit half of that fix: it says WHY the grant is a grant.
+
+@pytest.mark.django_db
+def test_the_consent_status_is_stored_when_the_storefront_states_one(order):
+    record_attribution(order, {
+        "consent": {"marketing": True, "analytics": True, "version": 2, "status": "implied"},
+    })
+    row = OrderAttribution.objects.get(order=order)
+    assert row.consent_marketing is True
+    assert row.consent_status == "implied"
+
+
+@pytest.mark.django_db
+def test_an_older_storefront_build_records_no_status_rather_than_a_guessed_one(order):
+    # The storefront deploys separately from this API, so a blob with no `status` is the
+    # NORMAL state for the window between the two. "" reads as unknown, which is the
+    # honest answer; defaulting it to either value would invent a lawful basis.
+    record_attribution(order, {"consent": {"marketing": True, "version": 2}})
+    row = OrderAttribution.objects.get(order=order)
+    assert row.consent_marketing is True
+    assert row.consent_status == ""
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("claimed", ["EXPLICIT", "forced", "", None, 1, {"a": 1}])
+def test_a_status_outside_the_allowlist_is_dropped_not_coerced(order, claimed):
+    record_attribution(order, {"consent": {"marketing": True, "status": claimed}})
+    assert OrderAttribution.objects.get(order=order).consent_status == ""

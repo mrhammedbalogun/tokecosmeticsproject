@@ -203,3 +203,31 @@ def test_the_address_snapshot_is_the_source_of_the_match_fields(order):
     assert (user.first_name, user.city, user.state, user.country) == (
         "Amina", "Lekki", "Lagos", "NG"
     )
+
+
+# ── THE CONSENT THE PAYLOAD CARRIES (2026-09-18) ──────────────────────────────────────
+#
+# Google states consent in the request body, and used to state it from a constant. The
+# value has to travel with the payload so the adapter can be tested against a fixture
+# rather than reaching back into the ORM — and so that the assertion made to Google is
+# derived from the same row `_skip_reason` gated on.
+
+@pytest.mark.django_db
+def test_the_payload_carries_the_consent_from_the_snapshot():
+    order = make_order(user=None, email="a@x.com")
+    attribution(order, marketing=True)
+    assert purchase_payload(order, order.marketing_attribution).consent_marketing is True
+
+
+@pytest.mark.django_db
+def test_a_non_consenting_snapshot_reaches_the_payload_as_a_denial():
+    order = make_order(user=None, email="a@x.com")
+    attribution(order, marketing=False)
+    assert purchase_payload(order, order.marketing_attribution).consent_marketing is False
+
+
+@pytest.mark.django_db
+def test_no_snapshot_at_all_reads_as_a_denial():
+    # The same direction `_skip_reason` fails in: an order with no snapshot is one we
+    # recorded no consent for, and the payload must not claim otherwise.
+    assert purchase_payload(make_order(user=None, email="a@x.com"), None).consent_marketing is False

@@ -4,6 +4,19 @@ vi.mock("next/headers", () => ({ cookies: async () => ({
   get: (n: string) => (store.has(n) ? { name: n, value: store.get(n) } : undefined),
   set: (n: string, v: string) => store.set(n, v), delete: (n: string) => store.delete(n),
 }) }));
+// The route reads the consent policy to derive an implied grant (see attribution.ts).
+// Stubbed rather than served through `global.fetch`, because these tests assert on
+// `f.mock.calls[0]` and a real config fetch would sit in front of the checkout call.
+// `consent_required_countries: []` with the jar's country=NG is production's own shape:
+// an opt-out market, so the blob below carries an IMPLIED grant.
+vi.mock("@/lib/marketing", () => ({
+  getMarketingConfig: async () => ({
+    tracking_enabled: true,
+    consent_version: 1,
+    consent_required_countries: ["GB"],
+    channels: [{ code: "meta", pixel_id: "123", secondary_id: "" }],
+  }),
+}));
 import { POST } from "@/app/api/checkout/route";
 const orig = global.fetch;
 beforeEach(() => { process.env.API_URL = "http://backend:8000"; store.set("access", "TOK"); store.set("country", "NG"); });
@@ -24,6 +37,42 @@ describe("place-order BFF", () => {
     expect(new Headers((init as RequestInit).headers).get("Idempotency-Key")).toBeTruthy();
   });
   // --- guest checkout (Plan-38) ---------------------------------------------------
+
+  // ── THE CONSENT THE ORDER IS STAMPED WITH (2026-09-18) ────────────────────────────
+  //
+  // The blob is assembled here and nowhere else, and it decides whether the sale is ever
+  // reported to an ad platform. Before this, an absent `tc_consent` cookie was read as a
+  // refusal — which in an opt-out market is simply wrong, and silently dropped ~37% of
+  // production conversions.
+  it("stamps an opt-out visitor's implied grant rather than a refusal", async () => {
+    const f = upstream(201, { order_number: "TC-2", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    await POST(req({ cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer" }));
+    const [, init] = f.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string).marketing.consent).toEqual({
+      marketing: true, analytics: true, version: 1, status: "implied",
+    });
+  });
+
+  it("stamps an explicit refusal as explicit", async () => {
+    store.set("tc_consent", JSON.stringify({ v: 1, a: 0, m: 0 }));
+    const f = upstream(201, { order_number: "TC-3", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    await POST(req({ cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer" }));
+    store.delete("tc_consent");
+    const [, init] = f.mock.calls[0];
+    expect(JSON.parse((init as RequestInit).body as string).marketing.consent).toEqual({
+      marketing: false, analytics: false, version: 1, status: "explicit",
+    });
+  });
+
+  it("stamps a refusal for a market where consent must be asked for first", async () => {
+    store.set("country", "GB");
+    const f = upstream(201, { order_number: "TC-4", payment: { gateway: "bank_transfer", action: "bank_details", data: {} } });
+    await POST(req({ cart_id: "c1", address_id: 1, delivery_option_id: 2, payment_gateway: "bank_transfer" }));
+    const [, init] = f.mock.calls[0];
+    const consent = JSON.parse((init as RequestInit).body as string).marketing.consent;
+    expect(consent.marketing).toBe(false);
+    expect(consent.status).toBe("implied");
+  });
 
   it("no session + authed-shaped body (address_id, no guest contact) is a 400, no upstream call", async () => {
     store.delete("access"); store.delete("refresh");

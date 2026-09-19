@@ -268,12 +268,20 @@ class GoogleAdsChannel(ConversionChannel):
         if identifiers:
             event["userData"] = {"userIdentifiers": identifiers}
 
-        # Consent travels with the event, from the snapshot taken at checkout — not from
-        # a live cookie read, which a webhook has no access to anyway.
-        event["consent"] = {
-            "adUserData": "CONSENT_GRANTED",
-            "adPersonalization": "CONSENT_GRANTED",
-        }
+        # ── CONSENT, ACTUALLY READ FROM THE SNAPSHOT ─────────────────────────────────
+        #
+        # This block used to hardcode CONSENT_GRANTED under a comment claiming it came
+        # from the snapshot. It did not — `payload` was never read. That was harmless
+        # only for as long as `_skip_reason` refused to let a non-consenting event reach
+        # an adapter at all, which made the guarantee live in a different file from the
+        # assertion. The moment either the consent default or the skip gate moved, this
+        # became a false statement to Google about a real customer.
+        #
+        # An assertion this file makes must be one this file can justify. Both fields
+        # take the same value: our consent model has one marketing category, and
+        # splitting it here would invent a distinction the visitor was never offered.
+        granted = "CONSENT_GRANTED" if payload.consent_marketing else "CONSENT_DENIED"
+        event["consent"] = {"adUserData": granted, "adPersonalization": granted}
 
         body: dict = {
             "destinations": [{

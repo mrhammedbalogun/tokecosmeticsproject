@@ -91,6 +91,29 @@ def _clean_ip(raw) -> str | None:
         return None
 
 
+# The two shapes `consent.status` may legitimately take. Anything else — a missing key
+# from an older storefront build, a forged value — becomes "" rather than being coerced
+# to one of these: "unknown" is the honest reading of both, and neither is a value worth
+# failing a checkout over.
+CONSENT_STATUSES = frozenset({"explicit", "implied"})
+
+
+def _clean_status(raw) -> str:
+    """The consent status the storefront claims, or "" when it claims nothing.
+
+    Allowlisted for the same reason the click ids are: this is attacker-supplied text
+    heading for a database column. And note what a forged value buys — NOTHING. The
+    status is an audit note; `_skip_reason` gates on `consent_marketing`, which a caller
+    could already set either way. Claiming "explicit" for an implied grant misrepresents
+    the forger's own record and nobody else's.
+    """
+    # `isinstance` FIRST. `raw in frozenset` raises TypeError on an unhashable value,
+    # and a forged `"status": {}` would then take the whole snapshot down through
+    # `record_attribution`'s catch-all — losing the click ids and the pixel cookies to
+    # protect a field that is only ever an audit note. Caught by the parametrised test.
+    return raw if isinstance(raw, str) and raw in CONSENT_STATUSES else ""
+
+
 def _clean_version(raw) -> int:
     """The consent version the visitor answered. Non-numeric or negative becomes 0,
     which reads as "no recorded version" — the honest answer, and the same one an order
@@ -140,6 +163,7 @@ def record_attribution(order, blob) -> None:
                 consent_marketing=bool(consent.get("marketing")),
                 consent_analytics=bool(consent.get("analytics")),
                 consent_version=_clean_version(consent.get("version")),
+                consent_status=_clean_status(consent.get("status")),
                 click_ids=_clean_ids(data.get("click_ids"), CLICK_ID_KEYS),
                 pixel_cookies=_clean_ids(data.get("pixel_cookies"), PIXEL_COOKIE_KEYS),
                 client_ip=_clean_ip(data.get("client_ip")),
