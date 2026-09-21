@@ -54,15 +54,24 @@ export default async function CmsPage({ params }: { params: Promise<{ slug: stri
   if (!page) notFound();
 
   return (
-    <article className="mx-auto max-w-3xl px-4 py-16">
-      <h1 className="font-display text-4xl">{page.title}</h1>
+    <article className="mx-auto max-w-3xl px-4 py-12 sm:py-16">
+      <header className="border-b border-line pb-8">
+        <h1 className="font-display text-3xl leading-tight sm:text-4xl">{page.title}</h1>
+        {page.seo_description && (
+          // The SEO description doubles as the standfirst. An editor writes one sentence
+          // saying what the page is for; showing it saves them writing it twice, and a
+          // long policy reads far better with a line of orientation above it.
+          <p className="mt-3 text-sm leading-relaxed text-muted">{page.seo_description}</p>
+        )}
+      </header>
       {/* SANITISED SERVER-SIDE ON WRITE (`apps/cms/sanitize.py`), never here: the database
           holds only allow-listed HTML, so every reader is safe without repeating the rule.
-          This is the one place a Content editor's markup reaches a customer's browser. */}
-      <div
-        className="prose prose-sm mt-8 max-w-none leading-relaxed text-muted"
-        dangerouslySetInnerHTML={{ __html: page.body }}
-      />
+          This is the one place a Content editor's markup reaches a customer's browser.
+
+          `cms-prose` (globals.css), NOT Tailwind's `prose`: the typography plugin is not
+          installed in this project, so `prose prose-sm` here matched nothing at all and
+          every policy page rendered at browser defaults. */}
+      <div className="cms-prose mt-10" dangerouslySetInnerHTML={{ __html: page.body }} />
     </article>
   );
 }
