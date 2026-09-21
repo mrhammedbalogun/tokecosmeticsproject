@@ -74,6 +74,18 @@ const GMAPS_FONT = ["https://fonts.gstatic.com"];
 //                              three depending on the visitor's region and cookie state
 //   td.doubleclick.net         the conversion-linker iframe Google Ads renders
 //
+// TWO OF THOSE THREE ALSO SERVE SCRIPTS, which is not obvious and was missed until
+// 2026-09-20. gtag.js is loaded from googletagmanager.com, but once it knows an `AW-` id
+// it fetches MORE JavaScript: `www.googleadservices.com/pagead/conversion_async.js` (the
+// conversion + remarketing tag) and remarketing code from `googleads.g.doubleclick.net`.
+// Those are `script-src`, not `img-src`/`connect-src`, and they are requested ONLY once
+// an `AW-` id exists — so the gap was invisible for as long as Google Ads had no browser
+// tag configured, and would have appeared on the day one was.
+//
+// `www.google.com` is deliberately NOT in the script list: its Google Ads role is
+// `/ads/ga-audiences`, a beacon, not a script. A CSP is only worth having if each origin
+// is listed for what it actually does.
+//
 // Nothing here is loaded unless the visitor has consented and the channel is switched on
 // in the admin — but a CSP is a static document and cannot express that, so every origin
 // a granted visitor could reach must be listed.
@@ -94,9 +106,15 @@ const GOOGLE_ADS_CONVERSION = [
   "https://www.googleadservices.com",
   "https://www.google.com",
 ];
+/** The subset of the above that gtag.js loads JavaScript from — see the note above. */
+const GOOGLE_ADS_SCRIPT = [
+  "https://www.googleadservices.com",
+  "https://googleads.g.doubleclick.net",
+];
 
 const PIXEL_SCRIPT = [
   ...META_PIXEL_SCRIPT, ...TIKTOK_PIXEL, ...SNAP_PIXEL_SCRIPT, ...GOOGLE_TAG_SCRIPT,
+  ...GOOGLE_ADS_SCRIPT,
 ];
 const PIXEL_CONNECT = [
   ...META_PIXEL_ENDPOINT, ...TIKTOK_PIXEL, ...SNAP_PIXEL_ENDPOINT,

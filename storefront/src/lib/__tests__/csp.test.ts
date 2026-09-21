@@ -32,6 +32,38 @@ describe("the storefront CSP", () => {
     expect(directive(policy, "frame-src")).toContain("https://challenges.cloudflare.com");
   });
 
+  // ── THE GOOGLE ADS SCRIPT HOSTS (2026-09-20) ──────────────────────────────────────
+  //
+  // gtag.js comes from googletagmanager.com, but once it holds an `AW-` id it fetches
+  // MORE JavaScript — conversion_async.js from googleadservices.com, and remarketing
+  // code from googleads.g.doubleclick.net. Both were listed only under img-src and
+  // connect-src, which is the wrong directive for a <script>. Invisible while Google
+  // Ads had no browser tag; it would have surfaced the day one was configured, and
+  // then only on the flip to an ENFORCED policy — a silent, delayed failure.
+  it("allows the scripts gtag pulls in once it has an AW- conversion id", () => {
+    const policy = buildCsp();
+    for (const origin of [
+      "https://www.googletagmanager.com",
+      "https://www.googleadservices.com",
+      "https://googleads.g.doubleclick.net",
+    ]) {
+      expect(directive(policy, "script-src")).toContain(origin);
+    }
+  });
+
+  it("does not widen script-src to Google Ads origins that only serve beacons", () => {
+    // www.google.com's Google Ads role is /ads/ga-audiences, an image beacon. It belongs
+    // in img-src and connect-src, and listing it for scripts would widen the policy to
+    // one of the largest origins on the web for no reason.
+    const policy = buildCsp();
+    expect(directive(policy, "img-src")).toContain("https://www.google.com");
+    expect(directive(policy, "script-src")).not.toContain("https://www.google.com");
+  });
+
+  it("keeps the conversion-linker iframe in frame-src", () => {
+    expect(directive(buildCsp(), "frame-src")).toContain("https://td.doubleclick.net");
+  });
+
   it("does NOT carry origins for gateways that hand off by redirect", () => {
     // Flutterwave uses window.location.assign to a hosted page — a top-level navigation
     // needs no CSP allowance, and listing it would widen the policy for nothing.
