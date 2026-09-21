@@ -270,3 +270,90 @@ export function storeListJsonLd(
     })),
   };
 }
+
+/**
+ * `JobPosting` structured data — what puts a role into Google Jobs.
+ *
+ * ── THE FIELDS GOOGLE ACTUALLY REQUIRES ─────────────────────────────────────────────
+ *
+ * `title`, `description`, `datePosted`, `hiringOrganization` and `jobLocation`. Miss one
+ * and the posting is simply ineligible, silently — there is no error anywhere, it just
+ * never appears. `validThrough` is optional but load-bearing in the other direction:
+ * without it Google keeps showing a role long after it is filled, and the complaint
+ * arrives as "why did nobody reply to my application".
+ *
+ * ── DESCRIPTION IS HTML, ON PURPOSE ─────────────────────────────────────────────────
+ *
+ * Google's own guidance asks for the full description INCLUDING its markup, so the
+ * formatting survives into the job card. It is safe to embed: the backend sanitised it
+ * on write through nh3 (`apps/cms/sanitize.py`), and `JsonLd` escapes `<` so nothing in
+ * it can close the script tag.
+ *
+ * ── ONE POSTING, MANY `jobLocation` ENTRIES ─────────────────────────────────────────
+ *
+ * This is exactly the shape schema.org expects for a role advertised in several cities,
+ * and it is why collapsing the eleven Sales Representative adverts into one posting
+ * costs nothing in search: Google reads eleven locations off one page.
+ */
+export function jobPostingJsonLd(
+  job: {
+    title: string;
+    description: string;
+    requirements: string;
+    employment_type: string;
+    workplace_type: string;
+    country_code: string;
+    country_name: string;
+    locations: { label: string }[];
+    published_at: string | null;
+    closes_at: string | null;
+  },
+  path: string,
+): Record<string, any> {
+  // schema.org's vocabulary, not ours. An unmapped value is omitted rather than passed
+  // through: a bad enum invalidates the whole posting, while a missing optional does not.
+  const employmentType = {
+    full_time: "FULL_TIME",
+    part_time: "PART_TIME",
+    contract: "CONTRACTOR",
+    internship: "INTERN",
+    temporary: "TEMPORARY",
+    volunteer: "VOLUNTEER",
+  }[job.employment_type];
+
+  const locations = job.locations.length
+    ? job.locations.map((l) => l.label)
+    : [job.country_name];
+
+  return {
+    "@context": "https://schema.org",
+    "@type": "JobPosting",
+    url: absoluteUrl(path),
+    title: job.title,
+    description: [job.description, job.requirements].filter(Boolean).join(""),
+    ...(job.published_at ? { datePosted: job.published_at } : {}),
+    ...(job.closes_at ? { validThrough: job.closes_at } : {}),
+    ...(employmentType ? { employmentType } : {}),
+    // TELECOMMUTE is the only value Google reads here, and only for a fully remote role.
+    ...(job.workplace_type === "remote"
+      ? { jobLocationType: "TELECOMMUTE" }
+      : {}),
+    hiringOrganization: {
+      "@type": "Organization",
+      name: SITE_NAME,
+      sameAs: siteUrl(),
+      logo: absoluteUrl("/email/logo.png"),
+    },
+    jobLocation: locations.map((label) => ({
+      "@type": "Place",
+      address: {
+        "@type": "PostalAddress",
+        // The labels are free text and mix levels ("Alimosho, Lagos", "Delta State",
+        // "Benin") — see `apps/careers/models.py`. `addressLocality` is the honest field
+        // for all of them; pretending to know which are regions would be worse data.
+        addressLocality: label,
+        addressCountry: job.country_code || "NG",
+      },
+    })),
+  };
+}

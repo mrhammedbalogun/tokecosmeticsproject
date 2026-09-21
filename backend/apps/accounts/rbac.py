@@ -164,6 +164,36 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     # to 0–100 — and every write is audited with the old and new value, which is what makes
     # the wider grant safe.
     "decisions.manage": frozenset({"Owner", "Manager"}),
+    # CAREERS SPLITS IN TWO (Plan-45), and the split is the same argument the
+    # cms/marketing paragraph above makes. A job advert is CONTENT: a title, a
+    # description, "Good Pay" — wrong, embarrassing or legally awkward if mishandled,
+    # but it moves no money and names no private individual. An APPLICATION is the
+    # densest personal data in this system: a named stranger's email, phone, home
+    # address and employment history, plus a cover letter that often explains why they
+    # want to leave their current employer.
+    #
+    # One combined scope would mean neither could ever be granted alone — a copywriter
+    # asked to fix a typo in a job advert would arrive holding every candidate's CV, and
+    # whoever does the hiring could not be given the applications without also being
+    # given the public careers page to rewrite.
+    #
+    # Both sit at {Owner, Manager} TODAY, by Hammed's call (2026-09-21), so the split
+    # changes nothing yet. That is the point: `careers.manage` can be widened to Content
+    # in one line, later, without that decision touching applicant PII.
+    "careers.manage": frozenset({"Owner", "Manager"}),
+    # THE PII GRANT. Its own name, and the name matters twice over: it is what
+    # `apps/core/tests/test_audit_guard.py::PII_SCOPE_PREFIXES` matches on to FORCE
+    # read-auditing onto every endpoint that carries it. A scope called `careers.manage`
+    # would have sailed past that rule, and the CV download — the single most sensitive
+    # read on the admin surface — would have left no trace of who looked.
+    "careers.applications.manage": frozenset({"Owner", "Manager"}),
+    # DELETING an application is a step above managing it, exactly as `products.delete`
+    # is above `products.manage`: it destroys the row AND permanently removes the CV from
+    # the bucket, which is what a "delete my data" request resolves to and is therefore
+    # not undoable by anybody. A Manager screening candidates has no reason to hold it,
+    # and the failure mode of granting it too widely is a hiring record that cannot be
+    # produced when somebody asks why a decision was made.
+    "careers.applications.delete": frozenset({"Owner"}),
 }
 
 SCOPES: frozenset[str] = frozenset(SCOPE_GRANTS)

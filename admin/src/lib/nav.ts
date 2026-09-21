@@ -53,6 +53,17 @@ export const NAV_ITEMS: NavItem[] = [
   // ships anything — an active row here is a shop a customer walks into, and filing it
   // beside the carrier screens is how somebody eventually confuses the two.
   { label: "Find a Store", href: "/find-stores", scopes: ["products.manage"] },
+  // The careers board and the people who applied to it (Plan-45). ANY-OF two scopes,
+  // like the Settings and Deliveries doors: `careers.manage` opens the roles screen and
+  // `careers.applications.manage` the applicants, and they are separate precisely so one
+  // can be granted without the other later — a copywriter who may fix a job advert must
+  // not thereby hold every candidate's CV. The page itself shows only the tabs the
+  // visitor's scopes cover.
+  {
+    label: "Careers",
+    href: "/careers",
+    scopes: ["careers.manage", "careers.applications.manage"],
+  },
   { label: "Customers", href: "/customers", scopes: ["customers.view"] },
   { label: "Reviews", href: "/reviews", scopes: ["reviews.manage"] },
   { label: "Coupons", href: "/coupons", scopes: ["marketing.manage"] },

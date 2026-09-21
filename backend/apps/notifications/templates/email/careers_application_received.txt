@@ -1,0 +1,10 @@
+NEW APPLICATION — {{ job_title }}{% if location_label %} · {{ location_label }}{% endif %}
+
+{{ candidate_name }} has applied{% if is_resubmission %} (this replaces or follows an earlier application from the same address){% endif %}.
+{% if has_cover_letter %}A cover letter is attached to the application.{% endif %}
+
+Their contact details and CV are on the application itself — this alert deliberately
+carries neither:
+
+{{ application_url }}
+{% include "email/_footer_internal.txt" with footer_note="This address is subscribed to the New job application alert on the admin Email Notifications screen." %}

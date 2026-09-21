@@ -44,16 +44,25 @@ const SHOP = join(APP, "(shop)");
 const STATIC_SHOP = join(APP, "(static-shop)");
 
 /**
- * The nine routes Task 12D moved into the prerendered group.
+ * The routes that live in the prerendered group — the nine Task 12D moved here, plus
+ * `/careers/[slug]` (Plan-45).
  *
  * `/cart` and `/checkout` were in this list until Task 12E and are DELIBERATELY not:
  * they are the conversion path, and the decision was that they keep the per-request
  * `(shop)` shell rather than trade it for a prerendered one. They are therefore covered
  * by the `(shop)` prerender BAN above instead — the same rule, from the other end.
+ *
+ * `/careers/[slug]` is the first DYNAMIC segment in this group, and it belongs here for
+ * the same reason the other nine do: a job advert is the same bytes for every visitor,
+ * in every market, signed in or not. It earns its place by `generateStaticParams` (every
+ * open role is built at deploy time) plus a revalidating fetch tagged `careers`, which
+ * Django flushes on every posting write — so it is prerendered and still never stale.
+ * It appears in the manifest's `dynamicRoutes` rather than its `routes`, which the check
+ * below already unions.
  */
 const STATIC_TARGETS = [
-  "/about-us", "/blog", "/careers", "/contact-us", "/disclaimer", "/follow-us",
-  "/skin-quiz", "/entrepreneurial-program", "/become-a-distributor",
+  "/about-us", "/blog", "/careers", "/careers/[slug]", "/contact-us", "/disclaimer",
+  "/follow-us", "/skin-quiz", "/entrepreneurial-program", "/become-a-distributor",
 ];
 
 /** Every URL path served by a page under the `(shop)` segment. Route groups are not
@@ -215,7 +224,7 @@ describe("the prerendered group must stay prerenderable", () => {
     expect(offenders, "a dynamic read here quietly un-statics the route").toEqual([]);
   });
 
-  it("holds exactly the nine routes Task 12D left here, and nothing else", () => {
+  it("holds exactly the routes listed above, and nothing else", () => {
     // A future page dropped in here would be prerendered by inheritance — which is fine
     // only if somebody decided that deliberately. This makes them decide.
     expect(groupRoutes(STATIC_SHOP).sort()).toEqual([...STATIC_TARGETS].sort());

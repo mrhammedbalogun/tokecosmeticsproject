@@ -63,6 +63,11 @@ INSTALLED_APPS = [
     # `delivery`: an active `delivery.SenderLocation` is a live GIG shipping origin,
     # and a directory of distributors must never be able to become one.
     "apps.stores",
+    # The careers board (Plan-45). Its own app rather than a corner of `cms`: a job
+    # advert is content, but an APPLICATION is the densest personal data in this system
+    # and carries an uploaded file, its own scopes and its own audit posture. Filing the
+    # two together would have put candidate CVs behind the page-copy scope.
+    "apps.careers",
     # Ad-platform measurement (Plan-44): the pixels' configuration, the consent and
     # click-id snapshot an order carries, and the outbox of conversion events owed to
     # Meta, TikTok, Snapchat and Google. Its own app rather than a corner of `analytics`:
@@ -338,6 +343,16 @@ REST_FRAMEWORK = {
         "suggest": "60/min",
         "cart": "120/min",
         "newsletter": "5/min",
+        # CAREERS (Plan-45). Two rates, and the upload one is the tighter of the pair
+        # because it is the endpoint that CREATES OBJECTS in the bucket that also holds
+        # the database backups. Six is the pace of somebody genuinely re-picking a file
+        # ("wrong one", "that was the old version"), not the pace of a form being filled.
+        "careers_upload": "6/min",
+        # Submitting is cheap for us and expensive for the applicant, so the cap is set
+        # to stop a script rather than to ration a person: nobody writes four cover
+        # letters a minute, and a household or an office behind one NAT address must
+        # still be able to apply one after another.
+        "careers_apply": "10/min",
         # Public referral-code lookup. Shared bucket via the BFF (see
         # `_IPKeyedThrottle`), so generous on purpose: this must never stop a real
         # customer typing a code, and a guessed code costs nobody anything.

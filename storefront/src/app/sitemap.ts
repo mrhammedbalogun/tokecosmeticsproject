@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { flattenCategories, getCategoryTree, getProducts } from "@/lib/catalog";
 import { getPages } from "@/lib/cms";
 import { getCombos } from "@/lib/combos";
+import { getJobs } from "@/lib/careers";
 import { MORE_LINKS } from "@/lib/site-pages";
 import { SHOP_EDITS } from "@/lib/shop-edits";
 import { absoluteUrl } from "@/lib/seo";
@@ -50,6 +51,21 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       url: absoluteUrl(link.href),
       changeFrequency: "monthly",
       priority: link.priority,
+    });
+  }
+
+  // Open roles (Plan-45). `/careers` itself arrives from MORE_LINKS above; these are
+  // the per-role pages, which are the URLs Google Jobs indexes and the ones people
+  // actually share. Weekly rather than monthly: a role opening or closing is the whole
+  // point of the page. A failure costs the sitemap these URLs and nothing else.
+  for (const job of (await getJobs()) ?? []) {
+    entries.push({
+      url: absoluteUrl(`/careers/${job.slug}`),
+      lastModified: job.published_at ? new Date(job.published_at) : undefined,
+      changeFrequency: "weekly",
+      // Above the CMS pages and below the shop edits: a live vacancy is worth more to
+      // us than a policy page and less than a category.
+      priority: 0.6,
     });
   }
 

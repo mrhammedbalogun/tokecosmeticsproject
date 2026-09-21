@@ -52,7 +52,14 @@ from apps.core.audit import AdminAuditMixin
 # only unmasked bank account read in the product, and its three existing read views were
 # each individually pinned below while the rule that would catch the FOURTH was not
 # looking at them at all.
-PII_SCOPE_PREFIXES = ("orders.", "customers.", "referrals.")
+# `careers.applications.` joined on 2026-09-21 with Plan-45, and the scope was NAMED for
+# this rule as much as for the grant table: a job application carries a stranger's email,
+# phone, cover letter and CV, which is a denser personal record than an order. A single
+# `careers.manage` scope covering both the adverts and the applicants would have matched
+# nothing here, and the CV download — the most sensitive read on the surface — would have
+# left no trace of who fetched whose file. The PREFIX, not the whole scope, so the
+# postings endpoints beside them are not dragged into read-auditing for serving job copy.
+PII_SCOPE_PREFIXES = ("orders.", "customers.", "referrals.", "careers.applications.")
 
 # Views that audit their READS, enumerated. The rule above discovers most of them; this
 # list is the second, independent statement, and it is what catches the two directions a
@@ -95,6 +102,11 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     # The GIG deliveries table's sibling for couriers with no API. Same reason,
     # verbatim: customer name and phone on every row, paginated bulk PII.
     "AdminPartnerShipmentListView": "the partner deliveries table: customer name and phone on every row",
+    # Plan-45. The applications table and one application in full — and, on the same
+    # class, the CV download, which is the only endpoint in the product that hands over a
+    # file a member of the public uploaded about themselves. If a candidate ever asks who
+    # saw their CV, the row written here is the only thing that can answer.
+    "JobApplicationAdminViewSet": "job applications: a candidate's name, email, phone, cover letter and their CV",
 }
 
 

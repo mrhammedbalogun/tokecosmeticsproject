@@ -55,6 +55,11 @@ urlpatterns = [
     # The public store locator (Plan-42). Anonymous; `/stores/places/` is the
     # country -> state -> LGA cascade, `/stores/` the results.
     path("api/v1/stores/", include("apps.stores.urls")),
+    # The careers board (Plan-45). Anonymous, and the only public surface in this project
+    # that accepts an uploaded file — indirectly: the browser uploads to S3 with a
+    # presigned ticket minted here, and the apply call carries only the key. See
+    # `apps/careers/resume_storage.py` for why the bytes never reach this container.
+    path("api/v1/careers/", include("apps.careers.urls")),
     # Which pixels the storefront should load, and the consent policy to apply before
     # loading them (Plan-44). Anonymous and public: everything it returns is already
     # visible in the page source. Credentials are NEVER served here.
@@ -73,6 +78,7 @@ urlpatterns = [
     path("api/v1/admin/", include("apps.checkout.admin_urls")),
     path("api/v1/admin/", include("apps.delivery.admin_urls")),
     path("api/v1/admin/", include("apps.stores.admin_urls")),
+    path("api/v1/admin/", include("apps.careers.admin_urls")),
     path("api/v1/admin/", include("apps.analytics.admin_urls")),
     path("api/v1/admin/", include("apps.referrals.admin_urls")),
     path("api/v1/admin/", include("apps.orders.admin_urls")),

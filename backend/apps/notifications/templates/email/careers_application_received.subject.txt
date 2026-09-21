@@ -1,0 +1,1 @@
+New application — {{ job_title }}{% if location_label %} ({{ location_label }}){% endif %}

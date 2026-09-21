@@ -9,11 +9,13 @@ const OWNER = [
   "customers.view", "marketing.manage", "cms.manage", "reports.view", "staff.manage",
   "settings.manage", "referrals.view", "referrals.manage", "referrals.pay",
   "training.manage", "decisions.manage",
+  "careers.manage", "careers.applications.manage", "careers.applications.delete",
 ];
 const MANAGER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "reports.view", "referrals.view",
   "referrals.manage", "referrals.pay", "decisions.manage",
+  "careers.manage", "careers.applications.manage",
 ];
 const SUPPORT = ["orders.view", "orders.operate", "customers.view", "referrals.view"];
 const CONTENT = ["cms.manage"];
@@ -55,6 +57,10 @@ describe("the sidebar renders only what the scopes allow", () => {
       // locations carries, because both are lists of physical shops kept by whoever
       // runs the day to day.
       "Find a Store",
+      // Careers (Plan-45). The Manager holds BOTH careers scopes today, so the door is
+      // theirs; the split exists so `careers.manage` can be widened to Content later
+      // without that decision touching applicant CVs.
+      "Careers",
       "Customers", "Reviews",
       "Coupons",
       "Home Content",
@@ -125,5 +131,28 @@ describe("active-link matching", () => {
   it("falls back to the dashboard rather than matching everything", () => {
     expect(activeHref("/")).toBe("/");
     expect(activeHref("/something-new")).toBe("/");
+  });
+});
+
+describe("the Careers door (Plan-45)", () => {
+  it("opens for either careers scope, so the two can be granted apart", () => {
+    // The split exists so a copywriter can be given the job adverts WITHOUT every
+    // candidate's CV. That is only real if the nav item does not require both.
+    expect(labels(["careers.manage"])).toContain("Careers");
+    expect(labels(["careers.applications.manage"])).toContain("Careers");
+  });
+
+  it("is hidden from Support and Content, who hold neither", () => {
+    expect(labels(SUPPORT)).not.toContain("Careers");
+    expect(labels(CONTENT)).not.toContain("Careers");
+  });
+
+  it("is visible to the Owner and the Manager", () => {
+    expect(labels(OWNER)).toContain("Careers");
+    expect(labels(MANAGER)).toContain("Careers");
+  });
+
+  it("highlights Careers while an application is on screen", () => {
+    expect(activeHref("/careers/applications/42")).toBe("/careers");
   });
 });

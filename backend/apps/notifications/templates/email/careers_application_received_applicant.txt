@@ -1,0 +1,13 @@
+APPLICATION RECEIVED
+
+{% if candidate_name %}Hi {{ candidate_name }} — thanks{% else %}Thanks{% endif %} for applying to Toke Cosmetics.
+
+We have your application for {{ job_title }}{% if location_label %} in {{ location_label }}{% endif %},
+along with the CV you attached.
+
+Our team reads every application. If your experience matches what the role needs,
+someone will be in touch to arrange a conversation. If you do not hear from us, please
+do keep an eye on the careers page — we post new roles as they open.
+
+{{ shop_url }}/careers
+{% include "email/_footer.txt" %}

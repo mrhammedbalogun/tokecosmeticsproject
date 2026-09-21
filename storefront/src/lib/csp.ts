@@ -140,6 +140,27 @@ function apiOrigin(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
+/**
+ * The S3 endpoint a CAREERS APPLICANT uploads their CV to (Plan-45).
+ *
+ * The only host in this policy the browser WRITES to that is not ours, and it is here
+ * rather than routed through our own server for a measured reason: the API runs three
+ * sync gunicorn workers shared with checkout, and a 5MB multipart POST from an
+ * anonymous member of the public would occupy one for the duration. The browser uploads
+ * straight to a quarantine prefix using a ticket Django mints, and Django reads the
+ * bytes back to sniff them — `backend/apps/careers/resume_storage.py` has the full
+ * argument.
+ *
+ * SCOPED TO THE REGIONAL ENDPOINT, not `*.amazonaws.com`. The admin's own upload flow
+ * pins the same host, and for the same reason its `_client()` gives: the global endpoint
+ * answers a presigned POST with a 307 to the regional one, which a policy naming only
+ * the global host blocks before the request leaves the browser.
+ */
+function uploadOrigin(): string {
+  const region = process.env.NEXT_PUBLIC_AWS_REGION ?? "eu-west-1";
+  return `https://s3.${region}.amazonaws.com`;
+}
+
 /** The admin app, which frames the storefront for its live homepage preview. */
 function adminOrigin(dev: boolean): string {
   return (
@@ -190,7 +211,9 @@ export function buildCsp({ dev = false }: { dev?: boolean } = {}): string {
     "media-src": ["'self'", mediaHost(), apiOrigin()],
     "font-src": ["'self'", "data:", ...GMAPS_FONT],
     "connect-src": [
-      "'self'", apiOrigin(), ...PAYSTACK, ...PAYPAL, ...TURNSTILE, ...GMAPS_CONNECT,
+      // `uploadOrigin` is the careers CV upload (Plan-45) — see its comment above.
+      "'self'", apiOrigin(), uploadOrigin(),
+      ...PAYSTACK, ...PAYPAL, ...TURNSTILE, ...GMAPS_CONNECT,
       ...PIXEL_CONNECT,
     ],
     // The payment popups and the Turnstile challenge render in iframes.

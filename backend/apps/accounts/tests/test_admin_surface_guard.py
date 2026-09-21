@@ -175,6 +175,20 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # same reason: a bundle is a shelf decision with a price on it. The product-search
     # box is its own class because the builder needs variants and per-market prices in
     # one response, which the products list does not carry.
+    # --- careers (Plan-45): two scopes, and the split is the point ----------------
+    # A job advert is content; an application is a named stranger's CV. One scope would
+    # mean a copywriter fixing a typo in the advert holds every candidate's personal
+    # data. See `rbac.py` and `apps/careers/admin_views.py`.
+    "JobPostingAdminViewSet": "careers.manage",
+    # DELETE on this one elevates inline to `careers.applications.delete` (Owner only),
+    # which the URLconf cannot see — `test_admin_role_matrix` pins it over real HTTP.
+    "JobApplicationAdminViewSet": "careers.applications.manage",
+    # --- FAQ (2026-08). `cms.manage`, like pages: an FAQ answer about refunds is as
+    # load-bearing as a policy page, and the same person edits both. Declared here
+    # 2026-09-21 — these two had been routed without an entry, which is the exact gap
+    # `test_every_routed_admin_view_is_declared` exists to catch.
+    "FaqCategoryAdminViewSet": "cms.manage",
+    "FaqItemAdminViewSet": "cms.manage",
     "ComboAdminViewSet": "products.manage",
     "ComboProductSearchView": "products.manage",
     # --- catalog: everything here writes the product catalogue -------------------

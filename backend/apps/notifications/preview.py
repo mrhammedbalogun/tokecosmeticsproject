@@ -71,6 +71,18 @@ _PREVIEWS: dict[str, dict] = {
         ],
         "is_first": False,
     },
+    # Plan-45. Deliberately a made-up candidate: a preview renders into the admin's own
+    # screen, and pulling a REAL application in to demonstrate the template would put one
+    # person's name in front of whoever happens to be checking what an email looks like.
+    "careers.application_received": {
+        "is_preview": True,
+        "candidate_name": "Ada Obi",
+        "job_title": "Sales Representative",
+        "location_label": "Alimosho, Lagos",
+        "has_cover_letter": True,
+        "is_resubmission": False,
+        "application_url": "https://admin.tokecosmetics.com/careers/applications/1",
+    },
     "delivery.aaj_attention": {
         "is_preview": True,
         "order_number": "TC-10234",

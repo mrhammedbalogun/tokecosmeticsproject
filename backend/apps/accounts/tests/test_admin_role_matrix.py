@@ -188,6 +188,31 @@ MATRIX: list[Row] = [
         body={"name": "Nowhere"}),
     Row("StoreLocationAdminViewSet", "post", "/api/v1/admin/stores/999999/restore/",
         _MANAGERS),
+    # --- FAQ (2026-08). `cms.manage`, like the policy pages. Rows added 2026-09-21
+    # alongside their ADMIN_SURFACE entries: both viewsets had been routed without
+    # either, which is what the two completeness checks exist to catch.
+    Row("FaqCategoryAdminViewSet", "get", "/api/v1/admin/faq-categories/", _CONTENT),
+    Row("FaqItemAdminViewSet", "get", "/api/v1/admin/faq-items/", _CONTENT),
+    # --- careers (Plan-45): two scopes, and the DELETE row is the one that matters --
+    # Postings and applications are separated so the grant on each can move without the
+    # other; both are {Owner, Manager} today. The third row pins the inline elevation
+    # `ADMIN_SURFACE` cannot see: deleting an application takes a stranger's CV out of
+    # the bucket permanently, so it is the Owner's alone even though a Manager may read,
+    # filter and decide every application on the screen.
+    Row("JobPostingAdminViewSet", "get", "/api/v1/admin/careers/jobs/", _MANAGERS),
+    Row("JobPostingAdminViewSet", "post", "/api/v1/admin/careers/jobs/", _MANAGERS,
+        body={"title": "Nowhere"}),
+    Row("JobPostingAdminViewSet", "post",
+        "/api/v1/admin/careers/jobs/no-such-role/restore/", _MANAGERS),
+    Row("JobApplicationAdminViewSet", "get", "/api/v1/admin/careers/applications/",
+        _MANAGERS),
+    Row("JobApplicationAdminViewSet", "get",
+        "/api/v1/admin/careers/applications/999999/resume/", _MANAGERS),
+    Row("JobApplicationAdminViewSet", "delete",
+        "/api/v1/admin/careers/applications/999999/", _OWNER,
+        scope="careers.applications.delete"),
+    Row("JobApplicationAdminViewSet", "get",
+        "/api/v1/admin/careers/applications/stats/", _MANAGERS),
     # --- reports: Owner and Manager. Support works the desk and does not see the books.
     Row("ReportView", "get", "/api/v1/admin/reports/revenue/", _MANAGERS),
     Row("ReportExportView", "get", "/api/v1/admin/reports/revenue/export.csv", _MANAGERS),
