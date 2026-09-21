@@ -127,6 +127,31 @@ function deleteCookie(name: string): void {
 }
 
 /**
+ * Ask the server to re-write the consent cookie with a lifetime Safari will honour.
+ *
+ * `document.cookie` above is capped at 7 DAYS by Safari's ITP, which on this shop means
+ * six in ten customers (59% of orders carry an iOS user agent) were re-asked weekly no
+ * matter what they clicked. `app/api/consent/route.ts` has the full note.
+ *
+ * FIRE AND FORGET, and deliberately after the local write rather than instead of it:
+ * the banner must close in the same frame the button is pressed, and a visitor on a bad
+ * connection must not watch it hang. If this never lands they keep the 7-day cookie —
+ * exactly today's behaviour, which is degraded rather than broken.
+ */
+function persistConsent(version: number, analytics: boolean, marketing: boolean): void {
+  try {
+    void fetch("/api/consent", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ version, analytics, marketing }),
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    /* a consent choice must never throw into a click handler */
+  }
+}
+
+/**
  * Cookies the vendors' own scripts set, cleared when marketing consent is withdrawn.
  *
  * Best-effort, and honest about it: these are first-party cookies on our own domain, so
@@ -243,6 +268,8 @@ export function ConsentProvider({
 
       setBannerOverride(false);
       notifyCookieChange();
+      // Last, and not awaited: everything above is what the visitor sees happen.
+      persistConsent(config.consent_version, analytics, marketing);
     },
     [config.consent_version, pendingClickIds],
   );

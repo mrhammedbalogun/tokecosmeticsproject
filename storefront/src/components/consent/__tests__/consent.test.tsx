@@ -6,7 +6,7 @@
  * "Accept all", and that a refusal actually clears what was set.
  */
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConsentBanner } from "@/components/consent/ConsentBanner";
 import { ConsentProvider, useConsent } from "@/components/consent/ConsentProvider";
 import type { MarketingConfig } from "@/lib/marketing";
@@ -196,6 +196,58 @@ describe("a fresh ad click", () => {
 
     await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("--"));
     expect(readCookie("tc_clk")).toBe("");
+  });
+});
+
+// ── THE SEVEN-DAY CAP (2026-09-20) ──────────────────────────────────────────────────
+//
+// `document.cookie` is capped at 7 days by Safari's ITP, and 59% of this shop's orders
+// come from iOS — so a customer who accepted was re-asked weekly, for ever. The local
+// write still happens first (the banner must close in the same frame); the server call
+// is what makes the choice last six months.
+describe("making the choice stick", () => {
+  it("asks the server to persist an acceptance, without blocking the UI", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    setCountry("GB");
+    renderBanner();
+
+    fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
+
+    // The cookie is written locally straight away — not awaited on the network.
+    await waitFor(() => expect(readCookie("tc_consent")).not.toBe(""));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("/api/consent");
+    expect(JSON.parse(init.body)).toEqual({ version: 1, analytics: true, marketing: true });
+    vi.unstubAllGlobals();
+  });
+
+  it("persists a refusal too, so a decliner is not re-asked every week either", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    setCountry("GB");
+    renderBanner();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reject all" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body))
+      .toEqual({ version: 1, analytics: false, marketing: false });
+    vi.unstubAllGlobals();
+  });
+
+  it("still records the choice when the server call fails", async () => {
+    // Degraded, not broken: the visitor keeps the 7-day cookie rather than no cookie.
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    setCountry("GB");
+    renderBanner();
+
+    fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
+
+    await waitFor(() => expect(readCookie("tc_consent")).not.toBe(""));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
   });
 });
 

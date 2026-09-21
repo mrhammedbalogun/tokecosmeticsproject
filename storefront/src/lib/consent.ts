@@ -18,8 +18,37 @@
  *                                           but tracking runs until it is declined.
  *
  * The country list is served by the backend (`/marketing/config/`), not frozen here, so
- * adding Nigeria under the NDPA 2023 is an admin edit rather than a deploy. That is a
- * decision Hammed has not made yet and should not need a release to make.
+ * adding Nigeria under the NDPA 2023 is an admin edit rather than a deploy.
+ *
+ * ── NIGERIA STAYS OPT-OUT: A DECISION, NOT AN OVERSIGHT (2026-09-20) ────────────────
+ *
+ * Recorded here with the countervailing text beside it, so that a later reader does not
+ * quietly "fix" it — and so that if it is ever revisited, it is revisited on the facts.
+ *
+ * The NDPC's GAID 2025 (Article 19) reads the other way. Its own words:
+ *
+ *   (2) "Except as otherwise provided by this GAID, the use of cookies on a website or
+ *        other digital platforms requires consent."
+ *   (6) "...All other forms of cookies require a specific selection of 'yes or no'
+ *        (alternatively: 'accept' or 'reject') options presented to the data subject."
+ *
+ * On that text Nigeria is opt-IN, like the UK, and belongs in
+ * `consent_required_countries`. The same directive also says a cookie notice placed at
+ * the BOTTOM of a page, "where it may be ignored or be unnoticed by a data subject, is
+ * tantamount to lack of transparency" — which is exactly where this shop's banner sits,
+ * a placement chosen for the opposite reason (the ICO dislikes blocking modals).
+ *
+ * It stays opt-out because that is the shop owner's call about his own regulatory risk,
+ * made on 2026-09-20 with the above in front of him. The measurement cost of asking
+ * first in the shop's main market is immediate and large; the enforcement posture of the
+ * NDPC is not something this codebase can assess.
+ *
+ * Reversing it is ONE admin edit to `consent_required_countries` and no deploy.
+ *
+ * What was explicitly NOT accepted as a reason: "customers say accepting cookies is
+ * stressful". That turned out to be mostly a BUG — Safari caps JavaScript-written
+ * cookies at 7 days, so 59% of this shop's buyers were re-asked weekly whatever they
+ * clicked. Fixed separately; see `app/api/consent/route.ts`.
  *
  * ── WHY THIS COOKIE IS NOT httpOnly ─────────────────────────────────────────────────
  *
