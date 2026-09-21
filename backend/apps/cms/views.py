@@ -2,13 +2,15 @@
 from rest_framework import generics
 from rest_framework.permissions import AllowAny
 
+from django.db.models import Prefetch
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.cms.models import Banner, HomepageSection, MenuItem, Page
+from apps.cms.models import FaqCategory, FaqItem, Banner, HomepageSection, MenuItem, Page
 from apps.cms.serializers import (
     PublicBannerSerializer,
+    PublicFaqCategorySerializer,
     PublicGoogleReviewSerializer,
     PublicHomepageSectionSerializer,
     PublicMenuItemSerializer,
@@ -106,3 +108,37 @@ class PublicMenuView(APIView):
             "header": [i for i in data if i["menu"] == "header"],
             "footer": [i for i in data if i["menu"] == "footer"],
         })
+
+
+class PublicFaqView(generics.ListAPIView):
+    """`/api/v1/cms/faq/` — every active category with its published questions.
+
+    Unpaginated on purpose (see the serializer). The prefetch is what keeps it one
+    query per table rather than one per category, and it carries the `is_published`
+    filter so an unfinished answer never reaches the storefront at all.
+    """
+
+    permission_classes = [AllowAny]
+    serializer_class = PublicFaqCategorySerializer
+    pagination_class = None
+
+    def get_queryset(self):
+        return (
+            FaqCategory.objects
+            .filter(is_active=True)
+            # A CATEGORY WITH NOTHING PUBLISHED IN IT IS NOT A CATEGORY YET. Without this
+            # the storefront renders a heading with nothing under it, which reads as a
+            # broken page rather than an unfinished one — and that is the normal state
+            # here, because a section is seeded with its questions as drafts and the
+            # answers are written afterwards. It reappears on its own the moment the
+            # first answer in it is published.
+            .filter(items__is_published=True)
+            .distinct()
+            .prefetch_related(
+                Prefetch(
+                    "items",
+                    queryset=FaqItem.objects.filter(is_published=True),
+                    to_attr="published_items",
+                )
+            )
+        )

@@ -95,7 +95,9 @@ describe("the sidebar renders only what the scopes allow", () => {
   });
 
   it("Content sees content only — customer reviews are shop management, not copy", () => {
-    expect(labels(CONTENT)).toEqual(["Dashboard", "Content", "Training"]);
+    // FAQ joined Content on 2026-09-20: same `cms.manage` scope, its own door because it
+    // is edited far more often than the policy pages are.
+    expect(labels(CONTENT)).toEqual(["Dashboard", "Content", "FAQ", "Training"]);
   });
 
   it("a staff member with no scopes still sees the scopeless items and nothing else", () => {

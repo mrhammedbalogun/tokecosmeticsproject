@@ -1,6 +1,7 @@
 from django.urls import path
 
 from apps.cms.views import (
+    PublicFaqView,
     PublicHomepageView,
     PublicMenuView,
     PublicPageDetailView,
@@ -8,6 +9,7 @@ from apps.cms.views import (
 )
 
 urlpatterns = [
+    path("faq/", PublicFaqView.as_view(), name="cms-faq"),
     path("homepage/", PublicHomepageView.as_view(), name="cms-homepage"),
     path("menus/", PublicMenuView.as_view(), name="cms-menus"),
     path("pages/", PublicPageListView.as_view(), name="cms-page-list"),

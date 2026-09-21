@@ -67,6 +67,10 @@ export const NAV_ITEMS: NavItem[] = [
   // unreachable until 2026-08-16.
   { label: "Affiliates page", href: "/content/affiliates", scopes: ["marketing.manage"] },
   { label: "Content", href: "/content", scopes: ["cms.manage"] },
+  // Its own door rather than a link inside Content: the FAQ is edited far more often
+  // than the policy pages are, and burying it one level down would make the most-used
+  // content screen the hardest to reach.
+  { label: "FAQ", href: "/content/faq", scopes: ["cms.manage"] },
   // Support sees it too — `referrals.view` — because "where is my commission?" arrives at
   // the same desk as "where is my order?". Deciding and paying carry their own scopes on
   // the endpoints; this item is only the door.

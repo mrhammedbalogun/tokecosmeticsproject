@@ -427,3 +427,87 @@ class TrainingResource(TimeStampedModel):
         if derived:
             self.video_id = derived
         return super().save(*args, **kwargs)
+
+
+class FaqCategory(TimeStampedModel):
+    """A group of questions on `/faq`.
+
+    ── WHY THIS IS NOT A `Page` ────────────────────────────────────────────────────────
+
+    A policy page is one body of prose with a URL. An FAQ is a LIST of questions that
+    customers scan, that search engines want as structured data, and that the shop adds
+    to one question at a time. Storing it as HTML inside a `Page` would mean an editor
+    re-typing accordion markup to add a question, no way to reorder without editing
+    prose, and nothing for a `FAQPage` JSON-LD block to read.
+
+    ── WHY A CATEGORY IS A ROW AND NOT A CHOICES TUPLE ─────────────────────────────────
+
+    The four headings on this shop's FAQ are a merchandising decision, not a fact about
+    the code — the WordPress site it replaces had five, two of which overlapped. Making
+    them rows means renaming one, adding one, or hiding one is an admin edit rather than
+    a migration.
+
+    `is_active = False` hides a whole category and its questions at once, which is the
+    control you want when a section is half-written.
+    """
+
+    name = models.CharField(max_length=80)
+    slug = models.SlugField(max_length=80, unique=True)
+    # Shown under the heading. Optional — most categories do not need one.
+    blurb = models.CharField(max_length=200, blank=True)
+    sort = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort", "name"]
+        verbose_name_plural = "FAQ categories"
+
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)[:80]
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class FaqItem(TimeStampedModel):
+    """One question and its answer.
+
+    ── THE ANSWER IS SANITISED HTML, THE QUESTION IS PLAIN TEXT ────────────────────────
+
+    Exactly the split `Page` makes, for the same reason. An answer wants a link, a list
+    and some bold — `answer_source` is what the editor typed and `answer` is that run
+    through the same `clean_html` allow-list, derived on every save and never writable.
+
+    A question is a heading in an accordion and a `name` in the FAQPage JSON-LD. Markup
+    there would be escaped by React in one place and injected in another, so it is a
+    plain `CharField` and stays one.
+
+    ── DELETE IS ALLOWED, UNLIKE `Page` ───────────────────────────────────────────────
+
+    A page's slug is a published URL that the footer hard-codes, so deleting one breaks
+    a live link. A question addresses no URL of its own and nothing links to it
+    individually; a question that turned out to be wrong is genuinely disposable, and
+    making an editor keep it forever as a draft would make the real ones harder to find.
+    """
+
+    category = models.ForeignKey(FaqCategory, on_delete=models.CASCADE, related_name="items")
+    question = models.CharField(max_length=250)
+    answer_source = models.TextField()
+    answer = models.TextField(blank=True, editable=False)
+    sort = models.PositiveSmallIntegerField(default=0)
+    is_published = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["sort", "id"]
+        verbose_name = "FAQ item"
+
+    def save(self, *args, **kwargs):
+        # DERIVED ON EVERY SAVE, never trusted from the caller — the same line `Page.save`
+        # relies on, and the only way answer HTML reaches a customer's browser.
+        self.answer = clean_html(self.answer_source)
+        super().save(*args, **kwargs)
+
+    def __str__(self) -> str:
+        return self.question

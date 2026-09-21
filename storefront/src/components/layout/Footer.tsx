@@ -41,7 +41,10 @@ const COLUMNS: { heading: string; links: readonly (readonly [string, string])[] 
       ["Shipping & delivery", "/page/shipping"],
       ["Returns & refunds", "/page/returns"],
       ["Contact us", "/contact-us"],
-      ["FAQs", "/page/faqs"],
+      // `/faq`, not `/page/faqs`: the FAQ is a code route with its own accordion and
+      // FAQPage structured data (see app/(shop)/faq). The old link was a 404 — no CMS
+      // page with that slug was ever created.
+      ["FAQs", "/faq"],
     ],
   },
   {

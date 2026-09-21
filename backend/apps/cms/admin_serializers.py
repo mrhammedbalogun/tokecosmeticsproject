@@ -2,6 +2,8 @@ from PIL import Image
 from rest_framework import serializers
 
 from apps.cms.models import (
+    FaqCategory,
+    FaqItem,
     GoogleReview, GoogleReviewsMeta, Banner, HomepageSection, MediaAsset, MenuItem, Page,
     TrainingResource,
 )
@@ -356,3 +358,39 @@ class TrainingLibrarySerializer(serializers.ModelSerializer):
         fields = ["id", "title", "description", "youtube_url", "video_id", "position",
                   "created_at"]
         read_only_fields = fields
+
+
+class FaqCategoryAdminSerializer(serializers.ModelSerializer):
+    """A category, plus a count so the screen can show an empty one as empty rather than
+    making the Owner open it to find out."""
+
+    item_count = serializers.SerializerMethodField()
+
+    audit_allowlist = ("name", "slug", "blurb", "sort", "is_active")
+
+    class Meta:
+        model = FaqCategory
+        fields = ["id", "name", "slug", "blurb", "sort", "is_active", "item_count"]
+        # Derived from the name on first save; editable afterwards, because it is only an
+        # anchor on /faq rather than a URL of its own.
+        extra_kwargs = {"slug": {"required": False}}
+
+    def get_item_count(self, obj) -> int:
+        return obj.items.count()
+
+
+class FaqItemAdminSerializer(serializers.ModelSerializer):
+    """`answer` is read-only everywhere: it is derived from `answer_source` by the model,
+    so publishing it as writable would let a caller put unsanitised HTML in front of a
+    customer. Both are returned — the editor edits the source and can see what survived
+    the allow-list, which is the point of storing two copies."""
+
+    category_name = serializers.CharField(source="category.name", read_only=True)
+
+    audit_allowlist = ("category", "question", "answer_source", "sort", "is_published")
+
+    class Meta:
+        model = FaqItem
+        fields = ["id", "category", "category_name", "question",
+                  "answer_source", "answer", "sort", "is_published"]
+        read_only_fields = ["answer"]

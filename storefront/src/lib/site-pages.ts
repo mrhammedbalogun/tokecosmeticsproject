@@ -27,6 +27,9 @@ export interface NavLink {
 export const MORE_LINKS: readonly NavLink[] = [
   { label: "About Us", href: "/about-us", priority: 0.6 },
   { label: "Contact Us", href: "/contact-us", priority: 0.6 },
+  // Higher than its neighbours: it answers the questions that stop a sale, and it is
+  // the page support most often needs to send somebody to.
+  { label: "FAQs", href: "/faq", priority: 0.6 },
   { label: "Blog", href: "/blog", priority: 0.7 },
   { label: "Careers", href: "/careers", priority: 0.4 },
   { label: "Find Stores", href: "/find-stores", priority: 0.5 },

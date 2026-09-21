@@ -1,7 +1,7 @@
 """Public CMS serializers. Admin ones live in `admin_serializers.py`."""
 from rest_framework import serializers
 
-from apps.cms.models import Banner, GoogleReview, HomepageSection, MenuItem, Page
+from apps.cms.models import FaqCategory, FaqItem, Banner, GoogleReview, HomepageSection, MenuItem, Page
 
 
 class PublicPageSerializer(serializers.ModelSerializer):
@@ -55,3 +55,33 @@ class PublicGoogleReviewSerializer(serializers.ModelSerializer):
         model = GoogleReview
         fields = ["id", "author", "location", "rating", "text", "review_url",
                   "reviewed_at_text", "sort"]
+
+
+class PublicFaqItemSerializer(serializers.ModelSerializer):
+    """`answer`, never `answer_source`: the storefront injects this with
+    `dangerouslySetInnerHTML`, so the only field it may ever see is the sanitised one."""
+
+    class Meta:
+        model = FaqItem
+        fields = ["id", "question", "answer"]
+
+
+class PublicFaqCategorySerializer(serializers.ModelSerializer):
+    """A category with its published questions nested.
+
+    ONE request for the whole page, not one per section. The FAQ is small by nature
+    (tens of rows), the storefront renders every category at once, and the JSON-LD block
+    needs all of it anyway — so paginating it would cost a round trip per section and
+    buy nothing.
+    """
+
+    items = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FaqCategory
+        fields = ["name", "slug", "blurb", "items"]
+
+    def get_items(self, obj) -> list:
+        # `obj.items` is prefetched to the PUBLISHED rows by the view; filtering here
+        # instead would re-query once per category.
+        return PublicFaqItemSerializer(obj.published_items, many=True).data

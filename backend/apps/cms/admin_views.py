@@ -17,6 +17,8 @@ from apps.accounts.authentication import AdminJWTAuthentication
 from apps.accounts.rbac import HasAdminScope
 from apps.cms import admin_serializers, s3_uploads
 from apps.cms.admin_serializers import (
+    FaqCategoryAdminSerializer,
+    FaqItemAdminSerializer,
     GoogleReviewAdminSerializer,
     GoogleReviewsMetaAdminSerializer,
     BannerAdminSerializer,
@@ -31,6 +33,8 @@ from apps.cms.admin_serializers import (
 )
 from apps.cms.video_sniff import VIDEO_CONTENT_TYPES, is_faststart, sniff_video_container
 from apps.cms.models import (
+    FaqCategory,
+    FaqItem,
     Banner, HomepageSection, MediaAsset, MenuItem, Page, GoogleReview, GoogleReviewsMeta,
     TrainingResource,
 )
@@ -355,3 +359,35 @@ class TrainingLibraryView(AdminAuditMixin, generics.ListAPIView):
     serializer_class = TrainingLibrarySerializer
     queryset = TrainingResource.objects.filter(is_published=True)
     pagination_class = None
+
+
+class FaqCategoryAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """`cms.manage`, like pages: an FAQ answer about refunds is as load-bearing as a
+    policy page, and the two are edited by the same person.
+
+    DELETE IS ALLOWED. A category addresses no URL — `/faq` renders whatever exists — so
+    removing an empty or mistaken one breaks nothing. Deleting one with questions in it
+    takes them too (`on_delete=CASCADE`), which is why the screen shows the count.
+    """
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("cms.manage")]
+    serializer_class = FaqCategoryAdminSerializer
+    audit_serializers = (FaqCategoryAdminSerializer,)
+    audit_model_label = "cms.faqcategory"
+    queryset = FaqCategory.objects.all()
+
+
+class FaqItemAdminViewSet(AdminAuditMixin, viewsets.ModelViewSet):
+    """One question. Filterable by category so the admin screen can load a section at a
+    time rather than the whole FAQ."""
+
+    authentication_classes = [AdminJWTAuthentication]
+    permission_classes = [HasAdminScope("cms.manage")]
+    serializer_class = FaqItemAdminSerializer
+    audit_serializers = (FaqItemAdminSerializer,)
+    audit_model_label = "cms.faqitem"
+    queryset = FaqItem.objects.select_related("category").all()
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ["category", "is_published"]
+    search_fields = ["question", "answer_source"]

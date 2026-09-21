@@ -4,6 +4,8 @@ from django.urls import path
 
 from apps.cms.admin_views import (
     BannerAdminViewSet,
+    FaqCategoryAdminViewSet,
+    FaqItemAdminViewSet,
     GoogleReviewAdminViewSet,
     GoogleReviewsMetaAdminView,
     HomepageSectionAdminViewSet,
@@ -17,6 +19,8 @@ from apps.cms.admin_views import (
 router = SimpleRouter()
 router.register("pages", PageAdminViewSet, basename="admin-page")
 router.register("banners", BannerAdminViewSet, basename="admin-banner")
+router.register("faq-categories", FaqCategoryAdminViewSet, basename="admin-faq-category")
+router.register("faq-items", FaqItemAdminViewSet, basename="admin-faq-item")
 router.register("media", MediaAssetAdminViewSet, basename="admin-media")
 router.register("homepage-sections", HomepageSectionAdminViewSet, basename="admin-homepage-section")
 router.register("menu-items", MenuItemAdminViewSet, basename="admin-menu-item")

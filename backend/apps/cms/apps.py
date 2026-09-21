@@ -12,6 +12,8 @@ class CmsConfig(AppConfig):
         # no-op without REVALIDATE_SECRET; see apps/cms/revalidate.py.
         from apps.cms.models import (
             Banner,
+            FaqCategory,
+            FaqItem,
             GoogleReview,
             GoogleReviewsMeta,
             HomepageSection,
@@ -20,7 +22,8 @@ class CmsConfig(AppConfig):
         )
         from apps.cms.revalidate import notify_cms_changed
 
-        for model in (Banner, GoogleReview, GoogleReviewsMeta, HomepageSection, MenuItem, Page):
+        for model in (Banner, FaqCategory, FaqItem, GoogleReview, GoogleReviewsMeta,
+                      HomepageSection, MenuItem, Page):
             post_save.connect(notify_cms_changed, sender=model, dispatch_uid=f"cms-reval-save-{model.__name__}")
             post_delete.connect(notify_cms_changed, sender=model, dispatch_uid=f"cms-reval-del-{model.__name__}")
         # Geo-targeting lives on an M2M; editing only the countries fires no post_save.
