@@ -29,6 +29,7 @@
  * failure so the widget mints a fresh one, or the second attempt fails as a duplicate.
  */
 import { useId, useRef, useState } from "react";
+import Link from "next/link";
 import { TurnstileWidget, turnstileToken } from "@/components/auth/TurnstileWidget";
 import { PhoneField } from "@/components/ui/PhoneField";
 import {
@@ -63,13 +64,20 @@ export function ApplyForm({ job }: { job: Job }) {
   const [fileError, setFileError] = useState<string | null>(null);
   const [coverLetter, setCoverLetter] = useState("");
   // Survives a failed submit so a retry does not re-upload. Cleared when the file does.
-  const uploadedKey = useRef<string | null>(null);
+  //
+  // STATE, NOT A REF. It was a ref first, which the lint caught: the file field reads it
+  // to show "· uploaded", and a ref read during render is a value React will not
+  // re-render for — the hint would have been a render behind, permanently. The reason a
+  // ref was tempting is that `onSubmit` needs the key it has just minted, and setState
+  // is not visible until the next render; the fix is a local variable inside the
+  // handler, which is what `key` below is.
+  const [uploadedKey, setUploadedKey] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const busy = phase === "uploading" || phase === "submitting";
 
   function chooseFile(next: File | null) {
-    uploadedKey.current = null;
+    setUploadedKey(null);
     setProgress(0);
     if (!next) {
       setFile(null);
@@ -100,13 +108,17 @@ export function ApplyForm({ job }: { job: Job }) {
     setFieldErrors({});
 
     try {
-      if (!uploadedKey.current) {
+      // A LOCAL, because `setUploadedKey` does not make the value readable until the
+      // next render and this handler needs it two statements later.
+      let key = uploadedKey;
+      if (!key) {
         setPhase("uploading");
         setProgress(0);
-        uploadedKey.current = await uploadResume(file, {
+        key = await uploadResume(file, {
           turnstileToken: turnstileToken(),
           onProgress: setProgress,
         });
+        setUploadedKey(key);
       }
 
       setPhase("submitting");
@@ -118,7 +130,7 @@ export function ApplyForm({ job }: { job: Job }) {
         phone: String(data.get("phone") ?? "").trim(),
         cover_letter: coverLetter.trim(),
         location: data.get("location") ? Number(data.get("location")) : null,
-        upload_key: uploadedKey.current,
+        upload_key: key,
         resume_filename: file.name,
         website: String(data.get("website") ?? ""),
         turnstile_token: turnstileToken(),
@@ -133,7 +145,7 @@ export function ApplyForm({ job }: { job: Job }) {
         // A rejected FILE is the one failure that must invalidate the stored key —
         // otherwise every retry re-sends the same bytes the backend already refused.
         if (error.fieldErrors.resume) {
-          uploadedKey.current = null;
+          setUploadedKey(null);
           setFileError(error.fieldErrors.resume);
           setFile(null);
           if (fileInput.current) fileInput.current.value = "";
@@ -226,7 +238,7 @@ export function ApplyForm({ job }: { job: Job }) {
         disabled={busy}
         uploading={phase === "uploading"}
         progress={progress}
-        uploaded={Boolean(uploadedKey.current)}
+        uploaded={Boolean(uploadedKey)}
         onChoose={chooseFile}
       />
 
@@ -315,12 +327,12 @@ function Success({ job }: { job: Job }) {
         Our team reads every application. If your experience matches what the role needs,
         someone will be in touch to arrange a conversation.
       </p>
-      <a
+      <Link
         href="/careers"
         className="mt-6 inline-block text-sm font-medium text-accent underline underline-offset-4"
       >
         See our other open roles
-      </a>
+      </Link>
     </div>
   );
 }

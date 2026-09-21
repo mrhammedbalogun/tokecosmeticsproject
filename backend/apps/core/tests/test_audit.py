@@ -860,6 +860,59 @@ def _case_store_create(client, monkeypatch):
     ), 201
 
 
+def _case_faq_category_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/faq-categories/",
+        {"name": "Delivery", "sort": 1, "is_active": True},
+        format="json",
+    ), 201
+
+
+def _case_faq_item_create(client, monkeypatch):
+    from apps.cms.models import FaqCategory
+
+    category = FaqCategory.objects.create(name="Delivery", slug="delivery")
+    return client.post(
+        "/api/v1/admin/faq-items/",
+        {"category": category.pk, "question": "How long does delivery take?",
+         "answer_source": "<p>Two to five working days.</p>", "sort": 1,
+         "is_published": True},
+        format="json",
+    ), 201
+
+
+def _case_career_job_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/careers/jobs/",
+        {"title": "Sales Representative", "country": "NG",
+         "employment_type": "full_time", "workplace_type": "on_site",
+         "summary": "Grow Toke Cosmetics in your city.",
+         "description": "<p>What you will be doing.</p>",
+         "status": "open",
+         "locations": [{"label": "Alimosho, Lagos"}]},
+        format="json",
+    ), 201
+
+
+def _case_career_application_update(client, monkeypatch):
+    """A PATCH, not a create: an application is written by a MEMBER OF THE PUBLIC through
+    the anonymous careers form, never by staff. The only staff write is moving its status,
+    which is the decision the audit row needs to name."""
+    from apps.careers.factories import posting
+    from apps.careers.models import JobApplication
+
+    job = posting()
+    application = JobApplication.objects.create(
+        job=job, job_title=job.title, full_name="Ada Obi", email="ada@example.com",
+        phone="+2348023900964", resume_key="recruitment/resumes/deadbeef.pdf",
+    )
+    return client.patch(
+        f"/api/v1/admin/careers/applications/{application.pk}/",
+        {"status": "shortlisted"},
+        format="json",
+    ), 200
+
+
 def _case_tax_settings(client, monkeypatch):
     return client.patch(
         "/api/v1/admin/tax/settings/", {"charge_tax": False}, format="json"
@@ -987,6 +1040,14 @@ WRITE_CASES: dict[str, tuple] = {
     # Plan-42: the store directory. Archive/restore are exercised in
     # apps/stores/tests/test_admin_api.py; this pins the create row.
     "StoreLocationAdminViewSet": (_case_store_create, "create"),
+    # FAQ (2026-08). Both had been routed with no case here at all — the gap this
+    # completeness test exists to catch, closed 2026-09-21.
+    "FaqCategoryAdminViewSet": (_case_faq_category_create, "create"),
+    "FaqItemAdminViewSet": (_case_faq_item_create, "create"),
+    # Careers (Plan-45). The posting is an ordinary content create; the application is a
+    # PATCH, because staff never author one — see the case.
+    "JobPostingAdminViewSet": (_case_career_job_create, "create"),
+    "JobApplicationAdminViewSet": (_case_career_application_update, "partial_update"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),

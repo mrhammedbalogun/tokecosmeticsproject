@@ -64,6 +64,20 @@ OBJECT_ROUTES: dict[str, tuple[str, str]] = {
     "api/v1/combos/<slug:slug>/": (
         PUBLIC, "a merchandising grouping over public catalogue rows; the slug names no person"),
     "api/v1/cms/pages/<slug:slug>/": (PUBLIC, "published pages only; a draft 404s"),
+    # Careers (Plan-45). A job advert is public by definition — it is the thing we are
+    # asking strangers to read — and the slug names a ROLE, never a person. Draft and
+    # archived postings are excluded by `services.public_postings()`, so an unpublished
+    # role 404s exactly as an unpublished CMS page does.
+    "api/v1/careers/jobs/<slug:slug>/": (
+        PUBLIC, "open and closed postings only; a draft or archived one 404s"),
+    # The APPLY route is the one worth pausing over, because it WRITES personal data.
+    # It is still PUBLIC in this file's sense: the slug addresses the advert, not the
+    # applicant, and nothing about an existing application can be read or changed
+    # through it. What it creates is scoped by the email in the body, and the endpoint
+    # deliberately returns the same response either way so it cannot be used to ask
+    # whether a given person has applied (`apps/careers/services.py`).
+    "api/v1/careers/jobs/<slug:slug>/apply/": (
+        PUBLIC, "the slug names the advert, not the applicant; it reads no existing row"),
     "api/v1/webhooks/<str:gateway>/": (
         PUBLIC, "the gateway NAME, not an object id — authenticated by signature"),
     "api/v1/webhooks/aaj/<str:token>/": (

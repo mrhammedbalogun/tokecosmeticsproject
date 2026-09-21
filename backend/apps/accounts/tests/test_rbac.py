@@ -49,6 +49,13 @@ OWNER = {
     # legal position, the commission rate and the referred customer's discount are a
     # commercial one, and the Manager is who makes it.
     "decisions.manage",
+    # Careers (Plan-45). THREE scopes, and the split is the point: a job advert is
+    # content, an application is a named stranger's CV, and deleting one destroys the
+    # file for good. `careers.applications.` is also the prefix the audit guard matches
+    # to force read-auditing, which a single `careers.manage` would have evaded.
+    "careers.manage",
+    "careers.applications.manage",
+    "careers.applications.delete",  # takes the CV out of the bucket — Owner alone
 }
 MANAGER = {
     "orders.view",
@@ -65,6 +72,12 @@ MANAGER = {
     # Manager marks them paid. Withholding it just gets the Owner's login borrowed.
     "referrals.pay",
     "decisions.manage",  # see the note on the Owner set above
+    # Both careers scopes, by Hammed's call 2026-09-21 — the Manager posts the roles and
+    # screens the candidates. NOT `careers.applications.delete`: a Manager running a
+    # hiring round should not be able to destroy the record of a decision, or the CV
+    # behind it.
+    "careers.manage",
+    "careers.applications.manage",
 }
 # Support reads the payout queue for the same reason it reads orders: answering
 # "where is my commission?" is the job. It decides nothing.
