@@ -16,6 +16,7 @@ import { OrderTotals } from "@/components/orders/OrderTotals";
 import { PurchaseTracker } from "@/components/checkout/PurchaseTracker";
 import { getMarketingConfig } from "@/lib/marketing";
 import { purchaseValue } from "@/lib/tracking/value";
+import { googleUserDataFromOrder } from "@/lib/tracking/user-data";
 
 type Params = Promise<{ number: string }>;
 
@@ -58,12 +59,18 @@ export default async function ConfirmationPage({ params }: { params: Params }) {
     <section className="mx-auto max-w-3xl px-4 py-10">
       {/* Plan-44. The browser half of the Purchase event — the server half fires from the
           paid transition whether or not the customer ever reaches this page. Both send
-          the order number as their event id, which is how the platforms dedupe them. */}
+          the order number as their event id, which is how the platforms dedupe them.
+
+          `status` is not decoration: this page is also where a bank-transfer customer
+          lands straight after PLACEMENT, and nothing may be reported as a sale until the
+          money is in. See lib/tracking/paid.ts. */}
       <PurchaseTracker
         orderNumber={order.number}
+        status={order.status}
         currency={order.currency}
         value={purchaseValue(order)}
         items={order.items}
+        userData={googleUserDataFromOrder(order)}
         config={marketing}
       />
       <h1 className="font-display text-2xl">Thank you — your order is confirmed</h1>

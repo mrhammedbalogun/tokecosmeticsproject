@@ -11,6 +11,10 @@ import { OrderItems } from "@/components/orders/OrderItems";
 import { StatusChip } from "@/components/orders/StatusChip";
 import { OrderTotals } from "@/components/orders/OrderTotals";
 import { TrackingBlock } from "@/components/orders/TrackingBlock";
+import { LateGoogleAdsConversion } from "@/components/orders/LateGoogleAdsConversion";
+import { getMarketingConfig } from "@/lib/marketing";
+import { purchaseValue } from "@/lib/tracking/value";
+import { googleUserDataFromOrder } from "@/lib/tracking/user-data";
 
 type Params = Promise<{ number: string }>;
 type Search = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -55,8 +59,26 @@ export default async function OrderDetailPage({
     order.status === "pending_payment" &&
     confirmationCopy({ gateway: order.payment_gateway, status: order.status }).showBankDetails;
 
+  const marketing = await getMarketingConfig();
+
   return (
     <div>
+      {/* Plan-44, 2026-09-22. The second chance at the browser half: a bank-transfer
+          customer saw the confirmation page hours before the money was reconciled, so
+          nothing could be reported then. By the time they open this page from their
+          account the status is `processing`, and Google folds the late hit into the
+          conversion the server already uploaded for the same order number.
+
+          GOOGLE ONLY — Meta, TikTok and Snapchat dedupe on a short window and would
+          double-count at this distance. The component's docstring has the argument. */}
+      <LateGoogleAdsConversion
+        orderNumber={order.number}
+        status={order.status}
+        currency={order.currency}
+        value={purchaseValue(order)}
+        userData={googleUserDataFromOrder(order)}
+        config={marketing}
+      />
       <h2 className="font-display text-2xl">Order {order.number}</h2>
       <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
         <span>Placed {formatOrderDate(order.placed_at)}</span>

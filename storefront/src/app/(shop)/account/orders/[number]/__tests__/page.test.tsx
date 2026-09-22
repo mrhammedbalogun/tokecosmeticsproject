@@ -47,12 +47,13 @@ function order(overrides: Partial<OrderDetail> = {}): OrderDetail {
   };
 }
 
-let lastUrl = "";
-let lastInit: RequestInit | undefined;
+/** Every request the render made, in order. The page fetches the ORDER and then the
+ * marketing config (Plan-44's late Google Ads conversion), so a single "last request"
+ * no longer identifies the fetch a test means — find the one you want. */
+const calls: { url: string; init?: RequestInit }[] = [];
 function respond(body: unknown, status = 200) {
   global.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-    lastUrl = String(url);
-    lastInit = init;
+    calls.push({ url: String(url), init });
     return new Response(JSON.stringify(body), {
       status, headers: { "content-type": "application/json" },
     });
@@ -65,8 +66,7 @@ beforeEach(() => {
   store.clear();
   store.set("access", "AAA");
   store.set("refresh", "RRR");
-  lastUrl = "";
-  lastInit = undefined;
+  calls.length = 0;
   respond(order());
 });
 afterEach(() => { global.fetch = originalFetch; vi.restoreAllMocks(); });
@@ -245,8 +245,9 @@ describe("account order detail page", () => {
     store.set("country", "GB");
     await render_();
 
-    expect(lastUrl).toBe("http://backend:8000/api/v1/orders/TC-100038/");
-    expect(new Headers(lastInit?.headers).get("X-Country")).toBe("GB");
+    const detail = calls.find((c) => c.url.includes("/orders/TC-100038/"));
+    expect(detail?.url).toBe("http://backend:8000/api/v1/orders/TC-100038/");
+    expect(new Headers(detail?.init?.headers).get("X-Country")).toBe("GB");
   });
 
   it("404s become notFound()", async () => {
