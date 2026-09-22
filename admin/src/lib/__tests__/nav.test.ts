@@ -10,12 +10,13 @@ const OWNER = [
   "settings.manage", "referrals.view", "referrals.manage", "referrals.pay",
   "training.manage", "decisions.manage",
   "careers.manage", "careers.applications.manage", "careers.applications.delete",
+  "careers.notifications.manage",
 ];
 const MANAGER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "reports.view", "referrals.view",
   "referrals.manage", "referrals.pay", "decisions.manage",
-  "careers.manage", "careers.applications.manage",
+  "careers.manage", "careers.applications.manage", "careers.notifications.manage",
 ];
 const SUPPORT = ["orders.view", "orders.operate", "customers.view", "referrals.view"];
 const CONTENT = ["cms.manage"];
@@ -154,5 +155,13 @@ describe("the Careers door (Plan-45)", () => {
 
   it("highlights Careers while an application is on screen", () => {
     expect(activeHref("/careers/applications/42")).toBe("/careers");
+  });
+
+  it("highlights Careers on the notifications tab, NOT Email Notifications", () => {
+    // `/notifications` is a different top-level item. `activeHref` matches on longest
+    // prefix, and `/careers/notifications` does not start with `/notifications` — but a
+    // future contains-match would light the wrong sidebar entry, so pin it.
+    expect(activeHref("/careers/notifications")).toBe("/careers");
+    expect(activeHref("/notifications")).toBe("/notifications");
   });
 });

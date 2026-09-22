@@ -183,6 +183,12 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # DELETE on this one elevates inline to `careers.applications.delete` (Owner only),
     # which the URLconf cannot see — `test_admin_role_matrix` pins it over real HTTP.
     "JobApplicationAdminViewSet": "careers.applications.manage",
+    # Who gets emailed when somebody applies. Its own scope, WIDER than the
+    # `settings.manage` guarding the same table for every other event — the grant is
+    # argued in rbac.py and the event is pinned server-side. `mark-confirmed` elevates
+    # back to `settings.manage` inline, which the URLconf cannot see; the role matrix
+    # pins it over real HTTP.
+    "CareersNotificationAdminViewSet": "careers.notifications.manage",
     # --- FAQ (2026-08). `cms.manage`, like pages: an FAQ answer about refunds is as
     # load-bearing as a policy page, and the same person edits both. Declared here
     # 2026-09-21 — these two had been routed without an entry, which is the exact gap

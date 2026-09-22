@@ -110,6 +110,7 @@ export function NotificationSection({
   testAction,
   resendAction,
   markConfirmedAction,
+  canVouch = true,
   initialAddState = {},
 }: {
   event: NotificationEvent;
@@ -120,6 +121,19 @@ export function NotificationSection({
   testAction: (prev: RowState, fd: FormData) => Promise<RowState>;
   resendAction: (prev: RowState, fd: FormData) => Promise<RowState>;
   markConfirmedAction: (prev: RowState, fd: FormData) => Promise<RowState>;
+  /**
+   * Whether to offer the "Mark confirmed" override at all.
+   *
+   * DEFAULTS TRUE so the Email Notifications screen is unchanged: it is `settings.manage`
+   * and every visitor there can vouch by definition. The Careers tab passes `false` for a
+   * Manager, because vouching stays Owner-only there — confirming an address reaches every
+   * pending subscription it has, including events that screen cannot see.
+   *
+   * ERGONOMICS, NOT AUTHORIZATION. The endpoint refuses a Manager regardless (and says
+   * why); this only stops somebody being offered a button whose one outcome is a 403,
+   * which is the same rule `lib/nav.ts` states about hiding sidebar links.
+   */
+  canVouch?: boolean;
   initialAddState?: AddState;
 }) {
   const [addState, addFormAction] = useActionState<AddState, FormData>(
@@ -211,6 +225,7 @@ export function NotificationSection({
                         a typo marked confirmed fails silently forever — so the title
                         says who it is for. Confirming covers the address everywhere,
                         now and for any list it is added to later. */}
+                    {canVouch ? (
                     <RowForm
                       action={markConfirmedAction}
                       recipientId={row.id}
@@ -218,6 +233,7 @@ export function NotificationSection({
                       pendingLabel="Confirming…"
                       title={`Confirm ${labelFor(row)} without the email click. Only for an address you control or have verified yourself — a mistyped address confirmed this way fails silently.`}
                     />
+                    ) : null}
                   </>
                 ) : (
                   <RowForm

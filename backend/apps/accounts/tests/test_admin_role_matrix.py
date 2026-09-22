@@ -213,6 +213,18 @@ MATRIX: list[Row] = [
         scope="careers.applications.delete"),
     Row("JobApplicationAdminViewSet", "get",
         "/api/v1/admin/careers/applications/stats/", _MANAGERS),
+    # The careers notification list. Owner + Manager by Hammed's call (2026-09-21) —
+    # the people who hire fix their own alerts.
+    Row("CareersNotificationAdminViewSet", "get",
+        "/api/v1/admin/careers/notifications/", _MANAGERS),
+    Row("CareersNotificationAdminViewSet", "post",
+        "/api/v1/admin/careers/notifications/", _MANAGERS, body={"email": "x@y.test"}),
+    # VOUCHING STAYS OWNER-ONLY even on this surface: `confirm()` reaches every pending
+    # row for the address, including events this viewset cannot see. Inline elevation,
+    # invisible to ADMIN_SURFACE, which is exactly what this table is for.
+    Row("CareersNotificationAdminViewSet", "post",
+        "/api/v1/admin/careers/notifications/mark-confirmed/", _OWNER,
+        body={"recipient_id": 999999}, scope="settings.manage"),
     # --- reports: Owner and Manager. Support works the desk and does not see the books.
     Row("ReportView", "get", "/api/v1/admin/reports/revenue/", _MANAGERS),
     Row("ReportExportView", "get", "/api/v1/admin/reports/revenue/export.csv", _MANAGERS),

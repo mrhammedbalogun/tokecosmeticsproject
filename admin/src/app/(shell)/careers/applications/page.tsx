@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Pagination } from "@/components/Pagination";
 import { Tabs } from "@/app/(shell)/careers/page";
 import { ApiError } from "@/lib/api";
+import { getAdminMeOrNull } from "@/lib/admin-me";
 import {
   APPLICATION_STATUSES,
   applicationsQueryString,
@@ -49,6 +50,9 @@ export default async function ApplicationsPage({
     else if (Array.isArray(value) && value[0] !== undefined) raw.set(key, value[0]);
   }
   const filters = parseApplicationFilters(raw);
+  // Only to decide whether the Notifications tab is offered — the scope is re-checked on
+  // every request behind it.
+  const scopes = new Set((await getAdminMeOrNull())?.scopes ?? []);
 
   let page: Page<ApplicationRow> | null = null;
   let stats: ApplicationStats | null = null;
@@ -83,7 +87,11 @@ export default async function ApplicationsPage({
       <p className="mt-1 text-sm text-muted">
         Everyone who has applied through the careers page.
       </p>
-      <Tabs active="applications" canSeeApplications />
+      <Tabs
+        active="applications"
+        canSeeApplications
+        canSeeNotifications={scopes.has("careers.notifications.manage")}
+      />
 
       <div className="mt-6">
         {error ? (

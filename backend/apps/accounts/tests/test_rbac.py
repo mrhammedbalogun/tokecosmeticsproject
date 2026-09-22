@@ -56,6 +56,7 @@ OWNER = {
     "careers.manage",
     "careers.applications.manage",
     "careers.applications.delete",  # takes the CV out of the bucket — Owner alone
+    "careers.notifications.manage",  # who is emailed when somebody applies
 }
 MANAGER = {
     "orders.view",
@@ -78,6 +79,10 @@ MANAGER = {
     # behind it.
     "careers.manage",
     "careers.applications.manage",
+    # Hammed's call 2026-09-21: whoever runs hiring fixes their own alerts. Wider than
+    # the Owner-only `settings.manage` that guards the same table for every other event,
+    # and safe only because the careers viewset pins the event — see rbac.py.
+    "careers.notifications.manage",
 }
 # Support reads the payout queue for the same reason it reads orders: answering
 # "where is my commission?" is the job. It decides nothing.

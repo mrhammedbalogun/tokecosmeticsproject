@@ -194,6 +194,31 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     # and the failure mode of granting it too widely is a hiring record that cannot be
     # produced when somebody asks why a decision was made.
     "careers.applications.delete": frozenset({"Owner"}),
+    # WHO GETS EMAILED when somebody applies (2026-09-21). Its own scope, and it is
+    # deliberately WIDER than the `settings.manage` that guards the very same table for
+    # every other event — so the reasoning has to be written down.
+    #
+    # `notifications.admin_views` is Owner-only because "a standalone recipient row is an
+    # address with no account, no invite and no second factor that receives ORDER
+    # CONTENTS forever". That sentence is the whole argument, and it does not describe
+    # this event: the careers alert carries the candidate's name, the role and a link
+    # into the admin, and nothing else — no email, no phone, no cover letter, no CV.
+    # `apps/careers/tests/test_emails.py::test_THE_STAFF_ALERT_CARRIES_NO_CONTACT_DETAILS_AND_NO_CV`
+    # is what keeps that true, and it is the reason this grant is defensible rather than
+    # a quiet reversal of the Owner-only ruling.
+    #
+    # It is still not nothing: the alert names a THIRD PARTY (a candidate) to an address
+    # with no account behind it, and tells that address the named person is job-hunting.
+    # That is why it is a scope of its own rather than folded into `careers.manage` —
+    # posting a job advert and deciding who learns who applied are different amounts of
+    # trust, and this one can be taken away on its own.
+    #
+    # THE GRANT IS SAFE ONLY BECAUSE THE EVENT IS PINNED SERVER-SIDE. The viewset behind
+    # it can reach exactly one event code and no other, on every route including the
+    # detail and @action ones; see `apps/careers/notification_views.py`. If that pinning
+    # is ever loosened, this scope becomes `settings.manage` by the back door — a holder
+    # could subscribe any address to `order.paid`, which has nine real recipients today.
+    "careers.notifications.manage": frozenset({"Owner", "Manager"}),
 }
 
 SCOPES: frozenset[str] = frozenset(SCOPE_GRANTS)

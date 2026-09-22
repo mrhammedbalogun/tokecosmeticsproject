@@ -81,7 +81,11 @@ export default async function CareersPage({ searchParams }: { searchParams: Sear
         archived ones stay here.
       </p>
 
-      <Tabs active="roles" canSeeApplications={scopes.has("careers.applications.manage")} />
+      <Tabs
+        active="roles"
+        canSeeApplications={scopes.has("careers.applications.manage")}
+        canSeeNotifications={scopes.has("careers.notifications.manage")}
+      />
 
       <div className="mt-6">
         {error ? (
@@ -116,14 +120,23 @@ export default async function CareersPage({ searchParams }: { searchParams: Sear
 export function Tabs({
   active,
   canSeeApplications,
+  canSeeNotifications = false,
 }: {
-  active: "roles" | "applications";
+  active: "roles" | "applications" | "notifications";
   canSeeApplications: boolean;
+  canSeeNotifications?: boolean;
 }) {
+  // Each tab is gated on its OWN scope, because the three are separate grants: a holder
+  // of `careers.manage` alone sees only Roles, and the Notifications tab belongs to
+  // `careers.notifications.manage`. Hiding a tab is ergonomics, never authorization —
+  // every endpoint behind them re-checks on each request, from the database.
   const tabs = [
     { key: "roles", label: "Roles", href: "/careers" },
     ...(canSeeApplications
       ? [{ key: "applications", label: "Applications", href: "/careers/applications" }]
+      : []),
+    ...(canSeeNotifications
+      ? [{ key: "notifications", label: "Notifications", href: "/careers/notifications" }]
       : []),
   ];
   return (

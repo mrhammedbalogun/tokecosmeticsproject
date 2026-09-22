@@ -894,6 +894,14 @@ def _case_career_job_create(client, monkeypatch):
     ), 201
 
 
+def _case_career_notification_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/careers/notifications/",
+        {"email": "careers@example.com"},
+        format="json",
+    ), 201
+
+
 def _case_career_application_update(client, monkeypatch):
     """A PATCH, not a create: an application is written by a MEMBER OF THE PUBLIC through
     the anonymous careers form, never by staff. The only staff write is moving its status,
@@ -1048,6 +1056,7 @@ WRITE_CASES: dict[str, tuple] = {
     # PATCH, because staff never author one — see the case.
     "JobPostingAdminViewSet": (_case_career_job_create, "create"),
     "JobApplicationAdminViewSet": (_case_career_application_update, "partial_update"),
+    "CareersNotificationAdminViewSet": (_case_career_notification_create, "create"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),
