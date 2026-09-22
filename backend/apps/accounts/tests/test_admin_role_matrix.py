@@ -225,6 +225,36 @@ MATRIX: list[Row] = [
     Row("CareersNotificationAdminViewSet", "post",
         "/api/v1/admin/careers/notifications/mark-confirmed/", _OWNER,
         body={"recipient_id": 999999}, scope="settings.manage"),
+    # --- the student programme (2026-09-22): careers' shape, one surface wider ------
+    # Four scopes rather than three, because the intake switch is a separate grant from
+    # reading the students — and it is separate for a mechanical reason as well as a
+    # human one: keeping it out of the `entrepreneurship.applications.` family is what
+    # stops the audit guard forcing read-auditing onto a boolean.
+    Row("ProgramSettingsAdminView", "get",
+        "/api/v1/admin/entrepreneurship/settings/", _MANAGERS),
+    Row("ProgramSettingsAdminView", "patch",
+        "/api/v1/admin/entrepreneurship/settings/", _MANAGERS,
+        body={"is_open": True}),
+    Row("ProgramApplicationAdminViewSet", "get",
+        "/api/v1/admin/entrepreneurship/applications/", _MANAGERS),
+    Row("ProgramApplicationAdminViewSet", "get",
+        "/api/v1/admin/entrepreneurship/applications/stats/", _MANAGERS),
+    # The row that matters: deleting a student's application is permanent and is the
+    # Owner's alone, even though a Manager may read, filter and decide every one of them.
+    Row("ProgramApplicationAdminViewSet", "delete",
+        "/api/v1/admin/entrepreneurship/applications/999999/", _OWNER,
+        scope="entrepreneurship.applications.delete"),
+    Row("ProgrammeNotificationAdminViewSet", "get",
+        "/api/v1/admin/entrepreneurship/notifications/", _MANAGERS),
+    Row("ProgrammeNotificationAdminViewSet", "post",
+        "/api/v1/admin/entrepreneurship/notifications/", _MANAGERS,
+        body={"email": "x@y.test"}),
+    # VOUCHING STAYS OWNER-ONLY here too: `confirm()` reaches every pending row for the
+    # address, including events this viewset cannot see. Inline elevation, invisible to
+    # ADMIN_SURFACE, which is exactly what this table is for.
+    Row("ProgrammeNotificationAdminViewSet", "post",
+        "/api/v1/admin/entrepreneurship/notifications/mark-confirmed/", _OWNER,
+        body={"recipient_id": 999999}, scope="settings.manage"),
     # --- reports: Owner and Manager. Support works the desk and does not see the books.
     Row("ReportView", "get", "/api/v1/admin/reports/revenue/", _MANAGERS),
     Row("ReportExportView", "get", "/api/v1/admin/reports/revenue/export.csv", _MANAGERS),

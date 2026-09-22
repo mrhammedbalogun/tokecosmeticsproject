@@ -57,6 +57,14 @@ OWNER = {
     "careers.applications.manage",
     "careers.applications.delete",  # takes the CV out of the bucket — Owner alone
     "careers.notifications.manage",  # who is emailed when somebody applies
+    # The Student Entrepreneurship Program (2026-09-22). FOUR scopes, laid out to mirror
+    # careers: the intake switch is content, an application is a named student's contact
+    # details and school, deleting one destroys the record, and the alert list decides
+    # who learns a named young person applied.
+    "entrepreneurship.manage",
+    "entrepreneurship.applications.manage",
+    "entrepreneurship.applications.delete",  # destroys the record — Owner alone
+    "entrepreneurship.notifications.manage",
 }
 MANAGER = {
     "orders.view",
@@ -83,6 +91,12 @@ MANAGER = {
     # the Owner-only `settings.manage` that guards the same table for every other event,
     # and safe only because the careers viewset pins the event — see rbac.py.
     "careers.notifications.manage",
+    # The student programme, same three as careers and for the same reasons. NOT
+    # `entrepreneurship.applications.delete`: a Manager screening students should not be
+    # able to destroy the record of a decision they made.
+    "entrepreneurship.manage",
+    "entrepreneurship.applications.manage",
+    "entrepreneurship.notifications.manage",
 }
 # Support reads the payout queue for the same reason it reads orders: answering
 # "where is my commission?" is the job. It decides nothing.

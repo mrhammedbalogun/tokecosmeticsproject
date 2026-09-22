@@ -1,0 +1,38 @@
+{% extends "email/base.html" %}
+{% comment %}
+DELIBERATELY PROMISES NOTHING IT CANNOT KEEP. No "we will respond within X days", no
+implied acceptance, and above all NO NUMBERS — not a commission rate, not a stock value,
+not a target. This mail goes to a student who has just read a page about being given
+goods on credit, and anything here that reads as a commitment is a commitment, made by
+an automated message to somebody who will quote it back.
+
+It confirms receipt, says what happens next in the vaguest true terms, and points back at
+the page. That is the whole job.
+
+The GREETING carries the name, not the headline — same reasoning as
+`order_confirmation.html`: `student_name` is a first name split off a free-text field and
+a headline reading "Thanks, —" on a blank one is worse than one that never tried.
+{% endcomment %}
+{% block preheader %}We've received your application to the Student Entrepreneurship Program.{% endblock %}
+{% block heading %}{% include "email/_heading.html" with eyebrow="Application received" title="Thanks for applying" %}{% endblock %}
+{% block content %}
+<p style="margin:0 0 18px;">{% if student_name %}Hi {{ student_name }} — thanks{% else %}Thanks{% endif %} for applying to the Toke Cosmetics Student Entrepreneurship Program.</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+       style="margin:0 0 22px;border:1px solid #e7e2d8;border-radius:10px;">
+  <tr>
+    <td style="padding:16px 18px;">
+      <div style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6b6862;">You applied to</div>
+      <div style="margin-top:6px;font-size:16px;color:#1a1a1a;"><strong>Student Entrepreneurship Program</strong></div>
+      {% if institution %}<div style="margin-top:4px;font-size:13px;color:#6b6862;">{{ institution }}</div>{% endif %}
+    </td>
+  </tr>
+</table>
+
+<p style="margin:0 0 22px;">We read every application ourselves. If you look like a good fit,
+  someone from our team will contact you to talk it through and take you from there.</p>
+<p style="margin:0 0 22px;font-size:13px;color:#6b6862;">One thing worth knowing now: we will
+  never ask you to pay anything to join. If a message asks you for a fee, it did not come
+  from us.</p>
+{% include "email/_button.html" with url=programme_url label="Read about the programme" %}
+{% endblock %}

@@ -68,6 +68,13 @@ INSTALLED_APPS = [
     # and carries an uploaded file, its own scopes and its own audit posture. Filing the
     # two together would have put candidate CVs behind the page-copy scope.
     "apps.careers",
+    # The Student Entrepreneurship Program. Its own app for the reason `careers` is:
+    # the two rhyme (a public form, a stranger's details, a staff decision) and that is
+    # exactly the trap. A job applicant is asking to be PAID by us; a student here is
+    # asking to be TRUSTED WITH STOCK, on credit. Different reviewers, different scopes,
+    # different retention — and a `careers.applications.manage` holder screening
+    # candidates has no business reading either.
+    "apps.entrepreneurship",
     # Ad-platform measurement (Plan-44): the pixels' configuration, the consent and
     # click-id snapshot an order carries, and the outbox of conversion events owed to
     # Meta, TikTok, Snapchat and Google. Its own app rather than a corner of `analytics`:
@@ -353,6 +360,17 @@ REST_FRAMEWORK = {
         # letters a minute, and a household or an office behind one NAT address must
         # still be able to apply one after another.
         "careers_apply": "10/min",
+        # The student programme form. Same shape and same number as `careers_apply`
+        # above, and for the same reason: submitting is cheap for us and expensive for
+        # the applicant, so the cap is set to stop a script rather than to ration a
+        # person. A university computer room behind one NAT address is the case this
+        # must not break — several students applying one after another is the SUCCESS
+        # of the programme, not abuse of it.
+        #
+        # This form carries no file, so there is no second, tighter bucket in front of
+        # it the way `careers_upload` fronts the careers form. This rate and the
+        # Turnstile check on the same endpoint are the whole of the gate.
+        "programme_apply": "10/min",
         # Public referral-code lookup. Shared bucket via the BFF (see
         # `_IPKeyedThrottle`), so generous on purpose: this must never stop a real
         # customer typing a code, and a guessed code costs nobody anything.

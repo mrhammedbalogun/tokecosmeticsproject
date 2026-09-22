@@ -1,0 +1,13 @@
+APPLICATION RECEIVED
+
+{% if student_name %}Hi {{ student_name }} — thanks{% else %}Thanks{% endif %} for applying to the Toke Cosmetics
+Student Entrepreneurship Program{% if institution %} from {{ institution }}{% endif %}.
+
+We read every application ourselves. If you look like a good fit, someone from our team
+will contact you to talk it through and take you from there.
+
+One thing worth knowing now: we will never ask you to pay anything to join. If a message
+asks you for a fee, it did not come from us.
+
+{{ shop_url }}/entrepreneurial-program
+{% include "email/_footer.txt" %}

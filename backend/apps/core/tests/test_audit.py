@@ -921,6 +921,44 @@ def _case_career_application_update(client, monkeypatch):
     ), 200
 
 
+def _case_programme_settings(client, monkeypatch):
+    """The intake switch. A PATCH on a singleton, like the tax and business-decision
+    screens below — `ProgramSettings.load()` materialises the row on first touch."""
+    return client.patch(
+        "/api/v1/admin/entrepreneurship/settings/",
+        {"is_open": False, "closed_message": "Applications reopen in January."},
+        format="json",
+    ), 200
+
+
+def _case_programme_notification_create(client, monkeypatch):
+    return client.post(
+        "/api/v1/admin/entrepreneurship/notifications/",
+        {"email": "programme@example.com"},
+        format="json",
+    ), 201
+
+
+def _case_programme_application_update(client, monkeypatch):
+    """A PATCH, not a create: an application is written by a MEMBER OF THE PUBLIC through
+    the anonymous programme form, never by staff. The only staff write is moving its
+    status, which is the decision the audit row needs to name."""
+    from apps.core.models import Country
+    from apps.entrepreneurship.models import ProgramApplication
+
+    application = ProgramApplication.objects.create(
+        country=Country.objects.get(code="NG"),
+        full_name="Chidinma Eze", email="chidinma@example.com",
+        phone="+2348023900964", institution="University of Lagos",
+        academic_level="300 Level", course_of_study="Biochemistry",
+    )
+    return client.patch(
+        f"/api/v1/admin/entrepreneurship/applications/{application.pk}/",
+        {"status": "approved"},
+        format="json",
+    ), 200
+
+
 def _case_tax_settings(client, monkeypatch):
     return client.patch(
         "/api/v1/admin/tax/settings/", {"charge_tax": False}, format="json"
@@ -1057,6 +1095,12 @@ WRITE_CASES: dict[str, tuple] = {
     "JobPostingAdminViewSet": (_case_career_job_create, "create"),
     "JobApplicationAdminViewSet": (_case_career_application_update, "partial_update"),
     "CareersNotificationAdminViewSet": (_case_career_notification_create, "create"),
+    # `update`, not `partial_update`: this is a plain `RetrieveUpdateAPIView`, so there is
+    # no `self.action` for the mixin to prefer and the verb is derived from the method —
+    # the same as the tax, marketing and business-decision singletons above.
+    "ProgramSettingsAdminView": (_case_programme_settings, "update"),
+    "ProgramApplicationAdminViewSet": (_case_programme_application_update, "partial_update"),
+    "ProgrammeNotificationAdminViewSet": (_case_programme_notification_create, "create"),
     "WarehouseAdminViewSet": (_case_warehouse_create, "create"),
     "StockItemAdminViewSet": (_case_stock_create, "create"),
     "StockCSVImportView": (_case_stock_csv_import, "import_csv"),

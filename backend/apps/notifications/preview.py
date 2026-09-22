@@ -83,6 +83,21 @@ _PREVIEWS: dict[str, dict] = {
         "is_resubmission": False,
         "application_url": "https://admin.tokecosmetics.com/careers/applications/1",
     },
+    # Deliberately a made-up student, for the reason the careers preview gives: a
+    # preview renders into the admin's own screen, and pulling a REAL application in to
+    # demonstrate the template would put one person's name in front of whoever happens
+    # to be checking what an email looks like.
+    "entrepreneurship.application_received": {
+        "is_preview": True,
+        "student_name": "Chidinma Eze",
+        "institution": "University of Lagos",
+        "academic_level": "300 Level",
+        "course_of_study": "Biochemistry",
+        "country_name": "Nigeria",
+        "has_motivation": True,
+        "is_resubmission": False,
+        "application_url": "https://admin.tokecosmetics.com/entrepreneurship/1",
+    },
     "delivery.aaj_attention": {
         "is_preview": True,
         "order_number": "TC-10234",

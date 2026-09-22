@@ -64,6 +64,22 @@ export const NAV_ITEMS: NavItem[] = [
     href: "/careers",
     scopes: ["careers.manage", "careers.applications.manage"],
   },
+  // The Student Entrepreneurship Program (2026-09-22). ANY-OF, like Careers above and
+  // for the same reason: `entrepreneurship.manage` opens the intake switch and
+  // `entrepreneurship.applications.manage` the students who applied, and they are
+  // separate precisely so one can be granted without the other — whoever pauses an
+  // intake need not thereby hold every applicant's phone number. The page itself shows
+  // only the sections the visitor's scopes cover.
+  //
+  // The LABEL is not the route, deliberately. The storefront calls this page
+  // "Entrepreneurial Program" and the artwork calls it the "Student Entrepreneurship
+  // Program"; "Student Program" is the shortest thing that is unambiguous in a sidebar
+  // next to Customers and Staff, which are also lists of people.
+  {
+    label: "Student Program",
+    href: "/entrepreneurship",
+    scopes: ["entrepreneurship.manage", "entrepreneurship.applications.manage"],
+  },
   { label: "Customers", href: "/customers", scopes: ["customers.view"] },
   { label: "Reviews", href: "/reviews", scopes: ["reviews.manage"] },
   { label: "Coupons", href: "/coupons", scopes: ["marketing.manage"] },

@@ -11,12 +11,18 @@ const OWNER = [
   "training.manage", "decisions.manage",
   "careers.manage", "careers.applications.manage", "careers.applications.delete",
   "careers.notifications.manage",
+  "entrepreneurship.manage", "entrepreneurship.applications.manage",
+  "entrepreneurship.applications.delete", "entrepreneurship.notifications.manage",
 ];
 const MANAGER = [
   "orders.view", "orders.operate", "orders.manage", "products.manage", "reviews.manage",
   "customers.view", "marketing.manage", "reports.view", "referrals.view",
   "referrals.manage", "referrals.pay", "decisions.manage",
   "careers.manage", "careers.applications.manage", "careers.notifications.manage",
+  // NOT `entrepreneurship.applications.delete` — a Manager screens students but does
+  // not destroy the record of a decision they made.
+  "entrepreneurship.manage", "entrepreneurship.applications.manage",
+  "entrepreneurship.notifications.manage",
 ];
 const SUPPORT = ["orders.view", "orders.operate", "customers.view", "referrals.view"];
 const CONTENT = ["cms.manage"];
@@ -62,6 +68,7 @@ describe("the sidebar renders only what the scopes allow", () => {
       // theirs; the split exists so `careers.manage` can be widened to Content later
       // without that decision touching applicant CVs.
       "Careers",
+      "Student Program",
       "Customers", "Reviews",
       "Coupons",
       "Home Content",

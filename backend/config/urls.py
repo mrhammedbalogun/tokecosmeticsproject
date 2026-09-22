@@ -60,6 +60,10 @@ urlpatterns = [
     # presigned ticket minted here, and the apply call carries only the key. See
     # `apps/careers/resume_storage.py` for why the bytes never reach this container.
     path("api/v1/careers/", include("apps.careers.urls")),
+    # The Student Entrepreneurship Program. Anonymous, and deliberately FILE-FREE:
+    # unlike the careers form beside it there is nothing to upload, so there is no
+    # presigned ticket and Turnstile is verified on the apply call itself.
+    path("api/v1/entrepreneurship/", include("apps.entrepreneurship.urls")),
     # Which pixels the storefront should load, and the consent policy to apply before
     # loading them (Plan-44). Anonymous and public: everything it returns is already
     # visible in the page source. Credentials are NEVER served here.
@@ -79,6 +83,7 @@ urlpatterns = [
     path("api/v1/admin/", include("apps.delivery.admin_urls")),
     path("api/v1/admin/", include("apps.stores.admin_urls")),
     path("api/v1/admin/", include("apps.careers.admin_urls")),
+    path("api/v1/admin/", include("apps.entrepreneurship.admin_urls")),
     path("api/v1/admin/", include("apps.analytics.admin_urls")),
     path("api/v1/admin/", include("apps.referrals.admin_urls")),
     path("api/v1/admin/", include("apps.orders.admin_urls")),

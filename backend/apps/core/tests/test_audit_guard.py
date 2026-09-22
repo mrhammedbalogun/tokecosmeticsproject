@@ -59,7 +59,17 @@ from apps.core.audit import AdminAuditMixin
 # nothing here, and the CV download — the most sensitive read on the surface — would have
 # left no trace of who fetched whose file. The PREFIX, not the whole scope, so the
 # postings endpoints beside them are not dragged into read-auditing for serving job copy.
-PII_SCOPE_PREFIXES = ("orders.", "customers.", "referrals.", "careers.applications.")
+# `entrepreneurship.applications.` joined on 2026-09-22 on the same argument, and the
+# scope was split off `entrepreneurship.manage` for this rule as much as for the grant
+# table. Note the comparison that settles it: `orders.` is in this tuple and an order
+# carries no CV either — it qualifies because it names an individual and their contact
+# details on every row, which is exactly what a programme application does. The PREFIX,
+# not the whole family, so the intake switch beside it is not dragged into read-auditing
+# for serving one boolean.
+PII_SCOPE_PREFIXES = (
+    "orders.", "customers.", "referrals.", "careers.applications.",
+    "entrepreneurship.applications.",
+)
 
 # Views that audit their READS, enumerated. The rule above discovers most of them; this
 # list is the second, independent statement, and it is what catches the two directions a
@@ -107,6 +117,10 @@ READ_AUDITED_VIEWS: dict[str, str] = {
     # file a member of the public uploaded about themselves. If a candidate ever asks who
     # saw their CV, the row written here is the only thing that can answer.
     "JobApplicationAdminViewSet": "job applications: a candidate's name, email, phone, cover letter and their CV",
+    # The student programme's applicants. No file attached, which is the only way this
+    # is lighter than the row above — it still names an individual, their phone number
+    # and where they study, on every row of a paginated list.
+    "ProgramApplicationAdminViewSet": "programme applications: a student's name, email, phone, institution and course",
 }
 
 

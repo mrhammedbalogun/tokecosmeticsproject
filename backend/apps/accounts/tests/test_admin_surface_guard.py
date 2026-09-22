@@ -189,6 +189,18 @@ ADMIN_SURFACE: dict[str, str | None] = {
     # back to `settings.manage` inline, which the URLconf cannot see; the role matrix
     # pins it over real HTTP.
     "CareersNotificationAdminViewSet": "careers.notifications.manage",
+    # --- the student programme (2026-09-22): the same three-way split as careers ---
+    # The intake switch is its own scope so it does NOT sit under the
+    # `entrepreneurship.applications.` prefix — otherwise the audit guard would force
+    # read-auditing onto an endpoint that serves one boolean.
+    "ProgramSettingsAdminView": "entrepreneurship.manage",
+    # DELETE on this one elevates inline to `entrepreneurship.applications.delete`
+    # (Owner only), which the URLconf cannot see — `test_admin_role_matrix` pins it
+    # over real HTTP.
+    "ProgramApplicationAdminViewSet": "entrepreneurship.applications.manage",
+    # `mark-confirmed` elevates back to `settings.manage` inline, likewise invisible
+    # here and likewise pinned by the role matrix.
+    "ProgrammeNotificationAdminViewSet": "entrepreneurship.notifications.manage",
     # --- FAQ (2026-08). `cms.manage`, like pages: an FAQ answer about refunds is as
     # load-bearing as a policy page, and the same person edits both. Declared here
     # 2026-09-21 — these two had been routed without an entry, which is the exact gap

@@ -128,6 +128,17 @@ EVENTS: tuple[NotificationEvent, ...] = (
         ),
         template="careers_application_received",
     ),
+    NotificationEvent(
+        code="entrepreneurship.application_received",
+        label="New student programme application",
+        description=(
+            "A student applied to the Student Entrepreneurship Program. The alert names "
+            "them and where they study and nothing else — their contact details stay "
+            "behind the admin login, because an address on this list may have none. "
+            "For whoever runs the programme."
+        ),
+        template="programme_application_received",
+    ),
 )
 
 EVENTS_BY_CODE: dict[str, NotificationEvent] = {event.code: event for event in EVENTS}

@@ -219,6 +219,46 @@ SCOPE_GRANTS: dict[str, frozenset[str]] = {
     # is ever loosened, this scope becomes `settings.manage` by the back door — a holder
     # could subscribe any address to `order.paid`, which has nine real recipients today.
     "careers.notifications.manage": frozenset({"Owner", "Manager"}),
+    # ── THE STUDENT ENTREPRENEURSHIP PROGRAM (2026-09-22) ────────────────────────
+    #
+    # Four scopes, laid out to mirror careers above, because the two surfaces have the
+    # same shape and confusing them later would be easy. What differs is what the data
+    # IS: a job applicant is asking to be paid by us, a student here is asking to be
+    # given stock on credit. Neither population should be reachable with the other's
+    # grant, which is why this is four more scopes rather than a widening of those.
+    #
+    # `entrepreneurship.manage` is the INTAKE SWITCH and nothing else — whether the
+    # public form is accepting applications, and the sentence shown in its place. It
+    # names nobody and moves no money, so it is the one grant here that could be widened
+    # to Content later without that decision touching a student's details.
+    "entrepreneurship.manage": frozenset({"Owner", "Manager"}),
+    # THE PII GRANT, and the name matters twice over: it is what
+    # `apps/core/tests/test_audit_guard.py::PII_SCOPE_PREFIXES` matches on to FORCE
+    # read-auditing onto every endpoint carrying it. A single `entrepreneurship.manage`
+    # over both surfaces would have sailed past that rule and left the applicant list —
+    # a named student's email, phone, school and course on every row — readable without
+    # a trace of who looked. Same construction as `careers.applications.manage`, same
+    # reason, and deliberately NOT the same scope.
+    "entrepreneurship.applications.manage": frozenset({"Owner", "Manager"}),
+    # DELETING an application is a step above managing it, exactly as
+    # `careers.applications.delete` is: it destroys the row outright, which is what a
+    # "delete my data" request resolves to and is therefore not undoable by anybody. A
+    # Manager screening students has no reason to hold it, and the failure mode of
+    # granting it too widely is a record that cannot be produced when somebody asks why
+    # a decision was made.
+    "entrepreneurship.applications.delete": frozenset({"Owner"}),
+    # WHO GETS EMAILED when a student applies. Wider than the `settings.manage` that
+    # guards the same table for every other event, on the same argument the careers
+    # alert makes and subject to the same condition: the alert carries the student's
+    # name, where they study and a link into the admin — no email, no phone, no
+    # motivation letter.
+    # `apps/entrepreneurship/tests/test_emails.py::test_THE_STAFF_ALERT_CARRIES_NO_CONTACT_DETAILS`
+    # is what keeps that true, and it is the reason this grant is defensible rather than
+    # a quiet reversal of the Owner-only ruling. THE GRANT IS SAFE ONLY BECAUSE THE
+    # EVENT IS PINNED SERVER-SIDE (`apps/entrepreneurship/notification_views.py`); if
+    # that pinning is ever loosened, this scope becomes `settings.manage` by the back
+    # door, because a holder could subscribe any address to `order.paid`.
+    "entrepreneurship.notifications.manage": frozenset({"Owner", "Manager"}),
 }
 
 SCOPES: frozenset[str] = frozenset(SCOPE_GRANTS)
