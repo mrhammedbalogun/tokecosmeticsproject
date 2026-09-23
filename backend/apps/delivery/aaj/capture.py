@@ -409,7 +409,7 @@ def _resolve_created(shipment: AajShipment, *, tracking_id: str, label_url: str,
                              f"the AAJ account, booking {shipment.booking_id}){how}.")
 
 
-def _label_from(docs) -> str:
+def label_from(docs) -> str:
     for doc in docs or []:
         url = doc.get("url") if isinstance(doc, dict) else doc
         if isinstance(url, str) and url.startswith("http"):
@@ -452,7 +452,7 @@ def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
         if not tracking_id:
             return _park_unconfirmed(shipment, actor=actor, why="paid but no tracking id readable")
         _resolve_created(shipment, tracking_id=tracking_id,
-                         label_url=_label_from(record.get("labelDocuments")),
+                         label_url=label_from(record.get("labelDocuments")),
                          aaj_shipment_id=shipment_id, actor=actor, how=how)
         return "created"
     if not paid and not shipment_id:
@@ -463,9 +463,30 @@ def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
                          message=f"AAJ booking {shipment.booking_id} confirmed UNPAID and "
                                  "without a shipment — safe to retry the charge.")
         return "booked"
+    # Their half-state: the booking reads unpaid but a shipment record exists. Stamp
+    # its id on our row NO MATTER WHAT — it is the only key void-shipment accepts, and
+    # without it this lane has no exit at all: `create_unconfirmed` is not CAPTURABLE,
+    # so an order that lands here can neither be charged again nor cancelled, and the
+    # poll re-reads the same dead end every two hours forever.
+    if shipment_id and shipment.aaj_shipment_id != shipment_id:
+        shipment.aaj_shipment_id = shipment_id
+        shipment.save(update_fields=["aaj_shipment_id", "updated_at"])
+    detail = ""
+    try:
+        held = read_shipment(shipment_id) if shipment_id else {}
+    except client.AajError as exc:
+        logger.info("aaj half-state read failed for %s: %s", shipment_id, exc)
+        held = {}
+    held_tracking = str(held.get("trackingId") or "")
+    if held_tracking:
+        # What the desk needs to choose between voiding it and chasing the charge.
+        label = " with a label issued" if label_from(held.get("labelDocuments")) else ""
+        detail = (f"; their record is {held_tracking}, "
+                  f"'{held.get('humanStatus') or held.get('status')}'{label}")
     return _park_unconfirmed(
         shipment, actor=actor,
-        why=f"booking unpaid but AAJ holds shipment record {shipment_id} (their half-state)",
+        why=f"booking unpaid but AAJ holds shipment record {shipment_id} "
+            f"(their half-state){detail}",
     )
 
 
@@ -501,7 +522,7 @@ def _process_booking(shipment: AajShipment, *, actor) -> None:
         tracking_id = str(record.get("tracking_id") or record.get("trackingId") or "")
         if tracking_id:
             _resolve_created(shipment, tracking_id=tracking_id,
-                             label_url=_label_from(record.get("labelDocuments")),
+                             label_url=label_from(record.get("labelDocuments")),
                              aaj_shipment_id=str(record.get("_id") or ""), actor=actor, how="")
             return
         failure = CaptureRefused("no_tracking_id", "AAJ processed without a tracking id.")
@@ -565,6 +586,16 @@ def can_void(shipment: AajShipment) -> tuple[bool, str]:
         if scan in VOIDABLE_SCANS:
             return True, ""
         return False, f"AAJ has already scanned it ({scan}) — void is refused after the first hub scan"
+    if shipment.status == "create_unconfirmed":
+        # THE EXIT FROM THE HALF-STATE. AAJ holds a shipment record we never
+        # confirmed and the booking under it reads unpaid; cancelling that record is
+        # the one move that cannot cost money, and it lands the row on `voided`,
+        # which IS capturable — so the order can be re-booked cleanly afterwards.
+        # Without this, the lane is a dead end (see reconcile()).
+        if shipment.tracking_id or shipment.aaj_shipment_id:
+            return True, ""
+        return False, ("AAJ gave us no shipment id to cancel — press Check with AAJ "
+                       "first, and if it still says nothing, settle it with AAJ by phone")
     return False, f"shipment is {shipment.status}"
 
 
@@ -581,6 +612,7 @@ def void_shipment(order, *, actor) -> AajShipment:
     key = shipment.tracking_id or shipment.aaj_shipment_id
     if not key:
         raise CaptureRefused("no_tracking_id", "No AAJ shipment id to void.")
+    was_unconfirmed = shipment.status == "create_unconfirmed"
     result = client.call("DELETE", f"/partner/shipment/void-shipment/{key}",
                          {"unrestricted": False}, retries=0)
     order = shipment.order  # freshly loaded above; the caller's instance may be stale
@@ -591,10 +623,27 @@ def void_shipment(order, *, actor) -> AajShipment:
             order.tracking_carrier = ""
             order.tracking_number = ""
             order.save(update_fields=["tracking_carrier", "tracking_number", "updated_at"])
+        money = (
+            "nothing was ever charged for it"
+            if was_unconfirmed
+            else f"₦{shipment.cost} to be reversed"
+        )
         record_event(order, "aaj", actor=actor,
-                     message=f"AAJ shipment {shipment.tracking_id} VOIDED (booking "
-                             f"{shipment.booking_id}, ₦{shipment.cost} to be reversed): "
+                     message=f"AAJ shipment {key} VOIDED (booking "
+                             f"{shipment.booking_id}, {money}): "
                              f"{result.message}. Capture again to rebook.")
+    if was_unconfirmed and shipment.booking_id:
+        # The booking under a half-state record reads UNPAID, and voiding the shipment
+        # does not remove it — it would sit in AAJ's portal as a DUE record holding the
+        # customer's name, phone and address under a customBookingId they cannot search.
+        # Same best-effort lane the abandon path uses; a failure here never blocks the void.
+        from apps.delivery.tasks import delete_aaj_booking
+
+        try:
+            delete_aaj_booking.delay(shipment.pk, shipment.booking_id)
+        except Exception as exc:  # broker down: the booking lingers, the void still stands
+            logger.warning("aaj delete-booking enqueue failed for %s: %s",
+                           shipment.booking_id, exc)
     return shipment
 
 
@@ -606,7 +655,7 @@ def fetch_label(shipment: AajShipment) -> str | None:
     if shipment.label_url:
         return shipment.label_url
     record = read_shipment(shipment.tracking_id)
-    url = _label_from(record.get("labelDocuments"))
+    url = label_from(record.get("labelDocuments"))
     if url:
         shipment.label_url = url
         shipment.save(update_fields=["label_url", "updated_at"])

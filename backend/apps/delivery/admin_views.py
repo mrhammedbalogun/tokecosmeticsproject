@@ -785,6 +785,10 @@ class AdminAajShipmentView(AdminAuditMixin, APIView):
                 "status": shipment.status,
                 "booking_id": shipment.booking_id,
                 "tracking_id": shipment.tracking_id,
+                # AAJ's own id for the shipment record. Normally redundant with the
+                # tracking id — but in the `create_unconfirmed` lane it is the ONLY
+                # handle we have, and the one void-shipment is called with.
+                "aaj_shipment_id": shipment.aaj_shipment_id,
                 "quote_total": str(shipment.quote_total) if shipment.quote_total is not None else None,
                 "cost": str(shipment.cost) if shipment.cost is not None else None,
                 "charged": str(shipment.charged),

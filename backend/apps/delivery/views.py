@@ -121,13 +121,27 @@ class AajWebhookView(APIView):
         verified, how = aaj_webhook.verify_signature(
             request.body, headers, settings.AAJ_WEBHOOK_SIGNING_KEY
         )
-        if not verified and "no signature header" not in how:
+        unsigned = "no signature header" in how
+        if not verified and not unsigned:
             # They signed it and we could not reproduce it. Holding the URL is not a
             # licence to skip a check they performed.
             logger.warning("Rejected aaj webhook: %s", how)
             return Response({"error": "bad_signature"}, status=status.HTTP_401_UNAUTHORIZED)
-        # The line that turns their undocumented scheme into a pinned one.
-        logger.info("aaj webhook accepted (%s)", how)
+        if unsigned:
+            # Documented behaviour is that they always sign once a signing key is set
+            # on the org, so an unsigned push is either a misconfiguration on their
+            # side or someone else holding our URL. Loud, but not fatal until the
+            # setting says so — see AAJ_WEBHOOK_REQUIRE_SIGNATURE.
+            if settings.AAJ_WEBHOOK_REQUIRE_SIGNATURE:
+                logger.warning("Rejected aaj webhook: unsigned and a signature is required")
+                return Response({"error": "signature_required"},
+                                status=status.HTTP_401_UNAUTHORIZED)
+            logger.warning("aaj webhook accepted UNSIGNED from %s — their docs say they "
+                           "sign every push; check the signing key in their dashboard",
+                           client_ip(request))
+        else:
+            # The line that confirms their live scheme is the documented one.
+            logger.info("aaj webhook accepted (%s)", how)
 
         try:
             payload = aaj_webhook.parse_body(request.body)

@@ -15,6 +15,9 @@ import type { WriteState } from "@/app/(shell)/orders/[number]/actions";
  *   re-runs only the charge.
  * - `create_unconfirmed` has a CHECK button (reads AAJ, never charges) instead of
  *   the forbid-retry wall alone — AAJ's records can settle what the answer couldn't.
+ *   It also has CANCEL: AAJ's half-state (unpaid booking, shipment record anyway)
+ *   is permanent from their side, so check alone would loop forever. Cancelling
+ *   their record costs nothing and lands the order on `voided`, which is bookable.
  * - VOID exists (AAJ reverses until the first hub scan) and a voided shipment can
  *   be captured again.
  * - No wallet line: AAJ exposes no balance endpoint; credit-facility accounts are
@@ -28,6 +31,7 @@ export interface AajShipmentData {
   status: string;
   booking_id: string;
   tracking_id: string;
+  aaj_shipment_id: string;
   quote_total: string | null;
   cost: string | null;
   charged: string;
@@ -95,6 +99,10 @@ export function AajPanel({
   const mayOperate = scopes.includes("orders.operate");
   const unconfirmed = shipment.status === "create_unconfirmed" || state.code === "capture_unconfirmed";
   const willCost = shipment.cost ?? shipment.quote_total ?? shipment.charged;
+  // What void-shipment is called with. In the unconfirmed lane there is no tracking
+  // id of ours — only the record id `Check with AAJ` stamped on the row.
+  const voidKey = shipment.tracking_id || shipment.aaj_shipment_id;
+  const voidable = ["created", "in_transit", "create_unconfirmed"].includes(shipment.status);
   const capturable = ["quoted", "booked", "voided"].includes(shipment.status);
 
   const run = (action: () => Promise<WriteState>) =>
@@ -168,7 +176,9 @@ export function AajPanel({
           <span className="font-medium"> Check with AAJ</span> (it only reads) — if it still cannot
           settle, look the booking up in AAJ&rsquo;s portal by id
           <span className="font-mono"> {shipment.booking_id}</span> before anything else. Never
-          create again blind: that could charge twice.
+          create again blind: that could charge twice. If AAJ confirms the booking is unpaid,
+          <span className="font-medium"> Cancel AAJ&rsquo;s record</span> below removes their
+          half-made shipment at no cost and lets this order be booked again.
         </p>
       )}
 
@@ -259,38 +269,44 @@ export function AajPanel({
           </button>
         )}
 
-        {shipment.tracking_id && (
+        {(shipment.tracking_id || (voidable && voidKey)) && (
           <div className="flex flex-wrap items-center gap-2">
-            {shipment.label_url ? (
-              <a
-                href={shipment.label_url}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded border border-line px-3 py-1.5 text-xs hover:border-accent"
-              >
-                Open label PDF
-              </a>
-            ) : (
-              <button
-                onClick={() => run(() => actions.label({ number }))}
-                disabled={!mayOperate || pending}
-                title={!mayOperate ? "Needs orders.operate" : undefined}
-                className="rounded border border-line px-3 py-1.5 text-xs hover:border-accent disabled:opacity-50"
-              >
-                {pending ? "Asking AAJ…" : "Fetch label"}
-              </button>
-            )}
+            {shipment.tracking_id &&
+              (shipment.label_url ? (
+                <a
+                  href={shipment.label_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded border border-line px-3 py-1.5 text-xs hover:border-accent"
+                >
+                  Open label PDF
+                </a>
+              ) : (
+                <button
+                  onClick={() => run(() => actions.label({ number }))}
+                  disabled={!mayOperate || pending}
+                  title={!mayOperate ? "Needs orders.operate" : undefined}
+                  className="rounded border border-line px-3 py-1.5 text-xs hover:border-accent disabled:opacity-50"
+                >
+                  {pending ? "Asking AAJ…" : "Fetch label"}
+                </button>
+              ))}
 
-            {(shipment.status === "created" || shipment.status === "in_transit") && (
+            {/* Void, and — in the unconfirmed lane — the ONLY way out of it. There the
+                key is AAJ's record id rather than a tracking id of ours, and nothing was
+                ever charged, so the confirm copy must not promise a refund. */}
+            {voidable && voidKey && (
               confirming === "void" ? (
                 <span className="inline-flex items-center gap-2 rounded border border-warn/40 p-1.5 text-xs">
-                  Void {shipment.tracking_id} and reverse ₦{shipment.cost ?? willCost}?
+                  {unconfirmed
+                    ? `Cancel AAJ's unconfirmed record ${voidKey}? Nothing was charged for it — the order goes back to "Voided" and can be booked again.`
+                    : `Void ${voidKey} and reverse ₦${shipment.cost ?? willCost}?`}
                   <button
                     onClick={() => run(() => actions.void({ number }))}
                     disabled={pending}
                     className="rounded bg-warn px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
                   >
-                    {pending ? "Voiding…" : "Void"}
+                    {pending ? "Cancelling…" : unconfirmed ? "Cancel it" : "Void"}
                   </button>
                   <button onClick={() => setConfirming(null)} disabled={pending} className="rounded border border-line px-2 py-1 text-xs">
                     Keep
@@ -305,11 +321,13 @@ export function AajPanel({
                       ? "Needs orders.manage"
                       : !data.can_void
                         ? data.void_blocked_reason
-                        : "Allowed until AAJ's first hub scan"
+                        : unconfirmed
+                          ? "Removes AAJ's half-made record; costs nothing and lets this order be rebooked"
+                          : "Allowed until AAJ's first hub scan"
                   }
                   className="rounded border border-line px-3 py-1.5 text-xs text-warn hover:border-warn disabled:opacity-50"
                 >
-                  Void shipment…
+                  {unconfirmed ? "Cancel AAJ\u2019s record…" : "Void shipment…"}
                 </button>
               )
             )}

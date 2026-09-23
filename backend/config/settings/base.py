@@ -828,12 +828,17 @@ AAJ_SENDER_POSTAL_CODE = env("AAJ_SENDER_POSTAL_CODE", default="100001")
 # refusal; the runbook flips it on after one controlled live booking.
 AAJ_PROCESS_ENABLED = env.bool("AAJ_PROCESS_ENABLED", default=False)
 # Push tracking (Plan-43b). AAJ's dashboard takes a webhook URL and issues an
-# `aaj_`-prefixed signing key, but publishes no scheme for it — so the TOKEN is
-# ours (a random string in the URL we paste there, the credential that makes the
-# endpoint usable today) and the SIGNING KEY is theirs (verified when a signature
-# header appears, which is also how we learn their scheme). See aaj/webhook.py.
+# `aaj_`-prefixed signing key. The TOKEN is ours (a random string in the URL we
+# paste there — the credential, since their dashboard offers no other); the
+# SIGNING KEY is theirs. Their scheme was published 2026-09-22: hex HMAC-SHA256
+# of the raw body in `x-aaj-signature`. See aaj/webhook.py.
 AAJ_WEBHOOK_TOKEN = env("AAJ_WEBHOOK_TOKEN", default="")
 AAJ_WEBHOOK_SIGNING_KEY = env("AAJ_WEBHOOK_SIGNING_KEY", default="")
+# Off = an UNSIGNED push is still accepted on the path token alone (and logged
+# loudly). It stays off until a real delivery proves they sign every time, because
+# a receiver that 401s a push they genuinely send loses the event after five
+# retries — and no AAJ webhook has ever arrived here. Flip it on once one has.
+AAJ_WEBHOOK_REQUIRE_SIGNATURE = env.bool("AAJ_WEBHOOK_REQUIRE_SIGNATURE", default=False)
 
 # --- Google Places: homepage reviews header refresh (runbooks/google-apis-setup.md) ---
 # The SERVER key (IP-locked to the VPS, Places API (New) only) — never the browser key

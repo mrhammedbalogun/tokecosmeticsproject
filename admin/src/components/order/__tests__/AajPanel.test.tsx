@@ -11,6 +11,7 @@ function data(over: Partial<AajPanelData> = {}, ship: Partial<AajPanelData["ship
       status: "quoted",
       booking_id: "",
       tracking_id: "",
+      aaj_shipment_id: "",
       quote_total: "2779.00",
       cost: null,
       charged: "2779.00",
@@ -99,6 +100,22 @@ describe("AajPanel", () => {
     setup(data({ can_void: false, void_blocked_reason: "AAJ has already scanned it (ORIGIN_SCAN)" }, { status: "in_transit", tracking_id: "D276AA3D", last_scan: { scanType: "ORIGIN_SCAN", description: "Received at yaba", dateTime: "2026-08-23T16:06:38.000000+01:00" } }));
     expect(screen.getByRole("button", { name: /void shipment/i })).toBeDisabled();
     expect(screen.getByText(/Received at yaba/)).toBeInTheDocument();
+  });
+
+  it("the unconfirmed lane can be cancelled with AAJ's own record id, and promises no refund", async () => {
+    // The exit from a lane that otherwise never ends: AAJ's booking stays unpaid
+    // forever, so Check alone would loop. Nothing was charged, so the copy must not
+    // say "reverse" — and the key is AAJ's record id, not a tracking id of ours.
+    const { voidFn } = setup(data({ can_check: true, can_void: true }, {
+      status: "create_unconfirmed", booking_id: "bk-9", aaj_shipment_id: "sh-ghost", cost: "5254.00",
+    }));
+    fireEvent.click(screen.getByRole("button", { name: /cancel aaj.s record/i }));
+    expect(voidFn).not.toHaveBeenCalled();
+    expect(screen.getByText(/Cancel AAJ's unconfirmed record sh-ghost/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing was charged for it/i)).toBeInTheDocument();
+    expect(screen.queryByText(/reverse ₦/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^cancel it$/i }));
+    await waitFor(() => expect(voidFn).toHaveBeenCalledWith({ number: "TC-100001" }));
   });
 
   it("a voided shipment offers a rebook; label fetch reports not-ready as a sentence", async () => {

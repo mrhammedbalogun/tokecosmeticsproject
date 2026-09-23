@@ -256,16 +256,65 @@ def test_timeout_that_actually_charged_resolves_to_created(order, quoted, actor)
 @override_settings(**SETTINGS)
 @respx.mock
 def test_the_measured_half_state_parks_unconfirmed(order, quoted, actor):
-    # MEASURED: HTTP 500 "cannot be charged" yet a shipment record exists, booking unpaid.
+    # MEASURED twice — on the sandbox as "Credit facility cannot be charged" and in
+    # production on 2026-09-03 (TC-100224): the charge fails and AAJ mints a shipment
+    # record anyway, with a label, while the booking stays unpaid.
     respx.post(CREATE).mock(return_value=_create_resp())
     respx.post(PROCESS).mock(return_value=httpx.Response(500, json={
         "success": False, "message": "Credit facility cannot be charged", "status": 500}))
     respx.get(GET_BOOKING).mock(return_value=_booking_read(paid=False, shipment_id="sh-ghost"))
+    respx.get(f"{BASE}/partner/shipment/get-single-shipment/sh-ghost").mock(
+        return_value=_ok({"_id": "sh-ghost", "trackingId": "66033A20", "humanStatus": "Pending",
+                          "labelDocuments": [{"carrier": "AAJ", "url": "https://aaj.test/l.pdf"}]}))
     with pytest.raises(CaptureUnconfirmed):
         capture_shipment(order, actor=actor)
     quoted.refresh_from_db()
     assert quoted.status == "create_unconfirmed"
-    assert OrderEvent.objects.filter(order=order, message__contains="UNCONFIRMED").exists()
+    # Their record id is stamped on our row: without it there is no key to void with,
+    # and `create_unconfirmed` is not capturable — the order would have no way out.
+    assert quoted.aaj_shipment_id == "sh-ghost"
+    assert quoted.tracking_id == ""  # not ours until someone decides it is
+    event = OrderEvent.objects.filter(order=order, message__contains="UNCONFIRMED").first()
+    assert event is not None
+    # What the desk needs in order to choose: what AAJ is holding, and how far it got.
+    assert "66033A20" in event.message and "label" in event.message
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_the_half_state_can_be_cancelled_and_the_order_rebooked(order, quoted, actor):
+    """The exit from the lane. AAJ's half-state never resolves itself — the booking
+    stays unpaid forever — so `Check with AAJ` alone would loop every two hours for
+    the life of the order. Cancelling their record costs nothing (it was never
+    charged) and lands us on `voided`, which IS capturable."""
+    quoted.status = "create_unconfirmed"
+    quoted.booking_id = "bk-1"
+    quoted.aaj_shipment_id = "sh-ghost"
+    quoted.save()
+    assert can_void(quoted) == (True, "")
+
+    respx.delete(f"{BASE}/partner/shipment/void-shipment/sh-ghost").mock(
+        return_value=_ok({}, message="Shipment voided"))
+    with mock.patch("apps.delivery.tasks.delete_aaj_booking.delay") as delete_booking:
+        void_shipment(order, actor=actor)
+    quoted.refresh_from_db()
+    assert quoted.status == "voided"
+    # The unpaid booking holds the customer's name, phone and address as a DUE record
+    # AAJ cannot search by our order number. Voiding the shipment does not remove it.
+    delete_booking.assert_called_once_with(quoted.pk, "bk-1")
+    message = OrderEvent.objects.filter(order=order, message__contains="VOIDED").first().message
+    # Nothing was charged, so the timeline must not promise a reversal.
+    assert "nothing was ever charged" in message and "to be reversed" not in message
+
+
+@override_settings(**SETTINGS)
+def test_an_unconfirmed_row_with_no_aaj_id_says_what_to_do_instead(quoted):
+    """Cancel needs a key from AAJ. Without one the answer is a phone call, not a
+    button that would 404."""
+    quoted.status = "create_unconfirmed"
+    quoted.save()
+    ok, why = can_void(quoted)
+    assert not ok and "Check with AAJ" in why
 
 
 @override_settings(**SETTINGS)
