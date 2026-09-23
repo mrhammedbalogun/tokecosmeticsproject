@@ -445,9 +445,16 @@ def read_shipment(identifier: str) -> dict:
     return result.data if isinstance(result.data, dict) else {}
 
 
-def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
+def reconcile(shipment: AajShipment, *, actor=None, how: str = "", why_failed: str = "") -> str:
     """Settle a `booked`/`create_unconfirmed` shipment against AAJ's records.
-    Returns the outcome: "created" | "booked" | "unconfirmed". READS ONLY."""
+    Returns the outcome: "created" | "booked" | "unconfirmed". READS ONLY.
+
+    `why_failed` is AAJ's own message for the call that sent us here. It belongs in
+    the timeline for the same reason every other refusal does: audit rows are written
+    on 2xx only, so once the container log rolls this line is the ONLY place the
+    reason survives — and "Insufficient wallet balance" is a different action from
+    "AAJ is down". MEASURED 2026-09-23 on a throwaway booking, which is exactly the
+    answer TC-100224 needed on 3 September and nobody could recover."""
     try:
         booking = read_booking(shipment.booking_id)
     except client.AajError as exc:
@@ -476,7 +483,12 @@ def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
                          message=f"AAJ booking {shipment.booking_id} confirmed UNPAID and "
                                  "without a shipment — safe to retry the charge.")
         return "booked"
-    # Their half-state: the booking reads unpaid but a shipment record exists. Stamp
+    # Their half-state: the booking reads unpaid but a shipment record exists. This is
+    # the NORMAL shape of a refused charge, not a rare glitch — reproduced 2026-09-23
+    # on a throwaway booking whose charge was refused for "Insufficient wallet
+    # balance": AAJ minted the shipment and its label anyway. So every failed charge
+    # lands an order here, which is what makes the 48-hour cancel window operational
+    # rather than academic. Stamp
     # its id on our row NO MATTER WHAT — it is the only key void-shipment accepts, and
     # without it this lane has no exit at all: `create_unconfirmed` is not CAPTURABLE,
     # so an order that lands here can neither be charged again nor cancelled, and the
@@ -502,10 +514,11 @@ def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
         label = " with a label issued" if label_from(held.get("labelDocuments")) else ""
         detail = (f"; their record is {held_tracking}, "
                   f"'{held.get('humanStatus') or held.get('status')}'{label}")
+    said = f". AAJ said: {why_failed}" if why_failed else ""
     return _park_unconfirmed(
         shipment, actor=actor,
         why=f"booking unpaid but AAJ holds shipment record {shipment_id} "
-            f"(their half-state){detail}",
+            f"(their half-state){detail}{said}",
     )
 
 
@@ -548,7 +561,8 @@ def _process_booking(shipment: AajShipment, *, actor) -> None:
         failure = CaptureRefused("no_tracking_id", "AAJ processed without a tracking id.")
 
     logger.warning("aaj process-booking failed for %s: %s — reconciling", order.number, failure)
-    outcome = reconcile(shipment, actor=actor, how=" (resolved from AAJ's records after a failed answer)")
+    outcome = reconcile(shipment, actor=actor, why_failed=str(failure),
+                        how=" (resolved from AAJ's records after a failed answer)")
     if outcome == "created":
         return
     if outcome == "booked":
@@ -685,7 +699,10 @@ def void_shipment(order, *, actor) -> AajShipment:
         # The booking under a half-state record reads UNPAID, and voiding the shipment
         # does not remove it — it would sit in AAJ's portal as a DUE record holding the
         # customer's name, phone and address under a customBookingId they cannot search.
-        # Same best-effort lane the abandon path uses; a failure here never blocks the void.
+        # MEASURED 2026-09-23: AAJ REFUSES this once a shipment exists, even a voided
+        # one ("Cannot delete booking"), so today it is expected to fail and the DUE
+        # record lingers — ask AAJ to purge it. Kept because it costs nothing, it is the
+        # right call the moment they allow it, and a failure never blocks the void.
         from apps.delivery.tasks import delete_aaj_booking
 
         try:

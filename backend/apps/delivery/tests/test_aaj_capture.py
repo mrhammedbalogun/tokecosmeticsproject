@@ -261,7 +261,7 @@ def test_the_measured_half_state_parks_unconfirmed(order, quoted, actor):
     # record anyway, with a label, while the booking stays unpaid.
     respx.post(CREATE).mock(return_value=_create_resp())
     respx.post(PROCESS).mock(return_value=httpx.Response(500, json={
-        "success": False, "message": "Credit facility cannot be charged", "status": 500}))
+        "success": False, "message": "Insufficient wallet balance", "status": 500}))
     respx.get(GET_BOOKING).mock(return_value=_booking_read(paid=False, shipment_id="sh-ghost"))
     respx.get(f"{BASE}/partner/shipment/get-single-shipment/sh-ghost").mock(
         return_value=_ok({"_id": "sh-ghost", "trackingId": "66033A20", "humanStatus": "Pending",
@@ -278,6 +278,11 @@ def test_the_measured_half_state_parks_unconfirmed(order, quoted, actor):
     assert event is not None
     # What the desk needs in order to choose: what AAJ is holding, and how far it got.
     assert "66033A20" in event.message and "label" in event.message
+    # AND why it failed, in AAJ's own words. Audit rows write on 2xx only, so once the
+    # container log rolls this line is the only surviving record — and "Insufficient
+    # wallet balance" is a different action from "AAJ is down". TC-100224 lost exactly
+    # this: three weeks later nobody could say why the charge had not gone through.
+    assert "Insufficient wallet balance" in event.message
 
 
 @override_settings(**SETTINGS)
