@@ -486,9 +486,13 @@ def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
     except client.AajError as exc:
         logger.info("aaj half-state read failed for %s: %s", shipment_id, exc)
         held = {}
-    if shipment_id and shipment.aaj_shipment_id != shipment_id:
+    # Their record exists, so the 48-hour cancel window is ALREADY running. The
+    # `is None` half matters as much as the id: a row parked before that field
+    # existed has an unknown clock, and an unknown clock reads as "cancel is still
+    # open" — a button AAJ will refuse. Every poll of the lane heals it.
+    if shipment_id and (shipment.aaj_shipment_id != shipment_id
+                        or shipment.carrier_created_at is None):
         shipment.aaj_shipment_id = shipment_id
-        # Their record exists, so the 48-hour cancel window is ALREADY running.
         _stamp_carrier_created(shipment, held)
         shipment.save(update_fields=["aaj_shipment_id", "carrier_created_at", "updated_at"])
     detail = ""

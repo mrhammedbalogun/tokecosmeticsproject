@@ -550,6 +550,15 @@ def test_the_clock_starts_from_aajs_own_createdAt_when_they_give_one(order, quot
         capture_shipment(order, actor=actor)
     quoted.refresh_from_db()
     assert quoted.carrier_created_at.isoformat().startswith("2026-09-03T10:00:28")
+
+    # A row parked before the field existed has an unknown clock, which reads as
+    # "cancel is still open" — a button AAJ refuses. Re-reconciling heals it, so the
+    # 2-hourly poll fixes such rows without anyone pressing anything.
+    quoted.carrier_created_at = None
+    quoted.save(update_fields=["carrier_created_at"])
+    assert check_unconfirmed(order, actor=actor) == "unconfirmed"
+    quoted.refresh_from_db()
+    assert quoted.carrier_created_at.isoformat().startswith("2026-09-03T10:00:28")
     # ...and that is long past 48 hours, so the panel must not offer a cancel.
     ok, why = can_void(quoted)
     assert not ok and "48 hours" in why
