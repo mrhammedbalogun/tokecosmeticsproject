@@ -53,6 +53,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.core.cache import cache
 from django.db import transaction
+from django.utils.dateparse import parse_datetime
 from django.utils.timezone import now as django_now
 
 from apps.core.models import Region
@@ -389,8 +390,18 @@ def _create_booking(shipment: AajShipment, *, actor) -> None:
                              f"charged{note}.")
 
 
+def _stamp_carrier_created(shipment: AajShipment, record: dict | None = None) -> None:
+    """When AAJ's shipment record came into being — the clock the 48-hour void window
+    runs on. Theirs when they tell us, ours otherwise; never overwritten, because the
+    first answer is the closest to the truth."""
+    if shipment.carrier_created_at is not None:
+        return
+    theirs = parse_datetime(str((record or {}).get("createdAt") or "") or " ")
+    shipment.carrier_created_at = theirs or django_now()
+
+
 def _resolve_created(shipment: AajShipment, *, tracking_id: str, label_url: str,
-                     aaj_shipment_id: str, actor, how: str) -> None:
+                     aaj_shipment_id: str, actor, how: str, record: dict | None = None) -> None:
     order = shipment.order
     with transaction.atomic():
         shipment.status = "created"
@@ -398,8 +409,10 @@ def _resolve_created(shipment: AajShipment, *, tracking_id: str, label_url: str,
         shipment.aaj_shipment_id = aaj_shipment_id or shipment.aaj_shipment_id
         if label_url:
             shipment.label_url = label_url
+        _stamp_carrier_created(shipment, record)
         shipment.save(update_fields=[
-            "status", "tracking_id", "aaj_shipment_id", "label_url", "updated_at",
+            "status", "tracking_id", "aaj_shipment_id", "label_url",
+            "carrier_created_at", "updated_at",
         ])
         order.tracking_carrier = "AAJ"
         order.tracking_number = tracking_id
@@ -453,7 +466,7 @@ def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
             return _park_unconfirmed(shipment, actor=actor, why="paid but no tracking id readable")
         _resolve_created(shipment, tracking_id=tracking_id,
                          label_url=label_from(record.get("labelDocuments")),
-                         aaj_shipment_id=shipment_id, actor=actor, how=how)
+                         aaj_shipment_id=shipment_id, actor=actor, how=how, record=record)
         return "created"
     if not paid and not shipment_id:
         if shipment.status != "booked":
@@ -468,15 +481,17 @@ def reconcile(shipment: AajShipment, *, actor=None, how: str = "") -> str:
     # without it this lane has no exit at all: `create_unconfirmed` is not CAPTURABLE,
     # so an order that lands here can neither be charged again nor cancelled, and the
     # poll re-reads the same dead end every two hours forever.
-    if shipment_id and shipment.aaj_shipment_id != shipment_id:
-        shipment.aaj_shipment_id = shipment_id
-        shipment.save(update_fields=["aaj_shipment_id", "updated_at"])
-    detail = ""
     try:
         held = read_shipment(shipment_id) if shipment_id else {}
     except client.AajError as exc:
         logger.info("aaj half-state read failed for %s: %s", shipment_id, exc)
         held = {}
+    if shipment_id and shipment.aaj_shipment_id != shipment_id:
+        shipment.aaj_shipment_id = shipment_id
+        # Their record exists, so the 48-hour cancel window is ALREADY running.
+        _stamp_carrier_created(shipment, held)
+        shipment.save(update_fields=["aaj_shipment_id", "carrier_created_at", "updated_at"])
+    detail = ""
     held_tracking = str(held.get("trackingId") or "")
     if held_tracking:
         # What the desk needs to choose between voiding it and chasing the charge.
@@ -523,7 +538,8 @@ def _process_booking(shipment: AajShipment, *, actor) -> None:
         if tracking_id:
             _resolve_created(shipment, tracking_id=tracking_id,
                              label_url=label_from(record.get("labelDocuments")),
-                             aaj_shipment_id=str(record.get("_id") or ""), actor=actor, how="")
+                             aaj_shipment_id=str(record.get("_id") or ""), actor=actor,
+                             how="", record=record)
             return
         failure = CaptureRefused("no_tracking_id", "AAJ processed without a tracking id.")
 
@@ -573,12 +589,41 @@ def check_unconfirmed(order, *, actor) -> str:
 # --- after creation ----------------------------------------------------------------
 
 VOIDABLE_SCANS = {"", "LABEL_CREATED", "PICKUP_SCAN"}
+# MEASURED against the live API on 2026-09-22, on TC-100224's stranded record:
+# "Cannot void shipment after 48 hours from creation. Please contact Customer
+# Support" — a HARD window, independent of scanning, and NOT in any AAJ document.
+# delete-booking is no escape either; it answered "Cannot delete booking" on the
+# same record. After 48 hours the only exit is AAJ support, by phone.
+VOID_WINDOW = timedelta(hours=48)
+
+
+def void_window_left(shipment: AajShipment):
+    """How long is left to cancel with AAJ, or None when we cannot tell (rows that
+    predate `carrier_created_at`). None means "let AAJ answer", never "expired" —
+    refusing on a guess would hide a cancel that would have worked."""
+    if shipment.carrier_created_at is None:
+        return None
+    return VOID_WINDOW - (django_now() - shipment.carrier_created_at)
+
+
+def _expired(shipment: AajShipment) -> tuple[bool, str]:
+    left = void_window_left(shipment)
+    if left is None or left.total_seconds() > 0:
+        return False, ""
+    return True, ("AAJ refuses a void more than 48 hours after they created the "
+                  "shipment, whatever its scan state. This one is past that — only "
+                  "AAJ customer support can cancel it now.")
 
 
 def can_void(shipment: AajShipment) -> tuple[bool, str]:
-    """Void is allowed by AAJ until the first hub scan (status 1 Received IS one).
-    `created` always qualifies; `in_transit` only while the newest scan is still
-    pre-hub. AAJ's own refusal is the final word — this is the UI's hint."""
+    """Void is allowed by AAJ until the first hub scan (status 1 Received IS one)
+    AND within 48 hours of their creating the record — two independent limits, and
+    the second one is undocumented (see VOID_WINDOW). `created` always qualifies;
+    `in_transit` only while the newest scan is still pre-hub. AAJ's own refusal is
+    the final word — this is the UI's hint."""
+    expired, why = _expired(shipment)
+    if expired and shipment.status in ("created", "in_transit", "create_unconfirmed"):
+        return False, why
     if shipment.status == "created":
         return True, ""
     if shipment.status == "in_transit":

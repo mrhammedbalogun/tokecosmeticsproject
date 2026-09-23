@@ -765,7 +765,7 @@ class AdminAajShipmentView(AdminAuditMixin, APIView):
     def get(self, request, number: str):
         from django.conf import settings
 
-        from apps.delivery.aaj.capture import can_void
+        from apps.delivery.aaj.capture import can_void, void_window_left
         from apps.delivery.models import AajShipment
         from apps.orders.models import Order
 
@@ -780,6 +780,11 @@ class AdminAajShipmentView(AdminAuditMixin, APIView):
         elif order.status != "processing":
             can_capture, reason = False, f"order is {order.status} — capture after payment"
         voidable, void_reason = can_void(shipment)
+        # Hours left to cancel with AAJ. Their 48-hour window is undocumented and
+        # ABSOLUTE — past it, only their support can undo a shipment — so the desk
+        # sees the clock rather than discovering it from a refusal.
+        left = void_window_left(shipment)
+        void_hours_left = round(left.total_seconds() / 3600, 1) if left is not None else None
         return Response({
             "shipment": {
                 "status": shipment.status,
@@ -804,6 +809,7 @@ class AdminAajShipmentView(AdminAuditMixin, APIView):
             "can_check": shipment.status in ("create_unconfirmed", "booked") and bool(shipment.booking_id),
             "can_void": voidable,
             "void_blocked_reason": void_reason,
+            "void_hours_left": void_hours_left,
             # The kill-switch, surfaced so the desk knows a capture will stop at
             # "booked" before they press anything.
             "process_enabled": bool(settings.AAJ_PROCESS_ENABLED),

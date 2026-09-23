@@ -284,6 +284,12 @@ class AajShipment(TimeStampedModel):
     booking_id = models.CharField(max_length=40, blank=True)      # AAJ booking _id
     tracking_id = models.CharField(max_length=40, blank=True)     # AAJ shipment tracking id
     aaj_shipment_id = models.CharField(max_length=40, blank=True)  # AAJ shipment _id (void key)
+    # When AAJ made their shipment record — THEIR clock where they report it, ours
+    # otherwise. MEASURED 2026-09-22: "Cannot void shipment after 48 hours from
+    # creation", regardless of whether anything has been scanned. Without this the
+    # panel offers a cancel button that AAJ refuses, which is how TC-100224 sat
+    # unrecoverable for 19 days. Null on rows created before the rule was known.
+    carrier_created_at = models.DateTimeField(null=True, blank=True)
     label_url = models.URLField(blank=True)
     last_scan = models.JSONField(default=dict)  # newest raw tracking event, verbatim
     last_status = models.IntegerField(null=True, blank=True)  # AAJ numeric status at last poll

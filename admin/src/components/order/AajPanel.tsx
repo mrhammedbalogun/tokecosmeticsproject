@@ -18,8 +18,10 @@ import type { WriteState } from "@/app/(shell)/orders/[number]/actions";
  *   It also has CANCEL: AAJ's half-state (unpaid booking, shipment record anyway)
  *   is permanent from their side, so check alone would loop forever. Cancelling
  *   their record costs nothing and lands the order on `voided`, which is bookable.
- * - VOID exists (AAJ reverses until the first hub scan) and a voided shipment can
- *   be captured again.
+ * - VOID exists (AAJ reverses until the first hub scan, AND only within 48 hours of
+ *   their creating the record — an undocumented limit, measured the hard way) and a
+ *   voided shipment can be captured again. The clock is shown, because past it the
+ *   only exit is AAJ's support desk.
  * - No wallet line: AAJ exposes no balance endpoint; credit-facility accounts are
  *   post-paid.
  *
@@ -50,6 +52,8 @@ export interface AajPanelData {
   can_check: boolean;
   can_void: boolean;
   void_blocked_reason: string;
+  /** Hours left in AAJ's 48-hour cancel window; null when we cannot tell. */
+  void_hours_left: number | null;
   process_enabled: boolean;
 }
 
@@ -103,6 +107,8 @@ export function AajPanel({
   // id of ours — only the record id `Check with AAJ` stamped on the row.
   const voidKey = shipment.tracking_id || shipment.aaj_shipment_id;
   const voidable = ["created", "in_transit", "create_unconfirmed"].includes(shipment.status);
+  const hoursLeft = data.void_hours_left;
+  const closingSoon = hoursLeft !== null && hoursLeft > 0 && hoursLeft < 12;
   const capturable = ["quoted", "booked", "voided"].includes(shipment.status);
 
   const run = (action: () => Promise<WriteState>) =>
@@ -316,6 +322,7 @@ export function AajPanel({
                 <button
                   onClick={() => setConfirming("void")}
                   disabled={!mayManage || !data.can_void || pending}
+                  data-closing-soon={closingSoon || undefined}
                   title={
                     !mayManage
                       ? "Needs orders.manage"
@@ -330,6 +337,16 @@ export function AajPanel({
                   {unconfirmed ? "Cancel AAJ\u2019s record…" : "Void shipment…"}
                 </button>
               )
+            )}
+            {/* The clock on AAJ's undocumented 48-hour window. Shown while it is still
+                open, because after it closes only their support desk can undo a
+                shipment — and nothing in their API says so until it refuses. */}
+            {data.can_void && hoursLeft !== null && (
+              <span className={closingSoon ? "text-xs text-warn" : "text-xs text-muted"}>
+                {hoursLeft < 1
+                  ? "under an hour left to cancel with AAJ"
+                  : `${Math.floor(hoursLeft)}h left to cancel with AAJ`}
+              </span>
             )}
           </div>
         )}

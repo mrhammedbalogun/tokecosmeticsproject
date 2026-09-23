@@ -499,3 +499,57 @@ def test_collection_mode_pickup_shape():
 def test_collection_mode_dropoff_carries_no_pickup_details():
     # AAJ's spelling has no underscore; a date on a drop-off would be meaningless
     assert capture.collection_mode() == {"collectionType": "DROPOFF"}
+
+
+@override_settings(**SETTINGS)
+def test_the_48_hour_void_window_is_a_hard_limit_of_its_own(quoted):
+    """MEASURED on TC-100224, 2026-09-22: "Cannot void shipment after 48 hours from
+    creation. Please contact Customer Support" — nothing had been scanned, and
+    delete-booking refused too. Undocumented, and the reason that order could not be
+    recovered by anything we ship. can_void has to know it, or the panel offers a
+    button AAJ will refuse."""
+    from datetime import timedelta
+
+    from django.utils.timezone import now
+
+    from apps.delivery.aaj.capture import void_window_left
+
+    quoted.status = "created"
+    quoted.tracking_id = "D276AA3D"
+    quoted.carrier_created_at = now() - timedelta(hours=2)
+    quoted.save()
+    assert can_void(quoted) == (True, "")
+    assert 45 < void_window_left(quoted).total_seconds() / 3600 < 47
+
+    quoted.carrier_created_at = now() - timedelta(hours=49)
+    quoted.save()
+    ok, why = can_void(quoted)
+    assert not ok and "48 hours" in why and "customer support" in why.lower()
+
+    # An unknowable clock is never treated as expired: refusing on a guess would hide
+    # a cancel that would have worked. Let AAJ answer instead.
+    quoted.carrier_created_at = None
+    quoted.save()
+    assert can_void(quoted) == (True, "")
+    assert void_window_left(quoted) is None
+
+
+@override_settings(**SETTINGS)
+@respx.mock
+def test_the_clock_starts_from_aajs_own_createdAt_when_they_give_one(order, quoted, actor):
+    """Their clock, not ours — we may read a record minutes or hours after they made
+    it, and every one of those minutes is spent from the 48."""
+    respx.post(CREATE).mock(return_value=_create_resp())
+    respx.post(PROCESS).mock(return_value=httpx.Response(500, json={
+        "success": False, "message": "wallet declined", "status": 500}))
+    respx.get(GET_BOOKING).mock(return_value=_booking_read(paid=False, shipment_id="sh-ghost"))
+    respx.get(f"{BASE}/partner/shipment/get-single-shipment/sh-ghost").mock(
+        return_value=_ok({"_id": "sh-ghost", "trackingId": "66033A20",
+                          "createdAt": "2026-09-03T10:00:28.816Z", "labelDocuments": []}))
+    with pytest.raises(CaptureUnconfirmed):
+        capture_shipment(order, actor=actor)
+    quoted.refresh_from_db()
+    assert quoted.carrier_created_at.isoformat().startswith("2026-09-03T10:00:28")
+    # ...and that is long past 48 hours, so the panel must not offer a cancel.
+    ok, why = can_void(quoted)
+    assert not ok and "48 hours" in why

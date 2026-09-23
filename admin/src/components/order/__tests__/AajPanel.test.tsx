@@ -28,6 +28,7 @@ function data(over: Partial<AajPanelData> = {}, ship: Partial<AajPanelData["ship
     can_check: false,
     can_void: false,
     void_blocked_reason: "",
+    void_hours_left: null,
     process_enabled: true,
     ...over,
   };
@@ -116,6 +117,21 @@ describe("AajPanel", () => {
     expect(screen.queryByText(/reverse ₦/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /^cancel it$/i }));
     await waitFor(() => expect(voidFn).toHaveBeenCalledWith({ number: "TC-100001" }));
+  });
+
+  it("shows AAJ's 48-hour cancel clock, and reports it blocked once it has run out", () => {
+    // Undocumented and absolute: past 48 hours only AAJ's support desk can undo a
+    // shipment, so the desk sees the clock instead of discovering it from a refusal.
+    setup(data({ can_void: true, void_hours_left: 41.5 }, { status: "created", tracking_id: "D276AA3D" }));
+    expect(screen.getByText(/41h left to cancel with AAJ/i)).toBeInTheDocument();
+    document.body.innerHTML = "";
+    setup(data({
+      can_void: false,
+      void_hours_left: -18,
+      void_blocked_reason: "AAJ refuses a void more than 48 hours after they created the shipment",
+    }, { status: "create_unconfirmed", booking_id: "bk-9", aaj_shipment_id: "sh-ghost" }));
+    expect(screen.getByRole("button", { name: /cancel aaj.s record/i })).toBeDisabled();
+    expect(screen.queryByText(/left to cancel/i)).not.toBeInTheDocument();
   });
 
   it("a voided shipment offers a rebook; label fetch reports not-ready as a sentence", async () => {
